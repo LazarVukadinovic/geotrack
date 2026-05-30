@@ -15,7 +15,7 @@ internal static class TerritoryBoundaryDisplayGeometry
 
     public static Geometry? Create(Geometry? source)
     {
-        var polygonal = ToValidPolygonalGeometry(source);
+        var polygonal = ToValidPolygonalGeometry(source, copyWhenAlreadyValid: false);
         if (polygonal is null)
             return null;
 
@@ -84,10 +84,20 @@ internal static class TerritoryBoundaryDisplayGeometry
             .DefaultIfEmpty(0d)
             .Max();
 
-    private static Geometry? ToValidPolygonalGeometry(Geometry? geometry)
+    private static Geometry? ToValidPolygonalGeometry(
+        Geometry? geometry,
+        bool copyWhenAlreadyValid = true)
     {
         if (geometry is null || geometry.IsEmpty)
             return null;
+
+        geometry.SRID = geometry.SRID > 0 ? geometry.SRID : 4326;
+        if (geometry.SRID == 4326 &&
+            geometry.IsValid &&
+            geometry is Polygon or MultiPolygon)
+        {
+            return copyWhenAlreadyValid ? geometry.Copy() : geometry;
+        }
 
         var copy = geometry.Copy();
         copy.SRID = copy.SRID > 0 ? copy.SRID : 4326;

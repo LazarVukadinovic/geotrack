@@ -12,6 +12,9 @@ using Geotrack.Infrastructure;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Geometry = NetTopologySuite.Geometries.Geometry;
+using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using Point = NetTopologySuite.Geometries.Point;
+using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.Server;
 
@@ -24,15 +27,33 @@ public static class SeedData
     private const string GeoBoundariesLicense = "CC BY 4.0";
     private const string Adm1BoundaryLevel = "ADM1";
     private const string CroatiaIso3 = "HRV";
+    private const string SerbiaIso2 = "RS";
+    private const string SerbiaIso3 = "SRB";
     private const string CroatiaSeedRegionName = "Dubrovnik-Neretva";
     private const string LegacyCroatiaSeedRegionName = "Dalmatia";
     private const string DemoRegionalManagerEmail = "pera@gmail.com";
     private const string DemoRegionalManagerPassword = "Proba123!";
     private const string DemoRegionalManagerUsername = "pera";
     private const string RegionalManagerRoleName = "RegionalManager";
+    private const string TerritoryManagerRoleName = "TerritoryManager";
     private const string DemoRegionalManagerRegionName = CroatiaSeedRegionName;
+    private const string SerbiaTerritoryManagerEmail = "nikola@gmail.com";
+    private const string SerbiaTerritoryManagerPassword = "Proba123!";
+    private const string SerbiaTerritoryManagerUsername = "nikola";
+    private const string SerbiaRegionalManagerEmail = "serbia.regional@gmail.com";
+    private const string SerbiaRegionalManagerPassword = "Proba123!";
+    private const string SerbiaRegionalManagerUsername = "serbia-regional";
+    private const string SerbiaRegionalManagerAnchorDestinationName = "Kragujevac";
 
     private static readonly SemaphoreSlim InitializationLock = new(1, 1);
+    private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
+
+    private static readonly string[] LegacySerbiaSeedRegionNames =
+    {
+        "Central Serbia",
+        "Vojvodina",
+        "Western Serbia"
+    };
 
     private static readonly Dictionary<string, Dictionary<string, string>> SeedRegionBoundaryAliases =
         new(StringComparer.OrdinalIgnoreCase)
@@ -1679,6 +1700,490 @@ public static class SeedData
     private static bool IsUnicodeDash(char ch) =>
         ch is '\u2010' or '\u2011' or '\u2012' or '\u2013' or '\u2014';
 
+    private static async Task<Territory> EnsureSerbiaTerritoryAsync(AppDbContext db, DateTime now)
+    {
+        var territory = await db.Territories
+            .FirstOrDefaultAsync(item => item.CountryIso3 == SerbiaIso3)
+            ?? await db.Territories.FirstOrDefaultAsync(item => item.CountryCode == SerbiaIso2)
+            ?? await db.Territories.FirstOrDefaultAsync(item => item.Name == "Serbia");
+
+        if (territory is null)
+        {
+            territory = new Territory
+            {
+                Name = "Serbia",
+                CountryCode = SerbiaIso2,
+                CountryIso3 = SerbiaIso3,
+                TerritoryKind = TerritoryKinds.Country,
+                CreatedAt = now
+            };
+
+            db.Territories.Add(territory);
+            await db.SaveChangesAsync();
+            return territory;
+        }
+
+        var changed = false;
+        if (territory.Name != "Serbia")
+        {
+            territory.Name = "Serbia";
+            changed = true;
+        }
+
+        if (territory.CountryCode != SerbiaIso2)
+        {
+            territory.CountryCode = SerbiaIso2;
+            changed = true;
+        }
+
+        if (territory.CountryIso3 != SerbiaIso3)
+        {
+            territory.CountryIso3 = SerbiaIso3;
+            changed = true;
+        }
+
+        if (territory.TerritoryKind != TerritoryKinds.Country)
+        {
+            territory.TerritoryKind = TerritoryKinds.Country;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            territory.UpdatedAt = now;
+            await db.SaveChangesAsync();
+        }
+
+        return territory;
+    }
+
+    private static async Task<List<SeedRegionSpatialRow>> EnsureSerbiaAdm1RegionsFromCandidatesAsync(
+        AppDbContext db,
+        Territory serbia,
+        DateTime now)
+    {
+        var candidates = await db.AdministrativeBoundaryCandidates
+            .Where(candidate =>
+                candidate.Source == GeoBoundariesBoundarySource &&
+                candidate.AdmLevel == Adm1BoundaryLevel &&
+                candidate.CountryIso3 == SerbiaIso3)
+            .OrderBy(candidate => candidate.ShapeName)
+            .ThenBy(candidate => candidate.ShapeId)
+            .Select(candidate => new SeedCandidateBoundaryRow
+            {
+                CandidateId = candidate.Id,
+                ReleaseType = candidate.ReleaseType,
+                ShapeGroup = candidate.ShapeGroup,
+                ShapeId = candidate.ShapeId,
+                ShapeName = candidate.ShapeName,
+                ShapeType = candidate.ShapeType,
+                ExternalKey = candidate.ExternalKey,
+                BoundaryGeometry = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName),
+                BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)
+            })
+            .ToListAsync();
+
+        if (candidates.Count == 0)
+        {
+            return await LoadSeedRegionSpatialRowsAsync(db, serbia.Id);
+        }
+
+        var regions = await db.Regions
+            .Where(region => region.TerritoryId == serbia.Id)
+            .OrderBy(region => region.Id)
+            .ToListAsync();
+
+        var changed = false;
+        foreach (var candidate in candidates)
+        {
+            if (candidate.BoundaryGeometry is null)
+            {
+                continue;
+            }
+
+            var region = ResolveSeedRegionForCandidate(candidate, regions);
+            if (region is null)
+            {
+                region = new Region
+                {
+                    Name = candidate.ShapeName.Trim(),
+                    TerritoryId = serbia.Id,
+                    CreatedAt = now
+                };
+
+                db.Regions.Add(region);
+                regions.Add(region);
+                changed = true;
+            }
+            else if (!string.Equals(region.Name, candidate.ShapeName, StringComparison.Ordinal))
+            {
+                region.Name = candidate.ShapeName.Trim();
+                changed = true;
+            }
+
+            ApplySeedBoundaryCandidate(db, region, candidate, now);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync();
+        }
+
+        return await LoadSeedRegionSpatialRowsAsync(db, serbia.Id);
+    }
+
+    private static Region? ResolveSeedRegionForCandidate(
+        SeedCandidateBoundaryRow candidate,
+        IReadOnlyList<Region> regions)
+    {
+        var byCandidateId = ResolveUniqueSeedRegion(regions
+            .Where(region => region.BoundaryCandidateId == candidate.CandidateId));
+        if (byCandidateId is not null)
+        {
+            return byCandidateId;
+        }
+
+        var byExternalKey = ResolveUniqueSeedRegion(regions
+            .Where(region =>
+                !string.IsNullOrWhiteSpace(region.BoundaryExternalKey) &&
+                string.Equals(region.BoundaryExternalKey, candidate.ExternalKey, StringComparison.OrdinalIgnoreCase)));
+        if (byExternalKey is not null)
+        {
+            return byExternalKey;
+        }
+
+        var byShapeKey = ResolveUniqueSeedRegion(regions
+            .Where(region =>
+                string.Equals(region.BoundaryAdmLevel, Adm1BoundaryLevel, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(region.BoundaryShapeGroup, candidate.ShapeGroup, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(region.BoundaryShapeId, candidate.ShapeId, StringComparison.OrdinalIgnoreCase)));
+        if (byShapeKey is not null)
+        {
+            return byShapeKey;
+        }
+
+        var normalizedName = NormalizeSeedBoundaryName(candidate.ShapeName);
+        return ResolveUniqueSeedRegion(regions
+            .Where(region => NormalizeSeedBoundaryName(region.Name) == normalizedName));
+    }
+
+    private static Region? ResolveUniqueSeedRegion(IEnumerable<Region> regions)
+    {
+        var matches = regions.Take(2).ToList();
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    private static async Task<List<SeedRegionSpatialRow>> LoadSeedRegionSpatialRowsAsync(
+        AppDbContext db,
+        int territoryId)
+    {
+        var rows = await db.Regions
+            .Where(region =>
+                region.TerritoryId == territoryId &&
+                region.BoundaryCandidateId != null &&
+                region.BoundarySource == GeoBoundariesBoundarySource &&
+                region.BoundaryAdmLevel == Adm1BoundaryLevel)
+            .OrderBy(region => region.Name)
+            .ThenBy(region => region.Id)
+            .Select(region => new SeedRegionSpatialRow
+            {
+                Region = region,
+                BoundaryGeometry = EF.Property<Geometry?>(region, BoundaryGeometryPropertyName)
+            })
+            .ToListAsync();
+
+        return rows
+            .Where(row => row.BoundaryGeometry is not null)
+            .ToList();
+    }
+
+    private static SeedRegionSpatialRow? FindSeedRegionByPoint(
+        IReadOnlyList<SeedRegionSpatialRow> regions,
+        double latitude,
+        double longitude)
+    {
+        var point = Wgs84GeometryFactory.CreatePoint(
+            new NetTopologySuite.Geometries.Coordinate(longitude, latitude));
+        point.SRID = 4326;
+
+        var matches = regions
+            .Where(region => region.BoundaryGeometry is not null && region.BoundaryGeometry.Covers(point))
+            .Take(2)
+            .ToList();
+
+        return matches.Count switch
+        {
+            1 => matches[0],
+            > 1 => throw new InvalidOperationException(
+                $"Serbia ADM1 seed matched {matches.Count} regions for point {latitude.ToString(CultureInfo.InvariantCulture)}, {longitude.ToString(CultureInfo.InvariantCulture)}."),
+            _ => null
+        };
+    }
+
+    private static async Task RemoveUnreferencedLegacySerbiaRegionsAsync(AppDbContext db, Territory serbia)
+    {
+        var legacyRegions = await db.Regions
+            .Where(region =>
+                region.TerritoryId == serbia.Id &&
+                LegacySerbiaSeedRegionNames.Contains(region.Name))
+            .ToListAsync();
+
+        foreach (var region in legacyRegions)
+        {
+            var hasDestinations = await db.Destinations.AnyAsync(destination => destination.RegionId == region.Id);
+            var hasManagerAssignments = await db.RegionalManagerRegions.AnyAsync(assignment => assignment.RegionId == region.Id);
+            if (hasDestinations || hasManagerAssignments)
+            {
+                continue;
+            }
+
+            db.Regions.Remove(region);
+        }
+
+        if (db.ChangeTracker.HasChanges())
+        {
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static async Task EnsureSerbiaTerritoryManagerAsync(AppDbContext db, Territory serbia)
+    {
+        var now = DateTime.UtcNow;
+        var role = await EnsureSeedRoleAsync(
+            db,
+            TerritoryManagerRoleName,
+            "Can manage territories and assigned regions.",
+            now);
+        var user = await EnsureSeedUserAsync(
+            db,
+            SerbiaTerritoryManagerEmail,
+            SerbiaTerritoryManagerUsername,
+            "Nikola",
+            "Territory Manager",
+            "Nikola Territory Manager",
+            SerbiaTerritoryManagerPassword,
+            "Serbia",
+            now);
+
+        if (!await db.UserRoles.AnyAsync(existing => existing.UserId == user.Id && existing.RoleId == role.Id))
+        {
+            db.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = role.Id
+            });
+        }
+
+        if (!await db.TerritoryManagers.AnyAsync(existing => existing.UserId == user.Id))
+        {
+            db.TerritoryManagers.Add(new TerritoryManager
+            {
+                UserId = user.Id
+            });
+        }
+
+        if (!await db.TerritoryManagerTerritories.AnyAsync(existing =>
+                existing.UserId == user.Id &&
+                existing.TerritoryId == serbia.Id))
+        {
+            db.TerritoryManagerTerritories.Add(new TerritoryManagerTerritory
+            {
+                UserId = user.Id,
+                TerritoryId = serbia.Id,
+                CreatedAt = now
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureSerbiaRegionalManagerAsync(AppDbContext db, Region region)
+    {
+        var now = DateTime.UtcNow;
+        var role = await EnsureSeedRoleAsync(
+            db,
+            RegionalManagerRoleName,
+            "Can review and approve regional user contributions.",
+            now);
+        var user = await EnsureSeedUserAsync(
+            db,
+            SerbiaRegionalManagerEmail,
+            SerbiaRegionalManagerUsername,
+            "Serbia",
+            "Regional Manager",
+            "Serbia Regional Manager",
+            SerbiaRegionalManagerPassword,
+            region.Name,
+            now);
+
+        if (!await db.UserRoles.AnyAsync(existing => existing.UserId == user.Id && existing.RoleId == role.Id))
+        {
+            db.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = role.Id
+            });
+        }
+
+        var staleAssignments = await db.RegionalManagerRegions
+            .Where(assignment =>
+                assignment.UserId == user.Id &&
+                assignment.Region.TerritoryId == region.TerritoryId &&
+                assignment.RegionId != region.Id &&
+                assignment.IsActive)
+            .ToListAsync();
+
+        foreach (var staleAssignment in staleAssignments)
+        {
+            staleAssignment.IsActive = false;
+            staleAssignment.UpdatedAt = now;
+        }
+
+        var assignment = await db.RegionalManagerRegions.FindAsync(user.Id, region.Id);
+        if (assignment is null)
+        {
+            db.RegionalManagerRegions.Add(new RegionalManagerRegion
+            {
+                UserId = user.Id,
+                RegionId = region.Id,
+                IsActive = true,
+                CreatedAt = now
+            });
+        }
+        else if (!assignment.IsActive)
+        {
+            assignment.IsActive = true;
+            assignment.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<Role> EnsureSeedRoleAsync(
+        AppDbContext db,
+        string name,
+        string description,
+        DateTime now)
+    {
+        var role = await db.Roles.FirstOrDefaultAsync(existing => existing.Name == name);
+        if (role is not null)
+        {
+            return role;
+        }
+
+        role = new Role
+        {
+            Name = name,
+            Description = description,
+            CreatedAt = now
+        };
+
+        db.Roles.Add(role);
+        await db.SaveChangesAsync();
+        return role;
+    }
+
+    private static async Task<User> EnsureSeedUserAsync(
+        AppDbContext db,
+        string email,
+        string username,
+        string firstName,
+        string lastName,
+        string displayName,
+        string password,
+        string location,
+        DateTime now)
+    {
+        var normalizedEmail = email.ToLowerInvariant();
+        var hasher = new PasswordHasher<User>();
+        var user = await db.Users
+            .OrderBy(existing => existing.Id)
+            .FirstOrDefaultAsync(existing => existing.Email.ToLower() == normalizedEmail);
+
+        if (user is null)
+        {
+            user = new User
+            {
+                Username = await ResolveSeedUsernameAsync(db, username),
+                Email = normalizedEmail,
+                FirstName = firstName,
+                LastName = lastName,
+                DisplayName = displayName,
+                PhoneNumber = string.Empty,
+                Location = location,
+                NeedsInterestsOnboarding = false,
+                CreatedAt = now
+            };
+
+            user.PasswordHash = hasher.HashPassword(user, password);
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+            return user;
+        }
+
+        var changed = false;
+        if (SeedPasswordNeedsReset(hasher, user, password))
+        {
+            user.PasswordHash = hasher.HashPassword(user, password);
+            changed = true;
+        }
+
+        if (user.IsSuspended)
+        {
+            user.IsSuspended = false;
+            user.SuspendedAt = null;
+            user.SuspendedByUserId = null;
+            changed = true;
+        }
+
+        if (user.IsDeleted)
+        {
+            user.IsDeleted = false;
+            user.DeletedAt = null;
+            user.DeletedByUserId = null;
+            changed = true;
+        }
+
+        if (user.NeedsInterestsOnboarding)
+        {
+            user.NeedsInterestsOnboarding = false;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(user.FirstName))
+        {
+            user.FirstName = firstName;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(user.LastName))
+        {
+            user.LastName = lastName;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(user.DisplayName))
+        {
+            user.DisplayName = displayName;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(user.Location))
+        {
+            user.Location = location;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            user.UpdatedAt = now;
+            await db.SaveChangesAsync();
+        }
+
+        return user;
+    }
+
     private static async Task RemoveDeprecatedActivityPlaceTypeAsync(AppDbContext db)
     {
         var activityType = await db.PlaceTypes.FirstOrDefaultAsync(x => x.Name == "Activity");
@@ -2928,47 +3433,6 @@ public static class SeedData
     {
         var now = DateTime.UtcNow;
 
-        async Task<Territory> EnsureTerritoryAsync(string name)
-        {
-            var territory = await db.Territories.FirstOrDefaultAsync(x => x.Name == name);
-            if (territory is not null)
-            {
-                return territory;
-            }
-
-            territory = new Territory
-            {
-                Name = name,
-                CountryCode = string.Equals(name, "Croatia", StringComparison.OrdinalIgnoreCase) ? "HR" : null,
-                CountryIso3 = string.Equals(name, "Croatia", StringComparison.OrdinalIgnoreCase) ? "HRV" : null,
-                CreatedAt = now
-            };
-
-            db.Territories.Add(territory);
-            await db.SaveChangesAsync();
-            return territory;
-        }
-
-        async Task<Region> EnsureRegionAsync(string name, Territory territory)
-        {
-            var region = await db.Regions.FirstOrDefaultAsync(x => x.Name == name && x.TerritoryId == territory.Id);
-            if (region is not null)
-            {
-                return region;
-            }
-
-            region = new Region
-            {
-                Name = name,
-                TerritoryId = territory.Id,
-                CreatedAt = now
-            };
-
-            db.Regions.Add(region);
-            await db.SaveChangesAsync();
-            return region;
-        }
-
         async Task<DestinationType> EnsureDestinationTypeAsync(string name, string description)
         {
             var destinationType = await db.DestinationTypes.FirstOrDefaultAsync(x => x.Name == name);
@@ -3112,6 +3576,12 @@ public static class SeedData
             if (destination is not null)
             {
                 var changed = false;
+                if (destination.RegionId != region.Id)
+                {
+                    destination.RegionId = region.Id;
+                    changed = true;
+                }
+
                 if (Math.Abs(destination.Latitude - latitude) > 1e-9 || Math.Abs(destination.Longitude - longitude) > 1e-9)
                 {
                     destination.Latitude = latitude;
@@ -3614,10 +4084,34 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
-        var serbia = await EnsureTerritoryAsync("Serbia");
-        var centralSerbia = await EnsureRegionAsync("Central Serbia", serbia);
-        var vojvodina = await EnsureRegionAsync("Vojvodina", serbia);
-        var westernSerbia = await EnsureRegionAsync("Western Serbia", serbia);
+        var serbia = await EnsureSerbiaTerritoryAsync(db, now);
+        await EnsureSerbiaTerritoryManagerAsync(db, serbia);
+
+        var serbiaRegions = await EnsureSerbiaAdm1RegionsFromCandidatesAsync(db, serbia, now);
+        if (serbiaRegions.Count == 0)
+        {
+            return;
+        }
+
+        Region? TryResolveSerbiaRegion(double latitude, double longitude) =>
+            FindSeedRegionByPoint(serbiaRegions, latitude, longitude)?.Region;
+
+        var beogradRegion = TryResolveSerbiaRegion(44.8125, 20.4612);
+        var noviSadRegion = TryResolveSerbiaRegion(45.2671, 19.8335);
+        var zlatiborRegion = TryResolveSerbiaRegion(43.7297, 19.7003);
+        var kopaonikRegion = TryResolveSerbiaRegion(43.2856, 20.8095);
+        var taraRegion = TryResolveSerbiaRegion(43.9450, 19.4340);
+        var kragujevacRegion = TryResolveSerbiaRegion(44.010590360886276, 20.915278268657637);
+        if (beogradRegion is null ||
+            noviSadRegion is null ||
+            zlatiborRegion is null ||
+            kopaonikRegion is null ||
+            taraRegion is null ||
+            kragujevacRegion is null)
+        {
+            return;
+        }
+
         var cityType = await EnsureDestinationTypeAsync("City", "Urban destination");
         var mountainType = await EnsureDestinationTypeAsync("Mountain", "Mountain and outdoor destination");
         var nationalParkType = await EnsureDestinationTypeAsync("National Park", "Protected nature destination");
@@ -3661,7 +4155,7 @@ public static class SeedData
             "Beograd",
             "Serbia's capital with riverfront walks, historic fortresses, nightlife, museums and layered urban neighborhoods.",
             cityType,
-            centralSerbia,
+            beogradRegion,
             44.8125,
             20.4612);
         await AddDestinationTagsIfMissingAsync(beograd,
@@ -3707,7 +4201,7 @@ public static class SeedData
         await ForceSetPlaceImageAsync(kalemegdan, SeedWebp("kalemegdan"));
         await ForceSetPlaceImageAsync(adaLake, SeedWebp("ada-ciganlija"));
 
-        var noviSad = await EnsureDestinationAsync("Novi Sad", "Danube-side city known for Petrovaradin Fortress, relaxed streets, cafes and festival culture.", cityType, vojvodina, 45.2671, 19.8335);
+        var noviSad = await EnsureDestinationAsync("Novi Sad", "Danube-side city known for Petrovaradin Fortress, relaxed streets, cafes and festival culture.", cityType, noviSadRegion, 45.2671, 19.8335);
         await AddDestinationTagsIfMissingAsync(noviSad,
             "dest-riverfront",
             "dest-relaxed",
@@ -3732,7 +4226,7 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(strand, "waterfront", "swimming", "family-friendly");
         await AddPlaceTagsIfMissingAsync(fishZelenish, "local-favorite", "casual", "traditional", "vegetarian-friendly", "local-food", "food-market");
 
-        var zlatibor = await EnsureDestinationAsync("Zlatibor", "Mountain destination with viewpoints, lakes, pine landscapes, family stays and outdoor activities.", mountainType, westernSerbia, 43.7297, 19.7003);
+        var zlatibor = await EnsureDestinationAsync("Zlatibor", "Mountain destination with viewpoints, lakes, pine landscapes, family stays and outdoor activities.", mountainType, zlatiborRegion, 43.7297, 19.7003);
         await AddDestinationTagsIfMissingAsync(zlatibor,
             "dest-mountain-views",
             "dest-lake",
@@ -3756,7 +4250,7 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(goldGondola, "cable-car", "panoramic-view", "family-friendly", "nature");
         await AddPlaceTagsIfMissingAsync(tornikViewpoint, "hiking", "panoramic-view", "nature", "walking-route");
 
-        var kopaonik = await EnsureDestinationAsync("Kopaonik", "Mountain and ski destination with trails, viewpoints, hotels and winter activities.", mountainType, centralSerbia, 43.2856, 20.8095);
+        var kopaonik = await EnsureDestinationAsync("Kopaonik", "Mountain and ski destination with trails, viewpoints, hotels and winter activities.", mountainType, kopaonikRegion, 43.2856, 20.8095);
         await AddDestinationTagsIfMissingAsync(kopaonik,
             "dest-mountain-views",
             "dest-adventure",
@@ -3779,7 +4273,7 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(skiCenterPlace, "hiking", "panoramic-view", "family-friendly");
         await AddPlaceTagsIfMissingAsync(hotelGrand, "luxury-stay", "premium", "wellness");
 
-        var tara = await EnsureDestinationAsync("Tara", "National park destination with viewpoints, lakes, forest roads and quiet nature stays.", nationalParkType, westernSerbia, 43.9450, 19.4340);
+        var tara = await EnsureDestinationAsync("Tara", "National park destination with viewpoints, lakes, forest roads and quiet nature stays.", nationalParkType, taraRegion, 43.9450, 19.4340);
         await AddDestinationTagsIfMissingAsync(tara,
             "dest-forest",
             "dest-lake",
@@ -3801,7 +4295,7 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(banjskaStena, "panoramic-view", "hiking", "nature", "walking-route");
         await AddPlaceTagsIfMissingAsync(zaovineLake, "waterfront", "quiet-area", "nature", "family-friendly");
 
-        var kragujevac = await EnsureDestinationAsync("Kragujevac", "Serbia's former royal capital and cultural heart of Šumadija, known for its first Serbian theatre, Šumarice Memorial Park and Bubanj lake.", cityType, centralSerbia, 44.010590360886276, 20.915278268657637);
+        var kragujevac = await EnsureDestinationAsync(SerbiaRegionalManagerAnchorDestinationName, "Serbia's former royal capital and cultural heart of Šumadija, known for its first Serbian theatre, Šumarice Memorial Park and Bubanj lake.", cityType, kragujevacRegion, 44.010590360886276, 20.915278268657637);
         await AddDestinationTagsIfMissingAsync(kragujevac,
             "dest-culture",
             "dest-museums",
@@ -4228,6 +4722,9 @@ public static class SeedData
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, kafemat27.Name, placeId: kafemat27.Id, urls: new[] { SeedWebp("kafemat27") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, cafeteria.Name, placeId: cafeteria.Id, urls: new[] { SeedWebp("cafeteria") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, bigFashion.Name, placeId: bigFashion.Id, urls: new[] { SeedWebp("big-kg") });
+
+        await RemoveUnreferencedLegacySerbiaRegionsAsync(db, serbia);
+        await EnsureSerbiaRegionalManagerAsync(db, kragujevacRegion);
     }
 
     private static async Task EnsureAdditionalExploreDemoDataAsync(AppDbContext db, IReadOnlyDictionary<string, Tag> tagLookup)
@@ -5747,6 +6244,12 @@ public static class SeedData
         public string ExternalKey { get; set; } = string.Empty;
         public Geometry? BoundaryGeometry { get; set; }
         public Geometry? BoundaryDisplayGeometry { get; set; }
+    }
+
+    private sealed class SeedRegionSpatialRow
+    {
+        public Region Region { get; set; } = null!;
+        public Geometry? BoundaryGeometry { get; set; }
     }
 
     private static string NormalizeKey(string value) =>

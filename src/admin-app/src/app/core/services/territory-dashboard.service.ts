@@ -1,8 +1,9 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, shareReplay, tap } from 'rxjs';
+import { Observable, Subject, shareReplay, tap } from 'rxjs';
 import {
   BoundaryRegionCandidateResponse,
+  RegionSyncSummary,
   TerritoryAssignedTerritory,
   TerritoryContentDirectoryResponse,
   TerritoryDashboardResponse,
@@ -13,6 +14,8 @@ import {
   TerritoryRegionContentType,
   TerritoryRegionDetail,
   TerritoryRegionDirectoryResponse,
+  TerritoryRegionMapResponse,
+  TerritoryRegionSetupStatus,
   TerritorySidebarSummary,
 } from '../models/dashboard.model';
 
@@ -43,6 +46,10 @@ export class TerritoryDashboardService {
   private static readonly activeTerritoryStorageKey = 'geotrack_admin_active_territory_id';
 
   private assignedTerritories$?: Observable<TerritoryAssignedTerritory[]>;
+  private readonly regionSetupChangedSubject = new Subject<void>();
+  private readonly activeTerritoryChangedSubject = new Subject<number | null>();
+  readonly regionSetupChanged$ = this.regionSetupChangedSubject.asObservable();
+  readonly activeTerritoryChanged$ = this.activeTerritoryChangedSubject.asObservable();
 
   constructor(private readonly http: HttpClient) {}
 
@@ -66,6 +73,11 @@ export class TerritoryDashboardService {
     this.assignedTerritories$ = undefined;
   }
 
+  clearSessionState(): void {
+    this.assignedTerritories$ = undefined;
+    this.setActiveTerritoryId(null);
+  }
+
   getSidebarSummary(territoryId?: number | null): Observable<TerritorySidebarSummary> {
     return this.http.get<TerritorySidebarSummary>('/api/admin/territory/sidebar-summary', {
       params: this.withTerritoryId(new HttpParams(), territoryId),
@@ -84,6 +96,18 @@ export class TerritoryDashboardService {
 
     return this.http.get<TerritoryRegionDirectoryResponse>('/api/admin/territory/regions', {
       params,
+    });
+  }
+
+  getRegionSetupStatus(territoryId?: number | null): Observable<TerritoryRegionSetupStatus> {
+    return this.http.get<TerritoryRegionSetupStatus>('/api/admin/territory/regions/setup-status', {
+      params: this.withTerritoryId(new HttpParams(), territoryId),
+    });
+  }
+
+  getRegionMap(territoryId?: number | null): Observable<TerritoryRegionMapResponse> {
+    return this.http.get<TerritoryRegionMapResponse>('/api/admin/territory/regions/map', {
+      params: this.withTerritoryId(new HttpParams(), territoryId),
     });
   }
 
@@ -107,6 +131,22 @@ export class TerritoryDashboardService {
 
   createRegion(request: TerritoryRegionCreateRequest): Observable<TerritoryRegionCreateResponse> {
     return this.http.post<TerritoryRegionCreateResponse>('/api/admin/territory/regions', request);
+  }
+
+  syncRegionsFromAdm1(
+    territoryId?: number | null,
+    dryRun = false,
+    forceUpdateGeometry = false,
+  ): Observable<RegionSyncSummary> {
+    const params = this.withTerritoryId(new HttpParams(), territoryId)
+      .set('dryRun', String(dryRun))
+      .set('forceUpdateGeometry', String(forceUpdateGeometry));
+
+    return this.http.post<RegionSyncSummary>('/api/admin/territory/regions/sync-from-adm1', {}, { params });
+  }
+
+  notifyRegionSetupChanged(): void {
+    this.regionSetupChangedSubject.next();
   }
 
   getRegionDetail(
@@ -161,14 +201,21 @@ export class TerritoryDashboardService {
   }
 
   setActiveTerritoryId(territoryId: number | null): void {
+    const previous = this.getActiveTerritoryId();
+    const next = territoryId && territoryId > 0 ? territoryId : null;
+
     try {
-      if (territoryId && territoryId > 0) {
-        sessionStorage.setItem(TerritoryDashboardService.activeTerritoryStorageKey, String(territoryId));
+      if (next) {
+        sessionStorage.setItem(TerritoryDashboardService.activeTerritoryStorageKey, String(next));
       } else {
         sessionStorage.removeItem(TerritoryDashboardService.activeTerritoryStorageKey);
       }
     } catch {
       // Active territory persistence is a UI convenience only.
+    }
+
+    if (previous !== next) {
+      this.activeTerritoryChangedSubject.next(next);
     }
   }
 

@@ -62,6 +62,7 @@ public class RegionalEventService : IRegionalEventService
         var rows = await query
             .Skip(normalizedSkip)
             .Take(normalizedTake)
+            .AsSplitQuery()
             .Select(@event => new EventProjection
             {
                 Id = @event.Id,
@@ -157,6 +158,7 @@ public class RegionalEventService : IRegionalEventService
         var row = await _db.Events
             .AsNoTracking()
             .Where(@event => @event.Id == eventId && @event.Destination.RegionId == regionId)
+            .AsSplitQuery()
             .Select(@event => new EventProjection
             {
                 Id = @event.Id,

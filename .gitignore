@@ -18,6 +18,7 @@ TestResults/
 BenchmarkDotNet.Artifacts/
 **/.codexobj/
 *.tmp
+publish
 
 # User-specific files
 *.rsuser

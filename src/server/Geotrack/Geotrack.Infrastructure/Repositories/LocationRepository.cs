@@ -17,6 +17,7 @@ public class LocationRepository : Repository<Location>, ILocationRepository
     public async Task<Location?> GetWithDetailsAsync(int locationId)
     {
         return await _context.Locations
+            .AsNoTracking()
             .Include(l => l.Destination)
             .Include(l => l.Places)
                 .ThenInclude(p => p.PlaceTags)
@@ -32,6 +33,7 @@ public class LocationRepository : Repository<Location>, ILocationRepository
                 .ThenInclude(lt => lt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(l => l.Id == locationId);
     }
 

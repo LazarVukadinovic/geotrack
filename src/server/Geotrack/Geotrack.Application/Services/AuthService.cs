@@ -18,14 +18,6 @@ public class AuthService : IAuthService
     private const int SessionOnlyRefreshTokenLifetimeDays = 1;
     private const string InvalidCredentialsMessage = "Invalid email or password.";
     private const string AdminAccessDeniedMessage = "You do not have access to the admin app.";
-    private static readonly string[] AdminAppRoles =
-    [
-        RoleNames.Admin,
-        RoleNames.ContentModerator,
-        RoleNames.TerritoryManager,
-        RoleNames.TerritoryAssociate,
-        RoleNames.RegionalManager
-    ];
 
     private readonly IUserRepository _userRepository;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
@@ -103,8 +95,34 @@ public class AuthService : IAuthService
             AccessToken  = pair.AccessToken,
             RefreshToken = pair.RefreshToken,
             ExpiresIn    = pair.ExpiresIn,
-            SessionPersistent = pair.SessionPersistent
+            SessionPersistent = pair.SessionPersistent,
+            Session = pair.Session
         };
+    }
+
+    public async Task<AuthSessionDto> GetSessionAsync(RefreshRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            throw new UnauthorizedAccessException("Refresh token is required");
+
+        var stored = await _refreshTokenRepository.GetActiveByTokenHashAsync(HashToken(request.RefreshToken));
+        if (stored == null)
+            throw new UnauthorizedAccessException("Invalid or expired refresh token");
+
+        var user = await _userRepository.GetByIdWithRolesAsync(stored.UserId)
+            ?? throw new UnauthorizedAccessException("Invalid or expired refresh token");
+
+        EnsureAccountCanAuthenticate(user);
+        return BuildSessionDto(user, stored.IsPersistent, stored.ExpiresAt);
+    }
+
+    public async Task<AuthSessionDto> GetSessionForUserAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdWithRolesAsync(userId)
+            ?? throw new UnauthorizedAccessException("Invalid user session.");
+
+        EnsureAccountCanAuthenticate(user);
+        return BuildSessionDto(user, sessionPersistent: false, sessionExpiresAt: null);
     }
 
     public async Task LogoutAsync(LogoutRequestDto request)
@@ -153,7 +171,7 @@ public class AuthService : IAuthService
 
     public async Task<AdminLoginResponseDto> RefreshAdminAsync(RefreshRequestDto request)
     {
-        var rotated = await RotateRefreshTokenWithUserAsync(request, AdminAppRoles);
+        var rotated = await RotateRefreshTokenWithUserAsync(request, RoleNames.AdminAppRoles);
         var adminUser = await GetAdminUserAsync(rotated.UserId);
 
         return ToAdminLoginResponse(rotated.Pair, adminUser);
@@ -169,7 +187,7 @@ public class AuthService : IAuthService
 
     public async Task<AdminAuthUserDto> GetAdminUserAsync(int userId)
     {
-        return await GetAdminUserAsync(userId, AdminAppRoles);
+        return await GetAdminUserAsync(userId, RoleNames.AdminAppRoles);
     }
 
     public async Task<AdminAuthUserDto> GetRegionalAdminUserAsync(int userId)
@@ -198,6 +216,7 @@ public class AuthService : IAuthService
             AvatarUrl = user.AvatarUrl,
             AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
             Roles = roles,
+            CanAccessAdminApp = RoleNames.CanAccessAdminApp(roles),
             CanAccessContentModeration = roles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal),
             CanAccessRegionalAdmin = roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal),
             CanAccessTerritoryAdmin =
@@ -252,10 +271,6 @@ public class AuthService : IAuthService
         if (stored == null)
             throw new UnauthorizedAccessException("Invalid or expired refresh token");
 
-        stored.IsRevoked = true;
-        stored.RevokedAt = DateTime.UtcNow;
-        await _refreshTokenRepository.SaveChangesAsync();
-
         var user = await _userRepository.GetByIdWithRolesAsync(stored.UserId)
             ?? throw new UnauthorizedAccessException("Invalid or expired refresh token");
         EnsureAccountCanAuthenticate(user);
@@ -267,6 +282,10 @@ public class AuthService : IAuthService
             if (!requiredRoles.Any(requiredRole => roles.Contains(RoleNames.Normalize(requiredRole), StringComparer.Ordinal)))
                 throw new ForbiddenAccessException(AdminAccessDeniedMessage);
         }
+
+        stored.IsRevoked = true;
+        stored.RevokedAt = DateTime.UtcNow;
+        await _refreshTokenRepository.SaveChangesAsync();
 
         var pair = await IssueTokenPairAsync(stored.UserId, stored.IsPersistent);
         return (pair, stored.UserId);
@@ -298,13 +317,14 @@ public class AuthService : IAuthService
         var lifetimeDays = isPersistent
             ? PersistentRefreshTokenLifetimeDays
             : SessionOnlyRefreshTokenLifetimeDays;
+        var expiresAt = DateTime.UtcNow.AddDays(lifetimeDays);
 
         var refreshToken = new RefreshToken
         {
             UserId       = userId,
             TokenHash    = HashToken(refreshValue),
             IsPersistent = isPersistent,
-            ExpiresAt    = DateTime.UtcNow.AddDays(lifetimeDays),
+            ExpiresAt    = expiresAt,
             IsRevoked    = false,
             CreatedAt    = DateTime.UtcNow
         };
@@ -317,7 +337,67 @@ public class AuthService : IAuthService
             AccessToken  = accessToken,
             RefreshToken = refreshValue,
             ExpiresIn    = 900,
-            SessionPersistent = isPersistent
+            SessionPersistent = isPersistent,
+            Session = BuildSessionDto(user, isPersistent, expiresAt)
+        };
+    }
+
+    private static AuthSessionDto BuildSessionDto(
+        User user,
+        bool sessionPersistent,
+        DateTime? sessionExpiresAt)
+    {
+        var roles = NormalizeRoles(user.UserRoles.Select(userRole => userRole.Role.Name));
+        var adminRoleType = ResolvePrimaryAdminRole(roles);
+
+        return new AuthSessionDto
+        {
+            UserId = user.Id,
+            Email = user.Email,
+            DisplayName = BuildDisplayName(user),
+            AvatarUrl = user.AvatarUrl,
+            AvatarVersion = AvatarVersionBuilder.From(user.AvatarUrl, user.UpdatedAt, user.CreatedAt),
+            Roles = roles,
+            IsAuthenticated = true,
+            CanAccessAdminApp = adminRoleType is not null,
+            AdminRoleType = adminRoleType,
+            AdminLandingRoute = adminRoleType is null ? null : ResolveAdminLandingRoute(adminRoleType),
+            UserAppLandingRoute = "/profile",
+            SessionPersistent = sessionPersistent,
+            SessionExpiresAt = sessionExpiresAt
+        };
+    }
+
+    private static string? ResolvePrimaryAdminRole(IReadOnlyCollection<string> roles)
+    {
+        if (roles.Contains(RoleNames.Admin, StringComparer.Ordinal))
+            return RoleNames.Admin;
+
+        if (roles.Contains(RoleNames.ContentModerator, StringComparer.Ordinal))
+            return RoleNames.ContentModerator;
+
+        if (roles.Contains(RoleNames.TerritoryManager, StringComparer.Ordinal))
+            return RoleNames.TerritoryManager;
+
+        if (roles.Contains(RoleNames.TerritoryAssociate, StringComparer.Ordinal))
+            return RoleNames.TerritoryAssociate;
+
+        if (roles.Contains(RoleNames.RegionalManager, StringComparer.Ordinal))
+            return RoleNames.RegionalManager;
+
+        return null;
+    }
+
+    private static string ResolveAdminLandingRoute(string role)
+    {
+        return role switch
+        {
+            RoleNames.Admin => "/admin-dashboard",
+            RoleNames.ContentModerator => "/content-moderator/dashboard",
+            RoleNames.TerritoryManager => "/territory/overview",
+            RoleNames.TerritoryAssociate => "/territory/overview",
+            RoleNames.RegionalManager => "/dashboard",
+            _ => "/login"
         };
     }
 

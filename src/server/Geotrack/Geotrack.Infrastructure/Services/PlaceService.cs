@@ -149,10 +149,9 @@ public class PlaceService : IPlaceService
                 .ThenInclude(pt => pt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
-            .Include(p => p.PlaceAmenities)
-                .ThenInclude(placeAmenity => placeAmenity.Amenity)
             .Include(p => p.PlaceBookingPartners)
                 .ThenInclude(placeBookingPartner => placeBookingPartner.BookingPartner)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(p =>
                 p.Id == id &&
                 p.Status == PublishedStatus &&
@@ -189,6 +188,11 @@ public class PlaceService : IPlaceService
                 p.Stay == null &&
                 p.PlaceTypeId == place.PlaceTypeId &&
                 p.Location.DestinationId == place.Location.DestinationId)
+            .AsSplitQuery()
+            .OrderByDescending(p => p.PlaceReviews.Select(review => (double?)review.Rating).Average() ?? 0d)
+            .ThenByDescending(p => p.PlaceReviews.Count)
+            .ThenBy(p => p.Name)
+            .ThenBy(p => p.Id)
             .Take(5)
             .ToListAsync();
 
@@ -337,6 +341,7 @@ public class PlaceService : IPlaceService
                         .ThenInclude(tagType => tagType!.PlaceTypes)
             .Include(p => p.PlaceBookingPartners)
                 .ThenInclude(pb => pb.BookingPartner)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(p =>
                 p.Id == id &&
                 p.Status == PublishedStatus &&
@@ -373,6 +378,11 @@ public class PlaceService : IPlaceService
                 p.Location.Destination.Status == PublishedStatus &&
                 p.Stay != null &&
                 p.Location.DestinationId == place.Location.DestinationId)
+            .AsSplitQuery()
+            .OrderByDescending(p => p.PlaceReviews.Select(review => (double?)review.Rating).Average() ?? 0d)
+            .ThenByDescending(p => p.PlaceReviews.Count)
+            .ThenBy(p => p.Name)
+            .ThenBy(p => p.Id)
             .Take(5)
             .ToListAsync();
 
@@ -551,8 +561,10 @@ public class PlaceService : IPlaceService
     public async Task<GetPlaceDetailsResponseDto> GetPlaceDetailsAsync(int placeId, int? userId)
     {
         var place = await _db.Places
+            .AsNoTracking()
             .Include(p => p.PlaceReviews)
             .Include(p => p.Events)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(p =>
                 p.Id == placeId &&
                 p.Status == PublishedStatus &&

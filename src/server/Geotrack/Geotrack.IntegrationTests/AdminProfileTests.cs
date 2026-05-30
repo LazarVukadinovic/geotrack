@@ -78,6 +78,7 @@ public sealed class AdminProfileTests
         Assert.Equal(FirstAssignedAt, profile.RegionalManager.MemberSince);
         Assert.Equal(FirstAssignedAt, profile.Assignment.MemberSince);
         Assert.Equal(2, profile.Assignment.AssignedItems.Count);
+        AssertEmailNotificationsUnavailable(profile.Preferences);
 
         var expectedRegionNames = setup.AssignedRegions.Select(region => region.Name).OrderBy(name => name).ToList();
         var actualRegionNames = profile.RegionalManager.AssignedRegions.Select(region => region.Name).OrderBy(name => name).ToList();
@@ -116,6 +117,7 @@ public sealed class AdminProfileTests
         Assert.Equal("Croatia", assignedItem.Name);
         Assert.Equal("Croatia", assignedItem.DisplayName);
         Assert.Empty(profile.RegionalManager.AssignedRegions);
+        AssertEmailNotificationsUnavailable(profile.Preferences);
     }
 
     [Fact]
@@ -146,6 +148,7 @@ public sealed class AdminProfileTests
         Assert.Equal(AdminCreatedAt, profile.Assignment.MemberSince);
         Assert.Empty(profile.Assignment.AssignedItems);
         Assert.Empty(profile.RegionalManager.AssignedRegions);
+        AssertEmailNotificationsUnavailable(profile.Preferences);
     }
 
     [Fact]
@@ -175,6 +178,7 @@ public sealed class AdminProfileTests
         Assert.Equal(AdminCreatedAt, profile.Assignment.MemberSince);
         Assert.Empty(profile.Assignment.AssignedItems);
         Assert.Empty(profile.RegionalManager.AssignedRegions);
+        AssertEmailNotificationsUnavailable(profile.Preferences);
     }
 
     [Fact]
@@ -211,8 +215,7 @@ public sealed class AdminProfileTests
         Assert.Equal("elena@example.com", updated.User.Email);
         Assert.Equal("sr", updated.Preferences.InterfaceLanguage);
         Assert.Equal("Europe/Belgrade", updated.Preferences.Timezone);
-        Assert.False(updated.Preferences.EmailRequestsEnabled);
-        Assert.True(updated.Preferences.EmailNewReviewEnabled);
+        AssertEmailNotificationsUnavailable(updated.Preferences);
         Assert.Contains(RoleNames.RegionalManager, updated.Roles);
         Assert.Equal("Assigned Region", updated.Assignment.Label);
         Assert.Equal(2, updated.RegionalManager.AssignedRegions.Count);
@@ -226,14 +229,16 @@ public sealed class AdminProfileTests
             .SingleAsync(existing => existing.Id == setup.UserId);
 
         Assert.Equal("elena@example.com", user.Email);
+        Assert.False(user.EmailNotificationsEnabled);
+        Assert.False(user.EmailRequestsEnabled);
+        Assert.False(user.EmailNewReviewEnabled);
         Assert.Contains(user.UserRoles, userRole => userRole.Role.Name == RoleNames.RegionalManager);
         Assert.Equal(setup.AssignedRegions.Select(region => region.Id).OrderBy(id => id), user.RegionalManagerRegions.Select(assignment => assignment.RegionId).OrderBy(id => id));
 
         var reloaded = await client.GetFromJsonAsync<AdminProfileResponseDto>("/api/admin/profile");
         Assert.NotNull(reloaded);
         Assert.Equal("Updated bio", reloaded!.User.ShortBio);
-        Assert.False(reloaded.Preferences.EmailRequestsEnabled);
-        Assert.True(reloaded.Preferences.EmailNewReviewEnabled);
+        AssertEmailNotificationsUnavailable(reloaded.Preferences);
     }
 
     [Fact]
@@ -270,8 +275,7 @@ public sealed class AdminProfileTests
         Assert.Equal("zika@gmail.com", updated.User.Email);
         Assert.Equal("sr", updated.Preferences.InterfaceLanguage);
         Assert.Equal("Europe/Belgrade", updated.Preferences.Timezone);
-        Assert.False(updated.Preferences.EmailRequestsEnabled);
-        Assert.True(updated.Preferences.EmailNewReviewEnabled);
+        AssertEmailNotificationsUnavailable(updated.Preferences);
         Assert.Contains(RoleNames.Admin, updated.Roles);
         Assert.Equal(RoleNames.Admin, updated.Role.RoleCode);
         Assert.Equal("Administrator", updated.Role.RoleDisplayName);
@@ -287,6 +291,9 @@ public sealed class AdminProfileTests
             .SingleAsync(existing => existing.Id == userId);
 
         Assert.Equal("zika@gmail.com", user.Email);
+        Assert.False(user.EmailNotificationsEnabled);
+        Assert.False(user.EmailRequestsEnabled);
+        Assert.False(user.EmailNewReviewEnabled);
         Assert.Contains(user.UserRoles, userRole => userRole.Role.Name == RoleNames.Admin);
         Assert.Equal("Updated", user.FirstName);
         Assert.Equal("Administrator", user.LastName);
@@ -330,6 +337,7 @@ public sealed class AdminProfileTests
         Assert.Equal("Assigned Territory", updated.Assignment.Label);
         Assert.Equal(setup.AssignedTerritory.Name, updated.Assignment.DisplayValue);
         Assert.Equal(TerritoryAssignedAt, updated.Assignment.MemberSince);
+        AssertEmailNotificationsUnavailable(updated.Preferences);
 
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -560,6 +568,13 @@ public sealed class AdminProfileTests
             new AuthenticationHeaderValue("Bearer", session!.AccessToken);
 
         return session;
+    }
+
+    private static void AssertEmailNotificationsUnavailable(AdminProfilePreferencesDto preferences)
+    {
+        Assert.False(preferences.EmailNotificationsAvailable);
+        Assert.False(preferences.EmailRequestsEnabled);
+        Assert.False(preferences.EmailNewReviewEnabled);
     }
 
     private static async Task<(int UserId, List<Region> AssignedRegions)> PrepareRegionalManagerAsync(

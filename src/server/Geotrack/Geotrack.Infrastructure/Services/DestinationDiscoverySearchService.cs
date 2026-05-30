@@ -164,6 +164,7 @@ public class DestinationDiscoverySearchService
             })
             .OrderByDescending(destination => destination.Score)
             .ThenBy(destination => destination.Name)
+            .ThenBy(destination => destination.Id)
             .Skip(normalizedSkip)
             .Take(normalizedTake)
             .ToListAsync(cancellationToken);
@@ -350,6 +351,7 @@ public class DestinationDiscoverySearchService
         return await _db.Destinations
             .AsNoTracking()
             .Where(destination => destinationIds.Contains(destination.Id))
+            .AsSplitQuery()
             .Select(destination => new DestinationSearchRow
             {
                 Id = destination.Id,
@@ -387,6 +389,8 @@ public class DestinationDiscoverySearchService
                         (hasQuery &&
                          (destinationTag.Tag.Name.ToLower().Contains(term) ||
                           destinationTag.Tag.Slug.ToLower().Contains(term))))
+                    .OrderBy(destinationTag => destinationTag.Tag.Name)
+                    .ThenBy(destinationTag => destinationTag.TagId)
                     .Select(destinationTag => destinationTag.Tag.Name)
                     .ToList(),
                 MatchedLocationNames = destination.Locations
@@ -403,6 +407,7 @@ public class DestinationDiscoverySearchService
                                 locationTag.Tag.Slug.ToLower().Contains(term))
                         ))
                     .OrderBy(location => location.Name)
+                    .ThenBy(location => location.Id)
                     .Select(location => location.Name)
                     .Take(5)
                     .ToList(),
@@ -413,6 +418,8 @@ public class DestinationDiscoverySearchService
                         hasQuery &&
                         (locationTag.Tag.Name.ToLower().Contains(term) ||
                          locationTag.Tag.Slug.ToLower().Contains(term)))
+                    .OrderBy(locationTag => locationTag.Tag.Name)
+                    .ThenBy(locationTag => locationTag.TagId)
                     .Select(locationTag => locationTag.Tag.Name)
                     .Take(8)
                     .ToList(),
@@ -434,6 +441,7 @@ public class DestinationDiscoverySearchService
                                 placeTag.Tag.Slug.ToLower().Contains(term))
                         ))
                     .OrderBy(place => place.Name)
+                    .ThenBy(place => place.Id)
                     .Select(place => place.Name)
                     .Take(5)
                     .ToList(),
@@ -446,6 +454,8 @@ public class DestinationDiscoverySearchService
                         hasQuery &&
                         (placeTag.Tag.Name.ToLower().Contains(term) ||
                          placeTag.Tag.Slug.ToLower().Contains(term)))
+                    .OrderBy(placeTag => placeTag.Tag.Name)
+                    .ThenBy(placeTag => placeTag.TagId)
                     .Select(placeTag => placeTag.Tag.Name)
                     .Take(8)
                     .ToList(),
@@ -456,6 +466,8 @@ public class DestinationDiscoverySearchService
                         place.Status == PublishedStatus &&
                         hasQuery &&
                         place.PlaceType.Name.ToLower().Contains(term))
+                    .OrderBy(place => place.PlaceType.Name)
+                    .ThenBy(place => place.PlaceTypeId)
                     .Select(place => place.PlaceType.Name)
                     .Take(8)
                     .ToList(),
@@ -467,6 +479,8 @@ public class DestinationDiscoverySearchService
                         place.Stay != null &&
                         hasQuery &&
                         place.Stay.StayType.Name.ToLower().Contains(term))
+                    .OrderBy(place => place.Stay!.StayType.Name)
+                    .ThenBy(place => place.Stay!.StayTypeId)
                     .Select(place => place.Stay!.StayType.Name)
                     .Take(8)
                     .ToList(),

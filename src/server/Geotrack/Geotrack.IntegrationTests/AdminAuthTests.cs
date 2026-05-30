@@ -35,7 +35,7 @@ public sealed class AdminAuthTests
 
         response.EnsureSuccessStatusCode();
         Assert.True(response.Headers.TryGetValues("Set-Cookie", out var cookies));
-        Assert.Contains(cookies, value => value.Contains("geotrack_admin_refresh=", StringComparison.Ordinal));
+        Assert.Contains(cookies, IsSharedRefreshCookie);
 
         var session = await response.Content.ReadFromJsonAsync<AdminLoginResponseDto>();
         Assert.NotNull(session);
@@ -165,7 +165,7 @@ public sealed class AdminAuthTests
     }
 
     [Fact]
-    public async Task Admin_refresh_and_logout_use_the_admin_refresh_cookie()
+    public async Task Admin_refresh_and_logout_use_the_shared_refresh_cookie()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         await GrantRegionalManagerRoleAsync(app, "elena@example.com");
@@ -186,6 +186,184 @@ public sealed class AdminAuthTests
 
         var refreshAfterLogout = await client.PostAsJsonAsync("/api/admin/auth/refresh", new { });
         Assert.Equal(HttpStatusCode.Unauthorized, refreshAfterLogout.StatusCode);
+    }
+
+    [Fact]
+    public async Task User_app_login_with_admin_role_bootstraps_admin_app_from_shared_cookie()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var login = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequestDto
+            {
+                Email = "mika@gmail.com",
+                Password = "Proba123!",
+                RememberMe = true
+            });
+        login.EnsureSuccessStatusCode();
+
+        Assert.True(login.Headers.TryGetValues("Set-Cookie", out var cookies));
+        var sharedCookie = Assert.Single(cookies, IsSharedRefreshCookie);
+        Assert.Contains("max-age=", sharedCookie, StringComparison.OrdinalIgnoreCase);
+
+        var userSession = await login.Content.ReadFromJsonAsync<LoginResponseDto>();
+        Assert.NotNull(userSession);
+        Assert.NotNull(userSession!.Session);
+        Assert.True(userSession.Session!.CanAccessAdminApp);
+        Assert.Contains(RoleNames.TerritoryManager, userSession.Session.Roles);
+        Assert.Equal("/territory/overview", userSession.Session.AdminLandingRoute);
+
+        var adminRefresh = await client.PostAsJsonAsync("/api/admin/auth/refresh", new { });
+        adminRefresh.EnsureSuccessStatusCode();
+
+        var adminSession = await adminRefresh.Content.ReadFromJsonAsync<AdminLoginResponseDto>();
+        Assert.NotNull(adminSession);
+        Assert.Equal("mika@gmail.com", adminSession!.User.Email);
+        Assert.True(adminSession.User.CanAccessAdminApp);
+        Assert.True(adminSession.User.CanAccessTerritoryAdmin);
+        Assert.Contains(RoleNames.TerritoryManager, adminSession.User.Roles);
+    }
+
+    [Fact]
+    public async Task Admin_app_login_bootstraps_user_app_from_shared_cookie()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var adminLogin = await client.PostAsJsonAsync(
+            "/api/admin/auth/login",
+            new LoginRequestDto
+            {
+                Email = "zika@gmail.com",
+                Password = "Proba123!",
+                RememberMe = true
+            });
+        adminLogin.EnsureSuccessStatusCode();
+
+        Assert.True(adminLogin.Headers.TryGetValues("Set-Cookie", out var cookies));
+        Assert.Contains(cookies, IsSharedRefreshCookie);
+
+        var userRefresh = await client.PostAsJsonAsync("/api/auth/refresh", new { });
+        userRefresh.EnsureSuccessStatusCode();
+
+        var userSession = await userRefresh.Content.ReadFromJsonAsync<RefreshResponseDto>();
+        Assert.NotNull(userSession);
+        Assert.False(string.IsNullOrWhiteSpace(userSession!.AccessToken));
+        Assert.True(userSession.SessionPersistent);
+        Assert.NotNull(userSession.Session);
+        Assert.True(userSession.Session!.CanAccessAdminApp);
+        Assert.Contains(RoleNames.Admin, userSession.Session.Roles);
+    }
+
+    [Fact]
+    public async Task Admin_refresh_denies_normal_user_without_revoking_shared_user_session()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var login = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequestDto
+            {
+                Email = "marko.p@example.com",
+                Password = "password123",
+                RememberMe = true
+            });
+        login.EnsureSuccessStatusCode();
+
+        var denied = await client.PostAsJsonAsync("/api/admin/auth/refresh", new { });
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+
+        var body = await denied.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.NotNull(body);
+        Assert.Equal("You do not have access to the admin app.", body["message"]);
+
+        var userRefresh = await client.PostAsJsonAsync("/api/auth/refresh", new { });
+        userRefresh.EnsureSuccessStatusCode();
+
+        var refreshed = await userRefresh.Content.ReadFromJsonAsync<RefreshResponseDto>();
+        Assert.NotNull(refreshed);
+        Assert.False(string.IsNullOrWhiteSpace(refreshed!.AccessToken));
+        Assert.False(refreshed.Session!.CanAccessAdminApp);
+    }
+
+    [Fact]
+    public async Task Auth_session_endpoint_returns_safe_roles_and_admin_access_flags()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+
+        using (var anonymousClient = app.CreateClient())
+        {
+            var anonymous = await anonymousClient.GetAsync("/api/auth/session");
+            Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        }
+
+        using var client = app.CreateClient();
+        var login = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequestDto
+            {
+                Email = "moderator@gmail.com",
+                Password = "Proba123!",
+                RememberMe = false
+            });
+        login.EnsureSuccessStatusCode();
+
+        var sessionResponse = await client.GetAsync("/api/auth/session");
+        sessionResponse.EnsureSuccessStatusCode();
+
+        var session = await sessionResponse.Content.ReadFromJsonAsync<AuthSessionDto>();
+        Assert.NotNull(session);
+        Assert.True(session!.IsAuthenticated);
+        Assert.Equal("moderator@gmail.com", session.Email);
+        Assert.True(session.CanAccessAdminApp);
+        Assert.Equal(RoleNames.ContentModerator, session.AdminRoleType);
+        Assert.Equal("/content-moderator/dashboard", session.AdminLandingRoute);
+        Assert.Contains(RoleNames.ContentModerator, session.Roles);
+    }
+
+    [Fact]
+    public async Task Remember_me_controls_shared_cookie_persistence()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+
+        using (var persistentClient = app.CreateClient())
+        {
+            var persistentLogin = await persistentClient.PostAsJsonAsync(
+                "/api/auth/login",
+                new LoginRequestDto
+                {
+                    Email = "marko.p@example.com",
+                    Password = "password123",
+                    RememberMe = true
+                });
+            persistentLogin.EnsureSuccessStatusCode();
+
+            Assert.True(persistentLogin.Headers.TryGetValues("Set-Cookie", out var persistentCookies));
+            var sharedCookie = Assert.Single(persistentCookies, IsSharedRefreshCookie);
+            Assert.Contains("max-age=", sharedCookie, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("expires=", sharedCookie, StringComparison.OrdinalIgnoreCase);
+        }
+
+        using (var sessionClient = app.CreateClient())
+        {
+            var sessionLogin = await sessionClient.PostAsJsonAsync(
+                "/api/auth/login",
+                new LoginRequestDto
+                {
+                    Email = "marko.p@example.com",
+                    Password = "password123",
+                    RememberMe = false
+                });
+            sessionLogin.EnsureSuccessStatusCode();
+
+            Assert.True(sessionLogin.Headers.TryGetValues("Set-Cookie", out var sessionCookies));
+            var sharedCookie = Assert.Single(sessionCookies, IsSharedRefreshCookie);
+            Assert.DoesNotContain("max-age=", sharedCookie, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("expires=", sharedCookie, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [Fact]
@@ -256,5 +434,15 @@ public sealed class AdminAuthTests
         }
 
         await db.SaveChangesAsync();
+    }
+
+    private static bool IsSharedRefreshCookie(string value)
+    {
+        var lower = value.ToLowerInvariant();
+
+        return value.Contains("geotrack_refresh=", StringComparison.Ordinal)
+            && (lower.Contains("path=/api;") || lower.EndsWith("path=/api", StringComparison.Ordinal))
+            && !value.Contains("expires=Thu, 01 Jan 1970", StringComparison.OrdinalIgnoreCase)
+            && !value.Contains("expires=Thu, 01 Jan 1970 00:00:00 GMT", StringComparison.OrdinalIgnoreCase);
     }
 }

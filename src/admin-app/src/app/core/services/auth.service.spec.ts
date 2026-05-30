@@ -1,8 +1,10 @@
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { Router } from '@angular/router';
 
 import { AuthService } from './auth.service';
+import { AuthInterceptor } from '../interceptors/auth.interceptor';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -10,8 +12,14 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     sessionStorage.clear();
+    localStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
+        { provide: Router, useValue: { url: '/', navigate: () => Promise.resolve(true) } },
+        { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
+      ],
     });
     service = TestBed.inject(AuthService);
     http = TestBed.inject(HttpTestingController);
@@ -20,6 +28,7 @@ describe('AuthService', () => {
   afterEach(() => {
     http.verify();
     sessionStorage.clear();
+    localStorage.clear();
   });
 
   it('should be created', () => {
@@ -40,17 +49,34 @@ describe('AuthService', () => {
     const request = http.expectOne('/api/admin/auth/login');
     expect(request.request.method).toBe('POST');
     expect(request.request.withCredentials).toBe(true);
+    expect(request.request.headers.has('Authorization')).toBe(false);
     expect(request.request.body).toEqual({
       email: 'regional@example.com',
       password: 'Password123!',
       rememberMe: true,
     });
 
-    request.flush(adminLoginResponse());
+    const response = adminLoginResponse();
+    request.flush(response);
+    flushCurrentUser(response.user);
 
     expect(resolved).toBe(true);
     expect(service.isLoggedIn()).toBe(true);
     expect(service.getAccessToken()).toBe('access-token');
+  });
+
+  it('stores persistent admin session hints in local storage when the server remembers the session', () => {
+    service.login('regional@example.com', 'Password123!', true).subscribe();
+
+    const response = {
+      ...adminLoginResponse(),
+      sessionPersistent: true,
+    };
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
+
+    expect(localStorage.getItem('geotrack_admin_session')).toBe('persistent');
+    expect(sessionStorage.getItem('geotrack_admin_session')).toBeNull();
   });
 
   it('maps territory manager roles to the territory dashboard route', () => {
@@ -59,7 +85,7 @@ describe('AuthService', () => {
       expect(user.role).toBe('Territory Manager');
     });
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'territory-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -72,7 +98,13 @@ describe('AuthService', () => {
         canAccessRegionalAdmin: false,
         canAccessTerritoryAdmin: true,
       },
-    });
+    };
+    http.expectOne('/api/admin/auth/login').flush(response);
+    expect(service.getAccessToken()).toBe('territory-token');
+    flushCurrentUser(response.user);
+    flushAssignedTerritories([
+      { id: 10, name: 'Croatia', displayName: 'Croatia', statusLabel: 'Assigned' },
+    ]);
 
     expect(service.isTerritoryManager()).toBe(true);
     expect(service.isRegionalManager()).toBe(false);
@@ -85,7 +117,7 @@ describe('AuthService', () => {
       expect(user.role).toBe('Territory Associate');
     });
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'associate-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -98,7 +130,10 @@ describe('AuthService', () => {
         canAccessRegionalAdmin: false,
         canAccessTerritoryAdmin: true,
       },
-    });
+    };
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
+    flushAssignedTerritories();
 
     expect(service.isTerritoryAssociate()).toBe(true);
     expect(service.isTerritoryManager()).toBe(false);
@@ -114,7 +149,7 @@ describe('AuthService', () => {
       expect(user.roles).toEqual(['Admin']);
     });
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'admin-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -127,7 +162,9 @@ describe('AuthService', () => {
         canAccessRegionalAdmin: false,
         canAccessTerritoryAdmin: false,
       },
-    });
+    };
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
 
     expect(service.isAdministrator()).toBe(true);
     expect(service.isRegionalManager()).toBe(false);
@@ -143,7 +180,7 @@ describe('AuthService', () => {
       expect(user.roles).toEqual(['ContentModerator']);
     });
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'moderator-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -157,7 +194,9 @@ describe('AuthService', () => {
         canAccessTerritoryAdmin: false,
         canAccessContentModeration: true,
       },
-    });
+    };
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
 
     expect(service.isContentModerator()).toBe(true);
     expect(service.isAdministrator()).toBe(false);
@@ -172,7 +211,7 @@ describe('AuthService', () => {
       expect(user.roles).toEqual(['Admin', 'RegionalManager']);
     });
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'admin-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -185,7 +224,9 @@ describe('AuthService', () => {
         canAccessRegionalAdmin: true,
         canAccessTerritoryAdmin: false,
       },
-    });
+    };
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
 
     expect(service.getHomeRoute()).toBe('/admin-dashboard');
     expect(sessionStorage.getItem('geotrack_admin_active_view')).toBe('Admin');
@@ -198,7 +239,7 @@ describe('AuthService', () => {
       expect(user.roles).toEqual(['TerritoryManager', 'RegionalManager']);
     });
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'multi-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -211,15 +252,59 @@ describe('AuthService', () => {
         canAccessRegionalAdmin: true,
         canAccessTerritoryAdmin: true,
       },
+    };
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
+    flushAssignedTerritories();
+
+    expect(service.getHomeRoute()).toBe('/territory/overview');
+  });
+
+  it('clears stale territory context and primes assigned territories before emitting a territory login', () => {
+    sessionStorage.setItem('geotrack_admin_active_territory_id', '1');
+    let resolved = false;
+
+    service.login('nikola@gmail.com', 'Proba123!').subscribe(user => {
+      resolved = true;
+      expect(user.email).toBe('nikola@gmail.com');
+      expect(user.activeRoleCode).toBe('TerritoryManager');
     });
 
+    const response = {
+      accessToken: 'nikola-token',
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+      expiresIn: 900,
+      sessionPersistent: false,
+      user: {
+        id: 52,
+        email: 'nikola@gmail.com',
+        displayName: 'Nikola',
+        roles: ['TerritoryManager'],
+        canAccessRegionalAdmin: false,
+        canAccessTerritoryAdmin: true,
+      },
+    };
+
+    expect(sessionStorage.getItem('geotrack_admin_active_territory_id')).toBeNull();
+    http.expectOne('/api/admin/auth/login').flush(response);
+    expect(service.getAccessToken()).toBe('nikola-token');
+
+    flushCurrentUser(response.user);
+    expect(resolved).toBe(false);
+
+    flushAssignedTerritories([
+      { id: 2, name: 'Serbia', displayName: 'Serbia', statusLabel: 'Assigned' },
+    ]);
+
+    expect(resolved).toBe(true);
+    expect(sessionStorage.getItem('geotrack_admin_active_territory_id')).toBe('2');
     expect(service.getHomeRoute()).toBe('/territory/overview');
   });
 
   it('switches the active admin view only to a role owned by the current user', () => {
     service.login('multi@example.com', 'Proba123!').subscribe();
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'multi-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -232,7 +317,10 @@ describe('AuthService', () => {
         canAccessRegionalAdmin: true,
         canAccessTerritoryAdmin: true,
       },
-    });
+    };
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
+    flushAssignedTerritories();
 
     expect(service.switchAdminView('RegionalManager')).toBe(true);
     expect(service.getUser()?.role).toBe('Regional Manager');
@@ -273,6 +361,34 @@ describe('AuthService', () => {
     expect(service.getHomeRoute()).toBe('/territory/overview');
   });
 
+  it('attempts session restore even without a local admin hint for shared user-app cookies', () => {
+    service.restoreSession().subscribe(user => {
+      expect(user?.email).toBe('regional@example.com');
+    });
+
+    const request = http.expectOne('/api/admin/auth/refresh');
+    expect(request.request.method).toBe('POST');
+    request.flush(adminLoginResponse());
+
+    expect(sessionStorage.getItem('geotrack_admin_session')).toBe('session');
+    expect(service.isLoggedIn()).toBe(true);
+  });
+
+  it('marks admin access denied without treating the user as authenticated', () => {
+    service.restoreSession().subscribe(user => {
+      expect(user).toBeNull();
+    });
+
+    const request = http.expectOne('/api/admin/auth/refresh');
+    request.flush(
+      { message: 'You do not have access to the admin app.' },
+      { status: 403, statusText: 'Forbidden' },
+    );
+
+    expect(service.isLoggedIn()).toBe(false);
+    expect(service.adminAccessDenied()).toBe(true);
+  });
+
   it('uses a safe message for invalid credentials', () => {
     let message = '';
 
@@ -291,7 +407,9 @@ describe('AuthService', () => {
 
   it('clears local auth state on logout', () => {
     service.login('regional@example.com', 'Password123!').subscribe();
-    http.expectOne('/api/admin/auth/login').flush(adminLoginResponse());
+    const response = adminLoginResponse();
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
 
     service.logout();
 
@@ -321,5 +439,21 @@ describe('AuthService', () => {
         canAccessTerritoryAdmin: false,
       },
     };
+  }
+
+  function flushCurrentUser(user: object): void {
+    const request = http.expectOne('/api/admin/auth/me');
+    expect(request.request.method).toBe('GET');
+    expect(request.request.headers.get('Authorization')).toBe(`Bearer ${service.getAccessToken()}`);
+    request.flush(user);
+  }
+
+  function flushAssignedTerritories(territories = [
+    { id: 10, name: 'Assigned Territory', displayName: 'Assigned Territory', statusLabel: 'Assigned' },
+  ]): void {
+    const request = http.expectOne('/api/admin/territory/territories');
+    expect(request.request.method).toBe('GET');
+    expect(request.request.headers.get('Authorization')).toBe(`Bearer ${service.getAccessToken()}`);
+    request.flush(territories);
   }
 });

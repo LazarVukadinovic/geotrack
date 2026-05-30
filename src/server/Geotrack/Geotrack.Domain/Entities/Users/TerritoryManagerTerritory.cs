@@ -12,4 +12,5 @@ public class TerritoryManagerTerritory
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public DateTime? RegionSetupCompletedAt { get; set; }
 }

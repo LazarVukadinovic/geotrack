@@ -1,6 +1,6 @@
 import { Injectable, Optional, computed, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Observable, catchError, finalize, map, of, shareReplay, tap, throwError } from 'rxjs';
+import { Observable, Subject, catchError, defer, finalize, map, of, shareReplay, switchMap, take, tap, throwError } from 'rxjs';
 import { AdminRoleCode, User } from '../models/user.model';
 import {
   AdminView,
@@ -9,6 +9,18 @@ import {
   normalizeAdminRoleCode,
   resolveAdminViewForRoles,
 } from '../models/admin-view.model';
+import { AdminNotificationsService } from './administrator/admin-notifications.service';
+import { RegionalManagerSidebarStateService } from './regional-manager-sidebar-state.service';
+import { TerritoryDashboardService } from './territory-dashboard.service';
+
+export type AdminAuthSessionEvent = 'login-start' | 'login-success' | 'session-cleared';
+
+export class AdminAccessDeniedError extends Error {
+  constructor(message = 'This account does not have access to the administration portal.') {
+    super(message);
+    this.name = 'AdminAccessDeniedError';
+  }
+}
 
 interface AdminAuthUserResponse {
   id: number;
@@ -43,8 +55,11 @@ export class AuthService {
   private accessTokenExpiresAtMs: number | null = null;
   private refreshRequest$: Observable<User | null> | null = null;
   private readonly _currentUser = signal<User | null>(null);
+  private readonly _adminAccessDenied = signal(false);
+  private readonly sessionEventsSubject = new Subject<AdminAuthSessionEvent>();
 
   readonly currentUser = computed(() => this._currentUser());
+  readonly adminAccessDenied = computed(() => this._adminAccessDenied());
   readonly isLoggedIn = computed(() => this._currentUser() !== null);
   readonly isAdministrator = computed(() => this._currentUser()?.activeRoleCode === 'Admin');
   readonly isContentModerator = computed(() => this._currentUser()?.activeRoleCode === 'ContentModerator');
@@ -57,8 +72,14 @@ export class AuthService {
   readonly isRegionalManager = computed(() => this._currentUser()?.activeRoleCode === 'RegionalManager');
   readonly availableAdminViews = computed(() => getAdminViewsForRoles(this._currentUser()?.roles ?? []));
   readonly activeAdminView = computed(() => getAdminViewByCode(this._currentUser()?.activeRoleCode));
+  readonly sessionEvents$ = this.sessionEventsSubject.asObservable();
 
-  constructor(@Optional() private readonly http: HttpClient | null) {}
+  constructor(
+    @Optional() private readonly http: HttpClient | null,
+    @Optional() private readonly territoryDashboard: TerritoryDashboardService | null,
+    @Optional() private readonly regionalSidebarState: RegionalManagerSidebarStateService | null,
+    @Optional() private readonly notifications: AdminNotificationsService | null,
+  ) {}
 
   getUser(): User | null {
     return this._currentUser();
@@ -88,33 +109,51 @@ export class AuthService {
   }
 
   login(email: string, password: string, rememberMe = false): Observable<User> {
-    return this.httpClient
-      .post<LoginResponse>(
-        '/api/admin/auth/login',
-        { email, password, rememberMe },
-        { withCredentials: true },
-      )
-      .pipe(
-        tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
-        map(response => this.mapAdminUser(response.user, false)),
-        tap(user => {
-          this._currentUser.set(user);
-          this.setSessionHint();
-        }),
-        catchError(error => {
-          this.clearLocalSession();
-          return throwError(() => this.toSafeAuthError(error));
-        }),
-      );
+    return defer(() => {
+      this.beginLoginSession();
+
+      return this.httpClient
+        .post<LoginResponse>(
+          '/api/admin/auth/login',
+          { email, password, rememberMe },
+          { withCredentials: true },
+        )
+        .pipe(
+          tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
+          switchMap(response =>
+            this.httpClient.get<AdminAuthUserResponse>('/api/admin/auth/me').pipe(
+              map(userResponse => ({
+                user: this.mapAdminUser(userResponse, false),
+                sessionPersistent: response.sessionPersistent,
+              })),
+            ),
+          ),
+          switchMap(({ user, sessionPersistent }) =>
+            this.primeAdminContext(user).pipe(map(() => ({ user, sessionPersistent }))),
+          ),
+          tap(({ user, sessionPersistent }) => {
+            this._currentUser.set(user);
+            this._adminAccessDenied.set(false);
+            this.setSessionHint(sessionPersistent);
+            this.sessionEventsSubject.next('login-success');
+          }),
+          map(({ user }) => user),
+          catchError(error => {
+            this.clearLocalSession();
+            const safeError = this.toSafeAuthError(error);
+            if (safeError instanceof AdminAccessDeniedError) {
+              this._adminAccessDenied.set(true);
+            }
+
+            return throwError(() => safeError);
+          }),
+        );
+    });
   }
 
-  restoreSession(): Observable<User | null> {
-    if (this._currentUser()) {
+  restoreSession(options: { forceRefresh?: boolean } = {}): Observable<User | null> {
+    if (this._currentUser() && !options.forceRefresh) {
       return of(this._currentUser());
-    }
-
-    if (!this.hasSessionHint()) {
-      return of(null);
     }
 
     if (this.refreshRequest$) {
@@ -125,10 +164,20 @@ export class AuthService {
       .post<LoginResponse>('/api/admin/auth/refresh', {}, { withCredentials: true })
       .pipe(
         tap(response => this.setToken(response.accessToken, response.expiresAt, response.expiresIn)),
-        map(response => this.mapAdminUser(response.user)),
-        tap(user => this._currentUser.set(user)),
-        map(user => user as User | null),
-        catchError(() => {
+        map(response => ({
+          user: this.mapAdminUser(response.user),
+          sessionPersistent: response.sessionPersistent,
+        })),
+        tap(({ user }) => this._currentUser.set(user)),
+        tap(() => this._adminAccessDenied.set(false)),
+        tap(({ sessionPersistent }) => this.setSessionHint(sessionPersistent)),
+        map(({ user }) => user as User | null),
+        catchError(error => {
+          if (error instanceof HttpErrorResponse && error.status === 403) {
+            this.markAdminAccessDenied();
+            return of(null);
+          }
+
           this.clearLocalSession();
           return of(null);
         }),
@@ -252,6 +301,32 @@ export class AuthService {
     this.accessTokenExpiresAtMs = this.resolveExpiryMs(expiresAt, expiresIn);
   }
 
+  private beginLoginSession(): void {
+    this.accessToken = null;
+    this.accessTokenExpiresAtMs = null;
+    this._currentUser.set(null);
+    this._adminAccessDenied.set(false);
+    this.refreshRequest$ = null;
+    this.clearSessionStorage();
+    this.resetSessionScopedServices();
+    this.sessionEventsSubject.next('login-start');
+  }
+
+  private primeAdminContext(user: User): Observable<unknown> {
+    if (!this.territoryDashboard || !this.canUseTerritoryContext(user)) {
+      return of(null);
+    }
+
+    return this.territoryDashboard.getAssignedTerritories().pipe(
+      take(1),
+      tap(territories => {
+        const activeTerritoryId = territories[0]?.id ?? null;
+        this.territoryDashboard?.setActiveTerritoryId(activeTerritoryId);
+      }),
+      map(() => null),
+    );
+  }
+
   private resolveExpiryMs(expiresAt?: string | null, expiresIn?: number | null): number | null {
     const parsed = expiresAt ? Date.parse(expiresAt) : NaN;
     if (Number.isFinite(parsed)) {
@@ -268,7 +343,9 @@ export class AuthService {
   private toSafeAuthError(error: unknown): Error {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 403) {
-        return new Error(error.error?.message ?? 'You do not have access to the admin app.');
+        return new AdminAccessDeniedError(
+          error.error?.message ?? 'This account does not have access to the administration portal.',
+        );
       }
 
       if (error.status === 400) {
@@ -281,19 +358,18 @@ export class AuthService {
     return error instanceof Error ? error : new Error('Invalid email or password.');
   }
 
-  private setSessionHint(): void {
+  private setSessionHint(sessionPersistent: boolean): void {
     try {
-      sessionStorage.setItem(AuthService.sessionHintKey, '1');
+      localStorage.removeItem(AuthService.sessionHintKey);
+      sessionStorage.removeItem(AuthService.sessionHintKey);
+
+      if (sessionPersistent) {
+        localStorage.setItem(AuthService.sessionHintKey, 'persistent');
+      } else {
+        sessionStorage.setItem(AuthService.sessionHintKey, 'session');
+      }
     } catch {
       // Session restore is a convenience only.
-    }
-  }
-
-  private hasSessionHint(): boolean {
-    try {
-      return sessionStorage.getItem(AuthService.sessionHintKey) === '1';
-    } catch {
-      return false;
     }
   }
 
@@ -301,7 +377,16 @@ export class AuthService {
     this.accessToken = null;
     this.accessTokenExpiresAtMs = null;
     this._currentUser.set(null);
+    this._adminAccessDenied.set(false);
+    this.refreshRequest$ = null;
+    this.clearSessionStorage();
+    this.resetSessionScopedServices();
+    this.sessionEventsSubject.next('session-cleared');
+  }
+
+  private clearSessionStorage(): void {
     try {
+      localStorage.removeItem(AuthService.sessionHintKey);
       sessionStorage.removeItem(AuthService.sessionHintKey);
       sessionStorage.removeItem(AuthService.activeRegionStorageKey);
       sessionStorage.removeItem(AuthService.activeTerritoryStorageKey);
@@ -309,6 +394,16 @@ export class AuthService {
     } catch {
       // Session restore is a convenience only.
     }
+  }
+
+  private resetSessionScopedServices(): void {
+    this.territoryDashboard?.clearSessionState();
+    this.regionalSidebarState?.clear();
+    this.notifications?.reset();
+  }
+
+  private canUseTerritoryContext(user: User): boolean {
+    return user.activeRoleCode === 'TerritoryManager' || user.activeRoleCode === 'TerritoryAssociate';
   }
 
   private readActiveViewCode(): AdminRoleCode | null {
@@ -325,5 +420,10 @@ export class AuthService {
     } catch {
       // Active view persistence is only a session convenience.
     }
+  }
+
+  private markAdminAccessDenied(): void {
+    this.clearLocalSession();
+    this._adminAccessDenied.set(true);
   }
 }

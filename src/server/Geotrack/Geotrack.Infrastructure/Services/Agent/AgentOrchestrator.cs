@@ -1,12 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
-using System.Security.Cryptography;
 using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.DTOs.GeoTrackTools;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Options;
 using Geotrack.Application.Services;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,23 +14,31 @@ public class AgentOrchestrator : IAgentOrchestrator
 {
     private const int MaxResponseCards = 5;
     private const int MaxCardDescriptionLength = 180;
-    private readonly IAgentProviderRegistry _providerRegistry;
-    private readonly IAiProviderKeyService _keyService;
+    private static readonly string[] BackendManagedFields =
+    [
+        "provider",
+        "model",
+        "keyMode",
+        "sessionApiKey",
+        "temporaryKey",
+        "savedKeyId",
+        "apiKey"
+    ];
+
+    private readonly IGeminiAskAgentService _gemini;
     private readonly IGeoTrackToolService _toolService;
     private readonly AgentOptions _agentOptions;
     private readonly McpOptions _mcpOptions;
     private readonly ILogger<AgentOrchestrator> _logger;
 
     public AgentOrchestrator(
-        IAgentProviderRegistry providerRegistry,
-        IAiProviderKeyService keyService,
+        IGeminiAskAgentService gemini,
         IGeoTrackToolService toolService,
         IOptions<AgentOptions> agentOptions,
         IOptions<McpOptions> mcpOptions,
         ILogger<AgentOrchestrator> logger)
     {
-        _providerRegistry = providerRegistry;
-        _keyService = keyService;
+        _gemini = gemini;
         _toolService = toolService;
         _agentOptions = agentOptions.Value;
         _mcpOptions = mcpOptions.Value;
@@ -43,23 +49,11 @@ public class AgentOrchestrator : IAgentOrchestrator
         int? userId,
         CancellationToken cancellationToken = default)
     {
-        var savedKeys = userId.HasValue
-            ? await _keyService.GetKeysAsync(userId.Value, cancellationToken)
-            : Array.Empty<AgentApiKeyMetadataDto>();
-
-        var savedByProvider = savedKeys.ToDictionary(key => key.Provider, StringComparer.OrdinalIgnoreCase);
-        var providers = _providerRegistry.GetAll()
-            .OrderBy(provider => provider.Id)
-            .Select(provider =>
-            {
-                savedByProvider.TryGetValue(provider.Id, out var saved);
-                return provider.GetMetadata(userId, saved);
-            })
-            .ToList();
+        await Task.CompletedTask;
 
         return new AgentProvidersResponseDto
         {
-            Providers = providers,
+            Providers = new List<AgentProviderMetadataDto>(),
             Mcp = new AgentMcpMetadataDto
             {
                 Enabled = _mcpOptions.Enabled,
@@ -76,10 +70,14 @@ public class AgentOrchestrator : IAgentOrchestrator
         int userId,
         CancellationToken cancellationToken = default)
     {
+        RejectClientProviderConfiguration(request);
         var message = NormalizeMessage(request.Message);
-        var provider = ResolveProvider(request.Provider, out var providerMetadata);
-        var model = ResolveModel(request.Model, providerMetadata);
-        var key = await ResolveApiKeyAsync(provider, providerMetadata, request, userId, cancellationToken);
+        if (!_gemini.HasAvailableKey)
+        {
+            throw new AgentException("agent_unavailable", "Ask Agent is currently unavailable. Please try again later.", 503);
+        }
+
+        var model = _gemini.Model;
         var context = await _toolService.BuildAgentContextAsync(
             message,
             request.ContextOptions,
@@ -91,7 +89,7 @@ public class AgentOrchestrator : IAgentOrchestrator
         {
             return BuildLocalResponse(
                 request,
-                provider.Id,
+                _gemini.ProviderId,
                 model,
                 context.ToolsUsed,
                 context.ClarificationQuestion ?? "Which city or region should I search?",
@@ -102,7 +100,7 @@ public class AgentOrchestrator : IAgentOrchestrator
         {
             return BuildLocalResponse(
                 request,
-                provider.Id,
+                _gemini.ProviderId,
                 model,
                 context.ToolsUsed,
                 BuildNoResultsMessage(context),
@@ -111,7 +109,6 @@ public class AgentOrchestrator : IAgentOrchestrator
 
         var providerRequest = new AgentProviderChatRequest
         {
-            ApiKey = key,
             Model = model,
             SystemPrompt = BuildSystemPrompt(context),
             UserMessage = message,
@@ -121,11 +118,10 @@ public class AgentOrchestrator : IAgentOrchestrator
         var started = DateTime.UtcNow;
         try
         {
-            var result = await provider.GenerateAsync(providerRequest, cancellationToken);
-            await MarkSavedKeyUsedIfNeededAsync(request, userId, provider.Id, success: true, cancellationToken);
+            var result = await _gemini.GenerateAsync(providerRequest, cancellationToken);
             _logger.LogInformation(
                 "Agent provider {Provider} model {Model} completed in {LatencyMs} ms for user {UserId}; tools {Tools}.",
-                provider.Id,
+                _gemini.ProviderId,
                 model,
                 (DateTime.UtcNow - started).TotalMilliseconds,
                 userId,
@@ -138,7 +134,7 @@ public class AgentOrchestrator : IAgentOrchestrator
                     ? Guid.NewGuid().ToString()
                     : request.ConversationId.Trim(),
                 Text = result.Text,
-                Provider = provider.Id,
+                Provider = _gemini.ProviderId,
                 Model = model,
                 ToolsUsed = context.ToolsUsed,
                 Cards = cards,
@@ -148,193 +144,34 @@ public class AgentOrchestrator : IAgentOrchestrator
         }
         catch (AgentException)
         {
-            await MarkSavedKeyUsedIfNeededAsync(request, userId, provider.Id, success: false, cancellationToken);
             throw;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(
                 "Agent provider {Provider} failed with {ExceptionType} for user {UserId}.",
-                provider.Id,
+                _gemini.ProviderId,
                 ex.GetType().Name,
                 userId);
-            await MarkSavedKeyUsedIfNeededAsync(request, userId, provider.Id, success: false, cancellationToken);
-            throw new AgentException("agent_unavailable", "Ask Agent is temporarily unavailable.", 503);
+            throw new AgentException("agent_unavailable", "Ask Agent is currently unavailable. Please try again later.", 503);
         }
     }
 
-    public async Task<TestAgentApiKeyResponseDto> TestKeyAsync(
-        TestAgentApiKeyRequestDto request,
-        int userId,
-        CancellationToken cancellationToken = default)
+    private static void RejectClientProviderConfiguration(AgentChatRequestDto request)
     {
-        var provider = ResolveProvider(request.Provider, out var providerMetadata);
-        var model = ResolveModel(request.Model, providerMetadata);
-        var apiKey = await ResolveTestKeyAsync(request, userId, provider.Id, cancellationToken);
-
-        try
+        if (request.ExtensionData is null || request.ExtensionData.Count == 0)
         {
-            await provider.TestAsync(apiKey, model, cancellationToken);
-            return new TestAgentApiKeyResponseDto
-            {
-                Success = true,
-                Message = "The key was accepted by the provider."
-            };
-        }
-        catch (AgentException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                "Agent key test for provider {Provider} failed with {ExceptionType} for user {UserId}.",
-                provider.Id,
-                ex.GetType().Name,
-                userId);
-            throw new AgentException("provider_unavailable", "The AI provider is temporarily unavailable.", 503);
-        }
-    }
-
-    private IAgentProvider ResolveProvider(string providerId, out AgentProviderMetadataDto metadata)
-    {
-        var provider = _providerRegistry.Get(providerId)
-            ?? throw new AgentException("unsupported_provider", "The selected provider is not available.", 400);
-
-        metadata = provider.GetMetadata(null, null);
-        if (!metadata.Enabled)
-        {
-            throw new AgentException("provider_not_configured", "The selected provider is not configured.", 400);
+            return;
         }
 
-        return provider;
-    }
-
-    private static string ResolveModel(string? requestedModel, AgentProviderMetadataDto providerMetadata)
-    {
-        var model = string.IsNullOrWhiteSpace(requestedModel)
-            ? providerMetadata.DefaultModel
-            : requestedModel.Trim();
-
-        var selected = providerMetadata.Models
-            .FirstOrDefault(item => string.Equals(item.Id, model, StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(model) || selected is null)
+        if (request.ExtensionData.Keys.Any(key =>
+                BackendManagedFields.Contains(key, StringComparer.OrdinalIgnoreCase)))
         {
-            throw new AgentException("unsupported_model", "The selected model is not available for this provider.", 400);
-        }
-
-        return selected.Id;
-    }
-
-    private async Task<string> ResolveApiKeyAsync(
-        IAgentProvider provider,
-        AgentProviderMetadataDto providerMetadata,
-        AgentChatRequestDto request,
-        int userId,
-        CancellationToken cancellationToken)
-    {
-        if (!AgentKeyModes.IsKnown(request.KeyMode))
-        {
-            throw new AgentException("invalid_key_mode", "The selected key mode is invalid.", 400);
-        }
-
-        if (string.Equals(request.KeyMode, AgentKeyModes.Saved, StringComparison.OrdinalIgnoreCase))
-        {
-            if (!providerMetadata.SupportsSavedKey)
-            {
-                throw new AgentException("key_mode_unavailable", "Saved keys are not supported for this provider.", 400);
-            }
-
-            return await GetSavedApiKeyAsync(userId, provider.Id, cancellationToken);
-        }
-
-        if (string.Equals(request.KeyMode, AgentKeyModes.Session, StringComparison.OrdinalIgnoreCase))
-        {
-            if (!providerMetadata.SupportsSessionKey)
-            {
-                throw new AgentException("key_mode_unavailable", "Temporary keys are not supported for this provider.", 400);
-            }
-
-            return NormalizeSessionKey(request.SessionApiKey);
-        }
-
-        if (!providerMetadata.ProjectDemoKeyEnabled)
-        {
-            throw new AgentException("provider_not_configured", "Project demo access is not configured for this provider.", 400);
-        }
-
-        var options = _agentOptions.Providers.TryGetValue(provider.Id, out var providerOptions)
-            ? providerOptions
-            : null;
-        return string.IsNullOrWhiteSpace(options?.ApiKey)
-            ? throw new AgentException("provider_not_configured", "Project demo access is not configured for this provider.", 400)
-            : options.ApiKey.Trim();
-    }
-
-    private async Task<string> ResolveTestKeyAsync(
-        TestAgentApiKeyRequestDto request,
-        int userId,
-        string providerId,
-        CancellationToken cancellationToken)
-    {
-        if (!AgentKeyModes.IsKnown(request.KeyMode))
-        {
-            throw new AgentException("invalid_key_mode", "The selected key mode is invalid.", 400);
-        }
-
-        if (string.Equals(request.KeyMode, AgentKeyModes.Saved, StringComparison.OrdinalIgnoreCase))
-        {
-            return await GetSavedApiKeyAsync(userId, providerId, cancellationToken);
-        }
-
-        if (string.Equals(request.KeyMode, AgentKeyModes.Session, StringComparison.OrdinalIgnoreCase))
-        {
-            return NormalizeSessionKey(request.ApiKey);
-        }
-
-        if (!_agentOptions.AllowProjectDemoProvider ||
-            !_agentOptions.Providers.TryGetValue(providerId, out var providerOptions) ||
-            string.IsNullOrWhiteSpace(providerOptions.ApiKey))
-        {
-            throw new AgentException("provider_not_configured", "Project demo access is not configured for this provider.", 400);
-        }
-
-        return providerOptions.ApiKey.Trim();
-    }
-
-    private async Task<string> GetSavedApiKeyAsync(
-        int userId,
-        string providerId,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await _keyService.GetDecryptedKeyAsync(userId, providerId, cancellationToken)
-                ?? throw new AgentException("saved_key_missing", "No saved API key is configured for this provider.", 400);
-        }
-        catch (CryptographicException ex)
-        {
-            _logger.LogWarning(
-                "Saved API key for provider {Provider} could not be decrypted for user {UserId}: {ExceptionType}.",
-                providerId,
-                userId,
-                ex.GetType().Name);
             throw new AgentException(
-                "saved_key_unreadable",
-                "The saved API key could not be read. Please save it again.",
+                "invalid_request",
+                "Ask Agent provider configuration is managed by GeoTrack.",
                 400);
         }
-    }
-
-    private static string NormalizeSessionKey(string? apiKey)
-    {
-        var normalized = apiKey?.Trim() ?? string.Empty;
-        if (normalized.Length < 8 || normalized.Length > 2048 || normalized.Any(char.IsControl))
-        {
-            throw new AgentException("invalid_key", "A valid temporary API key is required.", 400);
-        }
-
-        return normalized;
     }
 
     private string NormalizeMessage(string? message)
@@ -357,19 +194,6 @@ public class AgentOrchestrator : IAgentOrchestrator
         }
 
         return normalized;
-    }
-
-    private async Task MarkSavedKeyUsedIfNeededAsync(
-        AgentChatRequestDto request,
-        int userId,
-        string providerId,
-        bool success,
-        CancellationToken cancellationToken)
-    {
-        if (string.Equals(request.KeyMode, AgentKeyModes.Saved, StringComparison.OrdinalIgnoreCase))
-        {
-            await _keyService.MarkKeyUsedAsync(userId, providerId, success, cancellationToken);
-        }
     }
 
     private static string BuildSystemPrompt(GeoTrackAgentContextDto context)

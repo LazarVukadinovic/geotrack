@@ -76,13 +76,13 @@ public sealed class UserSettingsTests
         Assert.NotNull(updatedNotifications);
         Assert.False(updatedNotifications.TravelRecommendations);
         Assert.False(updatedNotifications.CollectionUpdates);
-        Assert.True(updatedNotifications.EmailNotifications);
+        Assert.False(updatedNotifications.EmailNotifications);
 
         var persistedNotifications = await client.GetFromJsonAsync<GetNotificationSettingsResponseDto>("/api/user/me/notifications");
         Assert.NotNull(persistedNotifications);
         Assert.False(persistedNotifications.TravelRecommendations);
         Assert.False(persistedNotifications.CollectionUpdates);
-        Assert.True(persistedNotifications.EmailNotifications);
+        Assert.False(persistedNotifications.EmailNotifications);
 
         var supportResponse = await client.PostAsJsonAsync(
             "/api/user/me/support-requests",

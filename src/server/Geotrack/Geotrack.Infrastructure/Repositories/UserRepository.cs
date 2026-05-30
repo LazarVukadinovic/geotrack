@@ -64,6 +64,7 @@ namespace Geotrack.Infrastructure.Repositories
                     .ThenInclude(ut => ut.Tag)
                 .Include(u => u.Collections)
                     .ThenInclude(c => c.CollectionItems)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(u => u.Id == userId);
         }
 
@@ -98,6 +99,7 @@ namespace Geotrack.Infrastructure.Repositories
                 .Include(c => c.CollectionItems)
                     .ThenInclude(ci => ci.Event)
                     .ThenInclude(e => e!.Images)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(c => c.Id == collectionId && c.UserId == userId);
         }
 
@@ -338,6 +340,7 @@ namespace Geotrack.Infrastructure.Repositories
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
                 .Include(u => u.RegionalManagerRegions)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(u => u.Id == userId);
         }
 

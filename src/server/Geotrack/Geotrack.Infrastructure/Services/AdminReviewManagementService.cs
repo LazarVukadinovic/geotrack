@@ -928,14 +928,30 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
     {
         return sort switch
         {
-            "oldest" => query.OrderBy(row => row.CreatedAt).ThenBy(row => row.ReviewId),
+            "oldest" => query
+                .OrderBy(row => row.CreatedAt)
+                .ThenBy(row => row.ReviewKind)
+                .ThenBy(row => row.ReviewId),
             "reportsDesc" => query
                 .OrderByDescending(row => row.ReportCount)
                 .ThenByDescending(row => row.PendingReportCount)
-                .ThenByDescending(row => row.CreatedAt),
-            "ratingAsc" => query.OrderBy(row => row.Rating).ThenBy(row => row.CreatedAt),
-            "ratingDesc" => query.OrderByDescending(row => row.Rating).ThenByDescending(row => row.CreatedAt),
-            _ => query.OrderByDescending(row => row.CreatedAt).ThenByDescending(row => row.ReviewId)
+                .ThenByDescending(row => row.CreatedAt)
+                .ThenBy(row => row.ReviewKind)
+                .ThenByDescending(row => row.ReviewId),
+            "ratingAsc" => query
+                .OrderBy(row => row.Rating)
+                .ThenBy(row => row.CreatedAt)
+                .ThenBy(row => row.ReviewKind)
+                .ThenBy(row => row.ReviewId),
+            "ratingDesc" => query
+                .OrderByDescending(row => row.Rating)
+                .ThenByDescending(row => row.CreatedAt)
+                .ThenBy(row => row.ReviewKind)
+                .ThenByDescending(row => row.ReviewId),
+            _ => query
+                .OrderByDescending(row => row.CreatedAt)
+                .ThenBy(row => row.ReviewKind)
+                .ThenByDescending(row => row.ReviewId)
         };
     }
 

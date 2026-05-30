@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.DTOs.Auth;
-using Geotrack.Application.DTOs.Users;
 using Geotrack.Infrastructure;
 using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -42,62 +41,28 @@ public class AgentSecurityAndMcpTests
     }
 
     [Fact]
-    public async Task Saved_api_key_is_encrypted_masked_isolated_and_deletable()
+    public async Task Legacy_user_api_key_endpoints_are_not_available()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
-        var (ownerClient, ownerId) = await RegisterFreshUserAsync(app);
-        var (otherClient, _) = await RegisterFreshUserAsync(app);
-        const string rawKey = "test-gemini-secret-1234";
+        var (client, _) = await RegisterFreshUserAsync(app);
 
-        var save = await ownerClient.PostAsJsonAsync(
+        var list = await client.GetAsync("/api/agent/api-keys");
+        var save = await client.PostAsJsonAsync(
             "/api/agent/api-keys",
-            new SaveAgentApiKeyRequestDto
-            {
-                Provider = "GeMiNi",
-                ApiKey = rawKey
-            });
-        save.EnsureSuccessStatusCode();
+            new { provider = "gemini", apiKey = "test-gemini-secret-1234" });
+        var test = await client.PostAsJsonAsync(
+            "/api/agent/api-keys/test",
+            new { provider = "gemini", apiKey = "test-gemini-secret-1234" });
+        var delete = await client.DeleteAsync("/api/agent/api-keys/gemini");
 
-        var ownerKeys = await ownerClient.GetFromJsonAsync<List<AgentApiKeyMetadataDto>>("/api/agent/api-keys");
-        Assert.NotNull(ownerKeys);
-        var ownerKey = Assert.Single(ownerKeys!);
-        Assert.Equal("gemini", ownerKey.Provider);
-        Assert.Equal("1234", ownerKey.KeyLast4);
-
-        var providerMetadata = await ownerClient.GetFromJsonAsync<AgentProvidersResponseDto>("/api/agent/providers");
-        Assert.NotNull(providerMetadata);
-        var geminiMetadata = Assert.Single(providerMetadata!.Providers, provider => provider.Id == "gemini");
-        Assert.True(geminiMetadata.Enabled);
-        Assert.True(geminiMetadata.HasSavedKey);
-        Assert.Equal("1234", geminiMetadata.KeyLast4);
-        Assert.DoesNotContain(rawKey, JsonSerializer.Serialize(providerMetadata), StringComparison.Ordinal);
-
-        var otherKeys = await otherClient.GetFromJsonAsync<List<AgentApiKeyMetadataDto>>("/api/agent/api-keys");
-        Assert.NotNull(otherKeys);
-        Assert.Empty(otherKeys!);
-
-        await using (var scope = app.Services.CreateAsyncScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var stored = await db.UserAiProviderKeys.SingleAsync(key => key.UserId == ownerId && key.Provider == "gemini");
-            Assert.Equal("1234", stored.KeyLast4);
-            Assert.True(stored.IsActive);
-            Assert.NotEqual(rawKey, stored.EncryptedApiKey);
-            Assert.DoesNotContain(rawKey, stored.EncryptedApiKey, StringComparison.Ordinal);
-        }
-
-        var delete = await ownerClient.DeleteAsync("/api/agent/api-keys/GEMINI");
-        Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
-
-        await using (var scope = app.Services.CreateAsyncScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            Assert.False(await db.UserAiProviderKeys.AnyAsync(key => key.UserId == ownerId && key.Provider == "gemini"));
-        }
+        Assert.Equal(HttpStatusCode.NotFound, list.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, save.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, test.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, delete.StatusCode);
     }
 
     [Fact]
-    public async Task Chat_rejects_saved_key_mode_when_no_key_exists()
+    public async Task Chat_without_gemini_keys_returns_safe_unavailable_response()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         var (client, _) = await RegisterFreshUserAsync(app);
@@ -106,53 +71,39 @@ public class AgentSecurityAndMcpTests
             "/api/agent/chat",
             new AgentChatRequestDto
             {
-                Message = "Find restaurants",
-                Provider = "gemini",
-                Model = "gemini-2.5-flash",
-                KeyMode = AgentKeyModes.Saved
+                Message = "Find restaurants"
             });
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         var error = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
         Assert.NotNull(error);
-        Assert.Equal("saved_key_missing", error!["code"]);
+        Assert.Equal("agent_unavailable", error!["code"]);
+        Assert.Equal("Ask Agent is currently unavailable. Please try again later.", error["message"]);
     }
 
     [Fact]
-    public async Task Chat_rejects_unsupported_provider_and_model_safely()
+    public async Task Chat_rejects_client_provider_model_and_key_fields()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         var (client, _) = await RegisterFreshUserAsync(app);
 
-        var unsupportedProvider = await client.PostAsJsonAsync(
+        var response = await client.PostAsJsonAsync(
             "/api/agent/chat",
-            new AgentChatRequestDto
+            new
             {
-                Message = "Find restaurants",
-                Provider = "unknown-provider",
-                Model = "gemini-2.5-flash",
-                KeyMode = AgentKeyModes.Saved
+                message = "Find restaurants",
+                provider = "gemini",
+                model = "gemini-2.5-flash",
+                keyMode = "session",
+                sessionApiKey = "user-supplied-key"
             });
 
-        Assert.Equal(HttpStatusCode.BadRequest, unsupportedProvider.StatusCode);
-        var providerError = await unsupportedProvider.Content.ReadFromJsonAsync<Dictionary<string, string>>();
-        Assert.NotNull(providerError);
-        Assert.Equal("unsupported_provider", providerError!["code"]);
-
-        var unsupportedModel = await client.PostAsJsonAsync(
-            "/api/agent/chat",
-            new AgentChatRequestDto
-            {
-                Message = "Find restaurants",
-                Provider = "GEMINI",
-                Model = "claude-3-5-sonnet",
-                KeyMode = AgentKeyModes.Saved
-            });
-
-        Assert.Equal(HttpStatusCode.BadRequest, unsupportedModel.StatusCode);
-        var modelError = await unsupportedModel.Content.ReadFromJsonAsync<Dictionary<string, string>>();
-        Assert.NotNull(modelError);
-        Assert.Equal("unsupported_model", modelError!["code"]);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        var error = JsonSerializer.Deserialize<Dictionary<string, string>>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(error);
+        Assert.Equal("invalid_request", error!["code"]);
+        Assert.DoesNotContain("user-supplied-key", body, StringComparison.Ordinal);
     }
 
     [Fact]

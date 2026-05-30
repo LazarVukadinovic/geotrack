@@ -122,7 +122,10 @@
 
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between mb-3">
-              <h2 class="text-base font-bold text-gray-900">Regions Health Overview</h2>
+              <div>
+                <h2 class="text-base font-bold text-gray-900">Regions Health Overview</h2>
+                <p class="text-xs text-gray-400 mt-0.5">Top 4 regions by health score</p>
+              </div>
               <button (click)="navigateToRegions()" class="text-sm font-medium text-blue-600 hover:text-blue-800 bg-transparent border-0 cursor-pointer transition-colors">
                 View All Regions
               </button>
@@ -130,7 +133,7 @@
 
             @if (!isLoading && regions.length === 0) {
               <div class="bg-white rounded-xl border border-gray-100 p-8 text-center text-sm text-gray-500 shadow-sm">
-                No regions exist for this territory yet.
+                No regions available yet.
               </div>
             } @else {
               <div class="grid grid-cols-2 gap-2.5">

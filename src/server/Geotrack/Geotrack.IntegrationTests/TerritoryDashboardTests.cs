@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Geotrack.Application.Analytics;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Auth;
@@ -13,11 +14,20 @@ using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Coordinate = NetTopologySuite.Geometries.Coordinate;
+using Geometry = NetTopologySuite.Geometries.Geometry;
+using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using NtsPolygon = NetTopologySuite.Geometries.Polygon;
+using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.IntegrationTests;
 
 public sealed class TerritoryDashboardTests
 {
+    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private const string BoundaryDisplayGeometryPropertyName = "BoundaryDisplayGeometry";
+    private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 4326);
+
     [Fact]
     public async Task Territory_manager_can_load_dashboard_for_assigned_territory()
     {
@@ -119,6 +129,87 @@ public sealed class TerritoryDashboardTests
     }
 
     [Fact]
+    public async Task Territory_dashboard_regions_health_returns_top_four_ranked_regions_only()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+        var secondaryRegionId = await AddSparseContentRegionAsync(
+            app,
+            fixture.AssignedTerritoryId,
+            "Secondary Health Region");
+        await AddAdditionalRegionsAsync(app, fixture.AssignedTerritoryId, 30);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var dashboard = await client.GetFromJsonAsync<TerritoryDashboardDto>(
+            $"/api/admin/territory/dashboard?territoryId={fixture.AssignedTerritoryId}");
+        var regionalList = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}&sort=health-high&skip=0&take=100");
+
+        Assert.NotNull(dashboard);
+        Assert.NotNull(regionalList);
+        Assert.Equal(4, dashboard!.RegionsHealth.Count);
+        Assert.Equal(32, regionalList!.TotalCount);
+        Assert.True(regionalList.Items.Count > dashboard.RegionsHealth.Count);
+        Assert.Contains(dashboard.RegionsHealth, region => region.RegionId == fixture.AssignedRegionId);
+        Assert.Contains(dashboard.RegionsHealth, region => region.RegionId == secondaryRegionId);
+        Assert.Equal(
+            regionalList.Items.Take(4).Select(region => region.RegionId),
+            dashboard.RegionsHealth.Select(region => region.RegionId));
+
+        var healthScores = dashboard.RegionsHealth.Select(region => region.HealthScore).ToList();
+        Assert.Equal(healthScores.OrderByDescending(score => score), healthScores);
+    }
+
+    [Fact]
+    public async Task Territory_dashboard_regions_health_uses_deterministic_tie_breakers_for_zero_score_regions()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var territoryId = await CreateEmptyAssignedTerritoryAsync(app);
+        await AddNamedRegionsAsync(
+            app,
+            territoryId,
+            "Zulu Zero Region",
+            "Alpha Zero Region",
+            "Gamma Zero Region",
+            "Beta Zero Region",
+            "Delta Zero Region");
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var dashboard = await client.GetFromJsonAsync<TerritoryDashboardDto>(
+            $"/api/admin/territory/dashboard?territoryId={territoryId}");
+
+        Assert.NotNull(dashboard);
+        Assert.Equal(4, dashboard!.RegionsHealth.Count);
+        Assert.Equal(
+            new[] { "Alpha Zero Region", "Beta Zero Region", "Delta Zero Region", "Gamma Zero Region" },
+            dashboard.RegionsHealth.Select(region => region.RegionName));
+        Assert.All(dashboard.RegionsHealth, region => Assert.Equal(0, region.HealthScore));
+    }
+
+    [Fact]
+    public async Task Territory_dashboard_regions_health_returns_all_regions_when_fewer_than_four_exist()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var territoryId = await CreateEmptyAssignedTerritoryAsync(app);
+        await AddNamedRegionsAsync(
+            app,
+            territoryId,
+            "Alpha Small Region",
+            "Beta Small Region",
+            "Gamma Small Region");
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var dashboard = await client.GetFromJsonAsync<TerritoryDashboardDto>(
+            $"/api/admin/territory/dashboard?territoryId={territoryId}");
+
+        Assert.NotNull(dashboard);
+        Assert.Equal(3, dashboard!.RegionsHealth.Count);
+        Assert.Equal(
+            new[] { "Alpha Small Region", "Beta Small Region", "Gamma Small Region" },
+            dashboard.RegionsHealth.Select(region => region.RegionName));
+    }
+
+    [Fact]
     public async Task Territory_directories_return_only_assigned_territory_data()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -149,6 +240,239 @@ public sealed class TerritoryDashboardTests
             "/api/admin/regional/destinations",
             new { regionId = fixture.AssignedRegionId });
         Assert.Equal(HttpStatusCode.Forbidden, regionalMutation.StatusCode);
+    }
+
+    [Fact]
+    public async Task Territory_region_list_returns_destination_representative_image_from_content()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Destination,
+            fixture.AssignedDestinationId,
+            "/media/test/region-destination-gallery.svg",
+            isMain: false,
+            imageRole: EntityImageRole.Gallery,
+            sortOrder: 0);
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Destination,
+            fixture.AssignedDestinationId,
+            "/media/test/region-destination-main.svg",
+            isMain: true,
+            imageRole: EntityImageRole.Cover,
+            sortOrder: 10,
+            altText: "Destination main image");
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var regions = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}");
+
+        Assert.NotNull(regions);
+        var region = Assert.Single(regions!.Items);
+        Assert.NotNull(region.RepresentativeImage);
+        Assert.Equal("/media/test/region-destination-main.svg", region.RepresentativeImage!.Url);
+        Assert.Equal("Destination main image", region.RepresentativeImage.AltText);
+        Assert.Equal("Destination", region.RepresentativeImage.SourceType);
+        Assert.Equal(fixture.AssignedDestinationId, region.RepresentativeImage.SourceId);
+        Assert.Equal(region.RepresentativeImage.Url, region.ImageUrl);
+        Assert.Equal(2, region.DestinationsCount);
+        Assert.Equal(1, region.StaysCount);
+        Assert.NotNull(region.Health);
+    }
+
+    [Fact]
+    public async Task Territory_region_list_uses_place_image_when_no_destination_image_exists()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Place,
+            fixture.AssignedPlaceId,
+            "/media/test/region-place-main.svg",
+            isMain: true,
+            imageRole: EntityImageRole.Cover,
+            sortOrder: 0,
+            altText: "Place main image");
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var regions = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}");
+
+        Assert.NotNull(regions);
+        var region = Assert.Single(regions!.Items);
+        Assert.NotNull(region.RepresentativeImage);
+        Assert.Equal("/media/test/region-place-main.svg", region.RepresentativeImage!.Url);
+        Assert.Equal("Place", region.RepresentativeImage.SourceType);
+        Assert.Equal(fixture.AssignedPlaceId, region.RepresentativeImage.SourceId);
+    }
+
+    [Fact]
+    public async Task Territory_region_list_returns_null_representative_image_when_no_entity_images_exist()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var (territoryId, regionId) = await CreateEmptyAssignedRegionAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var regions = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={territoryId}");
+
+        Assert.NotNull(regions);
+        var region = Assert.Single(regions!.Items);
+        Assert.Equal(regionId, region.RegionId);
+        Assert.Null(region.RepresentativeImage);
+        Assert.Null(region.ImageUrl);
+    }
+
+    [Fact]
+    public async Task Territory_region_list_ignores_invalid_or_suspended_source_images()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryDashboardFixtureAsync(app);
+
+        await SetDestinationStatusAsync(app, fixture.AssignedDestinationId, "Suspended");
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Destination,
+            fixture.AssignedDestinationId,
+            "/media/test/region-suspended-destination.svg",
+            isMain: true,
+            imageRole: EntityImageRole.Cover,
+            sortOrder: 0);
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Location,
+            fixture.AssignedLocationId,
+            " ",
+            isMain: true,
+            imageRole: EntityImageRole.Cover,
+            sortOrder: 0);
+        await AddEntityImageAsync(
+            app,
+            EntityImageTargetType.Place,
+            fixture.AssignedPlaceId,
+            "/media/test/region-valid-place.svg",
+            isMain: true,
+            imageRole: EntityImageRole.Cover,
+            sortOrder: 0);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var regions = await client.GetFromJsonAsync<TerritoryRegionDirectoryResponseDto>(
+            $"/api/admin/territory/regions?territoryId={fixture.AssignedTerritoryId}");
+
+        Assert.NotNull(regions);
+        var region = Assert.Single(regions!.Items);
+        Assert.NotNull(region.RepresentativeImage);
+        Assert.Equal("/media/test/region-valid-place.svg", region.RepresentativeImage!.Url);
+        Assert.Equal("Place", region.RepresentativeImage.SourceType);
+        Assert.Equal(fixture.AssignedPlaceId, region.RepresentativeImage.SourceId);
+    }
+
+    [Fact]
+    public async Task Territory_region_map_returns_real_region_boundaries_assignments_and_counts()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryRegionMapFixtureAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var map = await client.GetFromJsonAsync<TerritoryRegionMapDto>(
+            $"/api/admin/territory/regions/map?territoryId={fixture.AssignedTerritoryId}");
+
+        Assert.NotNull(map);
+        Assert.Equal(fixture.AssignedTerritoryId, map!.Territory!.TerritoryId);
+        Assert.Equal("TMA", map.Territory.CountryIso3);
+        Assert.True(map.Territory.HasBoundary);
+        Assert.Equal("Territory.BoundaryGeometry", map.Territory.GeometrySource);
+        Assert.NotNull(map.Territory.GeometryGeoJson);
+        Assert.Contains("[0,0]", CoordinatesJson(map.Territory.GeometryGeoJson));
+        Assert.DoesNotContain("[100,100]", CoordinatesJson(map.Territory.GeometryGeoJson));
+        Assert.False(map.Territory.Viewport.IsEmpty);
+        Assert.False(map.Viewport.IsEmpty);
+
+        Assert.Equal(3, map.Regions.Count);
+        Assert.DoesNotContain(map.Regions, region => region.RegionId == fixture.OtherTerritoryRegionId);
+        Assert.DoesNotContain(map.Regions, region => region.Name == "Candidate Only ADM1");
+
+        var assigned = Assert.Single(map.Regions, region => region.RegionId == fixture.AssignedRegionId);
+        Assert.Equal("Active", assigned.Status);
+        Assert.True(assigned.HasBoundary);
+        Assert.Equal("Region.BoundaryGeometry", assigned.GeometrySource);
+        Assert.NotNull(assigned.GeometryGeoJson);
+        Assert.Contains("[0.2,0.2]", CoordinatesJson(assigned.GeometryGeoJson));
+        Assert.DoesNotContain("[8.2,8.2]", CoordinatesJson(assigned.GeometryGeoJson));
+        Assert.NotNull(assigned.CenterLatitude);
+        Assert.NotNull(assigned.CenterLongitude);
+        Assert.Single(assigned.AssignedManagers, manager =>
+            manager.Email == "elena@example.com" &&
+            manager.Role == RoleNames.RegionalManager);
+        Assert.Equal(1, assigned.ContentCounts.Destinations);
+        Assert.Equal(1, assigned.ContentCounts.Locations);
+        Assert.Equal(1, assigned.ContentCounts.Places);
+        Assert.Equal(0, assigned.ContentCounts.Stays);
+        Assert.Equal(1, assigned.ContentCounts.Events);
+        Assert.Equal(1, assigned.ContentCounts.Pending);
+        Assert.InRange(assigned.HealthScore ?? 0, 0, 100);
+        Assert.Equal($"/territory/regions/{fixture.AssignedRegionId}", assigned.DetailRoute);
+
+        var unassigned = Assert.Single(map.Regions, region => region.RegionId == fixture.UnassignedRegionId);
+        Assert.Equal("Inactive", unassigned.Status);
+        Assert.Empty(unassigned.AssignedManagers);
+        Assert.True(unassigned.HasBoundary);
+        Assert.Equal("Region.BoundaryGeometry", unassigned.GeometrySource);
+
+        var missingBoundary = Assert.Single(map.Regions, region => region.RegionId == fixture.MissingBoundaryRegionId);
+        Assert.False(missingBoundary.HasBoundary);
+        Assert.Null(missingBoundary.GeometrySource);
+        Assert.Null(missingBoundary.GeometryGeoJson);
+        Assert.True(missingBoundary.Viewport.IsEmpty);
+        Assert.Equal(
+            "Full region boundary is missing. Display geometry exists but is not used on this accuracy map.",
+            missingBoundary.BoundaryMissingReason);
+
+        Assert.Equal("Boundary data is missing for this territory or some regions.", map.BoundaryWarningMessage);
+    }
+
+    [Fact]
+    public async Task Territory_region_map_authorization_is_scoped_to_assigned_territory()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateTerritoryRegionMapFixtureAsync(app);
+
+        using var anonymousClient = app.CreateClient();
+        var anonymous = await anonymousClient.GetAsync(
+            $"/api/admin/territory/regions/map?territoryId={fixture.AssignedTerritoryId}");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        using var regionalClient = await LoginAdminAsync(app, "elena@example.com", "password123");
+        var regional = await regionalClient.GetAsync(
+            $"/api/admin/territory/regions/map?territoryId={fixture.AssignedTerritoryId}");
+        Assert.Equal(HttpStatusCode.Forbidden, regional.StatusCode);
+
+        using var territoryClient = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var unassigned = await territoryClient.GetAsync(
+            $"/api/admin/territory/regions/map?territoryId={fixture.OtherTerritoryId}");
+        Assert.Equal(HttpStatusCode.Forbidden, unassigned.StatusCode);
+    }
+
+    [Fact]
+    public async Task Territory_region_map_returns_safe_empty_response_when_no_regions_exist()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var territoryId = await CreateEmptyAssignedTerritoryAsync(app);
+
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        var map = await client.GetFromJsonAsync<TerritoryRegionMapDto>(
+            $"/api/admin/territory/regions/map?territoryId={territoryId}");
+
+        Assert.NotNull(map);
+        Assert.Equal(territoryId, map!.Territory!.TerritoryId);
+        Assert.Empty(map.Regions);
+        Assert.Equal("No regions are available for this territory. Sync ADM1 regions first.", map.EmptyStateMessage);
+        Assert.Equal("Boundary data is missing for this territory or some regions.", map.BoundaryWarningMessage);
     }
 
     [Fact]
@@ -426,6 +750,249 @@ public sealed class TerritoryDashboardTests
             new AuthenticationHeaderValue("Bearer", session!.AccessToken);
 
         return client;
+    }
+
+    private static async Task SetDestinationStatusAsync(GeotrackApiFactory app, int destinationId, string status)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var destination = await db.Destinations.SingleAsync(item => item.Id == destinationId);
+        destination.Status = status;
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task AddEntityImageAsync(
+        GeotrackApiFactory app,
+        EntityImageTargetType targetType,
+        int entityId,
+        string url,
+        bool isMain,
+        string imageRole,
+        int sortOrder,
+        string? altText = null)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var image = new EntityImage
+        {
+            TargetType = targetType,
+            Url = url,
+            AltText = altText,
+            IsMain = isMain,
+            ImageRole = imageRole,
+            SortOrder = sortOrder,
+            CreatedAt = DateTime.UtcNow.AddMilliseconds(sortOrder)
+        };
+
+        switch (targetType)
+        {
+            case EntityImageTargetType.Destination:
+                image.DestinationId = entityId;
+                break;
+            case EntityImageTargetType.Location:
+                image.LocationId = entityId;
+                break;
+            case EntityImageTargetType.Place:
+                image.PlaceId = entityId;
+                break;
+            case EntityImageTargetType.Event:
+                image.EventId = entityId;
+                break;
+            default:
+                throw new InvalidOperationException("Unsupported representative image test target.");
+        }
+
+        db.EntityImages.Add(image);
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<TerritoryRegionMapFixture> CreateTerritoryRegionMapFixtureAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var now = DateTime.UtcNow;
+        var destinationType = await db.DestinationTypes.OrderBy(existing => existing.Id).FirstAsync();
+        var locationType = await db.LocationTypes.OrderBy(existing => existing.Id).FirstAsync();
+        var placeType = await db.PlaceTypes.OrderBy(existing => existing.Id).FirstAsync();
+        var eventType = await db.EventTypes.OrderBy(existing => existing.Id).FirstAsync();
+        var territoryManager = await db.Users.SingleAsync(user => user.Email == "mika@gmail.com");
+        var regionalManager = await db.Users.SingleAsync(user => user.Email == "elena@example.com");
+        var contributor = await db.Users.SingleAsync(user => user.Email == "marko.p@example.com");
+
+        var assignedTerritory = new Territory
+        {
+            Name = $"Territory Map Assigned {Guid.NewGuid():N}",
+            TerritoryKind = TerritoryKinds.Country,
+            CountryCode = "TM",
+            CountryIso3 = "TMA",
+            BoundaryShapeType = "Polygon",
+            BoundarySource = "geoBoundaries",
+            BoundaryAdmLevel = "ADM0",
+            CreatedAt = now
+        };
+        var otherTerritory = new Territory
+        {
+            Name = $"Territory Map Other {Guid.NewGuid():N}",
+            TerritoryKind = TerritoryKinds.Country,
+            CountryCode = "TO",
+            CountryIso3 = "TMO",
+            BoundaryShapeType = "Polygon",
+            BoundarySource = "geoBoundaries",
+            BoundaryAdmLevel = "ADM0",
+            CreatedAt = now
+        };
+
+        db.Territories.AddRange(assignedTerritory, otherTerritory);
+        SetBoundary(db, assignedTerritory, Polygon(0, 0, 4, 4));
+        SetDisplayBoundary(db, assignedTerritory, Polygon(100, 100, 101, 101));
+        SetBoundary(db, otherTerritory, Polygon(10, 10, 14, 14));
+        await db.SaveChangesAsync();
+
+        db.TerritoryManagerTerritories.Add(new TerritoryManagerTerritory
+        {
+            UserId = territoryManager.Id,
+            TerritoryId = assignedTerritory.Id,
+            CreatedAt = now
+        });
+
+        var candidateOnly = new AdministrativeBoundaryCandidate
+        {
+            Source = "geoBoundaries",
+            ReleaseType = "gbOpen",
+            AdmLevel = "ADM1",
+            ShapeGroup = "TMA",
+            ShapeId = $"candidate-only-{Guid.NewGuid():N}",
+            ShapeName = "Candidate Only ADM1",
+            ShapeType = "Polygon",
+            ExternalKey = $"TMA-ADM1-candidate-only-{Guid.NewGuid():N}",
+            CountryIso3 = "TMA",
+            CountryTerritoryId = assignedTerritory.Id,
+            ImportedAt = now,
+            CreatedAt = now
+        };
+        db.AdministrativeBoundaryCandidates.Add(candidateOnly);
+        SetBoundary(db, candidateOnly, Polygon(2.8, 2.8, 3.2, 3.2));
+        SetDisplayBoundary(db, candidateOnly, Polygon(2.9, 2.9, 3.1, 3.1));
+
+        var assignedRegion = new Region
+        {
+            Name = "Assigned Map Region",
+            TerritoryId = assignedTerritory.Id,
+            BoundaryShapeType = "Polygon",
+            BoundarySource = "geoBoundaries",
+            BoundaryAdmLevel = "ADM1",
+            CreatedAt = now
+        };
+        var unassignedRegion = new Region
+        {
+            Name = "Unassigned Map Region",
+            TerritoryId = assignedTerritory.Id,
+            BoundaryShapeType = "Polygon",
+            BoundarySource = "geoBoundaries",
+            BoundaryAdmLevel = "ADM1",
+            CreatedAt = now
+        };
+        var missingBoundaryRegion = new Region
+        {
+            Name = "Missing Boundary Map Region",
+            TerritoryId = assignedTerritory.Id,
+            CreatedAt = now
+        };
+        var otherRegion = new Region
+        {
+            Name = "Other Territory Map Region",
+            TerritoryId = otherTerritory.Id,
+            BoundaryShapeType = "Polygon",
+            BoundarySource = "geoBoundaries",
+            BoundaryAdmLevel = "ADM1",
+            CreatedAt = now
+        };
+
+        db.Regions.AddRange(assignedRegion, unassignedRegion, missingBoundaryRegion, otherRegion);
+        SetBoundary(db, assignedRegion, Polygon(0.2, 0.2, 1.2, 1.2));
+        SetDisplayBoundary(db, assignedRegion, Polygon(8.2, 8.2, 9.2, 9.2));
+        SetBoundary(db, unassignedRegion, Polygon(1.4, 0.2, 2.4, 1.2));
+        SetDisplayBoundary(db, unassignedRegion, Polygon(9.4, 8.2, 10.4, 9.2));
+        SetDisplayBoundary(db, missingBoundaryRegion, Polygon(2.6, 0.2, 3.6, 1.2));
+        SetBoundary(db, otherRegion, Polygon(10.2, 10.2, 11.2, 11.2));
+        await db.SaveChangesAsync();
+
+        await GrantRegionalManagerCoverageAsync(db, regionalManager, assignedRegion.Id);
+
+        var destination = new Destination
+        {
+            Name = "Map Scoped Destination",
+            DestinationTypeId = destinationType.Id,
+            RegionId = assignedRegion.Id,
+            Description = "Destination inside map scoped region.",
+            Latitude = 0.5,
+            Longitude = 0.5,
+            CreatedAt = now
+        };
+        db.Destinations.Add(destination);
+        await db.SaveChangesAsync();
+
+        var location = new Location
+        {
+            Name = "Map Scoped Location",
+            DestinationId = destination.Id,
+            LocationTypeId = locationType.Id,
+            Latitude = 0.55,
+            Longitude = 0.55,
+            CreatedAt = now
+        };
+        db.Locations.Add(location);
+        await db.SaveChangesAsync();
+
+        var place = new Place
+        {
+            Name = "Map Scoped Place",
+            PlaceTypeId = placeType.Id,
+            LocationId = location.Id,
+            Description = "Place inside map scoped region.",
+            Latitude = 0.6,
+            Longitude = 0.6,
+            CreatedAt = now
+        };
+        db.Places.Add(place);
+
+        db.Events.Add(new Event
+        {
+            Name = "Map Scoped Event",
+            EventTypeId = eventType.Id,
+            DestinationId = destination.Id,
+            LocationId = location.Id,
+            Description = "Event inside map scoped region.",
+            StartDate = now.AddDays(5),
+            EndDate = now.AddDays(6),
+            CreatedAt = now
+        });
+
+        db.PlaceContributions.Add(new PlaceContribution
+        {
+            Type = PlaceContributionType.CreatePlace,
+            Status = PlaceContributionStatus.PendingReview,
+            UserId = contributor.Id,
+            PlaceTypeId = placeType.Id,
+            LocationId = location.Id,
+            Name = "Map Scoped Pending Contribution",
+            Description = "Pending contribution for map scoped region.",
+            Latitude = 0.62,
+            Longitude = 0.62,
+            SubmittedAt = now,
+            CreatedAt = now
+        });
+
+        await db.SaveChangesAsync();
+
+        return new TerritoryRegionMapFixture(
+            assignedTerritory.Id,
+            otherTerritory.Id,
+            assignedRegion.Id,
+            unassignedRegion.Id,
+            missingBoundaryRegion.Id,
+            otherRegion.Id);
     }
 
     private static async Task<TerritoryDashboardFixture> CreateTerritoryDashboardFixtureAsync(GeotrackApiFactory app)
@@ -795,6 +1362,75 @@ public sealed class TerritoryDashboardTests
         return (territory.Id, region.Id);
     }
 
+    private static async Task<int> AddSparseContentRegionAsync(
+        GeotrackApiFactory app,
+        int territoryId,
+        string regionName)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var destinationType = await db.DestinationTypes.OrderBy(existing => existing.Id).FirstAsync();
+        var locationType = await db.LocationTypes.OrderBy(existing => existing.Id).FirstAsync();
+        var now = DateTime.UtcNow;
+
+        var region = new Region
+        {
+            Name = regionName,
+            TerritoryId = territoryId,
+            CreatedAt = now.AddDays(-2)
+        };
+        db.Regions.Add(region);
+        await db.SaveChangesAsync();
+
+        var destination = new Destination
+        {
+            Name = $"{regionName} Destination",
+            DestinationTypeId = destinationType.Id,
+            RegionId = region.Id,
+            Description = "Sparse content used for dashboard health ranking.",
+            Latitude = 44.1,
+            Longitude = 15.1,
+            CreatedAt = now.AddDays(-1)
+        };
+        db.Destinations.Add(destination);
+        await db.SaveChangesAsync();
+
+        db.Locations.Add(new Location
+        {
+            Name = $"{regionName} Location",
+            DestinationId = destination.Id,
+            LocationTypeId = locationType.Id,
+            Description = "Sparse location used for dashboard health ranking.",
+            Latitude = 44.2,
+            Longitude = 15.2,
+            CreatedAt = now.AddDays(-1)
+        });
+        await db.SaveChangesAsync();
+
+        return region.Id;
+    }
+
+    private static async Task<List<int>> AddNamedRegionsAsync(
+        GeotrackApiFactory app,
+        int territoryId,
+        params string[] regionNames)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var now = DateTime.UtcNow;
+        var regions = regionNames.Select((name, index) => new Region
+        {
+            Name = name,
+            TerritoryId = territoryId,
+            CreatedAt = now.AddMinutes(-index)
+        }).ToList();
+
+        db.Regions.AddRange(regions);
+        await db.SaveChangesAsync();
+
+        return regions.Select(region => region.Id).ToList();
+    }
+
     private static async Task AddAdditionalRegionsAsync(
         GeotrackApiFactory app,
         int territoryId,
@@ -864,6 +1500,47 @@ public sealed class TerritoryDashboardTests
 
         await db.SaveChangesAsync();
     }
+
+    private static void SetBoundary(AppDbContext db, object entity, Geometry geometry)
+    {
+        geometry.SRID = 4326;
+        db.Entry(entity)
+            .Property(BoundaryGeometryPropertyName)
+            .CurrentValue = geometry;
+    }
+
+    private static void SetDisplayBoundary(AppDbContext db, object entity, Geometry geometry)
+    {
+        geometry.SRID = 4326;
+        db.Entry(entity)
+            .Property(BoundaryDisplayGeometryPropertyName)
+            .CurrentValue = geometry;
+    }
+
+    private static string CoordinatesJson(TerritoryRegionGeometryDto geometry) =>
+        JsonSerializer.Serialize(geometry.Coordinates);
+
+    private static NtsPolygon Polygon(double west, double south, double east, double north)
+    {
+        var polygon = GeometryFactory.CreatePolygon(new[]
+        {
+            new Coordinate(west, south),
+            new Coordinate(east, south),
+            new Coordinate(east, north),
+            new Coordinate(west, north),
+            new Coordinate(west, south)
+        });
+        polygon.SRID = 4326;
+        return polygon;
+    }
+
+    private sealed record TerritoryRegionMapFixture(
+        int AssignedTerritoryId,
+        int OtherTerritoryId,
+        int AssignedRegionId,
+        int UnassignedRegionId,
+        int MissingBoundaryRegionId,
+        int OtherTerritoryRegionId);
 
     private sealed record TerritoryDashboardFixture(
         int AssignedTerritoryId,

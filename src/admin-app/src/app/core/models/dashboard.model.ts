@@ -190,9 +190,18 @@ export interface TerritoryRegionDirectoryItem {
   healthScore?: number | null;
   health?: TerritoryHealth | null;
   activityScore: number;
+  representativeImage?: TerritoryRegionRepresentativeImage | null;
   imageUrl?: string | null;
   detailRoute?: string | null;
   createdAt: string;
+}
+
+export interface TerritoryRegionRepresentativeImage {
+  url: string;
+  altText?: string | null;
+  sourceType: string;
+  sourceId: number;
+  sourceName: string;
 }
 
 export interface TerritoryRegionDirectoryResponse {
@@ -202,6 +211,58 @@ export interface TerritoryRegionDirectoryResponse {
   skip: number;
   take: number;
   hasMore: boolean;
+}
+
+export interface TerritoryRegionMapResponse {
+  territory?: TerritoryRegionMapTerritory | null;
+  viewport: TerritoryRegionMapViewport;
+  regions: TerritoryRegionMapRegion[];
+  emptyStateMessage?: string | null;
+  boundaryWarningMessage?: string | null;
+}
+
+export interface TerritoryRegionMapTerritory {
+  territoryId: number;
+  name: string;
+  displayName: string;
+  countryCode?: string | null;
+  countryIso3?: string | null;
+  hasBoundary: boolean;
+  geometrySource?: string | null;
+  boundaryMissingReason?: string | null;
+  geometryGeoJson?: TerritoryRegionGeometry | null;
+  viewport: TerritoryRegionMapViewport;
+}
+
+export interface TerritoryRegionMapRegion {
+  regionId: number;
+  name: string;
+  displayName: string;
+  territoryId: number;
+  territoryDisplayName: string;
+  status: 'Active' | 'Inactive' | string;
+  healthScore?: number | null;
+  health?: TerritoryHealth | null;
+  assignedManagers: TerritoryRegionManager[];
+  managerDisplayName?: string | null;
+  contentCounts: TerritoryRegionMapContentCounts;
+  hasBoundary: boolean;
+  geometrySource?: string | null;
+  boundaryMissingReason?: string | null;
+  geometryGeoJson?: TerritoryRegionGeometry | null;
+  viewport: TerritoryRegionMapViewport;
+  centerLatitude?: number | null;
+  centerLongitude?: number | null;
+  detailRoute?: string | null;
+}
+
+export interface TerritoryRegionMapContentCounts {
+  destinations: number;
+  locations: number;
+  places: number;
+  stays: number;
+  events: number;
+  pending: number;
 }
 
 export interface TerritoryRegionBoundaryCoordinate {
@@ -326,6 +387,62 @@ export interface BoundaryRegionCandidate {
   validationMessage?: string | null;
   viewport?: TerritoryRegionMapViewport | null;
   geometryGeoJson?: TerritoryRegionGeometry | null;
+}
+
+export interface RegionSyncSummary {
+  territoryId: number;
+  territoryName: string;
+  countryIso3: string;
+  totalCandidates: number;
+  existingLinkedCount: number;
+  linkedExistingCount: number;
+  createdCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  ambiguousCount: number;
+  failedCount: number;
+  dryRun: boolean;
+  completedAt?: string | null;
+  items: RegionSyncItem[];
+}
+
+export interface TerritoryRegionSetupStatus {
+  territoryId: number;
+  territoryName: string;
+  countryIso3: string;
+  requiresInitialSync: boolean;
+  onboardingCompleted: boolean;
+  hasSyncedRegions: boolean;
+  syncedRegionCount: number;
+  candidateCount: number;
+  hasCandidateData: boolean;
+  canSync: boolean;
+  canUpdate: boolean;
+  updateAvailable: boolean;
+  missingCandidateData: boolean;
+  regionSetupCompletedAt?: string | null;
+  lastSyncedAt?: string | null;
+  candidateVersionHash?: string | null;
+  syncedVersionHash?: string | null;
+  message: string;
+}
+
+export interface RegionSyncItem {
+  candidateId: number;
+  candidateName: string;
+  candidateExternalKey: string;
+  regionId?: number | null;
+  regionName?: string | null;
+  status:
+    | 'AlreadyLinked'
+    | 'LinkedExisting'
+    | 'Created'
+    | 'Updated'
+    | 'Skipped'
+    | 'Ambiguous'
+    | 'Failed'
+    | string;
+  message: string;
 }
 
 export interface TerritoryContentDirectoryItem {

@@ -2868,6 +2868,9 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("RegionSetupCompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("UserId", "TerritoryId");
 
                     b.HasIndex("TerritoryId");

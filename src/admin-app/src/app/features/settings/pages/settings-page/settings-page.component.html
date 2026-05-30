@@ -277,7 +277,19 @@
                   <h3 class="text-sm font-semibold text-gray-800">Email Notifications</h3>
                 </div>
 
-                <div class="flex items-center justify-between py-3 border-b border-gray-50">
+                <p
+                  *ngIf="!emailNotificationsAvailable"
+                  id="email-notifications-unavailable"
+                  data-testid="email-notifications-unavailable"
+                  class="mb-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
+                >
+                  {{ emailNotificationUnavailableMessage }}
+                </p>
+
+                <div
+                  class="flex items-center justify-between py-3 border-b border-gray-50"
+                  [class.notification-row-disabled]="!emailNotificationsAvailable"
+                >
                   <div>
                     <p class="text-sm font-medium text-gray-800">{{ notificationPrimaryLabel }}</p>
                     <p class="text-xs text-gray-500 mt-0.5">
@@ -287,17 +299,21 @@
                   <button
                     type="button"
                     class="toggle-track"
-                    [class.on]="notifyRequests()"
-                    (click)="notifyRequests.update(v => !v)"
-                    [disabled]="isSaving()"
-                    [attr.aria-checked]="notifyRequests()"
+                    [class.on]="emailNotificationsAvailable && notifyRequests()"
+                    (click)="toggleEmailRequests()"
+                    [disabled]="!canEditEmailNotifications"
+                    [attr.aria-checked]="emailNotificationsAvailable && notifyRequests()"
+                    [attr.aria-describedby]="!emailNotificationsAvailable ? 'email-notifications-unavailable' : null"
                     role="switch"
                   >
                     <span class="toggle-thumb"></span>
                   </button>
                 </div>
 
-                <div class="flex items-center justify-between py-3">
+                <div
+                  class="flex items-center justify-between py-3"
+                  [class.notification-row-disabled]="!emailNotificationsAvailable"
+                >
                   <div>
                     <p class="text-sm font-medium text-gray-800">{{ notificationSecondaryLabel }}</p>
                     <p class="text-xs text-gray-500 mt-0.5">
@@ -307,10 +323,11 @@
                   <button
                     type="button"
                     class="toggle-track"
-                    [class.on]="notifyNewReview()"
-                    (click)="notifyNewReview.update(v => !v)"
-                    [disabled]="isSaving()"
-                    [attr.aria-checked]="notifyNewReview()"
+                    [class.on]="emailNotificationsAvailable && notifyNewReview()"
+                    (click)="toggleEmailNewReview()"
+                    [disabled]="!canEditEmailNotifications"
+                    [attr.aria-checked]="emailNotificationsAvailable && notifyNewReview()"
+                    [attr.aria-describedby]="!emailNotificationsAvailable ? 'email-notifications-unavailable' : null"
                     role="switch"
                   >
                     <span class="toggle-thumb"></span>

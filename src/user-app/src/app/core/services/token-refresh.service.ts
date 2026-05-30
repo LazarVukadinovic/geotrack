@@ -10,6 +10,10 @@ interface RefreshResponse {
   sessionPersistent: boolean;
 }
 
+interface RefreshOptions {
+  allowMissingSessionHint?: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class TokenRefreshService {
   private readonly tokenStorage = inject(TokenStorageService);
@@ -17,12 +21,12 @@ export class TokenRefreshService {
 
   private refreshInFlight$: Observable<string> | null = null;
 
-  refresh(): Observable<string> {
+  refresh(options: RefreshOptions = {}): Observable<string> {
     if (this.refreshInFlight$) {
       return this.refreshInFlight$;
     }
 
-    if (!this.tokenStorage.hasSession()) {
+    if (!options.allowMissingSessionHint && !this.tokenStorage.hasSession()) {
       return throwError(() => new Error('No refresh token available'));
     }
 
@@ -36,7 +40,7 @@ export class TokenRefreshService {
       )
       .pipe(
         tap((response) => {
-          this.tokenStorage.setAccessToken(response.accessToken);
+          this.tokenStorage.setSession(response.accessToken, response.sessionPersistent);
           this.tokenStorage.finalizeSessionMigration();
         }),
         map((response) => response.accessToken),

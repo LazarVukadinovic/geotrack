@@ -24,6 +24,9 @@
 .toggle-track.on {
   background: #1565d8;
 }
+.toggle-track:disabled.on {
+  background: #e5e7eb;
+}
 .toggle-thumb {
   position: absolute;
   left: 3px;
@@ -36,6 +39,12 @@
 }
 .toggle-track.on .toggle-thumb {
   transform: translateX(20px);
+}
+.toggle-track:disabled.on .toggle-thumb {
+  transform: translateX(0);
+}
+.notification-row-disabled {
+  opacity: 0.78;
 }
 
 /* Focus ring for inputs */

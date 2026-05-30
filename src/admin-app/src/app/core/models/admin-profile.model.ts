@@ -49,6 +49,7 @@ export interface AdminProfileAssignment {
 export interface AdminProfilePreferences {
   interfaceLanguage: string;
   timezone: string;
+  emailNotificationsAvailable?: boolean;
   emailRequestsEnabled: boolean;
   emailNewReviewEnabled: boolean;
 }

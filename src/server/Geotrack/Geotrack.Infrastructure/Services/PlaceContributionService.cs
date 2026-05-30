@@ -581,7 +581,7 @@ public class PlaceContributionService : IPlaceContributionService
         contribution.ReviewNote = NormalizeOptional(note);
         contribution.UpdatedAt = now;
 
-        _notificationService.AddContributionDecisionNotification(contribution);
+        await _notificationService.AddContributionDecisionNotificationAsync(contribution);
 
         await _db.SaveChangesAsync();
 
@@ -610,7 +610,7 @@ public class PlaceContributionService : IPlaceContributionService
         contribution.ReviewNote = NormalizeOptional(note);
         contribution.UpdatedAt = now;
 
-        _notificationService.AddContributionDecisionNotification(contribution);
+        await _notificationService.AddContributionDecisionNotificationAsync(contribution);
 
         await _db.SaveChangesAsync();
 

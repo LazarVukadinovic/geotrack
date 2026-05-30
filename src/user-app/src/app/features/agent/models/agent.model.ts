@@ -1,6 +1,5 @@
 export type ChatRole = 'user' | 'assistant';
 export type ChatMessageType = 'text' | 'suggestion_cards';
-export type AgentKeyMode = 'saved' | 'session' | 'project-demo';
 export type AgentResultEntityType = 'place' | 'stay' | 'event';
 
 export interface AgentResultCard {
@@ -42,35 +41,6 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
-export interface AgentProviderModel {
-  id: string;
-  displayName: string;
-  isDefault: boolean;
-}
-
-export interface AgentProvider {
-  id: string;
-  displayName: string;
-  enabled: boolean;
-  models: AgentProviderModel[];
-  defaultModel: string | null;
-  supportsSavedKey: boolean;
-  supportsSessionKey: boolean;
-  projectDemoKeyEnabled: boolean;
-  hasSavedKey: boolean;
-  keyLast4: string | null;
-  keyUpdatedAt: string | null;
-}
-
-export interface AgentApiKeyMetadata {
-  provider: string;
-  keyLast4: string;
-  displayName: string | null;
-  createdAt: string;
-  updatedAt: string;
-  lastUsedAt: string | null;
-}
-
 export interface AgentMcpMetadata {
   enabled: boolean;
   url: string | null;
@@ -79,7 +49,7 @@ export interface AgentMcpMetadata {
 }
 
 export interface AgentProvidersResponse {
-  providers: AgentProvider[];
+  providers?: never[];
   mcp: AgentMcpMetadata;
 }
 

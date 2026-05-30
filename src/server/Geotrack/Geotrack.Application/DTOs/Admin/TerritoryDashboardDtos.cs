@@ -113,9 +113,19 @@ public class TerritoryRegionDirectoryItemDto
     public int? HealthScore { get; set; }
     public TerritoryHealthDto? Health { get; set; }
     public int ActivityScore { get; set; }
+    public TerritoryRegionRepresentativeImageDto? RepresentativeImage { get; set; }
     public string? ImageUrl { get; set; }
     public string? DetailRoute { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class TerritoryRegionRepresentativeImageDto
+{
+    public string Url { get; set; } = string.Empty;
+    public string? AltText { get; set; }
+    public string SourceType { get; set; } = string.Empty;
+    public int SourceId { get; set; }
+    public string SourceName { get; set; } = string.Empty;
 }
 
 public class TerritoryRegionDirectoryResponseDto
@@ -126,6 +136,62 @@ public class TerritoryRegionDirectoryResponseDto
     public int Skip { get; set; }
     public int Take { get; set; }
     public bool HasMore { get; set; }
+}
+
+public class TerritoryRegionMapDto
+{
+    public TerritoryRegionMapTerritoryDto? Territory { get; set; }
+    public TerritoryRegionMapViewportDto Viewport { get; set; } = new();
+    public List<TerritoryRegionMapRegionDto> Regions { get; set; } = new();
+    public string? EmptyStateMessage { get; set; }
+    public string? BoundaryWarningMessage { get; set; }
+}
+
+public class TerritoryRegionMapTerritoryDto
+{
+    public int TerritoryId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string? CountryCode { get; set; }
+    public string? CountryIso3 { get; set; }
+    public bool HasBoundary { get; set; }
+    public string? GeometrySource { get; set; }
+    public string? BoundaryMissingReason { get; set; }
+    public TerritoryRegionGeometryDto? GeometryGeoJson { get; set; }
+    public TerritoryRegionMapViewportDto Viewport { get; set; } = new();
+}
+
+public class TerritoryRegionMapRegionDto
+{
+    public int RegionId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public int TerritoryId { get; set; }
+    public string TerritoryDisplayName { get; set; } = string.Empty;
+    public string Status { get; set; } = "Inactive";
+    public int? HealthScore { get; set; }
+    public TerritoryHealthDto? Health { get; set; }
+    public List<TerritoryRegionManagerDto> AssignedManagers { get; set; } = new();
+    public string? ManagerDisplayName { get; set; }
+    public TerritoryRegionMapContentCountsDto ContentCounts { get; set; } = new();
+    public bool HasBoundary { get; set; }
+    public string? GeometrySource { get; set; }
+    public string? BoundaryMissingReason { get; set; }
+    public TerritoryRegionGeometryDto? GeometryGeoJson { get; set; }
+    public TerritoryRegionMapViewportDto Viewport { get; set; } = new();
+    public double? CenterLatitude { get; set; }
+    public double? CenterLongitude { get; set; }
+    public string? DetailRoute { get; set; }
+}
+
+public class TerritoryRegionMapContentCountsDto
+{
+    public int Destinations { get; set; }
+    public int Locations { get; set; }
+    public int Places { get; set; }
+    public int Stays { get; set; }
+    public int Events { get; set; }
+    public int Pending { get; set; }
 }
 
 public class TerritoryRegionBoundaryCoordinateDto

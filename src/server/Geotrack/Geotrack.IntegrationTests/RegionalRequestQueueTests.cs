@@ -211,7 +211,8 @@ public sealed class RegionalRequestQueueTests
             notification.UserId == fixture.ContributorUserId &&
             notification.Type == "contribution_approved" &&
             notification.RelatedEntityId == fixture.PendingContributionId);
-        Assert.Equal("Your contribution was approved.", approvalNotification.Message);
+        Assert.Equal("Your contribution has been approved and published.", approvalNotification.Message);
+        Assert.Equal($"/places/{approvedContribution.PlaceId!.Value}", approvalNotification.ActionUrl);
 
         var rejectionNotification = await db.UserNotifications.SingleAsync(notification =>
             notification.UserId == fixture.ContributorUserId &&

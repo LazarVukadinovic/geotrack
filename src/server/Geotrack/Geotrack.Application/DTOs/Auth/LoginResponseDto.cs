@@ -21,4 +21,5 @@ public class LoginResponseDto
     public int ExpiresIn { get; set; } = 900;
 
     public bool SessionPersistent { get; set; }
+    public AuthSessionDto? Session { get; set; }
 }

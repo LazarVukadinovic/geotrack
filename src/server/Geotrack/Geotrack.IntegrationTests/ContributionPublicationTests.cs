@@ -56,6 +56,11 @@ public sealed class ContributionPublicationTests
         Assert.Equal("Approved", approved.Contribution.Status);
         Assert.NotNull(approved.Contribution.PlaceId);
 
+        var repeatedApprovalResponse = await reviewerClient.PostAsJsonAsync(
+            $"/api/contributions/{createdContribution.Contribution.Id}/approve",
+            new ReviewPlaceContributionRequestDto { Note = "Retry should not duplicate." });
+        Assert.Equal(HttpStatusCode.BadRequest, repeatedApprovalResponse.StatusCode);
+
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
@@ -91,6 +96,9 @@ public sealed class ContributionPublicationTests
             notification => notification.RelatedEntityId == createdContribution.Contribution.Id);
         Assert.Equal("contribution_approved", approvalNotification.Type);
         Assert.Equal(createdContribution.Contribution.Id, approvalNotification.RelatedEntityId);
+        Assert.Equal("Your contribution has been approved and published.", approvalNotification.Message);
+        Assert.Equal($"/stays/{approved.Contribution.PlaceId.Value}", approvalNotification.ActionUrl);
+        Assert.Equal(approvalNotification.ActionUrl, approvalNotification.TargetRoute);
         Assert.False(approvalNotification.IsRead);
         Assert.True(notifications.UnreadCount >= 1);
     }
