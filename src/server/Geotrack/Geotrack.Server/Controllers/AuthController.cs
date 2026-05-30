@@ -3,7 +3,7 @@ using Geotrack.Application.Exceptions;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using HeaderNames = Microsoft.Net.Http.Headers.HeaderNames;
+using System.Security.Claims;
 
 namespace Geotrack.Server.Controllers;
 
@@ -12,7 +12,6 @@ namespace Geotrack.Server.Controllers;
 [EnableRateLimiting("auth")]
 public class AuthController : ControllerBase
 {
-    private const string RefreshTokenCookieName = "geotrack_refresh";
     private readonly IAuthService _authService;
 
     public AuthController(IAuthService authService)
@@ -104,6 +103,32 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpGet("session")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<ActionResult<AuthSessionDto>> Session()
+    {
+        try
+        {
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                return Ok(await _authService.GetSessionForUserAsync(GetCurrentUserId()));
+            }
+
+            return Ok(await _authService.GetSessionAsync(new RefreshRequestDto
+            {
+                RefreshToken = ResolveRefreshToken(null)
+            }));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (ForbiddenAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+    }
+
     /// <summary>
     /// Revoke a refresh token (manual logout).
     /// Always returns 204 — callers must not rely on the outcome for UX decisions.
@@ -121,49 +146,28 @@ public class AuthController : ControllerBase
 
     private string ResolveRefreshToken(string? requestRefreshToken)
     {
-        var cookieToken = Request.Cookies[RefreshTokenCookieName];
-        if (!string.IsNullOrWhiteSpace(cookieToken))
-            return cookieToken;
-
-        return requestRefreshToken?.Trim() ?? string.Empty;
+        return AuthRefreshCookie.Resolve(Request, requestRefreshToken);
     }
 
     private void WriteRefreshTokenCookie(string refreshToken, bool isPersistent)
     {
-        var options = new CookieOptions
-        {
-            HttpOnly = true,
-            IsEssential = true,
-            Path = "/api/auth",
-            SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-            Secure = !HttpContext.Request.IsHttps
-                ? !HttpContext.Request.Host.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-                : true
-        };
-
-        if (isPersistent)
-        {
-            options.Expires = DateTimeOffset.UtcNow.AddDays(7);
-            options.MaxAge = TimeSpan.FromDays(7);
-        }
-
-        Response.Cookies.Append(RefreshTokenCookieName, refreshToken, options);
-        Response.Headers.Append(HeaderNames.CacheControl, "no-store");
+        AuthRefreshCookie.Append(HttpContext, refreshToken, isPersistent);
     }
 
     private void DeleteRefreshTokenCookie()
     {
-        Response.Cookies.Delete(RefreshTokenCookieName, new CookieOptions
-        {
-            HttpOnly = true,
-            IsEssential = true,
-            Path = "/api/auth",
-            SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-            Secure = !HttpContext.Request.IsHttps
-                ? !HttpContext.Request.Host.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-                : true
-        });
-        Response.Headers.Append(HeaderNames.CacheControl, "no-store");
+        AuthRefreshCookie.DeleteAll(HttpContext);
+    }
+
+    private int GetCurrentUserId()
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.FindFirstValue("userId");
+
+        return int.TryParse(value, out var userId)
+            ? userId
+            : throw new UnauthorizedAccessException("Invalid user session.");
     }
 
     private static LoginResponseDto Sanitize(LoginResponseDto response)

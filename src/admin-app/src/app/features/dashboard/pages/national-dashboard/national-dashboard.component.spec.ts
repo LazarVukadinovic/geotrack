@@ -1,12 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { NationalDashboardComponent } from './national-dashboard.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { TerritoryDashboardService } from '../../../../core/services/territory-dashboard.service';
-import { TerritoryDashboardResponse } from '../../../../core/models/dashboard.model';
+import { TerritoryDashboardResponse, TerritoryRegionHealth } from '../../../../core/models/dashboard.model';
 
 describe('NationalDashboardComponent', () => {
   let component: NationalDashboardComponent;
@@ -115,6 +115,35 @@ describe('NationalDashboardComponent', () => {
     },
   };
 
+  const makeRegion = (
+    regionId: number,
+    regionName: string,
+    healthScore: number,
+    patch: Partial<TerritoryRegionHealth> = {},
+  ): TerritoryRegionHealth => ({
+    regionId,
+    regionName,
+    managerDisplayName: null,
+    destinationsCount: 0,
+    locationsCount: 0,
+    placesCount: 0,
+    staysCount: 0,
+    eventsCount: 0,
+    pendingRequestsCount: 0,
+    healthScore,
+    health: {
+      score: healthScore,
+      statusLabel: healthScore > 0 ? 'Healthy' : 'Critical',
+      drivers: [],
+      issues: [],
+      recommendations: [],
+    },
+    activityScore: healthScore,
+    assignedManagers: [],
+    assignedManagersPreview: [],
+    ...patch,
+  });
+
   const authService = {
     fullName: 'Mika Mikic',
     getUser: vi.fn(() => ({ role: 'Territory Manager', region: '' })),
@@ -129,6 +158,7 @@ describe('NationalDashboardComponent', () => {
     getActiveTerritoryId: vi.fn(() => 10),
     setActiveTerritoryId: vi.fn(),
     getDashboard: vi.fn(() => of(dashboard)),
+    regionSetupChanged$: new Subject<void>().asObservable(),
   };
 
   beforeEach(async () => {
@@ -163,6 +193,77 @@ describe('NationalDashboardComponent', () => {
     expect(text).toContain('Real Destination');
     expect(text).toContain('Real Event');
     expect(text).toContain('Dalmatia');
+  });
+
+  it('renders at most four ranked region health cards and keeps the full-list link visible', () => {
+    component.dashboard = {
+      ...dashboard,
+      regionsHealth: [
+        makeRegion(101, 'Lowest Region', 10),
+        makeRegion(102, 'Highest Region', 95),
+        makeRegion(103, 'Zero Managed Region', 0, {
+          assignedManagers: [
+            {
+              userId: 103,
+              displayName: 'Managed Region Lead',
+              email: 'managed@example.com',
+              initials: 'MR',
+              avatarUrl: null,
+              role: 'RegionalManager',
+              assignedAt: '2026-05-03T00:00:00Z',
+            },
+          ],
+        }),
+        makeRegion(104, 'Zero Content Region', 0, {
+          destinationsCount: 2,
+          locationsCount: 1,
+        }),
+        makeRegion(105, 'Alpha Zero Region', 0),
+        makeRegion(106, 'Zeta Zero Region', 0),
+      ],
+    };
+    component.isLoading = false;
+    fixture.detectChanges();
+
+    const cards = fixture.nativeElement.querySelectorAll('button[aria-label^="Open "]');
+    const text = fixture.nativeElement.textContent;
+
+    expect(component.regions.map(region => region.regionName)).toEqual([
+      'Highest Region',
+      'Lowest Region',
+      'Zero Managed Region',
+      'Zero Content Region',
+    ]);
+    expect(cards.length).toBe(4);
+    expect(text).toContain('Top 4 regions by health score');
+    expect(text).toContain('View All Regions');
+    expect(text).not.toContain('Alpha Zero Region');
+    expect(text).not.toContain('Zeta Zero Region');
+  });
+
+  it('navigates to Regional Management from View All Regions', () => {
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate');
+
+    component.navigateToRegions();
+
+    expect(navigate).toHaveBeenCalledWith(['/territory/regions']);
+  });
+
+  it('renders the clean empty state when no regions are available', () => {
+    component.dashboard = {
+      ...dashboard,
+      regionsHealth: [],
+    };
+    component.isLoading = false;
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    const cards = fixture.nativeElement.querySelectorAll('button[aria-label^="Open "]');
+
+    expect(text).toContain('No regions available yet.');
+    expect(text).toContain('View All Regions');
+    expect(cards.length).toBe(0);
   });
 
   it('navigates content stat cards to the read-only territory directory', () => {

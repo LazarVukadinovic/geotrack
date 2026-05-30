@@ -17,6 +17,7 @@ public class PlaceRepository : Repository<Place>, IPlaceRepository
     public async Task<Place?> GetWithDetailsAsync(int placeId)
     {
         return await _context.Places
+            .AsNoTracking()
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
             .Include(p => p.Events)
@@ -25,6 +26,7 @@ public class PlaceRepository : Repository<Place>, IPlaceRepository
                 .ThenInclude(pt => pt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.Id == placeId);
     }
 

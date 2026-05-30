@@ -25,6 +25,13 @@ public class UserNotificationRepository : IUserNotificationRepository
             .ToListAsync();
     }
 
+    public async Task<int> CountByUserAsync(int userId)
+    {
+        return await _db.UserNotifications
+            .AsNoTracking()
+            .CountAsync(notification => notification.UserId == userId);
+    }
+
     public async Task<int> CountUnreadAsync(int userId)
     {
         return await _db.UserNotifications
@@ -43,6 +50,17 @@ public class UserNotificationRepository : IUserNotificationRepository
         return await _db.UserNotifications
             .Where(notification => notification.UserId == userId && notification.ReadAt == null)
             .ToListAsync();
+    }
+
+    public async Task<bool> ExistsAsync(int userId, string type, string relatedEntityType, int relatedEntityId)
+    {
+        return await _db.UserNotifications
+            .AsNoTracking()
+            .AnyAsync(notification =>
+                notification.UserId == userId &&
+                notification.Type == type &&
+                notification.RelatedEntityType == relatedEntityType &&
+                notification.RelatedEntityId == relatedEntityId);
     }
 
     public void Add(UserNotification notification)

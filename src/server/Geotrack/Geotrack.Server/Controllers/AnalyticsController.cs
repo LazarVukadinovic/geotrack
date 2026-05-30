@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace Geotrack.Server.Controllers;
 
 [ApiController]
-[Route("api/analytics")]
+[Route("api/interests")]
 [EnableRateLimiting("analytics")]
 public class AnalyticsController : ControllerBase
 {

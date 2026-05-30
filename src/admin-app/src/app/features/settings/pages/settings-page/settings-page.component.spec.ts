@@ -51,6 +51,7 @@ describe('SettingsComponent', () => {
     const assignmentSection = fixture.nativeElement.querySelector('[data-testid="assignment-section"]') as HTMLElement;
     expect(assignmentSection.textContent).toContain('Regional Manager Assignment');
     expect(assignmentSection.textContent).toContain('Assigned Region');
+    expectEmailNotificationsUnavailable();
   });
 
   it('renders territory manager assignment labels and values from the backend DTO', () => {
@@ -71,6 +72,7 @@ describe('SettingsComponent', () => {
     expect(assignmentText).not.toContain('Regional Manager Assignment');
     expect(assignmentText).not.toContain('Assigned Region');
     expect(assignmentText).not.toContain('No assigned regions');
+    expectEmailNotificationsUnavailable();
   });
 
   it('renders administrator profile settings with system access instead of region assignment labels', () => {
@@ -96,11 +98,12 @@ describe('SettingsComponent', () => {
     expect(assignmentText).toContain('Access Level');
     expect(assignmentText).toContain('Full access');
     expect(text).toContain('Reports');
-    expect(text).toContain('Receive an email when a new report needs administrator review.');
+    expect(text).toContain('Email delivery for administrator reports is not available yet.');
     expect(text).toContain('Reviews');
     expect(assignmentText).not.toContain('Assigned Region');
     expect(assignmentText).not.toContain('Assigned Country');
     expect(assignmentText).not.toContain('No assigned regions');
+    expectEmailNotificationsUnavailable();
   });
 
   it('renders content moderator settings with moderation scope and notifications', () => {
@@ -125,14 +128,15 @@ describe('SettingsComponent', () => {
     expect(assignmentText).toContain('Access Level');
     expect(assignmentText).toContain('Review moderation');
     expect(text).toContain('Review reports');
-    expect(text).toContain('Receive an email when a review report needs moderation.');
+    expect(text).toContain('Email delivery for review reports is not available yet.');
     expect(text).toContain('Moderation updates');
     expect(text).not.toContain('Assigned Region');
     expect(text).not.toContain('Assigned Territory');
+    expectEmailNotificationsUnavailable();
   });
 
 
-  it('submits editable fields only and includes notification preferences', () => {
+  it('submits editable fields only and keeps unavailable email preferences disabled', () => {
     flushProfile();
 
     component.firstName.set('Updated');
@@ -153,7 +157,7 @@ describe('SettingsComponent', () => {
       interfaceLanguage: 'sr',
       timezone: 'Europe/Belgrade',
       emailRequestsEnabled: false,
-      emailNewReviewEnabled: true,
+      emailNewReviewEnabled: false,
     });
     expect(request.request.body.email).toBeUndefined();
     expect(request.request.body.roles).toBeUndefined();
@@ -168,8 +172,9 @@ describe('SettingsComponent', () => {
       preferences: {
         interfaceLanguage: 'sr',
         timezone: 'Europe/Belgrade',
+        emailNotificationsAvailable: false,
         emailRequestsEnabled: false,
-        emailNewReviewEnabled: true,
+        emailNewReviewEnabled: false,
       },
     });
 
@@ -311,6 +316,7 @@ describe('SettingsComponent', () => {
       preferences: {
         interfaceLanguage: 'en-US',
         timezone: 'UTC',
+        emailNotificationsAvailable: false,
         emailRequestsEnabled: true,
         emailNewReviewEnabled: false,
       },
@@ -358,6 +364,7 @@ describe('SettingsComponent', () => {
       preferences: {
         interfaceLanguage: 'en-US',
         timezone: 'UTC',
+        emailNotificationsAvailable: false,
         emailRequestsEnabled: true,
         emailNewReviewEnabled: true,
       },
@@ -399,6 +406,7 @@ describe('SettingsComponent', () => {
       preferences: {
         interfaceLanguage: 'en-US',
         timezone: 'UTC',
+        emailNotificationsAvailable: false,
         emailRequestsEnabled: true,
         emailNewReviewEnabled: true,
       },
@@ -440,9 +448,27 @@ describe('SettingsComponent', () => {
       preferences: {
         interfaceLanguage: 'en-US',
         timezone: 'UTC',
+        emailNotificationsAvailable: false,
         emailRequestsEnabled: true,
         emailNewReviewEnabled: true,
       },
     };
+  }
+
+  function expectEmailNotificationsUnavailable(): void {
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Email Notifications');
+    expect(text).toContain('Email notifications are not available yet. In-app notifications are currently supported.');
+
+    const switches = Array.from(
+      fixture.nativeElement.querySelectorAll('.toggle-track') as NodeListOf<HTMLButtonElement>,
+    );
+    expect(switches.length).toBe(2);
+
+    for (const toggle of switches) {
+      expect(toggle.disabled).toBe(true);
+      expect(toggle.classList.contains('on')).toBe(false);
+      expect(toggle.getAttribute('aria-checked')).toBe('false');
+    }
   }
 });

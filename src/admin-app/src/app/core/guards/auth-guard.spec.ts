@@ -4,7 +4,14 @@ import { provideRouter, Router } from '@angular/router';
 import { lastValueFrom, Observable, of } from 'rxjs';
 import { vi } from 'vitest';
 
-import { administratorGuard, authGuard, contentModeratorGuard, regionalManagerGuard, territoryManagerGuard } from './auth.guard';
+import {
+  administratorGuard,
+  authGuard,
+  contentModeratorGuard,
+  loginRedirectGuard,
+  regionalManagerGuard,
+  territoryManagerGuard,
+} from './auth.guard';
 import { AuthService } from '../services/auth.service';
 
 describe('authGuard', () => {
@@ -18,11 +25,14 @@ describe('authGuard', () => {
     TestBed.runInInjectionContext(() => administratorGuard(...guardParameters));
   const executeContentModeratorGuard: CanActivateFn = (...guardParameters) =>
     TestBed.runInInjectionContext(() => contentModeratorGuard(...guardParameters));
+  const executeLoginRedirectGuard: CanActivateFn = (...guardParameters) =>
+    TestBed.runInInjectionContext(() => loginRedirectGuard(...guardParameters));
 
   const authService = {
     isLoggedIn: vi.fn(),
     hasValidAccessToken: vi.fn(),
     getUser: vi.fn(),
+    adminAccessDenied: vi.fn(),
     clearSession: vi.fn(),
     isAdministrator: vi.fn(),
     isContentModerator: vi.fn(),
@@ -38,6 +48,7 @@ describe('authGuard', () => {
     authService.isLoggedIn.mockReturnValue(false);
     authService.hasValidAccessToken.mockReturnValue(false);
     authService.getUser.mockReturnValue(null);
+    authService.adminAccessDenied.mockReturnValue(false);
     authService.clearSession.mockReturnValue(undefined);
     authService.isAdministrator.mockReturnValue(false);
     authService.isContentModerator.mockReturnValue(false);
@@ -70,15 +81,42 @@ describe('authGuard', () => {
     expect(router.serializeUrl(result as UrlTree)).toBe('/login?returnUrl=%2Fdashboard');
   });
 
-  it('clears expired local auth and redirects to login with session-expired state', () => {
+  it('refreshes expired local auth before redirecting to login with session-expired state', async () => {
     authService.isLoggedIn.mockReturnValue(true);
     authService.hasValidAccessToken.mockReturnValue(false);
+    authService.restoreSession.mockReturnValue(of(null));
 
     const router = TestBed.inject(Router);
-    const result = executeGuard({} as never, { url: '/destinations' } as never) as UrlTree;
+    const result = await lastValueFrom(
+      executeGuard({} as never, { url: '/destinations' } as never) as Observable<boolean | UrlTree>,
+    );
 
-    expect(authService.clearSession).toHaveBeenCalledTimes(1);
-    expect(router.serializeUrl(result)).toBe('/login?returnUrl=%2Fdestinations&sessionExpired=1');
+    expect(authService.restoreSession).toHaveBeenCalledWith({ forceRefresh: true });
+    expect(authService.clearSession).not.toHaveBeenCalled();
+    expect(router.serializeUrl(result as UrlTree)).toBe('/login?returnUrl=%2Fdestinations&sessionExpired=1');
+  });
+
+  it('routes authenticated non-admin sessions to the no-access page', async () => {
+    authService.adminAccessDenied.mockReturnValue(true);
+    authService.restoreSession.mockReturnValue(of(null));
+
+    const router = TestBed.inject(Router);
+    const result = await lastValueFrom(
+      executeGuard({} as never, { url: '/dashboard' } as never) as Observable<boolean | UrlTree>,
+    );
+
+    expect(router.serializeUrl(result as UrlTree)).toBe('/no-admin-access');
+  });
+
+  it('redirects logged-in admins away from the login page', () => {
+    authService.isLoggedIn.mockReturnValue(true);
+    authService.hasValidAccessToken.mockReturnValue(true);
+    authService.getHomeRoute.mockReturnValue('/admin-dashboard');
+
+    const router = TestBed.inject(Router);
+    const result = executeLoginRedirectGuard({} as never, { url: '/login' } as never) as UrlTree;
+
+    expect(router.serializeUrl(result)).toBe('/admin-dashboard');
   });
 
   it('allows authenticated regional managers', async () => {

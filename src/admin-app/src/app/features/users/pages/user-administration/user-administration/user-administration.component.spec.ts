@@ -789,7 +789,7 @@ describe('UserAdministrationComponent', () => {
     auth.login('mika@gmail.com', 'Proba123!').subscribe();
     const request = http.expectOne('/api/admin/auth/login');
     expect(request.request.method).toBe('POST');
-    request.flush({
+    const response = {
       accessToken: 'admin-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -802,7 +802,16 @@ describe('UserAdministrationComponent', () => {
         canAccessRegionalAdmin: false,
         canAccessTerritoryAdmin: roles.includes('TerritoryManager') || roles.includes('TerritoryAssociate'),
       },
-    });
+    };
+    request.flush(response);
+
+    const currentUser = http.expectOne('/api/admin/auth/me');
+    expect(currentUser.request.method).toBe('GET');
+    currentUser.flush(response.user);
+
+    if (roles.includes('TerritoryManager') || roles.includes('TerritoryAssociate')) {
+      flushTerritories();
+    }
   }
 
   function regionalManagerUserOptions(): HTMLButtonElement[] {

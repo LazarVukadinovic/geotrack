@@ -10,14 +10,19 @@ export interface AppNotification {
   relatedEntityType?: string | null;
   relatedEntityId?: number | null;
   actionUrl?: string | null;
+  targetType?: string | null;
+  targetId?: number | null;
+  targetRoute?: string | null;
   createdAt: string;
   readAt?: string | null;
   isRead: boolean;
 }
 
 interface NotificationsResponse {
-  notifications: AppNotification[];
+  notifications?: AppNotification[];
+  items?: AppNotification[];
   unreadCount: number;
+  totalCount?: number;
   skip: number;
   take: number;
   nextSkip: number;
@@ -131,7 +136,7 @@ export class AppNotificationsService {
 
     this.http.get<NotificationsResponse>('/api/notifications', { params }).subscribe({
       next: (res) => {
-        const mapped = res.notifications ?? [];
+        const mapped = (res.items ?? res.notifications ?? []).map(notification => this.normalizeNotification(notification));
         this._items.set(append ? [...this._items(), ...mapped] : mapped);
         this._unreadCount.set(res.unreadCount ?? 0);
         this._nextSkip.set(res.nextSkip ?? mapped.length);
@@ -147,6 +152,29 @@ export class AppNotificationsService {
         this.finishLoading(append);
       },
     });
+  }
+
+  private normalizeNotification(notification: AppNotification): AppNotification {
+    const actionUrl = this.normalizeInternalRoute(notification.actionUrl ?? notification.targetRoute);
+
+    return {
+      ...notification,
+      relatedEntityType: notification.relatedEntityType ?? notification.targetType ?? null,
+      relatedEntityId: notification.relatedEntityId ?? notification.targetId ?? null,
+      actionUrl,
+      targetRoute: actionUrl,
+      targetType: notification.targetType ?? notification.relatedEntityType ?? null,
+      targetId: notification.targetId ?? notification.relatedEntityId ?? null,
+      isRead: Boolean(notification.isRead),
+    };
+  }
+
+  private normalizeInternalRoute(value: string | null | undefined): string | null {
+    if (!value?.startsWith('/')) {
+      return null;
+    }
+
+    return value.startsWith('//') ? null : value;
   }
 
   private finishLoading(append: boolean): void {

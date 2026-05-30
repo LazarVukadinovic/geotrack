@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Geotrack.Application.Analytics;
@@ -9,6 +10,9 @@ using Geotrack.Application.DTOs.Users;
 using Geotrack.Domain.Entities.Analytics;
 using Geotrack.Infrastructure;
 using Geotrack.IntegrationTests.Infrastructure;
+using Geotrack.Server.Controllers;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -23,6 +27,40 @@ namespace Geotrack.IntegrationTests;
 /// </summary>
 public sealed class AnalyticsTests
 {
+    [Fact]
+    public void Interest_events_endpoint_uses_interests_route_and_rate_limit_metadata()
+    {
+        var route = Assert.Single(typeof(AnalyticsController).GetCustomAttributes<RouteAttribute>());
+        Assert.Equal("api/interests", route.Template);
+
+        var rateLimit = Assert.Single(typeof(AnalyticsController).GetCustomAttributes<EnableRateLimitingAttribute>());
+        Assert.Equal("analytics", rateLimit.PolicyName);
+
+        var ingest = typeof(AnalyticsController).GetMethod(
+            nameof(AnalyticsController.Ingest),
+            BindingFlags.Instance | BindingFlags.Public);
+
+        Assert.NotNull(ingest);
+        var post = Assert.Single(ingest!.GetCustomAttributes<HttpPostAttribute>());
+        Assert.Equal("events", post.Template);
+    }
+
+    [Fact]
+    public async Task Legacy_analytics_events_endpoint_is_not_exposed()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/analytics/events",
+            new
+            {
+                events = Array.Empty<object>(),
+            });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     [Fact]
     public async Task Authenticated_batch_attaches_user_id_from_jwt_and_ignores_client_supplied_user_id()
     {
@@ -51,7 +89,7 @@ public sealed class AnalyticsTests
             },
         };
 
-        var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        var response = await client.PostAsJsonAsync("/api/interests/events", batch);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         await using var scope = app.Services.CreateAsyncScope();
@@ -110,7 +148,7 @@ public sealed class AnalyticsTests
             },
         };
 
-        var disabledIngest = await client.PostAsJsonAsync("/api/analytics/events", disabledBatch);
+        var disabledIngest = await client.PostAsJsonAsync("/api/interests/events", disabledBatch);
         Assert.Equal(HttpStatusCode.NoContent, disabledIngest.StatusCode);
 
         await using (var verifyDisabled = app.Services.CreateAsyncScope())
@@ -143,7 +181,7 @@ public sealed class AnalyticsTests
             },
         };
 
-        var enabledIngest = await client.PostAsJsonAsync("/api/analytics/events", enabledBatch);
+        var enabledIngest = await client.PostAsJsonAsync("/api/interests/events", enabledBatch);
         Assert.Equal(HttpStatusCode.NoContent, enabledIngest.StatusCode);
 
         await using var verifyEnabled = app.Services.CreateAsyncScope();
@@ -173,7 +211,7 @@ public sealed class AnalyticsTests
             },
         };
 
-        var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        var response = await client.PostAsJsonAsync("/api/interests/events", batch);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         await using var scope = app.Services.CreateAsyncScope();
@@ -197,7 +235,7 @@ public sealed class AnalyticsTests
         using var client = app.CreateClient();
 
         var sessionId = Guid.NewGuid();
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/analytics/events")
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/interests/events")
         {
             Content = JsonContent.Create(new
             {
@@ -233,7 +271,7 @@ public sealed class AnalyticsTests
         using var client = app.CreateClient();
         using var content = new StringContent("{", Encoding.UTF8, "application/json");
 
-        var response = await client.PostAsync("/api/analytics/events", content);
+        var response = await client.PostAsync("/api/interests/events", content);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -255,7 +293,7 @@ public sealed class AnalyticsTests
             },
         };
 
-        var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        var response = await client.PostAsJsonAsync("/api/interests/events", batch);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         await using var scope = app.Services.CreateAsyncScope();
@@ -284,8 +322,8 @@ public sealed class AnalyticsTests
             },
         };
 
-        var first = await client.PostAsJsonAsync("/api/analytics/events", batch);
-        var second = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        var first = await client.PostAsJsonAsync("/api/interests/events", batch);
+        var second = await client.PostAsJsonAsync("/api/interests/events", batch);
 
         Assert.Equal(HttpStatusCode.NoContent, first.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, second.StatusCode);
@@ -337,7 +375,7 @@ public sealed class AnalyticsTests
             },
         };
 
-        var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        var response = await client.PostAsJsonAsync("/api/interests/events", batch);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         await using var scope = app.Services.CreateAsyncScope();
@@ -382,7 +420,7 @@ public sealed class AnalyticsTests
             },
         };
 
-        var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        var response = await client.PostAsJsonAsync("/api/interests/events", batch);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         await WaitForAsync(
@@ -437,7 +475,7 @@ public sealed class AnalyticsTests
                     entityId = placeId,
                 }).ToArray(),
             };
-            var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+            var response = await client.PostAsJsonAsync("/api/interests/events", batch);
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
 
@@ -491,7 +529,7 @@ public sealed class AnalyticsTests
             },
         };
 
-        var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        var response = await client.PostAsJsonAsync("/api/interests/events", batch);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         await using var scope = app.Services.CreateAsyncScope();
@@ -586,7 +624,7 @@ public sealed class AnalyticsTests
             },
         };
 
-        var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        var response = await client.PostAsJsonAsync("/api/interests/events", batch);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         await using var scope = app.Services.CreateAsyncScope();
@@ -633,7 +671,7 @@ public sealed class AnalyticsTests
             },
         };
 
-        var response = await client.PostAsJsonAsync("/api/analytics/events", batch);
+        var response = await client.PostAsJsonAsync("/api/interests/events", batch);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
         await using var scope = app.Services.CreateAsyncScope();
@@ -666,7 +704,7 @@ public sealed class AnalyticsTests
         }
 
         var response = await client.PostAsJsonAsync(
-            "/api/analytics/events",
+            "/api/interests/events",
             new
             {
                 events = new object[]
@@ -741,7 +779,7 @@ public sealed class AnalyticsTests
     private static async Task PostFavoriteAddedAsync(HttpClient client, int placeId)
     {
         var response = await client.PostAsJsonAsync(
-            "/api/analytics/events",
+            "/api/interests/events",
             new
             {
                 events = new object[]

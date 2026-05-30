@@ -29,6 +29,7 @@ public class PlaceContributionRepository : Repository<PlaceContribution>, IPlace
             .Include(x => x.RestaurantType)
             .Include(x => x.StayType)
             .Include(x => x.Images)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(x => x.Id == id);
     }
 

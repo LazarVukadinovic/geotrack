@@ -236,6 +236,21 @@ describe('SidebarComponent', () => {
     expect(normalizedText()).not.toContain('Requests Queue');
   });
 
+  it('shows the Region Map link below Regional Management for Territory Managers', () => {
+    currentRole = 'Territory Manager';
+    fixture.componentRef.setInput('regions', [{ id: 3, name: 'Testland', displayName: 'Testland' }]);
+    fixture.componentRef.setInput('activeRegionId', 3);
+    fixture.detectChanges();
+
+    const labels = Array.from(
+      fixture.nativeElement.querySelectorAll('a') as NodeListOf<HTMLAnchorElement>,
+    ).map(link => link.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+
+    expect(labels).toContain('Regional Management');
+    expect(labels).toContain('Region Map');
+    expect(labels.indexOf('Regional Management')).toBeLessThan(labels.indexOf('Region Map'));
+  });
+
   it('shows the Administrator Support Reports badge from the provided unresolved support count', () => {
     currentRole = 'Administrator';
     fixture.componentRef.setInput('supportReportsCount', 7);

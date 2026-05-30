@@ -111,7 +111,7 @@ export class RegisterPageComponent {
           if (res.accessToken) {
             // Registration always defaults to Remember Me = true so the new
             // session survives a browser restart (the user can adjust in settings).
-            this.authService.login(res.accessToken, true);
+            this.authService.login(res.accessToken, res.sessionPersistent);
             this.analytics.track('register_completed');
           }
 

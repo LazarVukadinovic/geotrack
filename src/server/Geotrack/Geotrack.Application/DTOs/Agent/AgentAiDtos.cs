@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace Geotrack.Application.DTOs.Agent;
 
 public class AgentProvidersResponseDto
@@ -21,12 +24,6 @@ public class AgentProviderMetadataDto
     public bool Enabled { get; set; }
     public List<AgentProviderModelDto> Models { get; set; } = new();
     public string? DefaultModel { get; set; }
-    public bool SupportsSavedKey { get; set; }
-    public bool SupportsSessionKey { get; set; }
-    public bool ProjectDemoKeyEnabled { get; set; }
-    public bool HasSavedKey { get; set; }
-    public string? KeyLast4 { get; set; }
-    public DateTime? KeyUpdatedAt { get; set; }
 }
 
 public class AgentProviderModelDto
@@ -46,36 +43,14 @@ public class AgentApiKeyMetadataDto
     public DateTime? LastUsedAt { get; set; }
 }
 
-public class SaveAgentApiKeyRequestDto
-{
-    public string Provider { get; set; } = string.Empty;
-    public string ApiKey { get; set; } = string.Empty;
-    public string? DisplayName { get; set; }
-}
-
-public class TestAgentApiKeyRequestDto
-{
-    public string Provider { get; set; } = string.Empty;
-    public string? ApiKey { get; set; }
-    public string? Model { get; set; }
-    public string KeyMode { get; set; } = AgentKeyModes.Session;
-}
-
-public class TestAgentApiKeyResponseDto
-{
-    public bool Success { get; set; }
-    public string Message { get; set; } = string.Empty;
-}
-
 public class AgentChatRequestDto
 {
     public string Message { get; set; } = string.Empty;
-    public string Provider { get; set; } = string.Empty;
-    public string? Model { get; set; }
-    public string KeyMode { get; set; } = AgentKeyModes.Saved;
-    public string? SessionApiKey { get; set; }
     public string? ConversationId { get; set; }
     public AgentContextOptionsDto? ContextOptions { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class AgentContextOptionsDto
@@ -128,16 +103,4 @@ public class AgentUsageMetadataDto
     public int? PromptTokens { get; set; }
     public int? CompletionTokens { get; set; }
     public int? TotalTokens { get; set; }
-}
-
-public static class AgentKeyModes
-{
-    public const string Saved = "saved";
-    public const string Session = "session";
-    public const string ProjectDemo = "project-demo";
-
-    public static bool IsKnown(string? value) =>
-        string.Equals(value, Saved, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(value, Session, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(value, ProjectDemo, StringComparison.OrdinalIgnoreCase);
 }

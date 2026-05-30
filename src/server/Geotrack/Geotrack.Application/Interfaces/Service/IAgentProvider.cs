@@ -5,9 +5,8 @@ namespace Geotrack.Application.Interfaces.Service;
 public interface IAgentProvider
 {
     string Id { get; }
-    AgentProviderMetadataDto GetMetadata(int? userId, AgentApiKeyMetadataDto? savedKey);
+    AgentProviderMetadataDto GetMetadata(int? userId);
     Task<AgentProviderChatResult> GenerateAsync(AgentProviderChatRequest request, CancellationToken cancellationToken = default);
-    Task TestAsync(string apiKey, string model, CancellationToken cancellationToken = default);
 }
 
 public class AgentProviderChatRequest

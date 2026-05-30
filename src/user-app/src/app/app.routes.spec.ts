@@ -6,16 +6,15 @@ function appShellChild(path: string): Route | undefined {
 }
 
 describe('app routes', () => {
-  it('redirects the unavailable settings notifications page back to settings', () => {
+  it('routes the settings notifications page to the notification preferences component', () => {
     const route = appShellChild('settings/notifications');
 
     expect(route).toBeTruthy();
     expect(route).toMatchObject({
       path: 'settings/notifications',
-      pathMatch: 'full',
-      redirectTo: 'settings',
     });
-    expect(route?.loadComponent).toBeUndefined();
-    expect(route?.canActivate).toBeUndefined();
+    expect(route?.loadComponent).toBeTruthy();
+    expect(route?.redirectTo).toBeUndefined();
+    expect(route?.canActivate).toBeTruthy();
   });
 });

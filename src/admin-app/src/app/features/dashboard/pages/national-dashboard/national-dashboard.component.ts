@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
@@ -33,7 +34,9 @@ interface TerritoryStatCard {
   styleUrl: './national-dashboard.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class NationalDashboardComponent implements OnInit {
+export class NationalDashboardComponent implements OnInit, OnDestroy {
+  private static readonly maxRegionHealthCards = 4;
+
   private readonly auth = inject(AuthService);
   private readonly territoryDashboard = inject(TerritoryDashboardService);
   private readonly router = inject(Router);
@@ -48,12 +51,13 @@ export class NationalDashboardComponent implements OnInit {
   isTerritoryLoading = false;
   errorMessage = '';
   private failedManagerAvatarKeys = new Set<string>();
+  private setupChangedSubscription: Subscription | null = null;
 
   get userName(): string { return this.auth.fullName; }
   get userRole(): string { return this.auth.getUser()?.role ?? ''; }
 
   get regions(): TerritoryRegionHealth[] {
-    return this.dashboard?.regionsHealth ?? [];
+    return this.rankRegionsForOverview(this.dashboard?.regionsHealth ?? []);
   }
 
   get topRegions(): TerritoryTopPerformingRegion[] {
@@ -77,7 +81,19 @@ export class NationalDashboardComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.setupChangedSubscription = this.territoryDashboard.regionSetupChanged$
+      .subscribe(() => {
+        if (this.activeTerritoryId) {
+          this.loadDashboard(this.activeTerritoryId);
+        } else {
+          this.loadTerritories();
+        }
+      });
     this.loadTerritories();
+  }
+
+  ngOnDestroy(): void {
+    this.setupChangedSubscription?.unsubscribe();
   }
 
   onTerritoryChange(territoryId: number): void {
@@ -312,5 +328,29 @@ export class NationalDashboardComponent implements OnInit {
       .slice(0, 2)
       .map(part => part.charAt(0).toUpperCase())
       .join('');
+  }
+
+  private rankRegionsForOverview(regions: TerritoryRegionHealth[]): TerritoryRegionHealth[] {
+    return [...regions]
+      .sort((left, right) =>
+        right.healthScore - left.healthScore ||
+        this.hasAssignedManager(right) - this.hasAssignedManager(left) ||
+        this.totalContentCount(right) - this.totalContentCount(left) ||
+        left.pendingRequestsCount - right.pendingRequestsCount ||
+        left.regionName.localeCompare(right.regionName) ||
+        left.regionId - right.regionId)
+      .slice(0, NationalDashboardComponent.maxRegionHealthCards);
+  }
+
+  private hasAssignedManager(region: TerritoryRegionHealth): number {
+    return (region.assignedManagers?.length ?? 0) > 0 ? 1 : 0;
+  }
+
+  private totalContentCount(region: TerritoryRegionHealth): number {
+    return region.destinationsCount +
+      region.locationsCount +
+      region.placesCount +
+      region.staysCount +
+      region.eventsCount;
   }
 }

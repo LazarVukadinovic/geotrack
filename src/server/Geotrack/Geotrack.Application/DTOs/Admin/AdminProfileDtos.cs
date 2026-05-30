@@ -58,6 +58,7 @@ public class AdminProfilePreferencesDto
 {
     public string InterfaceLanguage { get; set; } = "en-US";
     public string Timezone { get; set; } = "UTC";
+    public bool EmailNotificationsAvailable { get; set; }
     public bool EmailRequestsEnabled { get; set; }
     public bool EmailNewReviewEnabled { get; set; }
 }

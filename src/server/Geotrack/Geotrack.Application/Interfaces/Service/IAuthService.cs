@@ -8,6 +8,8 @@ public interface IAuthService
     Task<RegisterResponseDto> RegisterAsync(RegisterRequestDto request);
     Task<LoginResponseDto> LoginAsync(LoginRequestDto request);
     Task<RefreshResponseDto> RefreshAsync(RefreshRequestDto request);
+    Task<AuthSessionDto> GetSessionAsync(RefreshRequestDto request);
+    Task<AuthSessionDto> GetSessionForUserAsync(int userId);
     Task LogoutAsync(LogoutRequestDto request);
     Task<AdminLoginResponseDto> LoginAdminAsync(LoginRequestDto request);
     Task<AdminLoginResponseDto> RefreshAdminAsync(RefreshRequestDto request);

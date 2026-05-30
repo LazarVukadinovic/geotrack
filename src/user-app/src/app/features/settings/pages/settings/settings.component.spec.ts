@@ -52,20 +52,21 @@ describe('Settings', () => {
     expect(text).toContain('test@example.com');
   });
 
-  it('should render notifications as unavailable and non-actionable', () => {
+  it('should render notifications as available and route to notification settings', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     const notificationLabel = Array.from(nativeElement.querySelectorAll('.settings-row__label'))
       .find((element) => element.textContent?.trim() === 'Notifications');
     const notificationRow = notificationLabel?.closest('.settings-row') as HTMLElement | null;
 
-    expect(nativeElement.textContent).toContain('Notification preferences are not available yet.');
+    expect(nativeElement.textContent).not.toContain('Notification preferences are not available yet.');
+    expect(nativeElement.textContent).toContain('In-app approval notifications are enabled.');
     expect(notificationRow).toBeTruthy();
-    expect(notificationRow?.tagName.toLowerCase()).toBe('div');
-    expect(notificationRow?.querySelector('.settings-row__chevron')).toBeNull();
+    expect(notificationRow?.tagName.toLowerCase()).toBe('button');
+    expect(notificationRow?.querySelector('.settings-row__chevron')).toBeTruthy();
 
     notificationRow?.click();
 
-    expect(router.navigate).not.toHaveBeenCalled();
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/notifications']);
   });
 
   it('should log out and return to the profile tab', () => {
@@ -79,6 +80,7 @@ describe('Settings', () => {
     component.changePassword();
     component.openPrivacy();
     component.openAnalytics();
+    component.openNotifications();
     component.openInterests();
     component.openHelp();
     component.contactSupport();
@@ -87,6 +89,7 @@ describe('Settings', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/settings/change-password']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/privacy-settings']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/analytics']);
+    expect(router.navigate).toHaveBeenCalledWith(['/settings/notifications']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/interests'], { queryParams: { from: 'settings' } });
     expect(router.navigate).toHaveBeenCalledWith(['/settings/help-center']);
     expect(router.navigate).toHaveBeenCalledWith(['/settings/contact-support']);

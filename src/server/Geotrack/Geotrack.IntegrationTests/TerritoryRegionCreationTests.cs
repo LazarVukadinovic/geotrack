@@ -285,6 +285,123 @@ public sealed class TerritoryRegionCreationTests
     }
 
     [Fact]
+    public async Task Adm1_import_country_and_take_filters_resume_past_existing_candidates()
+    {
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = await WriteAdm1CandidateFileAsync(tempRoot);
+            await using var app = await GeotrackApiFactory.CreateAsync(
+                configurationOverrides: new Dictionary<string, string?>
+                {
+                    ["BoundaryImport:Adm1GeoJsonPath"] = adm1Path
+                });
+            await CreateAdm1CandidateFixtureAsync(app);
+
+            var firstRun = await ImportAdmBoundaryCandidatesAsync(
+                app,
+                "ADM1",
+                countryIso3: "TAA",
+                take: 2);
+
+            Assert.Equal("TAA", firstRun.CountryIso3);
+            Assert.Equal(2, firstRun.TakeLimit);
+            Assert.Equal(3, firstRun.TotalFeatures);
+            Assert.Equal(3, firstRun.MatchedFilterCount);
+            Assert.Equal(0, firstRun.FilteredOutCount);
+            Assert.Equal(2, firstRun.ProcessedCount);
+            Assert.Equal(2, firstRun.ImportedCount);
+            Assert.Equal(2, firstRun.ImportedCandidatesCount);
+            Assert.True(firstRun.HasMore);
+            Assert.False(firstRun.CompletedSourceScan);
+
+            await using (var scope = app.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                Assert.Equal(2, await db.AdministrativeBoundaryCandidates
+                    .AsNoTracking()
+                    .CountAsync(candidate => candidate.AdmLevel == "ADM1"));
+            }
+
+            var secondRun = await ImportAdmBoundaryCandidatesAsync(
+                app,
+                "ADM1",
+                countryIso3: "TAA",
+                take: 2);
+
+            Assert.Equal(5, secondRun.TotalFeatures);
+            Assert.Equal(4, secondRun.MatchedFilterCount);
+            Assert.Equal(1, secondRun.FilteredOutCount);
+            Assert.Equal(4, secondRun.ProcessedCount);
+            Assert.Equal(2, secondRun.ImportedCount);
+            Assert.Equal(2, secondRun.SkippedCount);
+            Assert.Equal(2, secondRun.ImportedCandidatesCount);
+            Assert.Equal(2, secondRun.SkippedCandidatesCount);
+            Assert.False(secondRun.HasMore);
+            Assert.True(secondRun.CompletedSourceScan);
+
+            await using (var scope = app.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                Assert.Equal(4, await db.AdministrativeBoundaryCandidates
+                    .AsNoTracking()
+                    .CountAsync(candidate => candidate.AdmLevel == "ADM1" && candidate.CountryIso3 == "TAA"));
+                Assert.Equal(0, await db.AdministrativeBoundaryCandidates
+                    .AsNoTracking()
+                    .CountAsync(candidate => candidate.AdmLevel == "ADM1" && candidate.CountryIso3 == "TBB"));
+            }
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Import_local_adm1_endpoint_does_not_backfill_regions_automatically()
+    {
+        var tempRoot = CreateTempBoundaryDirectory();
+
+        try
+        {
+            var adm1Path = await WriteAdm1CandidateFileAsync(tempRoot);
+            await using var app = await GeotrackApiFactory.CreateAsync(
+                configurationOverrides: new Dictionary<string, string?>
+                {
+                    ["BoundaryImport:Adm1GeoJsonPath"] = adm1Path
+                });
+            var fixture = await CreateAdm1CandidateFixtureAsync(app, createExistingCandidateRegion: true);
+            Assert.NotNull(fixture.ExistingRegionId);
+
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            var response = await admin.PostAsync(
+                "/api/admin/territories/boundaries/import-local-adm1?force=false",
+                content: null);
+            response.EnsureSuccessStatusCode();
+
+            var summary = await response.Content.ReadFromJsonAsync<BoundaryImportSummaryDto>();
+            Assert.NotNull(summary);
+            Assert.Equal(5, summary!.ImportedCandidatesCount);
+            Assert.Equal(0, summary.FailedCount);
+
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var existingRegion = await db.Regions
+                .AsNoTracking()
+                .SingleAsync(region => region.Id == fixture.ExistingRegionId.Value);
+            Assert.Null(existingRegion.BoundaryCandidateId);
+            Assert.Equal(5, await db.AdministrativeBoundaryCandidates
+                .AsNoTracking()
+                .CountAsync(candidate => candidate.AdmLevel == "ADM1"));
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
     public async Task Adm1_candidates_are_filtered_to_assigned_country_and_mark_existing_regions()
     {
         var tempRoot = CreateTempBoundaryDirectory();
@@ -544,11 +661,16 @@ public sealed class TerritoryRegionCreationTests
 
     private static async Task<BoundaryImportSummaryDto> ImportAdmBoundaryCandidatesAsync(
         GeotrackApiFactory app,
-        string admLevel)
+        string admLevel,
+        string? countryIso3 = null,
+        int? take = null)
     {
         await using var scope = app.Services.CreateAsyncScope();
         var import = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
-        return await import.ImportLocalBoundariesAsync(admLevel);
+        return await import.ImportLocalBoundariesAsync(
+            admLevel,
+            countryIso3: countryIso3,
+            take: take);
     }
 
     private static void TryDeleteDirectory(string path)

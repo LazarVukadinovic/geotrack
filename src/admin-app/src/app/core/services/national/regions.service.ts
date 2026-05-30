@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, map, switchMap, throwError } from 'rxjs';
 import {
   TerritoryAssignedTerritory,
+  RegionSyncSummary,
   TerritoryRegionCreateContext,
   TerritoryRegionCreateRequest,
   TerritoryRegionCreateResponse,
@@ -41,6 +42,7 @@ export interface RegionListItem {
   managerDisplayName?: string | null;
   assignedManagers: TerritoryRegionDirectoryItem['assignedManagers'];
   status: 'Active' | 'Inactive';
+  representativeImage?: TerritoryRegionDirectoryItem['representativeImage'];
   imageUrl?: string | null;
   imageBg: string;
   pendingRequests: number;
@@ -138,6 +140,17 @@ export class RegionsService {
     return this.territoryDashboard.createRegion(request);
   }
 
+  syncFromAdm1$(
+    territoryId?: number | null,
+    options: { dryRun?: boolean; forceUpdateGeometry?: boolean } = {},
+  ): Observable<RegionSyncSummary> {
+    return this.territoryDashboard.syncRegionsFromAdm1(
+      territoryId ?? this.getActiveTerritoryId(),
+      options.dryRun ?? false,
+      options.forceUpdateGeometry ?? false,
+    );
+  }
+
   delete$(_id?: string): Observable<void> {
     return throwError(() => new Error('Territory Manager can view regions but cannot delete them.'));
   }
@@ -184,6 +197,7 @@ export class RegionsService {
     const status = (item.status || (assignedPersons > 0 ? 'Active' : 'Inactive')).toLowerCase() === 'active'
       ? 'Active'
       : 'Inactive';
+    const representativeImage = item.representativeImage ?? null;
 
     return {
       id: String(item.regionId ?? item.id),
@@ -202,7 +216,8 @@ export class RegionsService {
       managerDisplayName: item.managerDisplayName,
       assignedManagers: item.assignedManagers ?? [],
       status,
-      imageUrl: item.imageUrl,
+      representativeImage,
+      imageUrl: representativeImage?.url ?? null,
       imageBg: this.imageBackground(item.regionId ?? item.id),
       pendingRequests: item.pendingRequestsCount,
       healthScore: item.healthScore ?? item.health?.score ?? null,

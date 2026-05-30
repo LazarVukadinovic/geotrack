@@ -1,5 +1,12 @@
 import { Routes } from '@angular/router';
-import { authGuard, administratorGuard, contentModeratorGuard, regionalManagerGuard, territoryManagerGuard } from './core/guards/auth.guard';
+import {
+  authGuard,
+  administratorGuard,
+  contentModeratorGuard,
+  loginRedirectGuard,
+  regionalManagerGuard,
+  territoryManagerGuard,
+} from './core/guards/auth.guard';
 export const routes: Routes = [
   // Redirect root → login
   { path: '', redirectTo: 'login', pathMatch: 'full' },
@@ -7,8 +14,15 @@ export const routes: Routes = [
   // ── Auth ─────────────────────────────────
   {
     path: 'login',
+    canActivate: [loginRedirectGuard],
     loadComponent: () =>
       import('./features/auth/pages/login-page/login-page.component').then(m => m.LoginComponent),
+  },
+  {
+    path: 'no-admin-access',
+    loadComponent: () =>
+      import('./features/auth/pages/no-admin-access/no-admin-access.component')
+        .then(m => m.NoAdminAccessComponent),
   },
 
   // ── Shell ──────────────────────────────────
@@ -251,7 +265,17 @@ export const routes: Routes = [
         loadComponent: () => import('./features/regions/pages/regions/regions.component').then(m=>m.AllRegionsComponent),
       },
       {
+        path: 'territory/regions/map',
+        canActivate:[territoryManagerGuard],
+        loadComponent: () => import('./features/regions/pages/region-map/region-map.component').then(m=>m.TerritoryRegionMapComponent),
+      },
+      {
         path: 'territory/regions/new',
+        redirectTo: 'territory/regions',
+        pathMatch: 'full',
+      },
+      {
+        path: 'territory/regions/advanced/new',
         canActivate:[territoryManagerGuard],
         loadComponent: () => import('./features/regions/pages/add-region/add-region.component').then(m=>m.AddRegionComponent),
       },

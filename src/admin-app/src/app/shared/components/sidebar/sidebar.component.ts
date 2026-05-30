@@ -25,6 +25,7 @@ export interface SidebarNavItem {
   path: string;
   icon: string;
   exact?: boolean;
+  activePathExclusions?: string[];
   badge?: number;
 }
 
@@ -116,6 +117,14 @@ export class SidebarComponent implements OnInit, OnChanges {
     return url === path || url.startsWith(path + '/') || url.startsWith(path + '?');
   }
 
+  isItemActive(item: SidebarNavItem): boolean {
+    if (item.activePathExclusions?.some(path => this.isActive(path))) {
+      return false;
+    }
+
+    return this.isActive(item.path, item.exact);
+  }
+
   get pickerLabel(): string {
     return this.auth.canAccessTerritoryAdmin() ? 'TERRITORY' : 'REGION';
   }
@@ -188,7 +197,13 @@ export class SidebarComponent implements OnInit, OnChanges {
   get territoryMainNav(): SidebarNavItem[] {
     return [
       { label: 'Territory Overview', path: '/territory/overview', icon: 'dashboard', exact: true },
-      { label: 'Regional Management', path: '/territory/regions', icon: 'map' },
+      {
+        label: 'Regional Management',
+        path: '/territory/regions',
+        icon: 'map',
+        activePathExclusions: ['/territory/regions/map'],
+      },
+      { label: 'Region Map', path: '/territory/regions/map', icon: 'map' },
       { label: 'User Administration', path: '/territory/users', icon: 'users' },
     ];
   }

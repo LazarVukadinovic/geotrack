@@ -18,7 +18,7 @@ public class ConfiguredUnavailableAgentProvider : IAgentProvider
 
     public string Id { get; }
 
-    public AgentProviderMetadataDto GetMetadata(int? userId, AgentApiKeyMetadataDto? savedKey)
+    public AgentProviderMetadataDto GetMetadata(int? userId)
     {
         var providerOptions = GetOptions();
         return new AgentProviderMetadataDto
@@ -29,24 +29,13 @@ public class ConfiguredUnavailableAgentProvider : IAgentProvider
                 : providerOptions.DisplayName,
             Enabled = false,
             Models = BuildModels(providerOptions),
-            DefaultModel = providerOptions?.DefaultModel,
-            SupportsSavedKey = false,
-            SupportsSessionKey = false,
-            ProjectDemoKeyEnabled = false,
-            HasSavedKey = savedKey is not null,
-            KeyLast4 = savedKey?.KeyLast4,
-            KeyUpdatedAt = savedKey?.UpdatedAt
+            DefaultModel = providerOptions?.DefaultModel
         };
     }
 
     public Task<AgentProviderChatResult> GenerateAsync(
         AgentProviderChatRequest request,
         CancellationToken cancellationToken = default)
-    {
-        throw new AgentException("provider_not_configured", "This provider is not available yet.", 400);
-    }
-
-    public Task TestAsync(string apiKey, string model, CancellationToken cancellationToken = default)
     {
         throw new AgentException("provider_not_configured", "This provider is not available yet.", 400);
     }

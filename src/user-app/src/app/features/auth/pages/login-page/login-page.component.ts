@@ -55,7 +55,7 @@ export class LoginPageComponent {
       })
       .subscribe({
         next: (response) => {
-          this.authService.login(response.accessToken, this.rememberMe);
+          this.authService.login(response.accessToken, response.sessionPersistent);
           this.analytics.track('login_completed');
           // Fetch the user profile immediately after login so that the
           // Profile page already has fullName/email on first render —

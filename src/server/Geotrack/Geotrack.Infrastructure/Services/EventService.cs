@@ -233,6 +233,7 @@ public class EventService : IEventService
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
                 .ThenInclude(tag => tag.TagType)
                     .ThenInclude(tagType => tagType!.PlaceTypes)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(e =>
                 e.Id == id &&
                 e.Status == PublishedStatus &&
@@ -255,6 +256,9 @@ public class EventService : IEventService
                 e.Destination.Status == PublishedStatus &&
                 (e.Location == null || e.Location.Status == PublishedStatus) &&
                 (e.Place == null || e.Place.Status == PublishedStatus))
+            .OrderBy(e => e.StartDate)
+            .ThenBy(e => e.Name)
+            .ThenBy(e => e.Id)
             .Take(5)
             .ToListAsync();
 
@@ -326,11 +330,13 @@ public class EventService : IEventService
     public async Task<GetEventDetailsResponseDto> GetEventDetailsAsync(int eventId, int? userId)
     {
         var evt = await _db.Events
+            .AsNoTracking()
             .Include(e => e.Images)
             .Include(e => e.EventReviews)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
                 .ThenInclude(tag => tag.TagType)
                     .ThenInclude(tagType => tagType!.PlaceTypes)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(e =>
                 e.Id == eventId &&
                 e.Status == PublishedStatus &&
@@ -387,10 +393,9 @@ public class EventService : IEventService
         int take = ReviewPaging.DefaultTake)
     {
         var evt = await _db.Events
-            .Include(e => e.Images)
-            .Include(e => e.EventTags).ThenInclude(et => et.Tag)
-                .ThenInclude(tag => tag.TagType)
-                    .ThenInclude(tagType => tagType!.PlaceTypes)
+            .AsNoTracking()
+            .Include(e => e.EventTags)
+                .ThenInclude(et => et.Tag)
             .FirstOrDefaultAsync(e =>
                 e.Id == eventId &&
                 e.Status == PublishedStatus &&

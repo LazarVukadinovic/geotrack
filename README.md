@@ -4,7 +4,7 @@ GeoTrack je web aplikacija za istraživanje destinacija, mesta, smeštaja i doga
 
 Backend je ASP.NET Core API koji čuva katalog, korisnike, recenzije, kolekcije, doprinose, notifikacije, analitiku, mapne pretrage i AI/MCP integracije. Frontend ne koristi direktne pozive ka eksternim mapnim i AI provider servisima za glavne tokove: ti pozivi idu kroz backend.
 
-Ask Agent je backend-driven AI funkcionalnost za pitanja nad GeoTrack katalogom. Angular prikazuje provider/model/key opcije koje dobije od backend-a, a chat se izvršava preko servera. GeoTrack MCP je zaseban remote HTTP JSON-RPC tool endpoint za spoljne AI alate koji podržavaju MCP.
+Ask Agent je backend-managed AI funkcionalnost za pitanja nad GeoTrack katalogom. Angular ne prikazuje provider/model/key opcije i ne šalje korisničke API ključeve; chat se izvršava preko server-side Gemini key pool-a. GeoTrack MCP je zaseban remote HTTP JSON-RPC tool endpoint za spoljne AI alate koji podržavaju MCP.
 
 ## Tehnologije
 
@@ -22,9 +22,8 @@ Ask Agent je backend-driven AI funkcionalnost za pitanja nad GeoTrack katalogom.
 - EF Core 8
 - PostgreSQL preko Npgsql
 - PostGIS i NetTopologySuite za prostorne upite
-- ASP.NET Core Data Protection za šifrovanje sačuvanih korisničkih AI ključeva
 - JWT bearer autentikacija i HttpOnly refresh cookie
-- Gemini AI provider adapter; OpenAI i Claude postoje kao trenutno nedostupni scaffolding provideri
+- Gemini AI provider adapter sa backend-managed pool-om API ključeva
 - Remote HTTP JSON-RPC MCP endpoint na `/api/mcp`
 
 ## Struktura projekta
@@ -133,37 +132,31 @@ Glavni chat ide preko:
 
 Legacy endpoint `POST /api/agent/message` još postoji zbog kompatibilnosti, ali novi tok koristi `/api/agent/chat`.
 
-Provider i model liste dolaze sa backend-a. Gemini je trenutno implementirani provider adapter. OpenAI i Claude postoje u konfiguraciji kao nedostupni scaffolding provideri dok se ne dodaju realni adapteri i server-side konfiguracija.
+Gemini je jedini provider za user-app Ask Agent tok. Model i API ključevi se podešavaju isključivo na backend-u. Frontend ne bira provider/model, ne čuva API key u browser storage-u i ne šalje privremene ili sačuvane korisničke ključeve. Ako jedan Gemini key dostigne kvotu ili rate-limit, backend privremeno hladi taj key i pokušava sledeći konfigurisani key.
 
-Korisnik može da koristi:
-
-- `project-demo` key, ako je Gemini API key podešen na backend;
-- sačuvani korisnički API key;
-- privremeni session key koji se šalje samo za jedan zahtev.
-
-API key se ne čuva u browser storage-u. Sačuvani korisnički ključ čuva se server-side u `UserAiProviderKeys` i šifruje se preko ASP.NET Core Data Protection. Frontend dobija samo bezbedne metapodatke, kao što su provider id i poslednja 4 karaktera ključa.
-
-## Testiranje Ask Agent-a pomoću Gemini API key-ja
+## Konfiguracija Gemini API ključeva za Ask Agent
 
 Za lokalno testiranje možete napraviti Gemini API key u Google AI Studio-u. Nemojte ga stavljati u Angular, source kod, `environment` fajlove frontenda ili commit-ovane konfiguracije.
 
-Project/demo podešavanje preko user-secrets:
+Podešavanje preko user-secrets:
 
 ```bash
-dotnet user-secrets set "Agent:AllowProjectDemoProvider" "true" --project server/Geotrack/Geotrack.Server
-dotnet user-secrets set "Agent:Providers:gemini:ApiKey" "<gemini-api-key>" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:ApiKeys:0" "<gemini-api-key-1>" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:ApiKeys:1" "<gemini-api-key-2>" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:Model" "gemini-3.5-flash" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:KeyCooldownSeconds" "300" --project server/Geotrack/Geotrack.Server
 ```
 
 Ista podešavanja kao environment variable imena:
 
 ```text
-Agent__AllowProjectDemoProvider=true
-Agent__Providers__gemini__ApiKey=<gemini-api-key>
+Gemini__ApiKeys__0=<gemini-api-key-1>
+Gemini__ApiKeys__1=<gemini-api-key-2>
+Gemini__Model=gemini-3.5-flash
+Gemini__KeyCooldownSeconds=300
 ```
 
-`project-demo` režim se prikazuje samo kada je dozvoljen i kada backend ima stvaran Gemini API key. Alternativno, prijavljen korisnik može u Ask Agent podešavanjima da unese Gemini key kao sačuvani key ili privremeni session key.
-
-Free quota i uslovi korišćenja zavise od Google AI Studio/Gemini pravila. Za produkciju moraju da se kontrolišu kvote, rate-limit-i, monitoring i trajno čuvanje Data Protection ključeva.
+Podrazumevani model je `gemini-3.5-flash`. Free quota i uslovi korišćenja zavise od Google AI Studio/Gemini pravila. Za produkciju moraju da se kontrolišu kvote, rate-limit-i i monitoring backend key pool-a.
 
 ## MCP konektor
 
@@ -206,9 +199,7 @@ Za javni ChatGPT/Claude connector potreban je javni HTTPS URL, ne `localhost`. P
 ## Bezbednosne napomene
 
 - Ne commitovati API ključeve, lozinke, connection string lozinke ili provider tokene.
-- Provider API key ne sme da ide u frontend kod ili browser storage.
-- Sačuvani korisnički AI key čuva se samo server-side i šifruje se Data Protection mehanizmom.
-- Privremeni session key koristi se samo za zahtev koji ga šalje.
+- Gemini API key ne sme da ide u frontend kod, browser storage, network payload iz user-app-a ili logove.
 - Precizna GPS lokacija ne sme da se čuva u `localStorage`; trenutni kod koristi `sessionStorage` za `geotrack_location` i briše staru `localStorage` kopiju.
 - MCP trenutno ne izlaže write, admin, moderation ili private user tools.
 - Backend endpoint-i treba da zadrže postojeću validaciju i rate-limit politike.

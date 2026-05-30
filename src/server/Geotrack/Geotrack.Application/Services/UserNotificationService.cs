@@ -23,7 +23,7 @@ public class UserNotificationService : IUserNotificationService
         _notificationRepository = notificationRepository;
     }
 
-    public async Task<GetUserNotificationsResponseDto> GetMineAsync(int userId, int skip = 0, int take = 30)
+    public async Task<GetUserNotificationsResponseDto> GetMineAsync(int userId, int skip = 0, int take = 25)
     {
         var normalizedSkip = Math.Max(0, skip);
         var normalizedTake = Math.Clamp(take, 1, MaxTake);
@@ -39,11 +39,14 @@ public class UserNotificationService : IUserNotificationService
             : notifications;
 
         var unreadCount = await _notificationRepository.CountUnreadAsync(userId);
+        var totalCount = await _notificationRepository.CountByUserAsync(userId);
+        var mappedItems = pageItems.Select(MapNotification).ToList();
 
         return new GetUserNotificationsResponseDto
         {
-            Notifications = pageItems.Select(MapNotification).ToList(),
+            Items = mappedItems,
             UnreadCount = unreadCount,
+            TotalCount = totalCount,
             Skip = normalizedSkip,
             Take = normalizedTake,
             NextSkip = normalizedSkip + pageItems.Count,
@@ -79,7 +82,7 @@ public class UserNotificationService : IUserNotificationService
         await _notificationRepository.SaveChangesAsync();
     }
 
-    public void AddContributionDecisionNotification(PlaceContribution contribution)
+    public async Task AddContributionDecisionNotificationAsync(PlaceContribution contribution)
     {
         if (contribution.Status is not (PlaceContributionStatus.Approved or PlaceContributionStatus.Rejected))
         {
@@ -87,18 +90,31 @@ public class UserNotificationService : IUserNotificationService
         }
 
         var isApproved = contribution.Status == PlaceContributionStatus.Approved;
+        var type = isApproved ? ContributionApprovedType : ContributionRejectedType;
+        const string relatedEntityType = "contribution";
+
+        if (await _notificationRepository.ExistsAsync(
+                contribution.UserId,
+                type,
+                relatedEntityType,
+                contribution.Id))
+        {
+            return;
+        }
 
         _notificationRepository.Add(new UserNotification
         {
             UserId = contribution.UserId,
-            Type = isApproved ? ContributionApprovedType : ContributionRejectedType,
+            Type = type,
             Title = isApproved ? "Contribution approved" : "Contribution rejected",
             Message = isApproved
-                ? "Your contribution was approved."
+                ? "Your contribution has been approved and published."
                 : "Your contribution was reviewed but was not approved.",
-            RelatedEntityType = "contribution",
+            RelatedEntityType = relatedEntityType,
             RelatedEntityId = contribution.Id,
-            ActionUrl = $"/contributions/{contribution.Id}",
+            ActionUrl = isApproved
+                ? BuildApprovedContributionRoute(contribution)
+                : $"/contributions/{contribution.Id}",
             CreatedAt = contribution.ReviewedAt ?? DateTime.UtcNow
         });
     }
@@ -183,8 +199,23 @@ public class UserNotificationService : IUserNotificationService
         RelatedEntityType = notification.RelatedEntityType,
         RelatedEntityId = notification.RelatedEntityId,
         ActionUrl = notification.ActionUrl,
+        TargetType = notification.RelatedEntityType,
+        TargetId = notification.RelatedEntityId,
+        TargetRoute = notification.ActionUrl,
         CreatedAt = notification.CreatedAt,
         ReadAt = notification.ReadAt,
         IsRead = notification.ReadAt.HasValue
     };
+
+    private static string BuildApprovedContributionRoute(PlaceContribution contribution)
+    {
+        if (!contribution.PlaceId.HasValue)
+        {
+            return $"/contributions/{contribution.Id}";
+        }
+
+        return contribution.StayTypeId.HasValue
+            ? $"/stays/{contribution.PlaceId.Value}"
+            : $"/places/{contribution.PlaceId.Value}";
+    }
 }

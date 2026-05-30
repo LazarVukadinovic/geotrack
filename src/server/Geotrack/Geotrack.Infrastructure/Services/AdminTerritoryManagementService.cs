@@ -284,6 +284,7 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
             .Include(user => user.TerritoryManager!)
                 .ThenInclude(manager => manager.TerritoryManagerTerritories)
                     .ThenInclude(assignment => assignment.Territory)
+            .AsSplitQuery()
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(normalizedQuery))
@@ -413,6 +414,7 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
                     .ThenInclude(manager => manager.User)
                         .ThenInclude(user => user.UserRoles)
                             .ThenInclude(userRole => userRole.Role)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(item => item.Id == territoryId, cancellationToken)
             ?? throw new KeyNotFoundException("Territory not found.");
 
@@ -759,6 +761,7 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
         var territory = await _db.Territories
             .Include(item => item.Regions)
             .Include(item => item.TerritoryManagerTerritories)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(item => item.Id == territoryId, cancellationToken)
             ?? throw new KeyNotFoundException("Territory not found.");
 
@@ -832,6 +835,7 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
             .Include(item => item.TerritoryManager!)
                 .ThenInclude(manager => manager.TerritoryManagerTerritories)
                     .ThenInclude(assignment => assignment.Territory)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(item => item.Id == userId, cancellationToken)
             ?? throw new InvalidOperationException("Selected user was not found.");
 
@@ -1069,14 +1073,18 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
 
         return field switch
         {
-            "name" => desc ? query.OrderByDescending(item => item.Name) : query.OrderBy(item => item.Name),
+            "name" => desc
+                ? query.OrderByDescending(item => item.Name).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.Name).ThenBy(item => item.Id),
             "status" => desc
-                ? query.OrderBy(item => item.TerritoryManagerTerritories.Any())
-                : query.OrderByDescending(item => item.TerritoryManagerTerritories.Any()),
+                ? query.OrderBy(item => item.TerritoryManagerTerritories.Any()).ThenBy(item => item.Name).ThenBy(item => item.Id)
+                : query.OrderByDescending(item => item.TerritoryManagerTerritories.Any()).ThenBy(item => item.Name).ThenBy(item => item.Id),
             "countries" => desc
-                ? query.OrderByDescending(item => item.CountryCode ?? item.Name)
-                : query.OrderBy(item => item.CountryCode ?? item.Name),
-            _ => desc ? query.OrderByDescending(item => item.CreatedAt) : query.OrderBy(item => item.CreatedAt)
+                ? query.OrderByDescending(item => item.CountryCode ?? item.Name).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.CountryCode ?? item.Name).ThenBy(item => item.Id),
+            _ => desc
+                ? query.OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Id)
+                : query.OrderBy(item => item.CreatedAt).ThenBy(item => item.Id)
         };
     }
 

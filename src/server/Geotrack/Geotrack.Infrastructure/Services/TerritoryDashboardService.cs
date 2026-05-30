@@ -14,10 +14,14 @@ namespace Geotrack.Infrastructure.Services;
 public sealed class TerritoryDashboardService : ITerritoryDashboardService
 {
     private const int DefaultTopTake = 3;
+    private const int DashboardRegionsHealthTake = 4;
     private const int DetailPreviewTake = 5;
     private const int DirectoryMaxTake = 100;
     private const string PublishedStatus = "Published";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private const string BoundaryDisplayGeometryPropertyName = "BoundaryDisplayGeometry";
+    private const string TerritoryBoundaryGeometrySource = "Territory.BoundaryGeometry";
+    private const string RegionBoundaryGeometrySource = "Region.BoundaryGeometry";
     private const string ManualDrawBoundarySource = "ManualDraw";
     private const string OsmBoundarySource = "OsmBoundary";
     private const string GeoBoundariesBoundarySource = "geoBoundaries";
@@ -203,15 +207,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 TerritoryId = region.TerritoryId,
                 TerritoryName = region.Territory.Name,
                 CreatedAt = region.CreatedAt,
-                UpdatedAt = region.UpdatedAt,
-                ImageUrl = region.Images
-                    .Where(image => image.TargetType == EntityImageTargetType.Region)
-                    .OrderByDescending(image => image.IsMain)
-                    .ThenBy(image => image.SortOrder)
-                    .ThenBy(image => image.CreatedAt)
-                    .ThenBy(image => image.Id)
-                    .Select(image => image.Url)
-                    .FirstOrDefault()
+                UpdatedAt = region.UpdatedAt
             })
             .ToListAsync();
 
@@ -258,7 +254,6 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 HealthScore = health?.Score,
                 Health = health,
                 ActivityScore = healthScore,
-                ImageUrl = row.ImageUrl,
                 DetailRoute = $"/territory/regions/{row.Id}"
             };
         });
@@ -289,15 +284,100 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         };
 
         var ordered = items.ToList();
+        var pageItems = ordered.Skip(skip).Take(take).ToList();
+        var representativeImages = await GetRepresentativeImagesForRegionsAsync(
+            pageItems.Select(item => item.RegionId).ToList());
+
+        foreach (var item in pageItems)
+        {
+            var representativeImage = representativeImages.GetValueOrDefault(item.RegionId);
+            item.RepresentativeImage = representativeImage;
+            item.ImageUrl = representativeImage?.Url;
+        }
 
         return new TerritoryRegionDirectoryResponseDto
         {
             Territory = activeTerritory,
-            Items = ordered.Skip(skip).Take(take).ToList(),
+            Items = pageItems,
             TotalCount = ordered.Count,
             Skip = skip,
             Take = take,
             HasMore = skip + take < ordered.Count
+        };
+    }
+
+    public async Task<TerritoryRegionMapDto> GetRegionMapAsync(
+        int userId,
+        int? territoryId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureTerritoryManagerRoleAsync(userId);
+
+        var activeTerritory = await GetAuthorizedTerritoryBoundaryAsync(userId, territoryId, cancellationToken);
+        if (activeTerritory is null)
+        {
+            return new TerritoryRegionMapDto
+            {
+                Viewport = new TerritoryRegionMapViewportDto { IsEmpty = true },
+                EmptyStateMessage = "No territory is assigned to this account.",
+                BoundaryWarningMessage = "No territory is assigned to this account."
+            };
+        }
+
+        var regionRows = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.TerritoryId == activeTerritory.Id)
+            .OrderBy(region => region.Name)
+            .ThenBy(region => region.Id)
+            .Select(region => new TerritoryRegionMapRow
+            {
+                Id = region.Id,
+                Name = region.Name,
+                TerritoryId = region.TerritoryId,
+                TerritoryName = region.Territory.Name,
+                BoundaryGeometry = EF.Property<Geometry?>(region, BoundaryGeometryPropertyName),
+                BoundaryDisplayGeometry = EF.Property<Geometry?>(region, BoundaryDisplayGeometryPropertyName)
+            })
+            .ToListAsync(cancellationToken);
+
+        var regionIds = regionRows.Select(region => region.Id).ToList();
+        var contentCounts = await GetRegionContentCountsAsync(regionIds);
+        var pendingCounts = await GetRegionPendingRequestCountsAsync(regionIds);
+        var managers = await GetRegionManagersAsync(regionIds);
+        var healthPeriod = _healthScores.ResolvePeriod("1m");
+        var healthScores = await _healthScores.GetRegionHealthScoresAsync(regionIds, healthPeriod);
+
+        var territoryDto = BuildMapTerritory(activeTerritory);
+        var regionDtos = regionRows
+            .Select(row => BuildMapRegion(
+                row,
+                contentCounts.GetValueOrDefault(row.Id, RegionContentCounts.Empty),
+                pendingCounts.GetValueOrDefault(row.Id),
+                managers.GetValueOrDefault(row.Id, new List<ManagerRow>()),
+                healthScores.GetValueOrDefault(row.Id)))
+            .ToList();
+
+        var viewportGeometries = new List<Geometry>();
+        var territoryGeometry = ToPolygonalGeometry(activeTerritory.BoundaryGeometry);
+        if (territoryGeometry is not null)
+        {
+            viewportGeometries.Add(territoryGeometry);
+        }
+
+        viewportGeometries.AddRange(regionRows
+            .Select(row => ToPolygonalGeometry(row.BoundaryGeometry))
+            .Where(geometry => geometry is not null)
+            .Select(geometry => geometry!));
+
+        return new TerritoryRegionMapDto
+        {
+            Territory = territoryDto,
+            Regions = regionDtos,
+            Viewport = BuildRegionMapViewport(viewportGeometries),
+            EmptyStateMessage = regionDtos.Count == 0
+                ? "No regions are available for this territory. Sync ADM1 regions first."
+                : null,
+            BoundaryWarningMessage = BuildRegionMapBoundaryWarning(territoryDto, regionDtos)
         };
     }
 
@@ -976,6 +1056,14 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                     ActivityScore = healthScore
                 };
             })
+            .OrderByDescending(region => region.HealthScore)
+            .ThenByDescending(region => region.AssignedManagers.Count > 0)
+            .ThenByDescending(TotalContentCount)
+            .ThenBy(region => region.PendingRequestsCount)
+            .ThenBy(region => region.RegionName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(region => region.RegionName, StringComparer.Ordinal)
+            .ThenBy(region => region.RegionId)
+            .Take(DashboardRegionsHealthTake)
             .ToList();
     }
 
@@ -1474,6 +1562,149 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 placeCounts.GetValueOrDefault(regionId),
                 stayCounts.GetValueOrDefault(regionId),
                 eventCounts.GetValueOrDefault(regionId)));
+    }
+
+    private async Task<Dictionary<int, TerritoryRegionRepresentativeImageDto>> GetRepresentativeImagesForRegionsAsync(
+        List<int> regionIds)
+    {
+        regionIds = regionIds
+            .Where(regionId => regionId > 0)
+            .Distinct()
+            .ToList();
+
+        if (regionIds.Count == 0)
+            return new Dictionary<int, TerritoryRegionRepresentativeImageDto>();
+
+        var candidates = new List<RegionRepresentativeImageCandidate>();
+
+        candidates.AddRange(await _db.EntityImages
+            .AsNoTracking()
+            .Where(image =>
+                image.TargetType == EntityImageTargetType.Destination &&
+                image.DestinationId.HasValue &&
+                image.Url != string.Empty &&
+                regionIds.Contains(image.Destination!.RegionId))
+            .Select(image => new RegionRepresentativeImageCandidate
+            {
+                RegionId = image.Destination!.RegionId,
+                SourcePriority = 0,
+                SourceType = "Destination",
+                SourceId = image.DestinationId!.Value,
+                SourceName = image.Destination.Name,
+                SourceStatus = image.Destination.Status,
+                Url = image.Url,
+                AltText = image.AltText,
+                IsMain = image.IsMain,
+                ImageRole = image.ImageRole,
+                SortOrder = image.SortOrder,
+                CreatedAt = image.CreatedAt,
+                ImageId = image.Id
+            })
+            .ToListAsync());
+
+        candidates.AddRange(await _db.EntityImages
+            .AsNoTracking()
+            .Where(image =>
+                image.TargetType == EntityImageTargetType.Location &&
+                image.LocationId.HasValue &&
+                image.Url != string.Empty &&
+                regionIds.Contains(image.Location!.Destination.RegionId))
+            .Select(image => new RegionRepresentativeImageCandidate
+            {
+                RegionId = image.Location!.Destination.RegionId,
+                SourcePriority = 1,
+                SourceType = "Location",
+                SourceId = image.LocationId!.Value,
+                SourceName = image.Location.Name,
+                SourceStatus = image.Location.Status,
+                Url = image.Url,
+                AltText = image.AltText,
+                IsMain = image.IsMain,
+                ImageRole = image.ImageRole,
+                SortOrder = image.SortOrder,
+                CreatedAt = image.CreatedAt,
+                ImageId = image.Id
+            })
+            .ToListAsync());
+
+        candidates.AddRange(await _db.EntityImages
+            .AsNoTracking()
+            .Where(image =>
+                image.TargetType == EntityImageTargetType.Place &&
+                image.PlaceId.HasValue &&
+                image.Url != string.Empty &&
+                regionIds.Contains(image.Place!.Location.Destination.RegionId))
+            .Select(image => new RegionRepresentativeImageCandidate
+            {
+                RegionId = image.Place!.Location.Destination.RegionId,
+                SourcePriority = 2,
+                SourceType = image.Place.Stay != null ? "Stay" : "Place",
+                SourceId = image.PlaceId!.Value,
+                SourceName = image.Place.Name,
+                SourceStatus = image.Place.Status,
+                Url = image.Url,
+                AltText = image.AltText,
+                IsMain = image.IsMain,
+                ImageRole = image.ImageRole,
+                SortOrder = image.SortOrder,
+                CreatedAt = image.CreatedAt,
+                ImageId = image.Id
+            })
+            .ToListAsync());
+
+        candidates.AddRange(await _db.EntityImages
+            .AsNoTracking()
+            .Where(image =>
+                image.TargetType == EntityImageTargetType.Event &&
+                image.EventId.HasValue &&
+                image.Url != string.Empty &&
+                regionIds.Contains(image.Event!.Destination.RegionId))
+            .Select(image => new RegionRepresentativeImageCandidate
+            {
+                RegionId = image.Event!.Destination.RegionId,
+                SourcePriority = 3,
+                SourceType = "Event",
+                SourceId = image.EventId!.Value,
+                SourceName = image.Event.Name,
+                SourceStatus = image.Event.Status,
+                Url = image.Url,
+                AltText = image.AltText,
+                IsMain = image.IsMain,
+                ImageRole = image.ImageRole,
+                SortOrder = image.SortOrder,
+                CreatedAt = image.CreatedAt,
+                ImageId = image.Id
+            })
+            .ToListAsync());
+
+        return candidates
+            .Where(IsDisplayableRepresentativeImageCandidate)
+            .GroupBy(candidate => candidate.RegionId)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                {
+                    var selected = group
+                        .OrderBy(RepresentativeImagePreferenceGroup)
+                        .ThenBy(candidate => candidate.SourcePriority)
+                        .ThenByDescending(candidate => candidate.IsMain)
+                        .ThenBy(candidate => RepresentativeImageRoleRank(candidate.ImageRole))
+                        .ThenBy(candidate => candidate.SortOrder)
+                        .ThenBy(candidate => candidate.CreatedAt)
+                        .ThenBy(candidate => candidate.ImageId)
+                        .ThenBy(candidate => candidate.SourceName)
+                        .ThenBy(candidate => candidate.SourceId)
+                        .First();
+
+                    return new TerritoryRegionRepresentativeImageDto
+                    {
+                        Url = selected.Url.Trim(),
+                        AltText = NullIfWhiteSpace(selected.AltText) ?? selected.SourceName,
+                        SourceType = selected.SourceType,
+                        SourceId = selected.SourceId,
+                        SourceName = selected.SourceName
+                    };
+                });
     }
 
     private async Task<Dictionary<int, int>> GetRegionPendingRequestCountsAsync(List<int> regionIds)
@@ -2518,7 +2749,10 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         return map;
     }
 
-    private async Task<TerritoryBoundaryRow?> GetAuthorizedTerritoryBoundaryAsync(int userId, int? territoryId)
+    private async Task<TerritoryBoundaryRow?> GetAuthorizedTerritoryBoundaryAsync(
+        int userId,
+        int? territoryId,
+        CancellationToken cancellationToken = default)
     {
         if (territoryId.HasValue && territoryId.Value <= 0)
             throw new InvalidOperationException("territoryId must be positive.");
@@ -2547,9 +2781,12 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 BoundarySource = assignment.Territory.BoundarySource,
                 BoundaryGeometry = EF.Property<Geometry?>(
                     assignment.Territory,
-                    BoundaryGeometryPropertyName)
+                    BoundaryGeometryPropertyName),
+                BoundaryDisplayGeometry = EF.Property<Geometry?>(
+                    assignment.Territory,
+                    BoundaryDisplayGeometryPropertyName)
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (territoryId.HasValue && territory is null)
             throw new UnauthorizedAccessException("Territory is not assigned to the current territory manager.");
@@ -2572,6 +2809,102 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             CenterLatitude = centroid?.Y,
             CenterLongitude = centroid?.X
         };
+    }
+
+    private static TerritoryRegionMapTerritoryDto BuildMapTerritory(TerritoryBoundaryRow row)
+    {
+        var geometry = ToPolygonalGeometry(row.BoundaryGeometry);
+        var geoJson = ToGeoJson(geometry);
+
+        return new TerritoryRegionMapTerritoryDto
+        {
+            TerritoryId = row.Id,
+            Name = row.Name,
+            DisplayName = row.Name,
+            CountryCode = row.CountryCode,
+            CountryIso3 = row.CountryIso3,
+            HasBoundary = geoJson is not null,
+            GeometrySource = geoJson is not null ? TerritoryBoundaryGeometrySource : null,
+            BoundaryMissingReason = geoJson is null
+                ? BuildBoundaryMissingReason("Full territory boundary", row.BoundaryDisplayGeometry)
+                : null,
+            GeometryGeoJson = geoJson,
+            Viewport = BuildSingleGeometryViewport(geometry)
+        };
+    }
+
+    private static TerritoryRegionMapRegionDto BuildMapRegion(
+        TerritoryRegionMapRow row,
+        RegionContentCounts counts,
+        int pendingRequests,
+        List<ManagerRow> managers,
+        TerritoryHealthDto? health)
+    {
+        var geometry = ToPolygonalGeometry(row.BoundaryGeometry);
+        var geoJson = ToGeoJson(geometry);
+        var centroid = geometry?.Centroid;
+        var healthScore = health?.Score;
+
+        return new TerritoryRegionMapRegionDto
+        {
+            RegionId = row.Id,
+            Name = row.Name,
+            DisplayName = row.Name,
+            TerritoryId = row.TerritoryId,
+            TerritoryDisplayName = row.TerritoryName,
+            Status = managers.Count > 0 ? "Active" : "Inactive",
+            HealthScore = healthScore,
+            Health = health,
+            AssignedManagers = managers.Select(BuildManagerDto).ToList(),
+            ManagerDisplayName = BuildManagerDisplayName(managers),
+            ContentCounts = new TerritoryRegionMapContentCountsDto
+            {
+                Destinations = counts.Destinations,
+                Locations = counts.Locations,
+                Places = counts.Places,
+                Stays = counts.Stays,
+                Events = counts.Events,
+                Pending = pendingRequests
+            },
+            HasBoundary = geoJson is not null,
+            GeometrySource = geoJson is not null ? RegionBoundaryGeometrySource : null,
+            BoundaryMissingReason = geoJson is null
+                ? BuildBoundaryMissingReason("Full region boundary", row.BoundaryDisplayGeometry)
+                : null,
+            GeometryGeoJson = geoJson,
+            Viewport = BuildSingleGeometryViewport(geometry),
+            CenterLatitude = centroid?.Y,
+            CenterLongitude = centroid?.X,
+            DetailRoute = $"/territory/regions/{row.Id}"
+        };
+    }
+
+    private static string? BuildRegionMapBoundaryWarning(
+        TerritoryRegionMapTerritoryDto territory,
+        List<TerritoryRegionMapRegionDto> regions)
+    {
+        var territoryMissing = !territory.HasBoundary;
+        var regionsMissing = regions.Any(region => !region.HasBoundary);
+
+        return territoryMissing || regionsMissing
+            ? "Boundary data is missing for this territory or some regions."
+            : null;
+    }
+
+    private static TerritoryRegionMapViewportDto BuildSingleGeometryViewport(Geometry? geometry)
+    {
+        var polygonal = ToPolygonalGeometry(geometry);
+        return polygonal is null
+            ? new TerritoryRegionMapViewportDto { IsEmpty = true }
+            : BuildRegionMapViewport(new[] { polygonal });
+    }
+
+    private static string BuildBoundaryMissingReason(string boundaryLabel, Geometry? displayGeometry)
+    {
+        var hasDisplayGeometry = ToPolygonalGeometry(displayGeometry) is not null;
+        return hasDisplayGeometry
+            ? $"{boundaryLabel} is missing. Display geometry exists but is not used on this accuracy map."
+            : $"{boundaryLabel} is missing.";
     }
 
     private static void MarkExistingRegionCandidates(
@@ -3097,6 +3430,13 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             AssignedAt = manager.AssignedAt
         };
 
+    private static int TotalContentCount(TerritoryRegionHealthDto region) =>
+        region.DestinationsCount +
+        region.LocationsCount +
+        region.PlacesCount +
+        region.StaysCount +
+        region.EventsCount;
+
     private static string BuildDisplayName(string? displayName, string? firstName, string? lastName, string? username)
     {
         if (!string.IsNullOrWhiteSpace(displayName))
@@ -3120,6 +3460,43 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
 
         return value[..157].TrimEnd() + "...";
     }
+
+    private static bool IsDisplayableRepresentativeImageCandidate(RegionRepresentativeImageCandidate candidate) =>
+        !string.IsNullOrWhiteSpace(candidate.Url) &&
+        IsDisplayableContentStatus(candidate.SourceStatus);
+
+    private static bool IsDisplayableContentStatus(string? status)
+    {
+        var normalized = status?.Trim();
+        return !string.Equals(normalized, "Deleted", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(normalized, "Suspended", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(normalized, "Disabled", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int RepresentativeImagePreferenceGroup(RegionRepresentativeImageCandidate candidate)
+    {
+        var normalizedRole = EntityImageRole.Normalize(candidate.ImageRole);
+        return candidate.IsMain ||
+               string.Equals(normalizedRole, EntityImageRole.Cover, StringComparison.Ordinal) ||
+               string.Equals(normalizedRole, EntityImageRole.Card, StringComparison.Ordinal)
+            ? 0
+            : 1;
+    }
+
+    private static int RepresentativeImageRoleRank(string? imageRole)
+    {
+        var normalizedRole = EntityImageRole.Normalize(imageRole);
+        if (string.Equals(normalizedRole, EntityImageRole.Cover, StringComparison.Ordinal))
+            return 0;
+
+        if (string.Equals(normalizedRole, EntityImageRole.Card, StringComparison.Ordinal))
+            return 1;
+
+        return 2;
+    }
+
+    private static string? NullIfWhiteSpace(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string? BuildInitials(string displayName)
     {
@@ -3210,7 +3587,23 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public string TerritoryName { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
-        public string? ImageUrl { get; set; }
+    }
+
+    private sealed class RegionRepresentativeImageCandidate
+    {
+        public int RegionId { get; set; }
+        public int SourcePriority { get; set; }
+        public string SourceType { get; set; } = string.Empty;
+        public int SourceId { get; set; }
+        public string SourceName { get; set; } = string.Empty;
+        public string SourceStatus { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
+        public string? AltText { get; set; }
+        public bool IsMain { get; set; }
+        public string ImageRole { get; set; } = EntityImageRole.Gallery;
+        public int SortOrder { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public int ImageId { get; set; }
     }
 
     private sealed class ManagerRow
@@ -3303,6 +3696,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public string? BoundaryShapeType { get; set; }
         public string? BoundarySource { get; set; }
         public Geometry? BoundaryGeometry { get; set; }
+        public Geometry? BoundaryDisplayGeometry { get; set; }
     }
 
     private sealed class RegionBoundaryRow
@@ -3310,6 +3704,16 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public Geometry? BoundaryGeometry { get; set; }
+    }
+
+    private sealed class TerritoryRegionMapRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int TerritoryId { get; set; }
+        public string TerritoryName { get; set; } = string.Empty;
+        public Geometry? BoundaryGeometry { get; set; }
+        public Geometry? BoundaryDisplayGeometry { get; set; }
     }
 
     private sealed class RegionBoundaryMetadataRow

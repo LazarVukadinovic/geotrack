@@ -1479,20 +1479,23 @@ public sealed class AdminUserManagementService : IAdminUserManagementService
             "nameAsc" => query
                 .OrderBy(user => user.DisplayName ?? user.FirstName)
                 .ThenBy(user => user.LastName)
-                .ThenBy(user => user.Email),
+                .ThenBy(user => user.Email)
+                .ThenBy(user => user.Id),
             "reviewsDesc" => query
                 .OrderByDescending(user =>
                     _db.PlaceReviews.Count(review => review.UserId == user.Id) +
                     _db.EventReviews.Count(review => review.UserId == user.Id) +
                     _db.DestinationReviews.Count(review => review.UserId == user.Id) +
                     _db.LocationReviews.Count(review => review.UserId == user.Id))
-                .ThenBy(user => user.Email),
+                .ThenBy(user => user.Email)
+                .ThenBy(user => user.Id),
             "reportedDesc" => query
                 .OrderByDescending(user =>
                     _db.ReviewReports.Count(report =>
                         report.ReviewAuthorUserId == user.Id &&
                         report.Status == ReviewReportStatus.Pending))
-                .ThenBy(user => user.Email),
+                .ThenBy(user => user.Email)
+                .ThenBy(user => user.Id),
             _ => query.OrderByDescending(user => user.CreatedAt).ThenByDescending(user => user.Id)
         };
     }

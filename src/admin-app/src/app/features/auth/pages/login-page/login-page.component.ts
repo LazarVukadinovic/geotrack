@@ -2,7 +2,7 @@ import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, NgModel } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { AuthService } from '../../../../core/services/auth.service';
+import { AdminAccessDeniedError, AuthService } from '../../../../core/services/auth.service';
 
 @Component({
   selector: 'app-login',
@@ -88,6 +88,11 @@ export class LoginComponent implements OnInit {
       },
       error: (err: Error) => {
         this.isLoading.set(false);
+        if (err instanceof AdminAccessDeniedError) {
+          void this.router.navigate(['/no-admin-access'], { replaceUrl: true });
+          return;
+        }
+
         this.authError.set(err.message ?? 'Invalid email or password. Please try again.');
       },
     });

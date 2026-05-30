@@ -1,61 +1,59 @@
 <app-settings-subpage-shell
   title="Notifications"
-  description="Choose which GeoTrack updates should be prepared for your account. We save these preferences now so future alerts and summaries reflect your travel style.">
-  <div class="flex flex-col gap-4">
+  description="Manage the GeoTrack updates you receive in the app.">
+  <div class="notif-settings">
     @if (errorMessage()) {
-      <div class="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-        {{ errorMessage() }}
-      </div>
+      <section class="notif-settings__message notif-settings__message--error" aria-live="polite">
+        <p>{{ errorMessage() }}</p>
+        <button type="button" class="notif-settings__retry" (click)="load()">Retry</button>
+      </section>
     }
 
-    @if (feedbackMessage()) {
-      <div class="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-        {{ feedbackMessage() }}
-      </div>
+    @if (isLoading()) {
+      <section class="notif-settings__card" aria-busy="true">
+        <div class="notif-settings__skeleton notif-settings__skeleton--title"></div>
+        <div class="notif-settings__skeleton"></div>
+        <div class="notif-settings__skeleton notif-settings__skeleton--short"></div>
+      </section>
+    } @else {
+      <section class="notif-settings__group" aria-labelledby="in-app-notifications-title">
+        <div class="notif-settings__group-header">
+          <div>
+            <h2 id="in-app-notifications-title">In-app notifications</h2>
+            <p>Delivered inside GeoTrack.</p>
+          </div>
+        </div>
+
+        <article class="notif-settings__preference">
+          <div class="notif-settings__preference-copy">
+            <h3>Contribution approved</h3>
+            <p>Get notified in GeoTrack when your submitted contribution is approved.</p>
+          </div>
+          <span class="notif-settings__switch notif-settings__switch--on" aria-label="Enabled">
+            <span class="notif-settings__switch-knob"></span>
+          </span>
+        </article>
+      </section>
+
+      <section class="notif-settings__group" aria-labelledby="email-notifications-title">
+        <div class="notif-settings__group-header">
+          <div>
+            <h2 id="email-notifications-title">Email notifications</h2>
+            <p>Email notifications are not available yet.</p>
+          </div>
+          <span class="notif-settings__badge">Coming soon</span>
+        </div>
+
+        <button type="button" class="notif-settings__preference notif-settings__preference--disabled" disabled>
+          <div class="notif-settings__preference-copy">
+            <h3>Email updates</h3>
+            <p>Email notifications are not available yet.</p>
+          </div>
+          <span class="notif-settings__switch" aria-hidden="true">
+            <span class="notif-settings__switch-knob"></span>
+          </span>
+        </button>
+      </section>
     }
-
-    <div class="rounded-[1.5rem] bg-white px-4 py-4 shadow-sm">
-      <p class="text-sm text-slate-600">
-        GeoTrack is steadily expanding travel alerts across the web app. Your selections are saved today and will guide the updates you receive as those experiences roll out.
-      </p>
-    </div>
-
-    <div class="rounded-[1.5rem] bg-white shadow-sm">
-      @if (isLoading()) {
-        <div class="px-4 py-5 text-sm text-slate-500">Loading your preferences...</div>
-      } @else {
-        @for (toggleItem of toggles; track toggleItem.key) {
-          <button
-            type="button"
-            class="w-full px-4 py-4 text-left transition-colors active:bg-slate-50"
-            [class.border-b]="!$last"
-            [class.border-slate-100]="!$last"
-            [class.opacity-50]="toggleItem.key !== 'generalNotifications' && !isEnabled('generalNotifications')"
-            [disabled]="toggleItem.key !== 'generalNotifications' && !isEnabled('generalNotifications')"
-            (click)="toggle(toggleItem.key)">
-            <div class="flex items-start gap-3">
-              <div class="flex-1">
-                <p class="text-sm font-semibold text-slate-800">{{ toggleItem.title }}</p>
-                <p class="mt-1 text-sm leading-relaxed text-slate-500">{{ toggleItem.description }}</p>
-              </div>
-
-              <span
-                class="notif-page__switch"
-                [class.notif-page__switch--on]="isEnabled(toggleItem.key)">
-                <span class="notif-page__switch-knob"></span>
-              </span>
-            </div>
-          </button>
-        }
-      }
-    </div>
-
-    <button
-      type="button"
-      (click)="save()"
-      [disabled]="!isDirty() || isLoading() || isSaving()"
-      class="w-full rounded-[1.75rem] bg-[#e8570a] px-4 py-4 text-base font-bold text-white shadow-lg transition-all duration-200 active:scale-[0.98] disabled:opacity-60">
-      {{ isSaving() ? 'Saving Preferences...' : 'Save Preferences' }}
-    </button>
   </div>
 </app-settings-subpage-shell>

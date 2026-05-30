@@ -51,7 +51,9 @@ describe('LoginComponent', () => {
       rememberMe: true,
     });
 
-    request.flush(adminLoginResponse());
+    const response = adminLoginResponse();
+    request.flush(response);
+    flushCurrentUser(response.user);
 
     expect(component.isLoading()).toBe(false);
     expect(component.authError()).toBeNull();
@@ -66,7 +68,7 @@ describe('LoginComponent', () => {
     component.password.set('Proba123!');
     component.onSubmit();
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'territory-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -79,7 +81,11 @@ describe('LoginComponent', () => {
         canAccessRegionalAdmin: false,
         canAccessTerritoryAdmin: true,
       },
-    });
+    };
+
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
+    flushAssignedTerritories([{ id: 10, name: 'Croatia', displayName: 'Croatia', statusLabel: 'Assigned' }]);
 
     expect(navigateSpy).toHaveBeenCalledWith('/territory/overview');
   });
@@ -92,7 +98,7 @@ describe('LoginComponent', () => {
     component.password.set('Proba123!');
     component.onSubmit();
 
-    http.expectOne('/api/admin/auth/login').flush({
+    const response = {
       accessToken: 'admin-token',
       expiresAt: new Date(Date.now() + 900_000).toISOString(),
       expiresIn: 900,
@@ -105,7 +111,10 @@ describe('LoginComponent', () => {
         canAccessRegionalAdmin: false,
         canAccessTerritoryAdmin: false,
       },
-    });
+    };
+
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
 
     expect(navigateSpy).toHaveBeenCalledWith('/admin-dashboard');
     expect(navigateSpy).not.toHaveBeenCalledWith('/admin/overview');
@@ -123,6 +132,25 @@ describe('LoginComponent', () => {
     expect(component.authError()).toBe('Invalid email or password.');
   });
 
+  it('routes normal user admin-login attempts to the no-access page', () => {
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    component.email.set('marko.p@example.com');
+    component.password.set('password123');
+    component.onSubmit();
+
+    const request = http.expectOne('/api/admin/auth/login');
+    request.flush(
+      { message: 'You do not have access to the admin app.' },
+      { status: 403, statusText: 'Forbidden' },
+    );
+
+    expect(component.isLoading()).toBe(false);
+    expect(component.authError()).toBeNull();
+    expect(navigateSpy).toHaveBeenCalledWith(['/no-admin-access'], { replaceUrl: true });
+  });
+
   function adminLoginResponse() {
     return {
       accessToken: 'access-token',
@@ -138,5 +166,17 @@ describe('LoginComponent', () => {
         canAccessTerritoryAdmin: false,
       },
     };
+  }
+
+  function flushCurrentUser(user: object): void {
+    const request = http.expectOne('/api/admin/auth/me');
+    expect(request.request.method).toBe('GET');
+    request.flush(user);
+  }
+
+  function flushAssignedTerritories(territories: unknown[]): void {
+    const request = http.expectOne('/api/admin/territory/territories');
+    expect(request.request.method).toBe('GET');
+    request.flush(territories);
   }
 });

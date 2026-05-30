@@ -14,6 +14,10 @@ public interface ITerritoryDashboardService
         string? sort,
         int skip,
         int take);
+    Task<TerritoryRegionMapDto> GetRegionMapAsync(
+        int userId,
+        int? territoryId,
+        CancellationToken cancellationToken = default);
     Task<TerritoryRegionCreateContextDto> GetRegionCreateContextAsync(int userId, int? territoryId);
     Task<BoundaryRegionCandidateResponseDto> GetRegionBoundaryCandidatesAsync(
         int userId,

@@ -66,6 +66,7 @@ public class RegionalPlaceService : IRegionalPlaceService
         var rows = await query
             .Skip(normalizedSkip)
             .Take(normalizedTake)
+            .AsSplitQuery()
             .Select(place => new PlaceProjection
             {
                 Id = place.Id,
@@ -173,6 +174,7 @@ public class RegionalPlaceService : IRegionalPlaceService
         var row = await _db.Places
             .AsNoTracking()
             .Where(place => place.Id == placeId && place.Location.Destination.RegionId == regionId)
+            .AsSplitQuery()
             .Select(place => new PlaceProjection
             {
                 Id = place.Id,
