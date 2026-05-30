@@ -11,7 +11,7 @@ Ask Agent je backend-managed AI funkcionalnost za pitanja nad GeoTrack katalogom
 - Administrativna aplikacija: `https://softeng.pmf.kg.ac.rs:10132`
 - Backend: `https://softeng.pmf.kg.ac.rs:10133`
 
-## Korisnici za testiranje
+## Korisnici za testiranje (dolenavedeni korisnici rade za obe aplikacije)
 
 Svi korisnici koriste istu lozinku:
 
