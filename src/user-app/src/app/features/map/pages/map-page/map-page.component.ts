@@ -126,6 +126,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   noDataSearchQuery = '';
   noDataSearchResults: MapSearchResult[] = [];
   allDestinations: MapSearchResult[] = [];
+  isLoadingDestinations = false;
+  destinationLoadError = '';
   private searchBlurTimeout?: ReturnType<typeof setTimeout>;
 
   selectedPlace: MapEntityMarker | null = null;
@@ -294,15 +296,43 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     return this.allDestinations.filter(d => d.name.toLowerCase().includes(q) || (d.subtitle ?? '').toLowerCase().includes(q));
   }
 
-  private loadDestinationsIfNeeded(): void {
-    if (this.allDestinations.length > 0) return;
+  get noDataHeading(): string {
+    if (!this.isLoadingDestinations && !this.destinationLoadError && this.allDestinations.length === 0) {
+      return 'GeoTrack does not have public destinations available yet.';
+    }
+
+    return "GeoTrack doesn't have content for this area yet.";
+  }
+
+  get noDataBody(): string {
+    if (!this.isLoadingDestinations && !this.destinationLoadError && this.allDestinations.length === 0) {
+      return 'Try again later after public places, stays, or events have been published.';
+    }
+
+    return 'Try searching for another destination where GeoTrack has places, stays, and events mapped.';
+  }
+
+  private loadDestinationsIfNeeded(force = false): void {
+    if (!force && (this.allDestinations.length > 0 || this.isLoadingDestinations)) return;
+    this.isLoadingDestinations = true;
+    this.destinationLoadError = '';
     this.mapApi.getDestinations().subscribe({
       next: (results) => {
         this.allDestinations = results;
+        this.isLoadingDestinations = false;
+        this.destinationLoadError = '';
         this.cdr.detectChanges();
       },
-      error: () => {},
+      error: () => {
+        this.isLoadingDestinations = false;
+        this.destinationLoadError = 'Destinations are unavailable right now.';
+        this.cdr.detectChanges();
+      },
     });
+  }
+
+  retryLoadDestinations(): void {
+    this.loadDestinationsIfNeeded(true);
   }
 
   selectNoDataDestination(result: MapSearchResult): void {
