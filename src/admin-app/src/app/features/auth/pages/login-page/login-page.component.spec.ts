@@ -132,6 +132,25 @@ describe('LoginComponent', () => {
     expect(component.authError()).toBe('Invalid email or password.');
   });
 
+  it('routes normal user admin-login attempts to the no-access page', () => {
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    component.email.set('marko.p@example.com');
+    component.password.set('password123');
+    component.onSubmit();
+
+    const request = http.expectOne('/api/admin/auth/login');
+    request.flush(
+      { message: 'You do not have access to the admin app.' },
+      { status: 403, statusText: 'Forbidden' },
+    );
+
+    expect(component.isLoading()).toBe(false);
+    expect(component.authError()).toBeNull();
+    expect(navigateSpy).toHaveBeenCalledWith(['/no-admin-access'], { replaceUrl: true });
+  });
+
   function adminLoginResponse() {
     return {
       accessToken: 'access-token',

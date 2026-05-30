@@ -1,5 +1,12 @@
 import { Routes } from '@angular/router';
-import { authGuard, administratorGuard, contentModeratorGuard, regionalManagerGuard, territoryManagerGuard } from './core/guards/auth.guard';
+import {
+  authGuard,
+  administratorGuard,
+  contentModeratorGuard,
+  loginRedirectGuard,
+  regionalManagerGuard,
+  territoryManagerGuard,
+} from './core/guards/auth.guard';
 export const routes: Routes = [
   // Redirect root → login
   { path: '', redirectTo: 'login', pathMatch: 'full' },
@@ -7,8 +14,15 @@ export const routes: Routes = [
   // ── Auth ─────────────────────────────────
   {
     path: 'login',
+    canActivate: [loginRedirectGuard],
     loadComponent: () =>
       import('./features/auth/pages/login-page/login-page.component').then(m => m.LoginComponent),
+  },
+  {
+    path: 'no-admin-access',
+    loadComponent: () =>
+      import('./features/auth/pages/no-admin-access/no-admin-access.component')
+        .then(m => m.NoAdminAccessComponent),
   },
 
   // ── Shell ──────────────────────────────────

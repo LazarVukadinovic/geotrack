@@ -1,0 +1,22 @@
+<main class="no-admin-access">
+  <section class="no-admin-access__panel" aria-labelledby="no-admin-access-title">
+    <img src="images/logo.png" alt="GeoTrack" class="no-admin-access__logo" />
+
+    <div class="no-admin-access__copy">
+      <p class="no-admin-access__eyebrow">GeoTrack Administration</p>
+      <h1 id="no-admin-access-title">Administration access unavailable</h1>
+      <p>
+        This account does not have access to the GeoTrack administration portal.
+      </p>
+    </div>
+
+    <div class="no-admin-access__actions">
+      <button type="button" class="no-admin-access__primary" (click)="goToUserApp()">
+        Go to GeoTrack
+      </button>
+      <button type="button" class="no-admin-access__secondary" (click)="signOut()">
+        Sign out and use another account
+      </button>
+    </div>
+  </section>
+</main>

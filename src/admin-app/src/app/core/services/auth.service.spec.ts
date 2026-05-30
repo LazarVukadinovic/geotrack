@@ -12,6 +12,7 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     sessionStorage.clear();
+    localStorage.clear();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptorsFromDi()),
@@ -27,6 +28,7 @@ describe('AuthService', () => {
   afterEach(() => {
     http.verify();
     sessionStorage.clear();
+    localStorage.clear();
   });
 
   it('should be created', () => {
@@ -61,6 +63,20 @@ describe('AuthService', () => {
     expect(resolved).toBe(true);
     expect(service.isLoggedIn()).toBe(true);
     expect(service.getAccessToken()).toBe('access-token');
+  });
+
+  it('stores persistent admin session hints in local storage when the server remembers the session', () => {
+    service.login('regional@example.com', 'Password123!', true).subscribe();
+
+    const response = {
+      ...adminLoginResponse(),
+      sessionPersistent: true,
+    };
+    http.expectOne('/api/admin/auth/login').flush(response);
+    flushCurrentUser(response.user);
+
+    expect(localStorage.getItem('geotrack_admin_session')).toBe('persistent');
+    expect(sessionStorage.getItem('geotrack_admin_session')).toBeNull();
   });
 
   it('maps territory manager roles to the territory dashboard route', () => {
@@ -343,6 +359,34 @@ describe('AuthService', () => {
 
     expect(sessionStorage.getItem('geotrack_admin_active_view')).toBe('TerritoryAssociate');
     expect(service.getHomeRoute()).toBe('/territory/overview');
+  });
+
+  it('attempts session restore even without a local admin hint for shared user-app cookies', () => {
+    service.restoreSession().subscribe(user => {
+      expect(user?.email).toBe('regional@example.com');
+    });
+
+    const request = http.expectOne('/api/admin/auth/refresh');
+    expect(request.request.method).toBe('POST');
+    request.flush(adminLoginResponse());
+
+    expect(sessionStorage.getItem('geotrack_admin_session')).toBe('session');
+    expect(service.isLoggedIn()).toBe(true);
+  });
+
+  it('marks admin access denied without treating the user as authenticated', () => {
+    service.restoreSession().subscribe(user => {
+      expect(user).toBeNull();
+    });
+
+    const request = http.expectOne('/api/admin/auth/refresh');
+    request.flush(
+      { message: 'You do not have access to the admin app.' },
+      { status: 403, statusText: 'Forbidden' },
+    );
+
+    expect(service.isLoggedIn()).toBe(false);
+    expect(service.adminAccessDenied()).toBe(true);
   });
 
   it('uses a safe message for invalid credentials', () => {
