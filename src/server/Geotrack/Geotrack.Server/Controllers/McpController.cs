@@ -32,9 +32,10 @@ public class McpController : ControllerBase
     [HttpGet]
     public IActionResult GetStatus()
     {
-        if (!_options.Enabled)
+        var unavailable = RejectUnavailableOrUnauthorized();
+        if (unavailable is not null)
         {
-            return NotFound(new { message = "GeoTrack MCP is disabled." });
+            return unavailable;
         }
 
         if (AcceptsEventStream())
@@ -56,9 +57,10 @@ public class McpController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Handle([FromBody] JsonElement request, CancellationToken cancellationToken)
     {
-        if (!_options.Enabled)
+        var unavailable = RejectUnavailableOrUnauthorized();
+        if (unavailable is not null)
         {
-            return NotFound(new { message = "GeoTrack MCP is disabled." });
+            return unavailable;
         }
 
         if (request.ValueKind == JsonValueKind.Array)
@@ -125,6 +127,22 @@ public class McpController : ControllerBase
         }
 
         return StatusCode(StatusCodes.Status202Accepted);
+    }
+
+    private IActionResult? RejectUnavailableOrUnauthorized()
+    {
+        if (!_options.Enabled)
+        {
+            return NotFound(new { message = "GeoTrack MCP is disabled." });
+        }
+
+        var isAuthenticated = User.Identity?.IsAuthenticated == true;
+        if (!isAuthenticated && (_options.RequireAuth || !_options.AllowAnonymousPublicTools))
+        {
+            return Unauthorized(new { message = "GeoTrack MCP requires authentication." });
+        }
+
+        return null;
     }
 
     private bool AcceptsEventStream() =>
