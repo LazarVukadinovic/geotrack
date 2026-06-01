@@ -1,20 +1,25 @@
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Options;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace Geotrack.Server.Services;
 
 public sealed class LocalUserAvatarStorageService : IUserAvatarStorageService
 {
-    private const int MaxAvatarBytes = 5 * 1024 * 1024;
     private const string AvatarUrlPrefix = "/media/uploads/avatars/";
 
     private readonly string _avatarDirectory;
     private readonly string _avatarDirectoryFullPath;
+    private readonly UploadLimitsOptions _uploadLimits;
 
-    public LocalUserAvatarStorageService(IWebHostEnvironment environment)
+    public LocalUserAvatarStorageService(
+        IWebHostEnvironment environment,
+        IOptions<UploadLimitsOptions> uploadLimits)
     {
         _avatarDirectory = Path.Combine(environment.ContentRootPath, "media", "uploads", "avatars");
         _avatarDirectoryFullPath = Path.GetFullPath(_avatarDirectory);
+        _uploadLimits = uploadLimits.Value;
     }
 
     public async Task<StoredAvatarFile> StoreAsync(int userId, byte[] fileBytes)
@@ -22,8 +27,8 @@ public sealed class LocalUserAvatarStorageService : IUserAvatarStorageService
         if (fileBytes.Length == 0)
             throw new InvalidOperationException("Please select an image to upload.");
 
-        if (fileBytes.Length > MaxAvatarBytes)
-            throw new InvalidOperationException("Profile image must be 5 MB or smaller.");
+        if (fileBytes.Length > _uploadLimits.UserAvatars.MaxFileSizeBytes)
+            throw new InvalidOperationException($"Profile image must be {FormatBytes(_uploadLimits.UserAvatars.MaxFileSizeBytes)} or smaller.");
 
         var detectedImage = DetectImageType(fileBytes)
             ?? throw new InvalidOperationException("Only PNG, JPG, JPEG, or WEBP images are supported.");
@@ -122,6 +127,17 @@ public sealed class LocalUserAvatarStorageService : IUserAvatarStorageService
         }
 
         return null;
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        const long oneMegabyte = 1024L * 1024L;
+        if (bytes % oneMegabyte == 0)
+        {
+            return $"{bytes / oneMegabyte} MB";
+        }
+
+        return $"{bytes} bytes";
     }
 
     private sealed record DetectedImage(string Extension);

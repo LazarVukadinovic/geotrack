@@ -1,21 +1,25 @@
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Options;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace Geotrack.Server.Services;
 
 public sealed class LocalContributionMediaStorageService : IContributionMediaStorageService
 {
-    private const int MaxImageBytes = 8 * 1024 * 1024;
-    private const int MaxOwnershipProofBytes = 10 * 1024 * 1024;
     private const string ContributionUrlPrefix = "/media/uploads/contributions/";
 
     private readonly string _mediaDirectory;
     private readonly string _mediaDirectoryFullPath;
+    private readonly UploadLimitsOptions _uploadLimits;
 
-    public LocalContributionMediaStorageService(IWebHostEnvironment environment)
+    public LocalContributionMediaStorageService(
+        IWebHostEnvironment environment,
+        IOptions<UploadLimitsOptions> uploadLimits)
     {
         _mediaDirectory = Path.Combine(environment.ContentRootPath, "media", "uploads", "contributions");
         _mediaDirectoryFullPath = Path.GetFullPath(_mediaDirectory);
+        _uploadLimits = uploadLimits.Value;
     }
 
     public async Task<StoredContributionMediaFile> StoreAsync(int userId, byte[] fileBytes)
@@ -23,8 +27,8 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
         if (fileBytes.Length == 0)
             throw new InvalidOperationException("Please select an image to upload.");
 
-        if (fileBytes.Length > MaxImageBytes)
-            throw new InvalidOperationException("Contribution image must be 8 MB or smaller.");
+        if (fileBytes.Length > _uploadLimits.Images.MaxFileSizeBytes)
+            throw new InvalidOperationException($"Contribution image must be {FormatBytes(_uploadLimits.Images.MaxFileSizeBytes)} or smaller.");
 
         var detectedImage = DetectImageType(fileBytes)
             ?? throw new InvalidOperationException("Only PNG, JPG, GIF, or WEBP images are supported.");
@@ -51,11 +55,15 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
         if (fileBytes.Length == 0)
             throw new InvalidOperationException("Please select an ownership proof document to upload.");
 
-        if (fileBytes.Length > MaxOwnershipProofBytes)
-            throw new InvalidOperationException("Ownership proof document must be 10 MB or smaller.");
+        if (fileBytes.Length > _uploadLimits.ProofDocuments.MaxFileSizeBytes)
+            throw new InvalidOperationException($"Ownership proof document must be {FormatBytes(_uploadLimits.ProofDocuments.MaxFileSizeBytes)} or smaller.");
 
-        var detectedFile = DetectOwnershipProofFile(fileBytes, originalFileName, contentType)
-            ?? throw new InvalidOperationException("Ownership proof document must be a PDF file.");
+        var detectedFile = DetectOwnershipProofFile(
+                fileBytes,
+                originalFileName,
+                contentType,
+                _uploadLimits.ProofDocuments)
+            ?? throw new InvalidOperationException("Ownership proof document must be a PDF, PNG, JPG/JPEG, or WEBP file.");
 
         Directory.CreateDirectory(_mediaDirectory);
 
@@ -118,10 +126,17 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
     private static DetectedUploadFile? DetectOwnershipProofFile(
         ReadOnlySpan<byte> fileBytes,
         string? originalFileName,
-        string? contentType)
+        string? contentType,
+        UploadProofDocumentLimitsOptions limits)
     {
         var extension = Path.GetExtension(originalFileName ?? string.Empty).ToLowerInvariant();
-        var normalizedContentType = contentType?.Trim().ToLowerInvariant();
+        var normalizedContentType = NormalizeContentType(contentType);
+
+        if (!ContainsOrdinalIgnoreCase(limits.AllowedExtensions, extension) ||
+            !ContainsOrdinalIgnoreCase(limits.AllowedContentTypes, normalizedContentType))
+        {
+            return null;
+        }
 
         if (fileBytes.Length >= 5 &&
             fileBytes[0] == 0x25 &&
@@ -135,10 +150,24 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
             return new DetectedUploadFile(".pdf");
         }
 
-        return null;
+        var detectedImage = DetectImageType(fileBytes, allowGif: false);
+        if (detectedImage is null)
+        {
+            return null;
+        }
+
+        if (!MatchesDeclaredImage(detectedImage, extension, normalizedContentType))
+        {
+            return null;
+        }
+
+        return new DetectedUploadFile(detectedImage.Extension);
     }
 
-    private static DetectedImage? DetectImageType(ReadOnlySpan<byte> fileBytes)
+    private static DetectedImage? DetectImageType(ReadOnlySpan<byte> fileBytes) =>
+        DetectImageType(fileBytes, allowGif: true);
+
+    private static DetectedImage? DetectImageType(ReadOnlySpan<byte> fileBytes, bool allowGif)
     {
         if (fileBytes.Length >= 8 &&
             fileBytes[0] == 0x89 &&
@@ -161,7 +190,8 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
             return new DetectedImage(".jpg");
         }
 
-        if (fileBytes.Length >= 6 &&
+        if (allowGif &&
+            fileBytes.Length >= 6 &&
             fileBytes[0] == 0x47 &&
             fileBytes[1] == 0x49 &&
             fileBytes[2] == 0x46 &&
@@ -186,6 +216,51 @@ public sealed class LocalContributionMediaStorageService : IContributionMediaSto
         }
 
         return null;
+    }
+
+    private static bool MatchesDeclaredImage(
+        DetectedImage detectedImage,
+        string extension,
+        string contentType)
+    {
+        if (detectedImage.Extension == ".jpg")
+        {
+            return (extension == ".jpg" || extension == ".jpeg") &&
+                (contentType == "image/jpeg" || contentType == "image/jpg");
+        }
+
+        return detectedImage.Extension == extension &&
+            detectedImage.Extension switch
+            {
+                ".png" => contentType == "image/png",
+                ".gif" => contentType == "image/gif",
+                ".webp" => contentType == "image/webp",
+                _ => false
+            };
+    }
+
+    private static string NormalizeContentType(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            return string.Empty;
+        }
+
+        return contentType.Split(';', 2)[0].Trim().ToLowerInvariant();
+    }
+
+    private static bool ContainsOrdinalIgnoreCase(IEnumerable<string> values, string value) =>
+        values.Any(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase));
+
+    private static string FormatBytes(long bytes)
+    {
+        const long oneMegabyte = 1024L * 1024L;
+        if (bytes % oneMegabyte == 0)
+        {
+            return $"{bytes / oneMegabyte} MB";
+        }
+
+        return $"{bytes} bytes";
     }
 
     private sealed record DetectedImage(string Extension);
