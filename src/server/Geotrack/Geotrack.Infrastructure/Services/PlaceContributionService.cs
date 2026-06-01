@@ -767,10 +767,10 @@ public class PlaceContributionService : IPlaceContributionService
         PlaceContributionType contributionType,
         UpsertPlaceContributionDto request)
     {
-        // Only ClaimOwnership contributions strictly require an ownership proof document.
-        // For CreatePlace / UpdatePlace, the document is optional — ownable types can be
-        // submitted without it, but the user won't receive edit rights after approval.
-        return contributionType == PlaceContributionType.ClaimOwnership;
+        if (contributionType == PlaceContributionType.ClaimOwnership)
+            return true;
+
+        return await ResolveRequestedPlaceTypeOwnableAsync(request);
     }
 
     private async Task<string?> ResolveRequestedPlaceTypeNameAsync(UpsertPlaceContributionDto request)
@@ -804,6 +804,11 @@ public class PlaceContributionService : IPlaceContributionService
         }
 
         var placeTypeName = NormalizeOptional(request.PlaceType);
+        if (placeTypeName is null && !string.IsNullOrWhiteSpace(request.StayType))
+        {
+            placeTypeName = "stay";
+        }
+
         if (placeTypeName is null)
             return false;
 

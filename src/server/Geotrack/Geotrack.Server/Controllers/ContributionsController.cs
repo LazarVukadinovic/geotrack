@@ -2,8 +2,12 @@ using System.Security.Claims;
 using System.Text.Json;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Options;
+using Geotrack.Server.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 
 namespace Geotrack.Server.Controllers;
 
@@ -13,10 +17,14 @@ namespace Geotrack.Server.Controllers;
 public class ContributionsController : ControllerBase
 {
     private readonly IPlaceContributionService _contributions;
+    private readonly UploadLimitsOptions _uploadLimits;
 
-    public ContributionsController(IPlaceContributionService contributions)
+    public ContributionsController(
+        IPlaceContributionService contributions,
+        IOptions<UploadLimitsOptions> uploadLimits)
     {
         _contributions = contributions;
+        _uploadLimits = uploadLimits.Value;
     }
 
     [HttpGet]
@@ -81,6 +89,9 @@ public class ContributionsController : ControllerBase
     [HttpPost("places")]
     [HttpPost("stays")]
     [Consumes("multipart/form-data")]
+    [EnableRateLimiting("contributions")]
+    [RequestSizeLimit(UploadLimitDefaults.ContributionMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.ProofDocumentMaxFileSizeBytes)]
     public async Task<ActionResult<PlaceContributionResponseDto>> CreatePlaceContribution(
         [FromForm] string payload,
         IFormFile? cardImage,
@@ -114,10 +125,18 @@ public class ContributionsController : ControllerBase
 
         try
         {
-            cardImageBytes = await ReadFileBytesAsync(cardImage);
-            coverImageBytes = await ReadFileBytesAsync(coverImage);
-            galleryImageBytes = await ReadFileBytesAsync(galleryImages);
-            ownershipProofBytes = await ReadFileBytesAsync(ownershipProofDocument);
+            await UploadValidation.ValidateContributionUploadAsync(
+                cardImage,
+                coverImage,
+                galleryImages,
+                ownershipProofDocument,
+                _uploadLimits,
+                HttpContext.RequestAborted);
+
+            cardImageBytes = await UploadValidation.ReadFileBytesAsync(cardImage, HttpContext.RequestAborted);
+            coverImageBytes = await UploadValidation.ReadFileBytesAsync(coverImage, HttpContext.RequestAborted);
+            galleryImageBytes = await UploadValidation.ReadFileBytesAsync(galleryImages, HttpContext.RequestAborted);
+            ownershipProofBytes = await UploadValidation.ReadFileBytesAsync(ownershipProofDocument, HttpContext.RequestAborted);
 
             var contribution = await _contributions.CreateAsync(
                 GetCurrentUserId(),
@@ -147,6 +166,9 @@ public class ContributionsController : ControllerBase
     [HttpPut("places/{id:int}")]
     [HttpPut("stays/{id:int}")]
     [Consumes("multipart/form-data")]
+    [EnableRateLimiting("contributions")]
+    [RequestSizeLimit(UploadLimitDefaults.ContributionMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.ProofDocumentMaxFileSizeBytes)]
     public async Task<ActionResult<PlaceContributionResponseDto>> UpdatePlaceContribution(
         int id,
         [FromForm] string payload,
@@ -176,14 +198,22 @@ public class ContributionsController : ControllerBase
 
         try
         {
+            await UploadValidation.ValidateContributionUploadAsync(
+                cardImage,
+                coverImage,
+                galleryImages,
+                ownershipProofDocument,
+                _uploadLimits,
+                HttpContext.RequestAborted);
+
             var contribution = await _contributions.UpdateAsync(
                 GetCurrentUserId(),
                 id,
                 request,
-                await ReadFileBytesAsync(cardImage),
-                await ReadFileBytesAsync(coverImage),
-                await ReadFileBytesAsync(galleryImages),
-                await ReadFileBytesAsync(ownershipProofDocument),
+                await UploadValidation.ReadFileBytesAsync(cardImage, HttpContext.RequestAborted),
+                await UploadValidation.ReadFileBytesAsync(coverImage, HttpContext.RequestAborted),
+                await UploadValidation.ReadFileBytesAsync(galleryImages, HttpContext.RequestAborted),
+                await UploadValidation.ReadFileBytesAsync(ownershipProofDocument, HttpContext.RequestAborted),
                 ownershipProofDocument?.FileName,
                 ownershipProofDocument?.ContentType);
 
@@ -275,37 +305,11 @@ public class ContributionsController : ControllerBase
             : throw new InvalidOperationException("Authenticated user id was not found.");
     }
 
-    private static async Task<byte[]?> ReadFileBytesAsync(IFormFile? file)
-    {
-        if (file is null || file.Length == 0)
-            return null;
-
-        await using var stream = file.OpenReadStream();
-        using var memory = new MemoryStream();
-        await stream.CopyToAsync(memory);
-        return memory.ToArray();
-    }
-
-    private static async Task<List<byte[]>> ReadFileBytesAsync(List<IFormFile>? files)
-    {
-        var result = new List<byte[]>();
-        if (files is null)
-            return result;
-
-        foreach (var file in files.Where(file => file is { Length: > 0 }))
-        {
-            var bytes = await ReadFileBytesAsync(file);
-            if (bytes is { Length: > 0 })
-                result.Add(bytes);
-        }
-
-        return result;
-    }
-
     private ActionResult HandleException(Exception ex)
     {
         return ex switch
         {
+            UploadValidationException upload => StatusCode(upload.StatusCode, new { message = upload.Message }),
             UnauthorizedAccessException => StatusCode(StatusCodes.Status403Forbidden, new { message = "Forbidden." }),
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
