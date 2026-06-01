@@ -3,6 +3,7 @@ using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.DTOs.GeoTrackTools;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Services;
+using Geotrack.Infrastructure.Services;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -39,6 +40,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         var query = _db.Places
             .AsNoTracking()
+            .WherePublicPlaces()
             .Where(place => place.Stay == null);
 
         if (criteria.DestinationId.HasValue)
@@ -103,6 +105,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         var item = await _db.Places
             .AsNoTracking()
+            .WherePublicPlaces()
             .Where(place => place.Id == id && place.Stay == null)
             .Select(place => new GeoTrackToolItemDto
             {
@@ -149,6 +152,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         var query = _db.Places
             .AsNoTracking()
+            .WherePublicPlaces()
             .Where(place => place.Stay != null);
 
         if (criteria.DestinationId.HasValue)
@@ -213,6 +217,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         var item = await _db.Places
             .AsNoTracking()
+            .WherePublicPlaces()
             .Where(place => place.Id == id && place.Stay != null)
             .Select(place => new GeoTrackToolItemDto
             {
@@ -257,7 +262,9 @@ public class GeoTrackToolService : IGeoTrackToolService
             return Array.Empty<GeoTrackToolItemDto>();
         }
 
-        var query = _db.Events.AsNoTracking();
+        var query = _db.Events
+            .AsNoTracking()
+            .WherePublicEvents();
         if (request.UpcomingOnly)
         {
             query = query.Where(evt => evt.EndDate >= DateTime.UtcNow);
@@ -265,7 +272,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         if (criteria.DestinationId.HasValue)
         {
-            query = query.Where(evt => evt.Location.DestinationId == criteria.DestinationId.Value);
+            query = query.Where(evt => evt.DestinationId == criteria.DestinationId.Value);
         }
 
         if (criteria.EventCategoryTerms.Count > 0 || criteria.TagTerms.Count > 0)
@@ -289,8 +296,10 @@ public class GeoTrackToolService : IGeoTrackToolService
                 EntityType = "event",
                 Title = evt.Name,
                 Description = Trim(evt.Description, 280),
-                Location = evt.Place != null ? evt.Place.Name : evt.Location.Name,
-                Destination = evt.Location.Destination.Name,
+                Location = evt.Place != null
+                    ? evt.Place.Name
+                    : evt.Location != null ? evt.Location.Name : evt.Destination.Name,
+                Destination = evt.Destination.Name,
                 Category = evt.EventType.Name,
                 DetailRoute = "/events/" + evt.Id,
                 ImageUrl = evt.Images
@@ -302,10 +311,14 @@ public class GeoTrackToolService : IGeoTrackToolService
                     .FirstOrDefault(),
                 Latitude = evt.Place != null && HasUsableCoordinates(evt.Place.Latitude, evt.Place.Longitude)
                     ? evt.Place.Latitude
-                    : (HasUsableCoordinates(evt.Location.Latitude, evt.Location.Longitude) ? evt.Location.Latitude : null),
+                    : evt.Location != null && HasUsableCoordinates(evt.Location.Latitude, evt.Location.Longitude)
+                        ? evt.Location.Latitude
+                        : HasUsableCoordinates(evt.Destination.Latitude, evt.Destination.Longitude) ? evt.Destination.Latitude : null,
                 Longitude = evt.Place != null && HasUsableCoordinates(evt.Place.Latitude, evt.Place.Longitude)
                     ? evt.Place.Longitude
-                    : (HasUsableCoordinates(evt.Location.Latitude, evt.Location.Longitude) ? evt.Location.Longitude : null),
+                    : evt.Location != null && HasUsableCoordinates(evt.Location.Latitude, evt.Location.Longitude)
+                        ? evt.Location.Longitude
+                        : HasUsableCoordinates(evt.Destination.Latitude, evt.Destination.Longitude) ? evt.Destination.Longitude : null,
                 StartsAt = evt.StartDate,
                 EndsAt = evt.EndDate,
                 Tags = evt.EventTags
@@ -328,6 +341,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         var item = await _db.Events
             .AsNoTracking()
+            .WherePublicEvents()
             .Where(evt => evt.Id == id)
             .Select(evt => new GeoTrackToolItemDto
             {
@@ -335,8 +349,10 @@ public class GeoTrackToolService : IGeoTrackToolService
                 EntityType = "event",
                 Title = evt.Name,
                 Description = Trim(evt.Description, 800),
-                Location = evt.Place != null ? evt.Place.Name : evt.Location.Name,
-                Destination = evt.Location.Destination.Name,
+                Location = evt.Place != null
+                    ? evt.Place.Name
+                    : evt.Location != null ? evt.Location.Name : evt.Destination.Name,
+                Destination = evt.Destination.Name,
                 Category = evt.EventType.Name,
                 DetailRoute = "/events/" + evt.Id,
                 ImageUrl = evt.Images
@@ -348,10 +364,14 @@ public class GeoTrackToolService : IGeoTrackToolService
                     .FirstOrDefault(),
                 Latitude = evt.Place != null && HasUsableCoordinates(evt.Place.Latitude, evt.Place.Longitude)
                     ? evt.Place.Latitude
-                    : (HasUsableCoordinates(evt.Location.Latitude, evt.Location.Longitude) ? evt.Location.Latitude : null),
+                    : evt.Location != null && HasUsableCoordinates(evt.Location.Latitude, evt.Location.Longitude)
+                        ? evt.Location.Latitude
+                        : HasUsableCoordinates(evt.Destination.Latitude, evt.Destination.Longitude) ? evt.Destination.Latitude : null,
                 Longitude = evt.Place != null && HasUsableCoordinates(evt.Place.Latitude, evt.Place.Longitude)
                     ? evt.Place.Longitude
-                    : (HasUsableCoordinates(evt.Location.Latitude, evt.Location.Longitude) ? evt.Location.Longitude : null),
+                    : evt.Location != null && HasUsableCoordinates(evt.Location.Latitude, evt.Location.Longitude)
+                        ? evt.Location.Longitude
+                        : HasUsableCoordinates(evt.Destination.Latitude, evt.Destination.Longitude) ? evt.Destination.Longitude : null,
                 StartsAt = evt.StartDate,
                 EndsAt = evt.EndDate,
                 Tags = evt.EventTags
@@ -381,6 +401,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         var placeCount = await _db.Places
             .AsNoTracking()
+            .WherePublicPlaces()
             .Where(place =>
                 place.Stay == null &&
                 EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null &&
@@ -389,6 +410,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         var stayCount = await _db.Places
             .AsNoTracking()
+            .WherePublicPlaces()
             .Where(place =>
                 place.Stay != null &&
                 EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null &&
@@ -397,6 +419,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         var eventCount = await _db.Events
             .AsNoTracking()
+            .WherePublicEvents()
             .Where(evt =>
                 EF.Property<Point?>(evt, SpatialPointFactory.CoordinatesPropertyName) != null &&
                 EF.Property<Point>(evt, SpatialPointFactory.CoordinatesPropertyName).Intersects(envelope))
@@ -640,6 +663,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         var destinations = await _db.Destinations
             .AsNoTracking()
+            .WherePublicDestinations()
             .Select(destination => new
             {
                 destination.Id,
@@ -663,6 +687,7 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         var locations = await _db.Locations
             .AsNoTracking()
+            .WherePublicLocations()
             .Select(location => new
             {
                 location.DestinationId,
@@ -746,8 +771,9 @@ public class GeoTrackToolService : IGeoTrackToolService
         return query.Where(evt =>
             EF.Functions.ILike(evt.Name, pattern) ||
             EF.Functions.ILike(evt.Description, pattern) ||
-            EF.Functions.ILike(evt.Location.Name, pattern) ||
-            EF.Functions.ILike(evt.Location.Destination.Name, pattern) ||
+            EF.Functions.ILike(evt.Destination.Name, pattern) ||
+            (evt.Location != null && EF.Functions.ILike(evt.Location.Name, pattern)) ||
+            (evt.Place != null && EF.Functions.ILike(evt.Place.Name, pattern)) ||
             EF.Functions.ILike(evt.EventType.Name, pattern) ||
             (evt.HostedBy != null && EF.Functions.ILike(evt.HostedBy, pattern)) ||
             evt.EventTags.Any(tag =>

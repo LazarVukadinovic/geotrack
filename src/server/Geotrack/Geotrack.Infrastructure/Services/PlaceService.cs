@@ -152,11 +152,8 @@ public class PlaceService : IPlaceService
             .Include(p => p.PlaceBookingPartners)
                 .ThenInclude(placeBookingPartner => placeBookingPartner.BookingPartner)
             .AsSplitQuery()
-            .FirstOrDefaultAsync(p =>
-                p.Id == id &&
-                p.Status == PublishedStatus &&
-                p.Location.Status == PublishedStatus &&
-                p.Location.Destination.Status == PublishedStatus);
+            .WherePublicPlaces()
+            .FirstOrDefaultAsync(p => p.Id == id);
 
         if (place is null)
         {
@@ -180,11 +177,9 @@ public class PlaceService : IPlaceService
             .AsNoTracking()
             .Include(p => p.PlaceReviews)
             .Include(p => p.Images)
+            .WherePublicPlaces()
             .Where(p =>
                 p.Id != id &&
-                p.Status == PublishedStatus &&
-                p.Location.Status == PublishedStatus &&
-                p.Location.Destination.Status == PublishedStatus &&
                 p.Stay == null &&
                 p.PlaceTypeId == place.PlaceTypeId &&
                 p.Location.DestinationId == place.Location.DestinationId)
@@ -199,6 +194,7 @@ public class PlaceService : IPlaceService
         var relatedEvents = await _db.Events
             .AsNoTracking()
             .Include(e => e.Images)
+            .WherePublicEvents()
             .Where(e => e.PlaceId == id)
             .OrderBy(e => e.StartDate)
             .Take(5)
@@ -625,18 +621,17 @@ public class PlaceService : IPlaceService
 
     public async Task<GetPlaceEventsResponseDto> GetPlaceEventsAsync(int placeId)
     {
-        var exists = await _db.Places.AnyAsync(p =>
-            p.Id == placeId &&
-            p.Status == PublishedStatus &&
-            p.Location.Status == PublishedStatus &&
-            p.Location.Destination.Status == PublishedStatus);
+        var exists = await _db.Places
+            .WherePublicPlaces()
+            .AnyAsync(p => p.Id == placeId);
         if (!exists)
         {
             throw new KeyNotFoundException("Place not found");
         }
 
         var events = await _db.Events
-            .Where(e => e.PlaceId == placeId && e.Status == PublishedStatus)
+            .WherePublicEvents()
+            .Where(e => e.PlaceId == placeId)
             .OrderBy(e => e.StartDate)
             .ToListAsync();
 
