@@ -11,7 +11,9 @@ using Geotrack.Server;
 using Geotrack.Server.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.StaticFiles;
@@ -26,6 +28,16 @@ using System.Text;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var uploadLimits = builder.Configuration
+    .GetSection("UploadLimits")
+    .Get<UploadLimitsOptions>()
+    ?? new UploadLimitsOptions();
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = uploadLimits.GlobalMaxRequestBodyBytes;
+});
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -58,6 +70,29 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.DefaultIgnoreCondition =
             System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     });
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var message = context.ModelState.Values
+            .SelectMany(value => value.Errors)
+            .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
+                ? error.Exception?.Message
+                : error.ErrorMessage)
+            .FirstOrDefault(errorMessage => !string.IsNullOrWhiteSpace(errorMessage))
+            ?? "Invalid request.";
+
+        if (message.Contains("Multipart body length limit", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ObjectResult(new { message = "Uploaded file is too large." })
+            {
+                StatusCode = StatusCodes.Status413PayloadTooLarge
+            };
+        }
+
+        return new BadRequestObjectResult(new { message });
+    };
+});
 
 builder.Services.AddMemoryCache();
 builder.Services.AddResponseCompression(options =>
@@ -87,6 +122,11 @@ builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection
 builder.Services.Configure<BoundaryImportOptions>(builder.Configuration.GetSection("BoundaryImport"));
 builder.Services.Configure<RegionBoundaryBackfillOptions>(builder.Configuration.GetSection("RegionBoundaryBackfill"));
 builder.Services.Configure<RegionalScopeValidationOptions>(builder.Configuration.GetSection("RegionalScopeValidation"));
+builder.Services.Configure<UploadLimitsOptions>(builder.Configuration.GetSection("UploadLimits"));
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = uploadLimits.GlobalMultipartBodyLengthLimitBytes;
+});
 builder.Services.AddDataProtection()
     .SetApplicationName("GeoTrack");
 
@@ -392,6 +432,78 @@ builder.Services.AddRateLimiter(options =>
                 ?? httpContext.Request.Headers["X-Anonymous-Session"].ToString()
                 ?? httpContext.Connection.RemoteIpAddress?.ToString()
                 ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("reviews", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("reports", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("contributions", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 12,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("uploads", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("support", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("userActions", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 60,
@@ -791,6 +903,20 @@ static string GetUserOrIpRateLimitPartition(HttpContext httpContext)
     }
 
     return $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+}
+
+static string GetUserAndIpRateLimitPartition(HttpContext httpContext)
+{
+    var ipAddress = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    var userId = httpContext.User.FindFirst("userId")?.Value
+        ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    if (!string.IsNullOrWhiteSpace(userId))
+    {
+        return $"user:{userId}:ip:{ipAddress}";
+    }
+
+    return $"ip:{ipAddress}";
 }
 
 static bool IsDemoContentSeedEnabledForEnvironment(IHostEnvironment environment, IConfiguration configuration)
