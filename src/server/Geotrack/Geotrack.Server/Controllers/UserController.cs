@@ -1,8 +1,12 @@
 using Geotrack.Application.DTOs.Tags;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Options;
+using Geotrack.Server.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 
 namespace Geotrack.Server.Controllers;
 
@@ -11,20 +15,15 @@ namespace Geotrack.Server.Controllers;
 [Authorize]
 public class UserController : ControllerBase
 {
-    private const long MaxAvatarFileSizeBytes = 5 * 1024 * 1024;
-    private static readonly HashSet<string> AllowedAvatarContentTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "image/png",
-        "image/jpeg",
-        "image/jpg",
-        "image/webp",
-    };
-
     private readonly IUserService _userService;
+    private readonly UploadLimitsOptions _uploadLimits;
 
-    public UserController(IUserService userService)
+    public UserController(
+        IUserService userService,
+        IOptions<UploadLimitsOptions> uploadLimits)
     {
         _userService = userService;
+        _uploadLimits = uploadLimits.Value;
     }
 
     [HttpGet("me")]
@@ -56,6 +55,9 @@ public class UserController : ControllerBase
 
     [HttpPut("me/avatar")]
     [Consumes("multipart/form-data")]
+    [EnableRateLimiting("uploads")]
+    [RequestSizeLimit(UploadLimitDefaults.UserAvatarMaxFileSizeBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.UserAvatarMaxFileSizeBytes)]
     public async Task<ActionResult<UpdateAvatarResponseDto>> UpdateAvatar(
         IFormFile? avatar)
     {
@@ -64,16 +66,10 @@ public class UserController : ControllerBase
             if (avatar is null || avatar.Length == 0)
                 return BadRequest(new { message = "Please select an image to upload." });
 
-            if (avatar.Length > MaxAvatarFileSizeBytes)
-                return BadRequest(new { message = "Profile image must be 5 MB or smaller." });
+            await UploadValidation.ValidateUserAvatarAsync(avatar, _uploadLimits, HttpContext.RequestAborted);
+            var fileBytes = await UploadValidation.ReadFileBytesAsync(avatar, HttpContext.RequestAborted);
 
-            if (!IsAllowedAvatarContentType(avatar.ContentType))
-                return BadRequest(new { message = "Only PNG, JPG, JPEG, or WEBP images are supported." });
-
-            await using var memoryStream = new MemoryStream();
-            await avatar.CopyToAsync(memoryStream);
-
-            return Ok(await _userService.UpdateAvatarAsync(GetUserId(), memoryStream.ToArray()));
+            return Ok(await _userService.UpdateAvatarAsync(GetUserId(), fileBytes!));
         }
         catch (Exception ex)
         {
@@ -186,6 +182,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPost("me/support-requests")]
+    [EnableRateLimiting("support")]
     public async Task<ActionResult<CreateSupportRequestResponseDto>> CreateSupportRequest([FromBody] CreateSupportRequestRequestDto request)
     {
         try
@@ -239,6 +236,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPost("me/collections")]
+    [EnableRateLimiting("userActions")]
     public async Task<ActionResult<CreateCollectionResponseDto>> CreateCollection([FromBody] CreateCollectionRequestDto request)
     {
         try
@@ -265,6 +263,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPut("me/collections/{id:int}")]
+    [EnableRateLimiting("userActions")]
     public async Task<ActionResult<UpdateCollectionResponseDto>> UpdateCollection([FromRoute] int id, [FromBody] UpdateCollectionRequestDto request)
     {
         try
@@ -278,6 +277,7 @@ public class UserController : ControllerBase
     }
 
     [HttpDelete("me/collections/{id:int}")]
+    [EnableRateLimiting("userActions")]
     public async Task<ActionResult> DeleteCollection([FromRoute] int id)
     {
         try
@@ -292,6 +292,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPost("me/collections/{id:int}/items")]
+    [EnableRateLimiting("userActions")]
     public async Task<ActionResult<AddCollectionItemResponseDto>> AddCollectionItem([FromRoute] int id, [FromBody] AddCollectionItemRequestDto request)
     {
         try
@@ -305,6 +306,7 @@ public class UserController : ControllerBase
     }
 
     [HttpDelete("me/collections/{id:int}/items/{itemId:int}")]
+    [EnableRateLimiting("userActions")]
     public async Task<ActionResult> DeleteCollectionItem([FromRoute] int id, [FromRoute] int itemId)
     {
         try
@@ -408,12 +410,6 @@ public class UserController : ControllerBase
         }
     }
 
-    private static bool IsAllowedAvatarContentType(string? contentType)
-    {
-        return string.IsNullOrWhiteSpace(contentType) ||
-            AllowedAvatarContentTypes.Contains(contentType.Trim());
-    }
-
     private int GetUserId()
     {
         var userIdClaim = User.FindFirst("userId")?.Value;
@@ -428,6 +424,7 @@ public class UserController : ControllerBase
     {
         return ex switch
         {
+            UploadValidationException upload => StatusCode(upload.StatusCode, new { message = upload.Message }),
             UnauthorizedAccessException => Unauthorized(new { message = ex.Message }),
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException => BadRequest(new { message = ex.Message }),
