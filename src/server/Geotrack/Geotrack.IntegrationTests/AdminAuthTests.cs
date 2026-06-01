@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.Security;
@@ -35,10 +36,10 @@ public sealed class AdminAuthTests
 
         response.EnsureSuccessStatusCode();
         Assert.True(response.Headers.TryGetValues("Set-Cookie", out var cookies));
-        Assert.Contains(cookies, IsSharedRefreshCookie);
+        var sharedCookie = Assert.Single(cookies, IsSharedRefreshCookie);
+        AssertSharedRefreshCookieFlags(sharedCookie);
 
-        var session = await response.Content.ReadFromJsonAsync<AdminLoginResponseDto>();
-        Assert.NotNull(session);
+        var session = await ReadAdminSessionWithoutRefreshTokenAsync(response);
         Assert.False(string.IsNullOrWhiteSpace(session.AccessToken));
         Assert.True(session.ExpiresAt > DateTime.UtcNow);
         Assert.Equal("elena@example.com", session.User.Email);
@@ -171,21 +172,74 @@ public sealed class AdminAuthTests
         await GrantRegionalManagerRoleAsync(app, "elena@example.com");
 
         using var client = app.CreateClient();
-        await LoginRegionalManagerAsync(client);
+        var login = await client.PostAsJsonAsync(
+            "/api/admin/auth/login",
+            new LoginRequestDto
+            {
+                Email = "elena@example.com",
+                Password = "password123",
+                RememberMe = false
+            });
+        login.EnsureSuccessStatusCode();
+
+        Assert.True(login.Headers.TryGetValues("Set-Cookie", out var loginCookies));
+        var loginCookie = Assert.Single(loginCookies, IsSharedRefreshCookie);
+        AssertSharedRefreshCookieFlags(loginCookie);
+
+        var loginSession = await ReadAdminSessionWithoutRefreshTokenAsync(login);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", loginSession.AccessToken);
 
         var refresh = await client.PostAsJsonAsync("/api/admin/auth/refresh", new { });
         refresh.EnsureSuccessStatusCode();
 
-        var refreshedSession = await refresh.Content.ReadFromJsonAsync<AdminLoginResponseDto>();
-        Assert.NotNull(refreshedSession);
+        Assert.True(refresh.Headers.TryGetValues("Set-Cookie", out var refreshCookies));
+        var refreshCookie = Assert.Single(refreshCookies, IsSharedRefreshCookie);
+        AssertSharedRefreshCookieFlags(refreshCookie);
+        Assert.NotEqual(ExtractCookieValue(loginCookie), ExtractCookieValue(refreshCookie));
+
+        var refreshedSession = await ReadAdminSessionWithoutRefreshTokenAsync(refresh);
         Assert.False(string.IsNullOrWhiteSpace(refreshedSession.AccessToken));
         Assert.Contains(RoleNames.RegionalManager, refreshedSession.User.Roles);
 
         var logout = await client.PostAsJsonAsync("/api/admin/auth/logout", new { });
         Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+        Assert.True(logout.Headers.TryGetValues("Set-Cookie", out var logoutCookies));
+        Assert.Contains(logoutCookies, IsSharedRefreshCookieDeletion);
 
         var refreshAfterLogout = await client.PostAsJsonAsync("/api/admin/auth/refresh", new { });
         Assert.Equal(HttpStatusCode.Unauthorized, refreshAfterLogout.StatusCode);
+    }
+
+    [Fact]
+    public async Task Refresh_cookie_flags_are_secure_when_request_is_https()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+
+        using var client = app.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/admin/auth/login")
+        {
+            Content = JsonContent.Create(new LoginRequestDto
+            {
+                Email = "zika@gmail.com",
+                Password = "Proba123!",
+                RememberMe = true
+            })
+        };
+
+        using var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        Assert.True(response.Headers.TryGetValues("Set-Cookie", out var cookies));
+        var sharedCookie = Assert.Single(cookies, IsSharedRefreshCookie);
+        AssertSharedRefreshCookieFlags(sharedCookie);
+        Assert.Contains("secure", sharedCookie, StringComparison.OrdinalIgnoreCase);
+
+        var session = await ReadAdminSessionWithoutRefreshTokenAsync(response);
+        Assert.Equal("zika@gmail.com", session.User.Email);
     }
 
     [Fact]
@@ -413,6 +467,26 @@ public sealed class AdminAuthTests
         return session;
     }
 
+    private static async Task<AdminLoginResponseDto> ReadAdminSessionWithoutRefreshTokenAsync(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        AssertNoRefreshTokenJson(body);
+
+        var session = JsonSerializer.Deserialize<AdminLoginResponseDto>(body, JsonOptions);
+        Assert.NotNull(session);
+        Assert.Equal(string.Empty, session!.RefreshToken);
+
+        return session;
+    }
+
+    private static void AssertNoRefreshTokenJson(string body)
+    {
+        using var document = JsonDocument.Parse(body);
+        Assert.False(
+            document.RootElement.TryGetProperty("refreshToken", out _),
+            $"Admin auth response must not include refreshToken JSON. Body: {body}");
+    }
+
     private static async Task GrantRegionalManagerRoleAsync(GeotrackApiFactory app, string email)
     {
         await using var scope = app.Services.CreateAsyncScope();
@@ -445,4 +519,35 @@ public sealed class AdminAuthTests
             && !value.Contains("expires=Thu, 01 Jan 1970", StringComparison.OrdinalIgnoreCase)
             && !value.Contains("expires=Thu, 01 Jan 1970 00:00:00 GMT", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsSharedRefreshCookieDeletion(string value)
+    {
+        var lower = value.ToLowerInvariant();
+
+        return value.Contains("geotrack_refresh=", StringComparison.Ordinal)
+            && (lower.Contains("path=/api;") || lower.EndsWith("path=/api"))
+            && value.Contains("expires=Thu, 01 Jan 1970", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AssertSharedRefreshCookieFlags(string value)
+    {
+        Assert.Contains("httponly", value, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=lax", value, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("path=/api", value, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ExtractCookieValue(string setCookie)
+    {
+        const string prefix = "geotrack_refresh=";
+        var start = setCookie.IndexOf(prefix, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Missing {prefix} in Set-Cookie header.");
+
+        start += prefix.Length;
+        var end = setCookie.IndexOf(';', start);
+        return end >= 0
+            ? setCookie[start..end]
+            : setCookie[start..];
+    }
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 }
