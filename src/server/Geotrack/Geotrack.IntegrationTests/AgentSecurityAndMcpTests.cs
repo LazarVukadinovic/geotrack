@@ -6,8 +6,10 @@ using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Infrastructure;
 using Geotrack.IntegrationTests.Infrastructure;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace Geotrack.IntegrationTests;
@@ -62,9 +64,39 @@ public class AgentSecurityAndMcpTests
     }
 
     [Fact]
-    public async Task Chat_without_gemini_keys_returns_safe_unavailable_response()
+    public async Task Legacy_agent_message_endpoint_is_retired()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/agent/message",
+            new { text = "Find restaurants" });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Chat_requires_authentication()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/agent/chat",
+            new AgentChatRequestDto
+            {
+                Message = "Find restaurants"
+            });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Chat_without_gemini_keys_returns_safe_unavailable_response()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync(
+            configurationOverrides: NoGeminiKeysOverrides());
         var (client, _) = await RegisterFreshUserAsync(app);
 
         var response = await client.PostAsJsonAsync(
@@ -104,6 +136,82 @@ public class AgentSecurityAndMcpTests
         Assert.NotNull(error);
         Assert.Equal("invalid_request", error!["code"]);
         Assert.DoesNotContain("user-supplied-key", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Frontend_apps_do_not_reference_legacy_agent_message_endpoint()
+    {
+        var repoRoot = FindRepoRoot();
+        var frontendRoots = new[]
+        {
+            Path.Combine(repoRoot, "user-app", "src"),
+            Path.Combine(repoRoot, "admin-app", "src")
+        };
+        var matches = frontendRoots
+            .Where(Directory.Exists)
+            .SelectMany(root => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            .Where(IsFrontendSourceFile)
+            .Where(file =>
+            {
+                var text = File.ReadAllText(file);
+                return text.Contains("/api/agent/message", StringComparison.OrdinalIgnoreCase)
+                    || text.Contains("/agent/message", StringComparison.OrdinalIgnoreCase);
+            })
+            .Select(file => Path.GetRelativePath(repoRoot, file))
+            .ToList();
+
+        Assert.Empty(matches);
+    }
+
+    [Fact]
+    public async Task Mcp_is_disabled_by_default_in_production_configuration()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync(
+            Environments.Production,
+            new Dictionary<string, string?>
+            {
+                ["Mcp:Enabled"] = "false",
+                ["Seed:EnableOperationalSeed"] = "false",
+                ["Seed:EnablePublicContentSeed"] = "false",
+                ["Seed:SyncAdm1Regions:Enabled"] = "false"
+            });
+        using var client = app.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://softeng.pmf.kg.ac.rs:10133")
+        });
+
+        var get = await client.GetAsync("/api/mcp");
+        var post = await PostMcpJsonAsync(
+            client,
+            new { jsonrpc = "2.0", id = 1, method = "tools/list" });
+
+        Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, post.StatusCode);
+        var body = await post.Content.ReadAsStringAsync();
+        Assert.Contains("disabled", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("geotrack_search_places", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Mcp_rejects_anonymous_requests_when_auth_required()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync(
+            configurationOverrides: new Dictionary<string, string?>
+            {
+                ["Mcp:Enabled"] = "true",
+                ["Mcp:RequireAuth"] = "true",
+                ["Mcp:AllowAnonymousPublicTools"] = "false"
+            });
+        using var client = app.CreateClient();
+
+        var response = await PostMcpJsonAsync(
+            client,
+            new { jsonrpc = "2.0", id = 1, method = "tools/list" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("requires authentication", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("geotrack_search_places", body, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -377,5 +485,37 @@ public class AgentSecurityAndMcpTests
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
         return await client.SendAsync(request);
+    }
+
+    private static Dictionary<string, string?> NoGeminiKeysOverrides() =>
+        Enumerable.Range(0, 50)
+            .ToDictionary(index => $"Gemini:ApiKeys:{index}", _ => (string?)string.Empty);
+
+    private static string FindRepoRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (Directory.Exists(Path.Combine(directory.FullName, "server", "Geotrack")) &&
+                Directory.Exists(Path.Combine(directory.FullName, "user-app", "src")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the GeoTrack repository root.");
+    }
+
+    private static bool IsFrontendSourceFile(string file)
+    {
+        var extension = Path.GetExtension(file);
+        return extension.Equals(".ts", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".scss", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".css", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".js", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".json", StringComparison.OrdinalIgnoreCase);
     }
 }
