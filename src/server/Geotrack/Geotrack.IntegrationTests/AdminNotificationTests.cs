@@ -525,8 +525,8 @@ public sealed class AdminNotificationTests
                     Latitude = fixture.Latitude,
                     Longitude = fixture.Longitude
                 },
-                cardImageBytes: null,
-                coverImageBytes: null,
+                cardImageBytes: TestPngBytes(),
+                coverImageBytes: TestPngBytes(),
                 galleryImageBytes: null,
                 ownershipProofBytes: null,
                 ownershipProofOriginalFileName: null,
@@ -1225,4 +1225,8 @@ public sealed class AdminNotificationTests
         int RegionId,
         double Latitude,
         double Longitude);
+
+    private static byte[] TestPngBytes() =>
+        Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=");
 }

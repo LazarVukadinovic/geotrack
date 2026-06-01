@@ -310,6 +310,59 @@ public sealed class RegionalLocationsTests
     }
 
     [Fact]
+    public async Task Regional_image_upload_rejects_invalid_files_and_still_accepts_valid_image()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateLocationsFixtureAsync(app);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+
+        using (var oversized = BuildImageUploadContent(
+            BytesWithPrefix((8 * 1024 * 1024) + 1, TestPngBytes()),
+            "too-large.png",
+            "image/png"))
+        {
+            var response = await manager.PostAsync(
+                $"/api/admin/regional/media/images?regionId={fixture.AssignedRegionId}",
+                oversized);
+            Assert.Equal((HttpStatusCode)413, response.StatusCode);
+        }
+
+        using (var unsupported = BuildImageUploadContent(
+            TestPngBytes(),
+            "image.gif",
+            "image/gif"))
+        {
+            var response = await manager.PostAsync(
+                $"/api/admin/regional/media/images?regionId={fixture.AssignedRegionId}",
+                unsupported);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        using (var mismatched = BuildImageUploadContent(
+            new byte[] { 1, 2, 3, 4 },
+            "image.png",
+            "image/png"))
+        {
+            var response = await manager.PostAsync(
+                $"/api/admin/regional/media/images?regionId={fixture.AssignedRegionId}",
+                mismatched);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        using (var tooMany = BuildManyImageUploadContent(13))
+        {
+            var response = await manager.PostAsync(
+                $"/api/admin/regional/media/images?regionId={fixture.AssignedRegionId}",
+                tooMany);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        var upload = await UploadOneImageAsync(manager, fixture.AssignedRegionId);
+        Assert.StartsWith("/media/uploads/regional/", upload.Url);
+    }
+
+    [Fact]
     public async Task Location_selector_tag_and_type_endpoints_are_backend_scoped()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -728,10 +781,7 @@ public sealed class RegionalLocationsTests
 
     private static async Task<RegionalImageUploadResultDto> UploadOneImageAsync(HttpClient client, int regionId)
     {
-        using var form = new MultipartFormDataContent();
-        using var content = new ByteArrayContent(TestPngBytes());
-        content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-        form.Add(content, "files", "cover.png");
+        using var form = BuildImageUploadContent(TestPngBytes(), "cover.png", "image/png");
 
         var response = await client.PostAsync($"/api/admin/regional/media/images?regionId={regionId}", form);
         response.EnsureSuccessStatusCode();
@@ -776,6 +826,38 @@ public sealed class RegionalLocationsTests
     private static byte[] TestPngBytes() =>
         Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=");
+
+    private static MultipartFormDataContent BuildImageUploadContent(
+        byte[] bytes,
+        string fileName,
+        string contentType)
+    {
+        var form = new MultipartFormDataContent();
+        var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        form.Add(content, "files", fileName);
+        return form;
+    }
+
+    private static MultipartFormDataContent BuildManyImageUploadContent(int count)
+    {
+        var form = new MultipartFormDataContent();
+        for (var index = 0; index < count; index++)
+        {
+            var content = new ByteArrayContent(TestPngBytes());
+            content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            form.Add(content, "files", $"gallery-{index}.png");
+        }
+
+        return form;
+    }
+
+    private static byte[] BytesWithPrefix(int length, byte[] prefix)
+    {
+        var bytes = new byte[length];
+        prefix.CopyTo(bytes, 0);
+        return bytes;
+    }
 
     private sealed record LocationsFixture(
         int AssignedRegionId,

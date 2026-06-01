@@ -398,11 +398,11 @@ public sealed class AuthFavoritesCollectionsTests
 
         using var oversizedUpload = CreateAvatarUploadContent(new byte[(5 * 1024 * 1024) + 1], "avatar.png", "image/png");
         var oversizedResponse = await client.PutAsync("/api/user/me/avatar", oversizedUpload);
-        Assert.Equal(HttpStatusCode.BadRequest, oversizedResponse.StatusCode);
+        Assert.Equal((HttpStatusCode)413, oversizedResponse.StatusCode);
 
         var oversizedError = await oversizedResponse.Content.ReadFromJsonAsync<Dictionary<string, string>>();
         Assert.NotNull(oversizedError);
-        Assert.Equal("Profile image must be 5 MB or smaller.", oversizedError["message"]);
+        Assert.Equal("Uploaded file is too large.", oversizedError["message"]);
     }
 
     [Fact]
