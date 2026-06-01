@@ -42,6 +42,7 @@ namespace Geotrack.Application.Services
             {
                 Id = region.Id,
                 Name = region.Name,
+                Description = region.Description,
                 TerritoryId = region.TerritoryId,
                 TerritoryName = region.Territory?.Name,
                 Managers = region.RegionalManagerRegions

@@ -5,25 +5,23 @@
   color: var(--color-primary-navy, #1a2b4c);
 }
 
-.ehd {
-  width: min(1080px, 100%);
-  margin: 0 auto;
-  padding: 18px 18px 64px;
-}
-
 .ehd__top-bar {
   position: sticky;
   top: 0;
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 64px;
-  margin: -18px -18px 18px;
-  padding: 0 18px;
+  justify-content: space-between;
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 18px 16px;
   background: #1a2b4c;
   border-radius: 0 0 20px 20px;
   box-shadow: 0 4px 16px rgba(26, 43, 76, 0.15);
+}
+
+.ehd {
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  padding: 18px 18px 64px;
 }
 
 .ehd__back {
@@ -49,12 +47,19 @@
 }
 
 .ehd__top-title {
-  flex: 1;
-  text-align: center;
-  margin-right: 38px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   color: #ffffff;
   font-weight: 800;
   font-size: 18px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.ehd__back-spacer {
+  width: 38px;
+  flex-shrink: 0;
 }
 
 .ehd__hero-panel,
@@ -120,11 +125,33 @@
   letter-spacing: -0.04em;
 }
 
-.ehd__description {
-  max-width: 760px;
+.ehd__description-wrap {
   margin: 16px 0 0;
+  max-width: 760px;
+}
+
+.ehd__description {
+  margin: 0;
   color: var(--color-muted, #6b7a99);
   line-height: 1.7;
+
+  &--collapsed {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+}
+
+.ehd__description-toggle {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #e8570a;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .ehd__muted {
@@ -232,15 +259,36 @@
 }
 
 .ehd__section-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding: 8px 10px;
   border-radius: 10px;
   color: var(--color-primary-navy, #1a2b4c);
   font-size: 14px;
   font-weight: 600;
+  text-decoration: none;
 
   &:hover {
     background: rgba(26, 43, 76, 0.05);
   }
+}
+
+.ehd__section-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-primary-navy, #1a2b4c);
+}
+
+.ehd__section-item-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-muted, #6b7a99);
+  line-height: 1.5;
 }
 
 .ehd__section-see-all {

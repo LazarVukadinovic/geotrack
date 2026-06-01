@@ -44,6 +44,7 @@ public class LocationService : ILocationService
         {
             Id = location.Id,
             Name = location.Name,
+            Description = string.IsNullOrWhiteSpace(location.Description) ? null : location.Description,
             DestinationId = location.DestinationId,
             DestinationName = location.Destination?.Name,
             LocationTypeId = location.LocationTypeId,

@@ -19,6 +19,7 @@ interface DetailSectionPreview {
   places?: unknown[];
   events?: unknown[];
   locations?: unknown[];
+
 }
 
 interface HierarchyDetail {
@@ -56,6 +57,7 @@ export class EntityHierarchyDetailPageComponent {
   protected readonly loadState = signal<LoadState>('loading');
 
   protected readonly expandedSectionIndex = signal<number | null>(null);
+  protected readonly descriptionExpanded = signal(false);
 
   protected toggleSection(index: number): void {
     this.expandedSectionIndex.update(current => current === index ? null : index);
@@ -67,7 +69,7 @@ export class EntityHierarchyDetailPageComponent {
           (section.locations?.length ?? 0);
   }
 
-  protected sectionItems(section: DetailSectionPreview): { name: string; route?: string }[] {
+  protected sectionItems(section: DetailSectionPreview): { name: string; description?: string; route?: string }[] {
     const all = [
     ...(section.places ?? []),
     ...(section.events ?? []),
@@ -75,6 +77,7 @@ export class EntityHierarchyDetailPageComponent {
   ] as Record<string, unknown>[];
     return all.map(item => ({
     name: String(item['name'] ?? item['title'] ?? 'Item'),
+    description: item['description'] ? String(item['description']) : undefined,
     route: item['route'] ? String(item['route']) : undefined,
   }));
   }
@@ -185,7 +188,7 @@ export class EntityHierarchyDetailPageComponent {
         parent: regionId
           ? { label: 'Region', name: regionName ?? `Region #${regionId}`, route: `/regions/${regionId}` }
           : null,
-        sections: this.mapSectionsWithRoutes(dto),
+        sections: this.mapSectionsWithRoutes(dto, false),
       };
     }
     case 'region': {
@@ -196,6 +199,7 @@ export class EntityHierarchyDetailPageComponent {
         id,
         title,
         typeLabel: 'Region',
+        description: this.toNullableString(dto['description']) ?? undefined,
         parent: territoryId
           ? { label: 'Territory', name: territoryName ?? `Territory #${territoryId}`, route: `/territories/${territoryId}` }
           : null,
@@ -215,6 +219,7 @@ export class EntityHierarchyDetailPageComponent {
         id,
         title,
         typeLabel: 'Territory',
+        description: this.toNullableString(dto['description']) ?? undefined,
         parent: null,
         sections: regions.length > 0 ? [{
           sectionTitle: 'Regions',
@@ -229,15 +234,17 @@ export class EntityHierarchyDetailPageComponent {
   }
 }
 
-private mapSectionsWithRoutes(dto: Record<string, unknown>): DetailSectionPreview[] {
+private mapSectionsWithRoutes(dto: Record<string, unknown>, includePlaces = true): DetailSectionPreview[] {
   const sections = Array.isArray(dto['sections']) ? dto['sections'] as Record<string, unknown>[] : [];
   return sections.map(section => ({
     sectionKey: this.toStringValue(section['key']),
     sectionTitle: this.toStringValue(section['title']),
     locations: (Array.isArray(section['locations']) ? section['locations'] as Record<string, unknown>[] : [])
-      .map(l => ({ id: l['id'], name: l['name'], route: `/locations/${l['id']}` })),
-    places: (Array.isArray(section['places']) ? section['places'] as Record<string, unknown>[] : [])
-      .map(p => ({ id: p['id'], name: p['name'], route: `/places/${p['id']}` })),
+      .map(l => ({ id: l['id'], name: l['name'], description: l['description'] ?? null, route: `/locations/${l['id']}` })),
+    places: includePlaces
+      ? (Array.isArray(section['places']) ? section['places'] as Record<string, unknown>[] : [])
+          .map(p => ({ id: p['id'], name: p['name'], route: `/places/${p['id']}` }))
+      : [],
   }));
 }
 

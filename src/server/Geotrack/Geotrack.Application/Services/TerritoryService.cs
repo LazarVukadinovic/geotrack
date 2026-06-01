@@ -43,10 +43,12 @@ public class TerritoryService : ITerritoryService
         {
             Id = territory.Id,
             Name = territory.Name,
+            Description = territory.Description,
             Regions = territory.Regions.Select(r => new TerritoryRegionItemDto
             {
                 Id = r.Id,
-                Name = r.Name
+                Name = r.Name,
+                Description = r.Description
             }).ToList()
         };
     }

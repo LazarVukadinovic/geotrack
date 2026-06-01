@@ -287,6 +287,7 @@ public class DestinationService : IDestinationService
         {
             Id = location.Id,
             Name = location.Name,
+            Description = string.IsNullOrWhiteSpace(location.Description) ? null : location.Description,
             Latitude = location.Latitude,
             Longitude = location.Longitude
         };
