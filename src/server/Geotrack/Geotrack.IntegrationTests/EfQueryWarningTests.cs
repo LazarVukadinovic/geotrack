@@ -53,7 +53,8 @@ public sealed class EfQueryWarningTests
             strictDb,
             Options.Create(new RegionalScopeValidationOptions()));
 
-        var destinations = new RegionalDestinationService(strictDb, scopeValidation);
+        var sanitizer = new NoopContentHtmlSanitizer();
+        var destinations = new RegionalDestinationService(strictDb, scopeValidation, sanitizer);
         var destinationList = await destinations.GetDestinationsAsync(
             fixture.ManagerUserId,
             fixture.RegionId,
@@ -67,7 +68,7 @@ public sealed class EfQueryWarningTests
             fixture.RegionId,
             fixture.DestinationId);
 
-        var locations = new RegionalLocationService(strictDb, scopeValidation);
+        var locations = new RegionalLocationService(strictDb, scopeValidation, sanitizer);
         var locationList = await locations.GetLocationsAsync(
             fixture.ManagerUserId,
             fixture.RegionId,
@@ -81,7 +82,7 @@ public sealed class EfQueryWarningTests
             fixture.RegionId,
             fixture.LocationId);
 
-        var places = new RegionalPlaceService(strictDb, scopeValidation);
+        var places = new RegionalPlaceService(strictDb, scopeValidation, sanitizer);
         var placeList = await places.GetPlacesAsync(
             fixture.ManagerUserId,
             fixture.RegionId,
@@ -96,7 +97,7 @@ public sealed class EfQueryWarningTests
             fixture.RegionId,
             fixture.PlaceId);
 
-        var events = new RegionalEventService(strictDb, scopeValidation);
+        var events = new RegionalEventService(strictDb, scopeValidation, sanitizer);
         var eventList = await events.GetEventsAsync(
             fixture.ManagerUserId,
             fixture.RegionId,
@@ -134,10 +135,15 @@ public sealed class EfQueryWarningTests
         var location = await locationService.GetLocationDetailsAsync(fixture.LocationId, userId: null);
         var locationSection = await locationService.GetLocationSectionAsync(fixture.LocationId, "places");
 
+        var sanitizer = new NoopContentHtmlSanitizer();
+        var audit = new NoopModerationAuditService();
+
         var placeService = new PlaceService(
             strictDb,
             new NoopFavoriteService(),
-            new NoopReviewContentModerationService());
+            new NoopReviewContentModerationService(),
+            sanitizer,
+            audit);
         var place = await placeService.GetPlaceDetailAsync(fixture.PlaceId);
         var hotel = await placeService.GetHotelDetailAsync(fixture.StayPlaceId);
         var placeMaster = await placeService.GetPlaceDetailsAsync(fixture.PlaceId, userId: null);
@@ -408,5 +414,28 @@ public sealed class EfQueryWarningTests
     private sealed class NoopReviewContentModerationService : IReviewContentModerationService
     {
         public Task EnsureAllowedReviewTextAsync(string? text) => Task.CompletedTask;
+    }
+
+    private sealed class NoopContentHtmlSanitizer : IContentHtmlSanitizer
+    {
+        public string SanitizeRichText(string? html) => html?.Trim() ?? string.Empty;
+    }
+
+    private sealed class NoopModerationAuditService : IModerationAuditService
+    {
+        public Task RecordAsync(
+            int moderatorUserId,
+            string targetType,
+            int targetId,
+            string action,
+            string? previousStatus,
+            string? newStatus,
+            string? reason = null,
+            string? internalNote = null,
+            string? sourceArea = null,
+            string? metadataJson = null,
+            string? correlationId = null,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

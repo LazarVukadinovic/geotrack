@@ -129,7 +129,11 @@ public sealed class ContentModeratorEntityReviewTests
 
             var suspendResponse = await moderator.Client.PostAsJsonAsync(
                 $"/api/admin/content-moderator/entities/{entityType}/{entityId}/suspend",
-                new ContentModeratorModerationActionRequestDto { Reason = "Integration test suspension." });
+                new ContentModeratorModerationActionRequestDto
+                {
+                    Reason = "Integration test suspension.",
+                    InternalNote = "Internal suspension audit note."
+                });
             suspendResponse.EnsureSuccessStatusCode();
 
             var suspended = await suspendResponse.Content.ReadFromJsonAsync<ContentModeratorEntityReviewDetailDto>(JsonOptions);
@@ -139,6 +143,15 @@ public sealed class ContentModeratorEntityReviewTests
             Assert.Null(suspended.PublicDetailRoute);
             Assert.True(suspended.Permissions.CanUnsuspend);
             await AssertEntityStatusAsync(app, entityType, entityId, SuspendedStatus);
+            await AssertModerationAuditAsync(
+                app,
+                entityType,
+                entityId,
+                "SuspendEntity",
+                PublishedStatus,
+                SuspendedStatus,
+                "Integration test suspension.",
+                "Internal suspension audit note.");
 
             var publicSuspended = await moderator.Client.GetAsync(PublicDetailRoute(entityType, entityId));
             Assert.Equal(HttpStatusCode.NotFound, publicSuspended.StatusCode);
@@ -155,6 +168,15 @@ public sealed class ContentModeratorEntityReviewTests
             Assert.Equal(UserAppDetailRoute(entityType, entityId), unsuspended.PublicDetailRoute);
             Assert.True(unsuspended.Permissions.CanSuspend);
             await AssertEntityStatusAsync(app, entityType, entityId, PublishedStatus);
+            await AssertModerationAuditAsync(
+                app,
+                entityType,
+                entityId,
+                "UnsuspendEntity",
+                SuspendedStatus,
+                PublishedStatus,
+                "Integration test restore.",
+                internalNote: null);
 
             var deleteResponse = await moderator.Client.PostAsJsonAsync(
                 $"/api/admin/content-moderator/entities/{entityType}/{entityId}/delete",
@@ -168,10 +190,21 @@ public sealed class ContentModeratorEntityReviewTests
             Assert.Null(deleted.PublicDetailRoute);
             Assert.False(deleted.Permissions.CanDelete);
             await AssertEntityStatusAsync(app, entityType, entityId, DeletedStatus);
+            await AssertModerationAuditAsync(
+                app,
+                entityType,
+                entityId,
+                "DeleteEntity",
+                PublishedStatus,
+                DeletedStatus,
+                "Integration test delete.",
+                internalNote: null);
 
             var publicDeleted = await moderator.Client.GetAsync(PublicDetailRoute(entityType, entityId));
             Assert.Equal(HttpStatusCode.NotFound, publicDeleted.StatusCode);
         }
+
+        await AssertAuditIsAppendOnlyAcrossEntityActionsAsync(app, expectedCount: 12);
     }
 
     [Fact]
@@ -468,6 +501,61 @@ public sealed class ContentModeratorEntityReviewTests
         };
 
         Assert.Equal(expectedStatus, actual);
+    }
+
+    private static async Task AssertModerationAuditAsync(
+        GeotrackApiFactory app,
+        string entityType,
+        int entityId,
+        string action,
+        string previousStatus,
+        string newStatus,
+        string reason,
+        string? internalNote)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var targetType = AuditTargetType(entityType);
+
+        var log = await db.ModerationAuditLogs
+            .AsNoTracking()
+            .SingleAsync(item =>
+                item.TargetType == targetType &&
+                item.TargetId == entityId &&
+                item.Action == action);
+
+        Assert.Equal(previousStatus, log.PreviousStatus);
+        Assert.Equal(newStatus, log.NewStatus);
+        Assert.Equal(reason, log.Reason);
+        Assert.Equal(internalNote, log.InternalNote);
+        Assert.Equal("ContentModerator", log.SourceArea);
+        Assert.True(log.CreatedAt > DateTime.UtcNow.AddMinutes(-5));
+    }
+
+    private static async Task AssertAuditIsAppendOnlyAcrossEntityActionsAsync(
+        GeotrackApiFactory app,
+        int expectedCount)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var count = await db.ModerationAuditLogs
+            .AsNoTracking()
+            .CountAsync(item => item.SourceArea == "ContentModerator");
+
+        Assert.Equal(expectedCount, count);
+    }
+
+    private static string AuditTargetType(string entityType)
+    {
+        return entityType switch
+        {
+            "destination" => "Destination",
+            "location" => "Location",
+            "place" => "Place",
+            "event" => "Event",
+            _ => throw new InvalidOperationException("Unknown entity type.")
+        };
     }
 
     private static string PublicDetailRoute(string entityType, int entityId)

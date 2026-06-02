@@ -301,6 +301,39 @@ public sealed class ContributionPublicationTests
         Assert.Equal("Cafe", listItem.PlaceType);
     }
 
+    [Fact]
+    public async Task Create_sanitizes_rich_text_description_before_saving_contribution()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+
+        var payload = CreateGenericPlaceContributionPayload("Sanitized Contribution Cafe");
+        payload["description"] = """
+            <p onclick="alert(1)">Safe <strong>description</strong></p>
+            <script>alert(1)</script>
+            <a href="javascript:alert(1)">unsafe</a>
+            """;
+
+        var response = await PostContributionAsync(client, payload);
+
+        response.EnsureSuccessStatusCode();
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+
+        Assert.Contains("<strong>description</strong>", created!.Contribution.Description);
+        Assert.DoesNotContain("<script", created.Contribution.Description, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("onclick", created.Contribution.Description, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("javascript:", created.Contribution.Description, StringComparison.OrdinalIgnoreCase);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var saved = await db.PlaceContributions
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == created.Contribution.Id);
+
+        Assert.Equal(created.Contribution.Description, saved.Description);
+    }
+
     [Theory]
     [InlineData("Stay")]
     [InlineData("Restaurant")]

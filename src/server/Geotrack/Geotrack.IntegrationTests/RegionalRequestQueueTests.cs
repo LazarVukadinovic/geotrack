@@ -205,7 +205,31 @@ public sealed class RegionalRequestQueueTests
         Assert.NotNull(approvedContribution.PlaceId);
         Assert.Equal(PlaceContributionStatus.Rejected, rejectedContribution.Status);
         Assert.Null(rejectedContribution.PlaceId);
-        Assert.Equal("Internal moderation note.", rejectedContribution.ReviewNote);
+        Assert.Null(rejectedContribution.ReviewNote);
+
+        var rejectedAudit = await db.ModerationAuditLogs
+            .AsNoTracking()
+            .SingleAsync(log =>
+                log.TargetType == "PlaceContribution" &&
+                log.TargetId == fixture.SecondPendingContributionId &&
+                log.Action == "RejectContribution");
+        Assert.Equal("PendingReview", rejectedAudit.PreviousStatus);
+        Assert.Equal("Rejected", rejectedAudit.NewStatus);
+        Assert.Null(rejectedAudit.Reason);
+        Assert.Equal("Internal moderation note.", rejectedAudit.InternalNote);
+        Assert.Equal("RegionalRequestQueue", rejectedAudit.SourceArea);
+
+        var approvedAudit = await db.ModerationAuditLogs
+            .AsNoTracking()
+            .SingleAsync(log =>
+                log.TargetType == "PlaceContribution" &&
+                log.TargetId == fixture.PendingContributionId &&
+                log.Action == "ApproveContribution");
+        Assert.Equal("PendingReview", approvedAudit.PreviousStatus);
+        Assert.Equal("Approved", approvedAudit.NewStatus);
+        Assert.Equal("Looks good.", approvedAudit.Reason);
+        Assert.Null(approvedAudit.InternalNote);
+        Assert.Equal("RegionalRequestQueue", approvedAudit.SourceArea);
 
         var approvalNotification = await db.UserNotifications.SingleAsync(notification =>
             notification.UserId == fixture.ContributorUserId &&

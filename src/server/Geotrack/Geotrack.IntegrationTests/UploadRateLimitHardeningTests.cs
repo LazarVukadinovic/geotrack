@@ -364,10 +364,20 @@ public sealed class UploadRateLimitHardeningTests
 
         public Task DeleteAsync(int userId, int contributionId) => Task.CompletedTask;
 
-        public Task<PlaceContributionDetailDto> ApproveAsync(int contributionId, int reviewerUserId, string? note) =>
+        public Task<PlaceContributionDetailDto> ApproveAsync(
+            int contributionId,
+            int reviewerUserId,
+            string? note,
+            string? internalNote = null,
+            string? sourceArea = null) =>
             Task.FromResult(new PlaceContributionDetailDto { Id = contributionId });
 
-        public Task<PlaceContributionDetailDto> RejectAsync(int contributionId, int reviewerUserId, string? note) =>
+        public Task<PlaceContributionDetailDto> RejectAsync(
+            int contributionId,
+            int reviewerUserId,
+            string? note,
+            string? internalNote = null,
+            string? sourceArea = null) =>
             Task.FromResult(new PlaceContributionDetailDto { Id = contributionId });
     }
 }
