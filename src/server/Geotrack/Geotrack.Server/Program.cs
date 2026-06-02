@@ -8,9 +8,12 @@ using Geotrack.Infrastructure.Repositories;
 using Geotrack.Infrastructure.Services;
 using Geotrack.Infrastructure.Services.Agent;
 using Geotrack.Server;
+using Geotrack.Server.Health;
+using Geotrack.Server.Middleware;
 using Geotrack.Server.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
@@ -18,6 +21,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
@@ -123,10 +127,14 @@ builder.Services.Configure<BoundaryImportOptions>(builder.Configuration.GetSecti
 builder.Services.Configure<RegionBoundaryBackfillOptions>(builder.Configuration.GetSection("RegionBoundaryBackfill"));
 builder.Services.Configure<RegionalScopeValidationOptions>(builder.Configuration.GetSection("RegionalScopeValidation"));
 builder.Services.Configure<UploadLimitsOptions>(builder.Configuration.GetSection("UploadLimits"));
+builder.Services.Configure<AnalyticsRetentionOptions>(builder.Configuration.GetSection("AnalyticsRetention"));
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = uploadLimits.GlobalMultipartBodyLengthLimitBytes;
 });
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => HealthCheckResult.Healthy("Process is alive."), tags: new[] { "live" })
+    .AddCheck<DatabaseReadinessHealthCheck>("database", tags: new[] { "ready" });
 builder.Services.AddDataProtection()
     .SetApplicationName("GeoTrack");
 
@@ -182,6 +190,7 @@ builder.Services.AddSingleton<IAnalyticsProcessingQueue, AnalyticsProcessingQueu
 builder.Services.AddHostedService<AnalyticsEventProcessingWorker>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<IAnalyticsReadService, AnalyticsReadService>();
+builder.Services.AddScoped<IAnalyticsRetentionService, AnalyticsRetentionService>();
 builder.Services.AddScoped<IUserInterestSignalUpdater, UserInterestSignalUpdater>();
 
 builder.Services.AddScoped<IReviewService, ReviewService>();
@@ -332,10 +341,21 @@ builder.Services.AddRateLimiter(options =>
 
     options.OnRejected = async (ctx, token) =>
     {
+        int? retryAfterSeconds = null;
         if (ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retry))
         {
-            ctx.HttpContext.Response.Headers.RetryAfter = ((int)retry.TotalSeconds).ToString();
+            retryAfterSeconds = (int)retry.TotalSeconds;
+            ctx.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
         }
+
+        var logger = ctx.HttpContext.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("RateLimiting");
+        logger.LogWarning(
+            "Rate limit rejected {Method} {Path}; retry after {RetryAfterSeconds} seconds.",
+            ctx.HttpContext.Request.Method,
+            ctx.HttpContext.Request.Path.Value,
+            retryAfterSeconds);
 
         ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         await ctx.HttpContext.Response.WriteAsJsonAsync(
@@ -676,6 +696,8 @@ if (forwardedHeadersEnabled)
     app.UseForwardedHeaders();
 }
 
+app.UseMiddleware<CorrelationIdMiddleware>();
+
 app.UseCors("ConfiguredOrigins");
 
 app.UseResponseCompression();
@@ -846,6 +868,18 @@ app.UseAuthorization();
 
 app.UseRateLimiter();
 
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("live"),
+    ResponseWriter = WriteHealthCheckResponse
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = WriteHealthCheckResponse
+});
+
 app.MapControllers();
 
 if (File.Exists(Path.Combine(webRoot, "index.html")))
@@ -1007,6 +1041,21 @@ static void ApplySecurityHeaders(IHeaderDictionary headers)
         "connect-src 'self' https:; " +
         "worker-src 'self' blob:; " +
         "script-src 'self';";
+}
+
+static Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
+{
+    context.Response.ContentType = "application/json";
+    return context.Response.WriteAsJsonAsync(new
+    {
+        status = report.Status.ToString(),
+        checks = report.Entries.Select(entry => new
+        {
+            name = entry.Key,
+            status = entry.Value.Status.ToString(),
+            description = entry.Value.Description
+        })
+    });
 }
 
 public partial class Program;
