@@ -9,7 +9,8 @@
     "build:production": "ng build --configuration production",
     "serve:static": "node server.js",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "test:ci": "ng test --watch=false"
   },
   "private": true,
   "packageManager": "npm@11.9.0",
