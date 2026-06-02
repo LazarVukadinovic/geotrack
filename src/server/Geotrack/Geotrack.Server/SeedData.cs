@@ -2787,7 +2787,7 @@ public static class SeedData
         await AddLocationImagesIfMissingAsync("Lapad", Unsplash("1596275281743-e4c30b6e0e27"));
         await AddLocationImagesIfMissingAsync("Gruz", Unsplash("1500530855697-b586d89ba3ee"));
 
-        await AddPlaceImagesIfMissingAsync("Banje Beach", Unsplash("1507525428034-b723cf961d3e"), Unsplash("1519046904884-53103b34b206"));
+        await AddPlaceImagesIfMissingAsync("Banje Beach", SeedWebp("banje-beach"));
         await AddPlaceImagesIfMissingAsync("Nautika Restaurant", Unsplash("1414235077428-338989a2e8c0"));
         await AddPlaceImagesIfMissingAsync("Cogito Coffee", Unsplash("1495474472287-4d71bcdd2085"));
         await AddPlaceImagesIfMissingAsync("Dubrovnik City Walls", SeedMedia("dubrovnik-old-town"));
