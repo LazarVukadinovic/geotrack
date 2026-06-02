@@ -158,6 +158,8 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddScoped<IDestinationRepository, DestinationRepository>();
 builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<ILocationRepository, LocationRepository>();
@@ -187,6 +189,8 @@ builder.Services.AddScoped<IModerationTermCache, ModerationTermCache>();
 builder.Services.AddScoped<IModerationTermService, ModerationTermService>();
 builder.Services.AddScoped<IReviewContentModerationService, ReviewContentModerationService>();
 builder.Services.AddScoped<IReviewReportService, ReviewReportService>();
+builder.Services.AddScoped<IModerationAuditService, ModerationAuditService>();
+builder.Services.AddScoped<IContentHtmlSanitizer, ContentHtmlSanitizer>();
 
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IInterestTopicService, InterestTopicService>();
@@ -1002,7 +1006,7 @@ static void ApplySecurityHeaders(IHeaderDictionary headers)
         "font-src 'self' data: https://fonts.gstatic.com https://klokantech.github.io; " +
         "connect-src 'self' https:; " +
         "worker-src 'self' blob:; " +
-        "script-src 'self' 'unsafe-inline';";
+        "script-src 'self';";
 }
 
 public partial class Program;
