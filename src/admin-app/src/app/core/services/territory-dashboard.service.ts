@@ -120,9 +120,16 @@ export class TerritoryDashboardService {
   getRegionBoundaryCandidates(
     territoryId?: number | null,
     level = 'ADM1',
+    geometry: 'none' | 'display' | 'map' = 'none',
+    take?: number,
   ): Observable<BoundaryRegionCandidateResponse> {
     let params = this.withTerritoryId(new HttpParams(), territoryId)
-      .set('level', level);
+      .set('level', level)
+      .set('geometry', geometry);
+
+    if (take !== undefined) {
+      params = params.set('take', String(Math.max(1, take)));
+    }
 
     return this.http.get<BoundaryRegionCandidateResponse>('/api/admin/territory/regions/boundary-candidates', {
       params,

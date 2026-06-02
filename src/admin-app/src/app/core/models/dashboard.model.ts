@@ -355,9 +355,13 @@ export interface BoundaryRegionCandidateResponse {
   source: string;
   admLevel: string;
   iso3: string;
+  geometryMode?: 'none' | 'display' | string;
   scannedFeatures: number;
   matchedFeatures: number;
   returnedCount: number;
+  skip?: number;
+  take?: number;
+  hasMore?: boolean;
   items: BoundaryRegionCandidate[];
   attribution?: string | null;
 }
