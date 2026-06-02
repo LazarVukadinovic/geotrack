@@ -25,7 +25,8 @@ public interface ITerritoryDashboardService
         string? admLevel,
         string? search,
         int skip,
-        int? take);
+        int? take,
+        string? geometryMode = null);
     Task<TerritoryRegionCreateResponseDto> CreateRegionAsync(int userId, TerritoryRegionCreateRequestDto request);
     Task<TerritoryRegionDetailDto> GetRegionDetailAsync(
         int userId,

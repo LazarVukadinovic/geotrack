@@ -451,7 +451,8 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
         string? admLevel,
         string? search,
         int skip,
-        int? take)
+        int? take,
+        string? geometryMode = null)
     {
         await EnsureTerritoryManagerOnlyRoleAsync(userId);
 
@@ -473,7 +474,8 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
             territoryGeometry,
             search,
             skip,
-            take);
+            take,
+            geometryMode);
 
         var existingRows = await _db.Regions
             .AsNoTracking()

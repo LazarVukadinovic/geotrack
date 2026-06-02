@@ -1776,12 +1776,31 @@ public sealed class AdminTerritoryManagementTests
             }
 
             using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            var listResponse = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
+                $"/api/admin/territory/regions/boundary-candidates?territoryId={territoryId}&level=ADM1&take=2");
+
+            Assert.NotNull(listResponse);
+            Assert.Equal("ADM1", listResponse!.AdmLevel);
+            Assert.Equal("TAA", listResponse.Iso3);
+            Assert.Equal("none", listResponse.GeometryMode);
+            Assert.Equal(2, listResponse.Take);
+            Assert.Equal(0, listResponse.Skip);
+            Assert.Equal(3, listResponse.MatchedFeatures);
+            Assert.Equal(2, listResponse.ReturnedCount);
+            Assert.True(listResponse.HasMore);
+            Assert.All(listResponse.Items, item => Assert.Null(item.GeometryGeoJson));
+            Assert.All(listResponse.Items, item => Assert.True(item.Viewport.IsEmpty));
+
+            var maxTakeResponse = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
+                $"/api/admin/territory/regions/boundary-candidates?territoryId={territoryId}&level=ADM1&take=500");
+            Assert.NotNull(maxTakeResponse);
+            Assert.Equal(100, maxTakeResponse!.Take);
+
             var response = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
-                $"/api/admin/territory/regions/boundary-candidates?territoryId={territoryId}&level=ADM1&take=10");
+                $"/api/admin/territory/regions/boundary-candidates?territoryId={territoryId}&level=ADM1&take=10&geometry=display");
 
             Assert.NotNull(response);
-            Assert.Equal("ADM1", response!.AdmLevel);
-            Assert.Equal("TAA", response.Iso3);
+            Assert.Equal("display", response!.GeometryMode);
             Assert.Equal(3, response.Items.Count);
             var candidate = Assert.Single(response.Items, item => item.ShapeId == "INSIDE-1");
             Assert.Equal("INSIDE-1", candidate.ShapeId);

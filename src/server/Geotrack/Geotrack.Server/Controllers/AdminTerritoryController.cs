@@ -241,7 +241,8 @@ public sealed class AdminTerritoryController : ControllerBase
         [FromQuery] string? level = null,
         [FromQuery] string? search = null,
         [FromQuery] int skip = 0,
-        [FromQuery] int? take = null)
+        [FromQuery] int? take = null,
+        [FromQuery] string? geometry = null)
     {
         if (territoryId.HasValue && territoryId.Value <= 0)
             return BadRequest(new { message = "territoryId must be positive." });
@@ -260,7 +261,8 @@ public sealed class AdminTerritoryController : ControllerBase
                 level,
                 search,
                 skip,
-                take));
+                take,
+                geometry));
         }
         catch (Exception ex)
         {
