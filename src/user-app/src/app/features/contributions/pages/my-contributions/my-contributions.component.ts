@@ -241,6 +241,13 @@ export class MyContributionsPageComponent implements OnInit {
     this.router.navigate(['/contributions', item.id]);
   }
 
+  protected viewPlace(event: Event, item: ContributionListItem): void {
+    event.stopPropagation();
+    if (item.publishedPlaceId != null) {
+      this.router.navigate(['/places', item.publishedPlaceId]);
+    }
+  }
+
   protected reload(): void {
     this.contributions.loadMine();
   }
