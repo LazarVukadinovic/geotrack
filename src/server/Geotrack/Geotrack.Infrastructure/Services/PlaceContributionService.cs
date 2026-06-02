@@ -42,17 +42,23 @@ public class PlaceContributionService : IPlaceContributionService
     private readonly IContributionMediaStorageService _mediaStorage;
     private readonly IUserNotificationService _notificationService;
     private readonly IAdminNotificationService _adminNotificationService;
+    private readonly IContentHtmlSanitizer _htmlSanitizer;
+    private readonly IModerationAuditService _auditService;
 
     public PlaceContributionService(
         AppDbContext db,
         IContributionMediaStorageService mediaStorage,
         IUserNotificationService notificationService,
-        IAdminNotificationService adminNotificationService)
+        IAdminNotificationService adminNotificationService,
+        IContentHtmlSanitizer htmlSanitizer,
+        IModerationAuditService auditService)
     {
         _db = db;
         _mediaStorage = mediaStorage;
         _notificationService = notificationService;
         _adminNotificationService = adminNotificationService;
+        _htmlSanitizer = htmlSanitizer;
+        _auditService = auditService;
     }
 
     public async Task<GetPlaceContributionsResponseDto> GetForUserAsync(int userId)
@@ -537,7 +543,12 @@ public class PlaceContributionService : IPlaceContributionService
         await _db.SaveChangesAsync();
     }
 
-    public async Task<PlaceContributionDetailDto> ApproveAsync(int contributionId, int reviewerUserId, string? note)
+    public async Task<PlaceContributionDetailDto> ApproveAsync(
+        int contributionId,
+        int reviewerUserId,
+        string? note,
+        string? internalNote = null,
+        string? sourceArea = null)
     {
         var contribution = await _db.PlaceContributions
             .Include(c => c.Images)
@@ -552,6 +563,9 @@ public class PlaceContributionService : IPlaceContributionService
         await EnsureReviewerCanReviewAsync(reviewerUserId, contribution);
 
         var now = DateTime.UtcNow;
+        var previousStatus = contribution.Status.ToString();
+        var publicNote = NormalizeOptional(note);
+        var normalizedInternalNote = NormalizeOptional(internalNote);
 
         if (contribution.Type == PlaceContributionType.CreatePlace)
         {
@@ -594,8 +608,19 @@ public class PlaceContributionService : IPlaceContributionService
         contribution.Status = PlaceContributionStatus.Approved;
         contribution.ReviewedByUserId = reviewerUserId;
         contribution.ReviewedAt = now;
-        contribution.ReviewNote = NormalizeOptional(note);
+        contribution.ReviewNote = publicNote;
         contribution.UpdatedAt = now;
+
+        await _auditService.RecordAsync(
+            reviewerUserId,
+            "PlaceContribution",
+            contribution.Id,
+            "ApproveContribution",
+            previousStatus,
+            contribution.Status.ToString(),
+            publicNote,
+            normalizedInternalNote,
+            sourceArea ?? "PlaceContributionReview");
 
         await _notificationService.AddContributionDecisionNotificationAsync(contribution);
 
@@ -605,7 +630,12 @@ public class PlaceContributionService : IPlaceContributionService
         return MapDetail(saved, includeReviewNote: true);
     }
 
-    public async Task<PlaceContributionDetailDto> RejectAsync(int contributionId, int reviewerUserId, string? note)
+    public async Task<PlaceContributionDetailDto> RejectAsync(
+        int contributionId,
+        int reviewerUserId,
+        string? note,
+        string? internalNote = null,
+        string? sourceArea = null)
     {
         var contribution = await _db.PlaceContributions
             .SingleOrDefaultAsync(c => c.Id == contributionId);
@@ -619,12 +649,26 @@ public class PlaceContributionService : IPlaceContributionService
         await EnsureReviewerCanReviewAsync(reviewerUserId, contribution);
 
         var now = DateTime.UtcNow;
+        var previousStatus = contribution.Status.ToString();
+        var publicNote = NormalizeOptional(note);
+        var normalizedInternalNote = NormalizeOptional(internalNote);
 
         contribution.Status = PlaceContributionStatus.Rejected;
         contribution.ReviewedByUserId = reviewerUserId;
         contribution.ReviewedAt = now;
-        contribution.ReviewNote = NormalizeOptional(note);
+        contribution.ReviewNote = publicNote;
         contribution.UpdatedAt = now;
+
+        await _auditService.RecordAsync(
+            reviewerUserId,
+            "PlaceContribution",
+            contribution.Id,
+            "RejectContribution",
+            previousStatus,
+            contribution.Status.ToString(),
+            publicNote,
+            normalizedInternalNote,
+            sourceArea ?? "PlaceContributionReview");
 
         await _notificationService.AddContributionDecisionNotificationAsync(contribution);
 
@@ -2499,7 +2543,7 @@ public class PlaceContributionService : IPlaceContributionService
         return normalized;
     }
 
-    private static void Validate(UpsertPlaceContributionDto request)
+    private void Validate(UpsertPlaceContributionDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new InvalidOperationException("Name is required.");
@@ -2549,8 +2593,8 @@ public class PlaceContributionService : IPlaceContributionService
             throw new InvalidOperationException("PlaceId is required for update contributions.");
     }
 
-    private static string NormalizeDescription(string? description) =>
-        description?.Trim() ?? string.Empty;
+    private string NormalizeDescription(string? description) =>
+        _htmlSanitizer.SanitizeRichText(description);
 
     private static string NormalizeRequiredName(string? value, string fieldName, int maxLength)
     {

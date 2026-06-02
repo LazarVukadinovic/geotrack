@@ -108,7 +108,11 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         if (normalizedSource == ContributionSource)
         {
             await EnsureContributionExistsInRegionAsync(regionId, requestId);
-            await _placeContributionService.ApproveAsync(requestId, userId, note);
+            await _placeContributionService.ApproveAsync(
+                requestId,
+                userId,
+                NormalizeDecisionText(note),
+                sourceArea: "RegionalRequestQueue");
             return await BuildSuccessResultAsync(regionId, ContributionSource, requestId);
         }
 
@@ -125,12 +129,18 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
     {
         await EnsureAssignedRegionAsync(userId, regionId);
         var normalizedSource = NormalizeSource(source);
-        var decisionNote = BuildDecisionNote(reason, note);
+        var publicReason = NormalizeDecisionText(reason);
+        var internalNote = NormalizeDecisionText(note);
 
         if (normalizedSource == ContributionSource)
         {
             await EnsureContributionExistsInRegionAsync(regionId, requestId);
-            await _placeContributionService.RejectAsync(requestId, userId, decisionNote);
+            await _placeContributionService.RejectAsync(
+                requestId,
+                userId,
+                publicReason,
+                internalNote,
+                "RegionalRequestQueue");
             return await BuildSuccessResultAsync(regionId, ContributionSource, requestId);
         }
 
@@ -641,17 +651,10 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         }
     }
 
-    private static string BuildDecisionNote(string? reason, string? note)
+    private static string? NormalizeDecisionText(string? value)
     {
-        var parts = new List<string>();
-
-        if (!string.IsNullOrWhiteSpace(reason))
-            parts.Add("Reason: " + reason.Trim());
-
-        if (!string.IsNullOrWhiteSpace(note))
-            parts.Add(note.Trim());
-
-        return string.Join(Environment.NewLine, parts);
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 
     private static string SafeActionError(Exception ex)

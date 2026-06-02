@@ -21,10 +21,14 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
     private const string DeletedStatus = "Archived";
 
     private readonly AppDbContext _db;
+    private readonly IModerationAuditService _auditService;
 
-    public ContentModeratorEntityReviewService(AppDbContext db)
+    public ContentModeratorEntityReviewService(
+        AppDbContext db,
+        IModerationAuditService auditService)
     {
         _db = db;
+        _auditService = auditService;
     }
 
     public async Task<ContentModeratorEntityReviewListResponseDto> GetEntitiesAsync(
@@ -83,15 +87,21 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
         ValidateModerationActionRequest(request);
 
         var entityType = NormalizeEntityType(type);
+        var reason = NormalizeModerationText(request?.Reason);
+        var internalNote = NormalizeModerationText(request?.InternalNote);
         var now = DateTime.UtcNow;
+        var previousStatus = string.Empty;
+        var newStatus = string.Empty;
 
         switch (entityType)
         {
             case DestinationEntityType:
                 var destination = await _db.Destinations.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Destination was not found.");
+                previousStatus = destination.Status;
                 EnsureCanSuspend(destination.Status);
                 destination.Status = SuspendedStatus;
+                newStatus = destination.Status;
                 destination.PublishedAt = null;
                 destination.UpdatedAt = now;
                 break;
@@ -99,8 +109,10 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             case LocationEntityType:
                 var location = await _db.Locations.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Location was not found.");
+                previousStatus = location.Status;
                 EnsureCanSuspend(location.Status);
                 location.Status = SuspendedStatus;
+                newStatus = location.Status;
                 location.PublishedAt = null;
                 location.UpdatedAt = now;
                 break;
@@ -108,8 +120,10 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             case PlaceEntityType:
                 var place = await _db.Places.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Place was not found.");
+                previousStatus = place.Status;
                 EnsureCanSuspend(place.Status);
                 place.Status = SuspendedStatus;
+                newStatus = place.Status;
                 place.PublishedAt = null;
                 place.UpdatedAt = now;
                 break;
@@ -117,8 +131,10 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             case EventEntityType:
                 var @event = await _db.Events.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Event was not found.");
+                previousStatus = @event.Status;
                 EnsureCanSuspend(@event.Status);
                 @event.Status = SuspendedStatus;
+                newStatus = @event.Status;
                 @event.PublishedAt = null;
                 @event.UpdatedAt = now;
                 break;
@@ -126,6 +142,18 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             default:
                 throw new InvalidOperationException("Unsupported entity type.");
         }
+
+        await _auditService.RecordAsync(
+            currentUserId,
+            ToAuditTargetType(entityType),
+            entityId,
+            "SuspendEntity",
+            previousStatus,
+            newStatus,
+            reason,
+            internalNote,
+            "ContentModerator",
+            cancellationToken: cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
         return await GetEntityAsync(currentUserId, entityType, entityId, cancellationToken);
@@ -142,15 +170,21 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
         ValidateModerationActionRequest(request);
 
         var entityType = NormalizeEntityType(type);
+        var reason = NormalizeModerationText(request?.Reason);
+        var internalNote = NormalizeModerationText(request?.InternalNote);
         var now = DateTime.UtcNow;
+        var previousStatus = string.Empty;
+        var newStatus = string.Empty;
 
         switch (entityType)
         {
             case DestinationEntityType:
                 var destination = await _db.Destinations.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Destination was not found.");
+                previousStatus = destination.Status;
                 EnsureCanUnsuspend(destination.Status);
                 destination.Status = PublishedStatus;
+                newStatus = destination.Status;
                 destination.PublishedAt ??= now;
                 destination.UpdatedAt = now;
                 break;
@@ -158,8 +192,10 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             case LocationEntityType:
                 var location = await _db.Locations.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Location was not found.");
+                previousStatus = location.Status;
                 EnsureCanUnsuspend(location.Status);
                 location.Status = PublishedStatus;
+                newStatus = location.Status;
                 location.PublishedAt ??= now;
                 location.UpdatedAt = now;
                 break;
@@ -167,8 +203,10 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             case PlaceEntityType:
                 var place = await _db.Places.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Place was not found.");
+                previousStatus = place.Status;
                 EnsureCanUnsuspend(place.Status);
                 place.Status = PublishedStatus;
+                newStatus = place.Status;
                 place.PublishedAt ??= now;
                 place.UpdatedAt = now;
                 break;
@@ -176,8 +214,10 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             case EventEntityType:
                 var @event = await _db.Events.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Event was not found.");
+                previousStatus = @event.Status;
                 EnsureCanUnsuspend(@event.Status);
                 @event.Status = PublishedStatus;
+                newStatus = @event.Status;
                 @event.PublishedAt ??= now;
                 @event.UpdatedAt = now;
                 break;
@@ -185,6 +225,18 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             default:
                 throw new InvalidOperationException("Unsupported entity type.");
         }
+
+        await _auditService.RecordAsync(
+            currentUserId,
+            ToAuditTargetType(entityType),
+            entityId,
+            "UnsuspendEntity",
+            previousStatus,
+            newStatus,
+            reason,
+            internalNote,
+            "ContentModerator",
+            cancellationToken: cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
         return await GetEntityAsync(currentUserId, entityType, entityId, cancellationToken);
@@ -201,15 +253,21 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
         ValidateModerationActionRequest(request);
 
         var entityType = NormalizeEntityType(type);
+        var reason = NormalizeModerationText(request?.Reason);
+        var internalNote = NormalizeModerationText(request?.InternalNote);
         var now = DateTime.UtcNow;
+        var previousStatus = string.Empty;
+        var newStatus = string.Empty;
 
         switch (entityType)
         {
             case DestinationEntityType:
                 var destination = await _db.Destinations.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Destination was not found.");
+                previousStatus = destination.Status;
                 EnsureCanDelete(destination.Status);
                 destination.Status = DeletedStatus;
+                newStatus = destination.Status;
                 destination.PublishedAt = null;
                 destination.UpdatedAt = now;
                 break;
@@ -217,8 +275,10 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             case LocationEntityType:
                 var location = await _db.Locations.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Location was not found.");
+                previousStatus = location.Status;
                 EnsureCanDelete(location.Status);
                 location.Status = DeletedStatus;
+                newStatus = location.Status;
                 location.PublishedAt = null;
                 location.UpdatedAt = now;
                 break;
@@ -226,8 +286,10 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             case PlaceEntityType:
                 var place = await _db.Places.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Place was not found.");
+                previousStatus = place.Status;
                 EnsureCanDelete(place.Status);
                 place.Status = DeletedStatus;
+                newStatus = place.Status;
                 place.PublishedAt = null;
                 place.UpdatedAt = now;
                 break;
@@ -235,8 +297,10 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             case EventEntityType:
                 var @event = await _db.Events.SingleOrDefaultAsync(entity => entity.Id == entityId, cancellationToken)
                     ?? throw new KeyNotFoundException("Event was not found.");
+                previousStatus = @event.Status;
                 EnsureCanDelete(@event.Status);
                 @event.Status = DeletedStatus;
+                newStatus = @event.Status;
                 @event.PublishedAt = null;
                 @event.UpdatedAt = now;
                 break;
@@ -244,6 +308,18 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
             default:
                 throw new InvalidOperationException("Unsupported entity type.");
         }
+
+        await _auditService.RecordAsync(
+            currentUserId,
+            ToAuditTargetType(entityType),
+            entityId,
+            "DeleteEntity",
+            previousStatus,
+            newStatus,
+            reason,
+            internalNote,
+            "ContentModerator",
+            cancellationToken: cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
         return await GetEntityAsync(currentUserId, entityType, entityId, cancellationToken);
@@ -1238,6 +1314,18 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
         };
     }
 
+    private static string ToAuditTargetType(string entityType)
+    {
+        return entityType switch
+        {
+            DestinationEntityType => "Destination",
+            LocationEntityType => "Location",
+            PlaceEntityType => "Place",
+            EventEntityType => "Event",
+            _ => throw new InvalidOperationException("Unsupported entity type.")
+        };
+    }
+
     private static string NormalizeStatusFilter(string? status)
     {
         var normalized = status?.Trim().ToLowerInvariant();
@@ -1306,5 +1394,11 @@ public sealed class ContentModeratorEntityReviewService : IContentModeratorEntit
 
         if (request.InternalNote?.Length > 2000)
             throw new InvalidOperationException("Internal note must be 2000 characters or fewer.");
+    }
+
+    private static string? NormalizeModerationText(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 }

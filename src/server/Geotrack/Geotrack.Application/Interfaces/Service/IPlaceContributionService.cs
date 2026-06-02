@@ -32,6 +32,17 @@ public interface IPlaceContributionService
         string? ownershipProofContentType);
 
     Task DeleteAsync(int userId, int contributionId);
-    Task<PlaceContributionDetailDto> ApproveAsync(int contributionId, int reviewerUserId, string? note);
-    Task<PlaceContributionDetailDto> RejectAsync(int contributionId, int reviewerUserId, string? note);
+    Task<PlaceContributionDetailDto> ApproveAsync(
+        int contributionId,
+        int reviewerUserId,
+        string? note,
+        string? internalNote = null,
+        string? sourceArea = null);
+
+    Task<PlaceContributionDetailDto> RejectAsync(
+        int contributionId,
+        int reviewerUserId,
+        string? note,
+        string? internalNote = null,
+        string? sourceArea = null);
 }

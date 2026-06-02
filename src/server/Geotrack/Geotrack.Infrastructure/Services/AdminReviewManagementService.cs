@@ -15,13 +15,16 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
 
     private readonly AppDbContext _db;
     private readonly IUserNotificationService _notificationService;
+    private readonly IModerationAuditService _auditService;
 
     public AdminReviewManagementService(
         AppDbContext db,
-        IUserNotificationService notificationService)
+        IUserNotificationService notificationService,
+        IModerationAuditService auditService)
     {
         _db = db;
         _notificationService = notificationService;
+        _auditService = auditService;
     }
 
     public async Task<AdminReviewListResponseDto> GetReviewsAsync(
@@ -109,6 +112,12 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
             note,
             DateTime.UtcNow,
             cancellationToken);
+        await RecordReviewRemovalAuditAsync(
+            currentAdmin.UserId,
+            target,
+            "DeleteReview",
+            note,
+            cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -149,11 +158,25 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
             requirePending: true,
             cancellationToken);
 
+        var previousStatus = report.Status.ToString();
+        var now = DateTime.UtcNow;
+
         report.Status = ReviewReportStatus.Dismissed;
         report.Decision = ReviewReportDecision.KeepReview;
         report.ReviewedByUserId = currentAdmin.UserId;
-        report.ReviewedAt = DateTime.UtcNow;
+        report.ReviewedAt = now;
         report.DecisionNote = NormalizeModerationNote(request?.Note);
+
+        await _auditService.RecordAsync(
+            currentAdmin.UserId,
+            "ReviewReport",
+            report.Id,
+            "RejectReport",
+            previousStatus,
+            report.Status.ToString(),
+            report.DecisionNote,
+            sourceArea: "ReviewManagement",
+            cancellationToken: cancellationToken);
 
         _notificationService.AddReviewReportReporterDecisionNotification(report);
         await _db.SaveChangesAsync(cancellationToken);
@@ -186,14 +209,31 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
             note,
             now,
             cancellationToken);
+        await RecordReviewRemovalAuditAsync(
+            currentAdmin.UserId,
+            target,
+            "RemoveReviewAndSuspendAuthor",
+            note,
+            cancellationToken);
 
         if (!target.Author.IsSuspended)
         {
+            var previousAuthorStatus = ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted);
             target.Author.IsSuspended = true;
             target.Author.SuspendedAt = now;
             target.Author.SuspendedByUserId = currentAdmin.UserId;
             target.Author.UpdatedAt = now;
             await RevokeRefreshTokensAsync(target.Author.Id, now, cancellationToken);
+            await _auditService.RecordAsync(
+                currentAdmin.UserId,
+                "User",
+                target.Author.Id,
+                "SuspendUser",
+                previousAuthorStatus,
+                ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted),
+                note,
+                sourceArea: "ReviewManagement",
+                cancellationToken: cancellationToken);
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -224,9 +264,16 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
             note,
             now,
             cancellationToken);
+        await RecordReviewRemovalAuditAsync(
+            currentAdmin.UserId,
+            target,
+            "RemoveReviewAndDeleteAuthor",
+            note,
+            cancellationToken);
 
         if (!target.Author.IsDeleted)
         {
+            var previousAuthorStatus = ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted);
             target.Author.IsDeleted = true;
             target.Author.DeletedAt = now;
             target.Author.DeletedByUserId = currentAdmin.UserId;
@@ -235,6 +282,16 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
             target.Author.SuspendedByUserId = null;
             target.Author.UpdatedAt = now;
             await RevokeRefreshTokensAsync(target.Author.Id, now, cancellationToken);
+            await _auditService.RecordAsync(
+                currentAdmin.UserId,
+                "User",
+                target.Author.Id,
+                "DeleteUser",
+                previousAuthorStatus,
+                ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted),
+                note,
+                sourceArea: "ReviewManagement",
+                cancellationToken: cancellationToken);
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -839,11 +896,22 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
 
         foreach (var pendingReport in pendingReports)
         {
+            var previousStatus = pendingReport.Status.ToString();
             pendingReport.Status = ReviewReportStatus.Actioned;
             pendingReport.Decision = ReviewReportDecision.RemoveReview;
             pendingReport.ReviewedByUserId = moderatorUserId;
             pendingReport.ReviewedAt = now;
             pendingReport.DecisionNote = note;
+            await _auditService.RecordAsync(
+                moderatorUserId,
+                "ReviewReport",
+                pendingReport.Id,
+                "AcceptReport",
+                previousStatus,
+                pendingReport.Status.ToString(),
+                note,
+                sourceArea: "ReviewManagement",
+                cancellationToken: cancellationToken);
             _notificationService.AddReviewReportReporterDecisionNotification(pendingReport);
         }
 
@@ -858,6 +926,25 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
             target.Kind.ToString(),
             target.ReviewId,
             now);
+    }
+
+    private Task RecordReviewRemovalAuditAsync(
+        int moderatorUserId,
+        ReviewMutationTarget target,
+        string action,
+        string note,
+        CancellationToken cancellationToken)
+    {
+        return _auditService.RecordAsync(
+            moderatorUserId,
+            target.Kind + "Review",
+            target.ReviewId,
+            action,
+            "Active",
+            "Removed",
+            note,
+            sourceArea: "ReviewManagement",
+            cancellationToken: cancellationToken);
     }
 
     private async Task<ReviewReport> EnsureReportMatchesReviewAsync(
