@@ -400,8 +400,8 @@
           <div class="hd__amenities" role="list" aria-label="Amenities">
             @for (amenity of h.amenities; track amenity.id) {
               <div class="hd__amenity" role="listitem">
-                <div class="hd__amenity-icon-wrap" aria-hidden="true">
-                  <svg class="hd__amenity-icon" viewBox="0 0 24 24" fill="none">
+                <span class="hd__amenity-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
                     <path
                       stroke="currentColor"
                       stroke-width="1.8"
@@ -410,8 +410,8 @@
                       [attr.d]="amenityIconPath(amenity.icon)"
                     />
                   </svg>
-                </div>
-                <span class="hd__amenity-label">{{ amenity.label }}</span>
+                </span>
+                <span>{{ amenity.label }}</span>
               </div>
             }
           </div>
