@@ -83,6 +83,12 @@ export class MapApiService {
     });
   }
 
+  geocode(query: string): Observable<MapSearchResult[]> {
+    return this.http.get<MapSearchResult[]>('/api/map/search', {
+      params: new HttpParams().set('query', query),
+    });
+  }
+
   reverseGeocode(latitude: number, longitude: number): Observable<MapReverseGeocodeResult> {
     return this.http.get<MapReverseGeocodeResult>('/api/map/reverse', {
       params: new HttpParams()

@@ -77,11 +77,17 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   pickerLat = signal<number | null>(null);
   pickerLng = signal<number | null>(null);
   isGeocoding = signal(false);
+  isAddressGeocoding = signal(false);
+  addressGeocodeStatus = signal('');
   submitAttempted = signal(false);
   private pickerMap?: MapLibreMap;
   private pickerResizeObserver?: ResizeObserver;
   private pickerMapInitFrame: number | null = null;
   private pickerMapResizeFrame: number | null = null;
+  private addressGeocodeTimeout: number | null = null;
+  private addressGeocodeRequestId = 0;
+  private lastGeocodedAddressKey = '';
+  private suppressAddressGeocode = false;
 
   form: BasicsData = {
     name: '', placeType: 'Landmark', placeTypeId: null, stayType: 'Hotel', address: '', city: '',
@@ -387,6 +393,64 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
       (latitude !== 0 || longitude !== 0);
   }
 
+  onAddressFieldsChanged(): void {
+    if (this.locationLocked() || this.suppressAddressGeocode) return;
+
+    const addressKey = this.addressLookupKey();
+    if (addressKey.length < 4 || addressKey === this.lastGeocodedAddressKey) return;
+
+    if (this.addressGeocodeTimeout !== null) {
+      window.clearTimeout(this.addressGeocodeTimeout);
+    }
+
+    this.addressGeocodeStatus.set('');
+    this.addressGeocodeTimeout = window.setTimeout(() => {
+      this.addressGeocodeTimeout = null;
+      void this.geocodeAddressFromFields(addressKey);
+    }, 650);
+  }
+
+  private async geocodeAddressFromFields(addressKey = this.addressLookupKey()): Promise<void> {
+    if (this.locationLocked() || addressKey.length < 4) return;
+
+    const requestId = ++this.addressGeocodeRequestId;
+    this.isAddressGeocoding.set(true);
+    this.addressGeocodeStatus.set('Looking up coordinates...');
+
+    try {
+      const results = await firstValueFrom(this.mapApi.geocode(addressKey));
+      if (requestId !== this.addressGeocodeRequestId) return;
+
+      const result = results.find(item => this.hasUsableCoordinates(item.latitude, item.longitude));
+      if (!result) {
+        this.addressGeocodeStatus.set('Could not find coordinates for this address.');
+        return;
+      }
+
+      this.form.lat = result.latitude;
+      this.form.lng = result.longitude;
+      this.pickerLat.set(result.latitude);
+      this.pickerLng.set(result.longitude);
+      this.lastGeocodedAddressKey = addressKey;
+      this.addressGeocodeStatus.set('Coordinates found from address.');
+    } catch {
+      if (requestId === this.addressGeocodeRequestId) {
+        this.addressGeocodeStatus.set('Could not look up coordinates right now.');
+      }
+    } finally {
+      if (requestId === this.addressGeocodeRequestId) {
+        this.isAddressGeocoding.set(false);
+      }
+    }
+  }
+
+  private addressLookupKey(): string {
+    return [this.form.address, this.form.city, this.form.region, this.form.country]
+      .map(part => (part ?? '').trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+
   async confirmCoordinates(): Promise<void> {
     const lat = this.pickerLat();
     const lng = this.pickerLng();
@@ -400,13 +464,17 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     this.isGeocoding.set(true);
 
     try {
+      this.suppressAddressGeocode = true;
       const data = await firstValueFrom(this.mapApi.reverseGeocode(confirmedLat, confirmedLng));
       if (data.address) this.form.address = data.address;
       if (data.city) this.form.city = data.city;
       if (data.region) this.form.region = data.region;
       if (data.country) this.form.country = data.country;
+      this.lastGeocodedAddressKey = this.addressLookupKey();
+      this.addressGeocodeStatus.set('Coordinates set.');
     } catch {
     } finally {
+      this.suppressAddressGeocode = false;
       this.isGeocoding.set(false);
       this.closeMapPicker();
     }
@@ -768,6 +836,10 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyPickerMap();
+    if (this.addressGeocodeTimeout !== null) {
+      window.clearTimeout(this.addressGeocodeTimeout);
+      this.addressGeocodeTimeout = null;
+    }
     const el = this.imgContainer()?.nativeElement;
     if (el && this.boundTouchStart) {
       el.removeEventListener('touchstart', this.boundTouchStart);
