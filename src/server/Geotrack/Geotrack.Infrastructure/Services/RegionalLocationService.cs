@@ -24,13 +24,16 @@ public class RegionalLocationService : IRegionalLocationService
 
     private readonly AppDbContext _db;
     private readonly RegionalScopeValidationService _scopeValidation;
+    private readonly IContentHtmlSanitizer _htmlSanitizer;
 
     public RegionalLocationService(
         AppDbContext db,
-        RegionalScopeValidationService scopeValidation)
+        RegionalScopeValidationService scopeValidation,
+        IContentHtmlSanitizer htmlSanitizer)
     {
         _db = db;
         _scopeValidation = scopeValidation;
+        _htmlSanitizer = htmlSanitizer;
     }
 
     public async Task<RegionalLocationListResponseDto> GetLocationsAsync(
@@ -240,7 +243,7 @@ public class RegionalLocationService : IRegionalLocationService
 
         var name = NormalizeRequiredText(request.Name, "Location name is required.", 200, "Location name is too long.");
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
-        var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
+        var description = NormalizeRichDescription(request.Description, 8000, "Description is too long.");
         var status = NormalizeCreateStatus(request.Status);
         var boundary = BuildBoundary(request.Boundary);
         if (boundary is not null)
@@ -565,7 +568,7 @@ public class RegionalLocationService : IRegionalLocationService
         };
     }
 
-    private static void ApplyUpdate(Location location, RegionalLocationUpdateRequestDto request)
+    private void ApplyUpdate(Location location, RegionalLocationUpdateRequestDto request)
     {
         if (request.Name is not null)
         {
@@ -589,11 +592,7 @@ public class RegionalLocationService : IRegionalLocationService
 
         if (request.Description is not null)
         {
-            var description = request.Description.Trim();
-            if (description.Length > 2000)
-                throw new InvalidOperationException("Description is too long.");
-
-            location.Description = description;
+            location.Description = NormalizeRichDescription(request.Description, 2000, "Description is too long.");
         }
 
         if (request.LocationTypeId.HasValue)
@@ -802,6 +801,15 @@ public class RegionalLocationService : IRegionalLocationService
         var normalized = value.Trim();
         if (normalized.Length == 0)
             return null;
+        if (normalized.Length > maxLength)
+            throw new InvalidOperationException(tooLongMessage);
+
+        return normalized;
+    }
+
+    private string NormalizeRichDescription(string? value, int maxLength, string tooLongMessage)
+    {
+        var normalized = _htmlSanitizer.SanitizeRichText(value);
         if (normalized.Length > maxLength)
             throw new InvalidOperationException(tooLongMessage);
 

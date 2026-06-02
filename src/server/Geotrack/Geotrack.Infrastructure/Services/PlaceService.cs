@@ -12,6 +12,7 @@ using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -23,15 +24,21 @@ public class PlaceService : IPlaceService
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
     private readonly IReviewContentModerationService _contentModeration;
+    private readonly IContentHtmlSanitizer _htmlSanitizer;
+    private readonly IModerationAuditService _auditService;
 
     public PlaceService(
         AppDbContext db,
         IFavoriteService favoriteService,
-        IReviewContentModerationService contentModeration)
+        IReviewContentModerationService contentModeration,
+        IContentHtmlSanitizer htmlSanitizer,
+        IModerationAuditService auditService)
     {
         _db = db;
         _favoriteService = favoriteService;
         _contentModeration = contentModeration;
+        _htmlSanitizer = htmlSanitizer;
+        _auditService = auditService;
     }
 
     public async Task<DestinationScopedResult<PlaceListingResponseDto>> GetPlacesAsync(
@@ -1192,44 +1199,86 @@ public class PlaceService : IPlaceService
                 p.Location.Destination.Status == PublishedStatus)
             ?? throw new KeyNotFoundException("Place not found.");
 
+        var now = DateTime.UtcNow;
+        var changedFields = new List<string>();
+
         if (!string.IsNullOrWhiteSpace(request.Name))
-            place.Name = request.Name.Trim();
+        {
+            place.Name = NormalizeOwnerUpdateRequiredName(request.Name, "Name", 200);
+            changedFields.Add(nameof(request.Name));
+        }
 
         if (request.Description != null)
-            place.Description = request.Description.Trim();
+        {
+            place.Description = NormalizeOwnerUpdateDescription(request.Description);
+            changedFields.Add(nameof(request.Description));
+        }
 
         if (request.OpeningHours != null)
-            place.OpeningHours = string.IsNullOrWhiteSpace(request.OpeningHours) ? null : request.OpeningHours.Trim();
+        {
+            place.OpeningHours = NormalizeOwnerUpdateOptional(request.OpeningHours, 1000, "Opening hours are too long.");
+            changedFields.Add(nameof(request.OpeningHours));
+        }
 
         if (request.Website != null)
-            place.Website = string.IsNullOrWhiteSpace(request.Website) ? null : request.Website.Trim();
+        {
+            place.Website = NormalizeOwnerUpdateWebsite(request.Website);
+            changedFields.Add(nameof(request.Website));
+        }
 
         if (request.ContactEmail != null)
-            place.ContactEmail = string.IsNullOrWhiteSpace(request.ContactEmail) ? null : request.ContactEmail.Trim();
+        {
+            place.ContactEmail = NormalizeOwnerUpdateContactEmail(request.ContactEmail);
+            changedFields.Add(nameof(request.ContactEmail));
+        }
 
         if (request.PhoneNumber != null)
-            place.Number = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim();
+        {
+            place.Number = NormalizeOwnerUpdatePhone(request.PhoneNumber);
+            changedFields.Add(nameof(request.PhoneNumber));
+        }
 
         if (request.AdmissionPriceRange != null)
-            place.AdmissionPriceRange = string.IsNullOrWhiteSpace(request.AdmissionPriceRange) ? null : request.AdmissionPriceRange.Trim();
+        {
+            place.AdmissionPriceRange = NormalizeOwnerUpdateOptional(request.AdmissionPriceRange, 200, "Admission / price range is too long.");
+            changedFields.Add(nameof(request.AdmissionPriceRange));
+        }
 
         if (request.BookingExternalLink != null)
-            place.BookingExternalLink = string.IsNullOrWhiteSpace(request.BookingExternalLink) ? null : request.BookingExternalLink.Trim();
+        {
+            place.BookingExternalLink = NormalizeOwnerUpdateExternalHttpsUrl(request.BookingExternalLink, 500, "Booking external link");
+            changedFields.Add(nameof(request.BookingExternalLink));
+        }
 
         if (request.BestTimeToVisit != null)
-            place.BestTimeToVisit = string.IsNullOrWhiteSpace(request.BestTimeToVisit) ? null : request.BestTimeToVisit.Trim();
+        {
+            place.BestTimeToVisit = NormalizeOwnerUpdateOptional(request.BestTimeToVisit, 500, "Best time to visit is too long.");
+            changedFields.Add(nameof(request.BestTimeToVisit));
+        }
 
         if (request.VisitorTips != null)
-            place.VisitorTips = string.IsNullOrWhiteSpace(request.VisitorTips) ? null : request.VisitorTips.Trim();
+        {
+            place.VisitorTips = NormalizeOwnerUpdateOptional(request.VisitorTips, 1000, "Visitor tips are too long.");
+            changedFields.Add(nameof(request.VisitorTips));
+        }
 
         if (request.AccessNotes != null)
-            place.AccessNotes = string.IsNullOrWhiteSpace(request.AccessNotes) ? null : request.AccessNotes.Trim();
+        {
+            place.AccessNotes = NormalizeOwnerUpdateOptional(request.AccessNotes, 1000, "Access notes are too long.");
+            changedFields.Add(nameof(request.AccessNotes));
+        }
 
         if (request.AccessibilityNotes != null)
-            place.AccessibilityNotes = string.IsNullOrWhiteSpace(request.AccessibilityNotes) ? null : request.AccessibilityNotes.Trim();
+        {
+            place.AccessibilityNotes = NormalizeOwnerUpdateOptional(request.AccessibilityNotes, 1000, "Accessibility notes are too long.");
+            changedFields.Add(nameof(request.AccessibilityNotes));
+        }
 
         if (request.Tags is not null)
-            await SyncOwnerUpdateTagsAsync(place.Id, request.Tags, now: DateTime.UtcNow);
+        {
+            await SyncOwnerUpdateTagsAsync(place.Id, request.Tags, now);
+            changedFields.Add(nameof(request.Tags));
+        }
 
         if (request.Amenities is not null)
         {
@@ -1237,12 +1286,34 @@ public class PlaceService : IPlaceService
                 await SyncOwnerUpdateStayAmenitiesAsync(place.Id, request.Amenities);
             else
                 await SyncOwnerUpdateAmenitiesAsync(place.Id, request.Amenities);
+
+            changedFields.Add(nameof(request.Amenities));
         }
 
         if (request.BookingPartners is not null)
+        {
             await SyncOwnerUpdateBookingPartnersAsync(place.Id, request.BookingPartners);
+            changedFields.Add(nameof(request.BookingPartners));
+        }
 
-        place.UpdatedAt = DateTime.UtcNow;
+        place.UpdatedAt = now;
+
+        if (changedFields.Count > 0)
+        {
+            await _auditService.RecordAsync(
+                userId,
+                "Place",
+                place.Id,
+                "OwnerUpdatedPlace",
+                place.Status,
+                place.Status,
+                sourceArea: "OwnerDirectUpdate",
+                metadataJson: JsonSerializer.Serialize(new
+                {
+                    ownerUserId = userId,
+                    changedFields = changedFields.Distinct(StringComparer.Ordinal).ToList()
+                }));
+        }
 
         await _db.SaveChangesAsync();
 
@@ -1466,20 +1537,27 @@ public class PlaceService : IPlaceService
             .ToListAsync();
         _db.PlaceBookingPartners.RemoveRange(existing);
 
-        var normalized = bookingPartners
-            .Select(partner => new
-            {
-                Id = NormalizeOwnerUpdateOptional(partner.Id)?.ToLowerInvariant(),
-                Url = NormalizeOwnerUpdateOptional(partner.Url)
-            })
-            .Where(partner => partner.Id is not null)
-            .DistinctBy(partner => partner.Id)
-            .Take(10)
+        var normalized = new List<(string Id, string Url)>();
+        foreach (var partner in bookingPartners)
+        {
+            var id = NormalizeOwnerUpdatePartnerId(partner.Id);
+            if (id is null)
+                continue;
+
+            var url = NormalizeOwnerUpdateRequiredExternalHttpsUrl(partner.Url, 500, "Booking partner URL");
+            normalized.Add((id, url));
+        }
+
+        normalized = normalized
+            .DistinctBy(partner => partner.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        if (normalized.Count > 10)
+            throw new InvalidOperationException("A place can include at most 10 booking partners.");
 
         foreach (var partner in normalized)
         {
-            var name = OwnerUpdatePartnerName(partner.Id!);
+            var name = OwnerUpdatePartnerName(partner.Id);
             var bookingPartner = await _db.BookingPartners.FirstOrDefaultAsync(existingPartner =>
                 existingPartner.Name.ToLower() == name.ToLower() ||
                 existingPartner.Name.ToLower() == partner.Id);
@@ -1506,19 +1584,134 @@ public class PlaceService : IPlaceService
 
     private static List<string> NormalizeOwnerUpdateLabels(IEnumerable<string> values, int maxItems)
     {
-        return values
-            .Select(NormalizeOwnerUpdateOptional)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(maxItems)
-            .ToList();
+        var normalized = new List<string>();
+
+        foreach (var value in values)
+        {
+            var item = NormalizeOwnerUpdateOptional(value);
+            if (item is null)
+                continue;
+
+            if (item.Length > 80)
+                throw new InvalidOperationException("Tags and amenities must be 80 characters or fewer.");
+
+            if (!normalized.Contains(item, StringComparer.OrdinalIgnoreCase))
+                normalized.Add(item);
+        }
+
+        if (normalized.Count > maxItems)
+            throw new InvalidOperationException($"A place can include at most {maxItems} tags or amenities.");
+
+        return normalized;
     }
 
     private static string? NormalizeOwnerUpdateOptional(string? value)
     {
         var normalized = value?.Trim();
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static string? NormalizeOwnerUpdateOptional(string? value, int maxLength, string tooLongMessage)
+    {
+        var normalized = NormalizeOwnerUpdateOptional(value);
+        if (normalized is null)
+            return null;
+
+        if (normalized.Length > maxLength)
+            throw new InvalidOperationException(tooLongMessage);
+
+        return normalized;
+    }
+
+    private string NormalizeOwnerUpdateDescription(string? value)
+    {
+        var sanitized = _htmlSanitizer.SanitizeRichText(value);
+        if (sanitized.Length > 2000)
+            throw new InvalidOperationException("Description is too long.");
+
+        return sanitized;
+    }
+
+    private static string NormalizeOwnerUpdateRequiredName(string? value, string fieldName, int maxLength)
+    {
+        var normalized = NormalizeOwnerUpdateOptional(value);
+        if (normalized is null)
+            throw new InvalidOperationException($"{fieldName} is required.");
+
+        if (normalized.Length > maxLength)
+            throw new InvalidOperationException($"{fieldName} must be {maxLength} characters or fewer.");
+
+        return normalized;
+    }
+
+    private static string? NormalizeOwnerUpdateWebsite(string? value) =>
+        NormalizeOwnerUpdateExternalHttpsUrl(value, 500, "Website URL");
+
+    private static string? NormalizeOwnerUpdateContactEmail(string? value)
+    {
+        var normalized = NormalizeOwnerUpdateOptional(value);
+        if (normalized is null)
+            return null;
+
+        if (normalized.Length > 200)
+            throw new InvalidOperationException("Contact email is too long.");
+
+        if (!Regex.IsMatch(normalized, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            throw new InvalidOperationException("Contact email is invalid.");
+
+        return normalized.ToLowerInvariant();
+    }
+
+    private static string? NormalizeOwnerUpdatePhone(string? value) =>
+        NormalizeOwnerUpdateOptional(value, 50, "Phone number is too long.");
+
+    private static string? NormalizeOwnerUpdatePartnerId(string? value)
+    {
+        var normalized = NormalizeOwnerUpdateOptional(value)?.ToLowerInvariant();
+        if (normalized is null)
+            return null;
+
+        if (normalized.Length > 80)
+            throw new InvalidOperationException("Booking partner name must be 80 characters or fewer.");
+
+        return normalized;
+    }
+
+    private static string NormalizeOwnerUpdateRequiredExternalHttpsUrl(string? value, int maxLength, string fieldName)
+    {
+        var normalized = NormalizeOwnerUpdateExternalHttpsUrl(value, maxLength, fieldName);
+        if (normalized is null)
+            throw new InvalidOperationException($"{fieldName} is required.");
+
+        return normalized;
+    }
+
+    private static string? NormalizeOwnerUpdateExternalHttpsUrl(string? value, int maxLength, string fieldName)
+    {
+        var normalized = NormalizeOwnerUpdateOptional(value);
+        if (normalized is null)
+            return null;
+
+        if (normalized.Length > maxLength)
+            throw new InvalidOperationException($"{fieldName} must be {maxLength} characters or fewer.");
+
+        if (normalized.StartsWith("//", StringComparison.Ordinal))
+            throw new InvalidOperationException($"{fieldName} must be a valid https URL.");
+
+        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri) ||
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(uri.Host) ||
+            uri.HostNameType == UriHostNameType.Unknown ||
+            !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            throw new InvalidOperationException($"{fieldName} must be a valid https URL.");
+        }
+
+        var absolute = uri.AbsoluteUri;
+        if (absolute.Length > maxLength)
+            throw new InvalidOperationException($"{fieldName} must be {maxLength} characters or fewer.");
+
+        return absolute;
     }
 
     private static string SlugifyOwnerUpdateValue(string value)

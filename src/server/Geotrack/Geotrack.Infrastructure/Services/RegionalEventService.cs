@@ -19,13 +19,16 @@ public class RegionalEventService : IRegionalEventService
 
     private readonly AppDbContext _db;
     private readonly RegionalScopeValidationService _scopeValidation;
+    private readonly IContentHtmlSanitizer _htmlSanitizer;
 
     public RegionalEventService(
         AppDbContext db,
-        RegionalScopeValidationService scopeValidation)
+        RegionalScopeValidationService scopeValidation,
+        IContentHtmlSanitizer htmlSanitizer)
     {
         _db = db;
         _scopeValidation = scopeValidation;
+        _htmlSanitizer = htmlSanitizer;
     }
 
     public async Task<RegionalEventListResponseDto> GetEventsAsync(
@@ -253,7 +256,7 @@ public class RegionalEventService : IRegionalEventService
 
         var name = NormalizeRequiredText(request.Name, "Event title is required.", 200, "Event title is too long.");
         var summary = NormalizeRequiredText(request.Summary, "Summary is required.", 160, "Summary is too long.");
-        var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
+        var description = NormalizeRichDescription(request.Description, 8000, "Description is too long.");
         var status = NormalizeCreateStatus(request.Status);
         var eventTypeId = await ResolveEventTypeIdAsync(request.EventTypeId);
         var parent = await ResolveParentAsync(request.RegionId, request);
@@ -700,7 +703,7 @@ public class RegionalEventService : IRegionalEventService
         };
     }
 
-    private static void ApplyUpdate(Event @event, RegionalEventUpdateRequestDto request)
+    private void ApplyUpdate(Event @event, RegionalEventUpdateRequestDto request)
     {
         if (request.Name is not null)
         {
@@ -715,11 +718,7 @@ public class RegionalEventService : IRegionalEventService
 
         if (request.Description is not null)
         {
-            var description = request.Description.Trim();
-            if (description.Length > 8000)
-                throw new InvalidOperationException("Description is too long.");
-
-            @event.Description = description;
+            @event.Description = NormalizeRichDescription(request.Description, 8000, "Description is too long.");
         }
 
         if (request.Summary is not null)
@@ -799,7 +798,9 @@ public class RegionalEventService : IRegionalEventService
             @event.AgeRestriction = NormalizeOptionalText(request.AgeRestriction, 100, "Age restriction is too long.");
         }
 
-        @event.VenueDescription = NormalizeOptionalText(request.VenueDescription, 2000, "Venue description is too long.", @event.VenueDescription);
+        @event.VenueDescription = request.VenueDescription is null
+            ? @event.VenueDescription
+            : NormalizeRichDescription(request.VenueDescription, 2000, "Venue description is too long.");
         @event.ArrivalTips = NormalizeOptionalText(request.ArrivalTips, 2000, "Arrival tips are too long.", @event.ArrivalTips);
         @event.Accessibility = NormalizeOptionalText(request.Accessibility, 1000, "Accessibility notes are too long.", @event.Accessibility);
     }
@@ -995,6 +996,15 @@ public class RegionalEventService : IRegionalEventService
             throw new InvalidOperationException(errorMessage);
 
         return normalized.Length == 0 ? null : normalized;
+    }
+
+    private string NormalizeRichDescription(string? value, int maxLength, string errorMessage)
+    {
+        var normalized = _htmlSanitizer.SanitizeRichText(value);
+        if (normalized.Length > maxLength)
+            throw new InvalidOperationException(errorMessage);
+
+        return normalized;
     }
 
     private static string NormalizeRequiredText(string? value, string requiredMessage, int maxLength, string lengthMessage)

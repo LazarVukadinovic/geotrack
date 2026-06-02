@@ -21,13 +21,16 @@ public class RegionalDestinationService : IRegionalDestinationService
 
     private readonly AppDbContext _db;
     private readonly RegionalScopeValidationService _scopeValidation;
+    private readonly IContentHtmlSanitizer _htmlSanitizer;
 
     public RegionalDestinationService(
         AppDbContext db,
-        RegionalScopeValidationService scopeValidation)
+        RegionalScopeValidationService scopeValidation,
+        IContentHtmlSanitizer htmlSanitizer)
     {
         _db = db;
         _scopeValidation = scopeValidation;
+        _htmlSanitizer = htmlSanitizer;
     }
 
     public async Task<RegionalDestinationListResponseDto> GetDestinationsAsync(
@@ -220,7 +223,7 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         var name = NormalizeRequiredText(request.Name, "Destination name is required.", 200, "Destination name is too long.");
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
-        var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
+        var description = NormalizeRichDescription(request.Description, 8000, "Description is too long.");
         var status = NormalizeCreateStatus(request.Status);
         var boundary = BuildBoundary(request.Boundary);
         var coordinates = ResolveCoordinates(request, boundary);
@@ -465,7 +468,7 @@ public class RegionalDestinationService : IRegionalDestinationService
         };
     }
 
-    private static void ApplyUpdate(Destination destination, RegionalDestinationUpdateRequestDto request)
+    private void ApplyUpdate(Destination destination, RegionalDestinationUpdateRequestDto request)
     {
         if (request.Name is not null)
         {
@@ -483,7 +486,7 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         if (request.Description is not null)
         {
-            destination.Description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
+            destination.Description = NormalizeRichDescription(request.Description, 8000, "Description is too long.");
         }
 
         if (request.DestinationTypeId.HasValue)
@@ -666,6 +669,15 @@ public class RegionalDestinationService : IRegionalDestinationService
         var normalized = value.Trim();
         if (normalized.Length == 0)
             return null;
+        if (normalized.Length > maxLength)
+            throw new InvalidOperationException(tooLongMessage);
+
+        return normalized;
+    }
+
+    private string NormalizeRichDescription(string? value, int maxLength, string tooLongMessage)
+    {
+        var normalized = _htmlSanitizer.SanitizeRichText(value);
         if (normalized.Length > maxLength)
             throw new InvalidOperationException(tooLongMessage);
 
