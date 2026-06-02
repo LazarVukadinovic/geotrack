@@ -2,13 +2,21 @@
   position: fixed;
   inset: 0;
   z-index: 500;
-  display: flex;
-  flex-direction: column;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: #fff;
   outline: none;
+}
+
+.gallery {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100dvh;
+  height: 100%;
 }
 
 // ─── Backdrop (handles click-outside-to-close) ────────────────────────────────
@@ -37,9 +45,14 @@
 .gallery__counter {
   font-size: 14px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.95);
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.42);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.24);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.58);
 }
 
 .gallery__close {
@@ -48,17 +61,18 @@
   justify-content: center;
   width: 38px;
   height: 38px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.48);
   border: none;
   border-radius: 50%;
   color: #fff;
   cursor: pointer;
   touch-action: manipulation;
-  transition: background 0.15s;
+  transition: background 0.15s, box-shadow 0.15s;
   flex-shrink: 0;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.32);
 
-  &:hover { background: rgba(255, 255, 255, 0.22); }
-  &:active { background: rgba(255, 255, 255, 0.3); }
+  &:hover { background: rgba(0, 0, 0, 0.58); }
+  &:active { background: rgba(0, 0, 0, 0.68); }
 
   svg {
     width: 17px;
