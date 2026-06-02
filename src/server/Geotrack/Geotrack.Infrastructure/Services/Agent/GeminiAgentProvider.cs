@@ -121,6 +121,13 @@ public class GeminiAgentProvider : IAgentProvider
                         continue;
                     }
 
+                    _logger.LogWarning(
+                        "Gemini provider returned status {StatusCode} provider status {ProviderStatus}; mapped to {ErrorCode} on attempt {Attempt}.",
+                        (int)response.StatusCode,
+                        providerError?.Error?.Status,
+                        mapped.Code,
+                        attempt);
+
                     throw mapped;
                 }
 

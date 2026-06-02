@@ -37,10 +37,21 @@ public class GeminiAskAgentService : IGeminiAskAgentService
         var attempts = _keyPool.GetAvailableKeys();
         if (attempts.Count == 0)
         {
+            _logger.LogWarning(
+                "Gemini key pool has no available keys for Ask Agent; configured {ConfiguredKeyCount}, available {AvailableKeyCount}.",
+                _keyPool.ConfiguredKeyCount,
+                _keyPool.AvailableKeyCount);
             throw TemporarilyUnavailable();
         }
 
         var model = Model;
+        _logger.LogInformation(
+            "Gemini Ask Agent request will try up to {AttemptCount} key(s) for model {Model}; configured {ConfiguredKeyCount}, available {AvailableKeyCount}.",
+            attempts.Count,
+            model,
+            _keyPool.ConfiguredKeyCount,
+            _keyPool.AvailableKeyCount);
+
         foreach (var key in attempts)
         {
             try
@@ -60,15 +71,17 @@ public class GeminiAskAgentService : IGeminiAskAgentService
             {
                 _keyPool.MarkRateLimited(key);
                 _logger.LogWarning(
-                    "Gemini API key {KeyFingerprint} hit quota/rate limits while serving Ask Agent.",
-                    key.Fingerprint);
+                    "Gemini API key {KeyFingerprint} hit quota/rate limits while serving Ask Agent; status {StatusCode}.",
+                    key.Fingerprint,
+                    ex.StatusCode);
             }
             catch (AgentException ex) when (IsInvalidKey(ex))
             {
                 _keyPool.MarkInvalid(key);
                 _logger.LogWarning(
-                    "Gemini API key {KeyFingerprint} was rejected by Gemini.",
-                    key.Fingerprint);
+                    "Gemini API key {KeyFingerprint} was rejected by Gemini; status {StatusCode}.",
+                    key.Fingerprint,
+                    ex.StatusCode);
             }
             catch (AgentException)
             {
@@ -76,6 +89,11 @@ public class GeminiAskAgentService : IGeminiAskAgentService
             }
         }
 
+        _logger.LogWarning(
+            "Gemini Ask Agent exhausted {AttemptCount} key attempt(s); configured {ConfiguredKeyCount}, available {AvailableKeyCount}.",
+            attempts.Count,
+            _keyPool.ConfiguredKeyCount,
+            _keyPool.AvailableKeyCount);
         throw TemporarilyUnavailable();
     }
 

@@ -4,6 +4,7 @@ using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Options;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure.Services.Agent;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -78,6 +79,27 @@ public class GeminiKeyPoolAndAskAgentServiceTests
         Assert.DoesNotContain(nextAttempts, key => key.Index == first.Index);
         Assert.Single(nextAttempts);
         Assert.Equal(1, pool.AvailableKeyCount);
+    }
+
+    [Fact]
+    public void Key_pool_logs_fingerprint_without_full_key()
+    {
+        var logger = new RecordingLogger<GeminiKeyPool>();
+        var pool = new GeminiKeyPool(
+            Options.Create(new GeminiOptions
+            {
+                ApiKeys = ["first-key-1111", "second-key-2222"],
+                KeyCooldownSeconds = 300
+            }),
+            logger);
+
+        var first = pool.GetAvailableKeys().First();
+        pool.MarkRateLimited(first);
+
+        var logText = string.Join('\n', logger.Messages);
+        Assert.Contains(first.Fingerprint, logText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("first-key-1111", logText, StringComparison.Ordinal);
+        Assert.DoesNotContain("second-key-2222", logText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -284,6 +306,27 @@ public class GeminiKeyPoolAndAskAgentServiceTests
             }
 
             base.Dispose(disposing);
+        }
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull =>
+            NullLogger.Instance.BeginScope(state);
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
         }
     }
 }

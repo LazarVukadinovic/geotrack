@@ -10,6 +10,7 @@ using Geotrack.Infrastructure.Services.Agent;
 using Geotrack.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
@@ -504,6 +505,32 @@ public class AgentCatalogGroundingTests
         Assert.Equal("prompt_too_long", ex.Code);
     }
 
+    [Fact]
+    public async Task Ask_agent_logs_metadata_without_full_prompt_or_pii()
+    {
+        var logger = new RecordingLogger<AgentOrchestrator>();
+        var prompt = "Find places near secret@example.com and phone +381000000.";
+        var orchestrator = new AgentOrchestrator(
+            new FakeGeminiAskAgentService(),
+            new FakeToolService(),
+            Options.Create(new AgentOptions { MaxPromptLength = 4000, MaxContextItems = 5, RequestTimeoutSeconds = 10 }),
+            Options.Create(new McpOptions()),
+            logger);
+
+        await orchestrator.ChatAsync(
+            new AgentChatRequestDto
+            {
+                Message = prompt
+            },
+            userId: 42);
+
+        var logText = string.Join('\n', logger.Messages);
+        Assert.Contains("prompt length", logText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(prompt, logText, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret@example.com", logText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("+381000000", logText, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static AgentChatRequestDto ChatRequest(string message) => new()
     {
         Message = message
@@ -626,6 +653,27 @@ public class AgentCatalogGroundingTests
         {
             LastRequest = request;
             return Task.FromResult(new AgentProviderChatResult { Text = "Grounded answer" });
+        }
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull =>
+            NullLogger.Instance.BeginScope(state);
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
         }
     }
 }

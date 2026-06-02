@@ -78,6 +78,14 @@ public class AgentOrchestrator : IAgentOrchestrator
         }
 
         var model = _gemini.Model;
+        var started = DateTime.UtcNow;
+        _logger.LogInformation(
+            "Ask Agent request started for user {UserId}; provider {Provider}; model {Model}; prompt length {PromptLength}.",
+            userId,
+            _gemini.ProviderId,
+            model,
+            message.Length);
+
         var context = await _toolService.BuildAgentContextAsync(
             message,
             request.ContextOptions,
@@ -87,6 +95,7 @@ public class AgentOrchestrator : IAgentOrchestrator
 
         if (context.ClarificationNeeded)
         {
+            LogLocalCompletion(userId, model, started, "clarification", context.ToolsUsed, cards.Count);
             return BuildLocalResponse(
                 request,
                 _gemini.ProviderId,
@@ -98,6 +107,7 @@ public class AgentOrchestrator : IAgentOrchestrator
 
         if (context.NoResults)
         {
+            LogLocalCompletion(userId, model, started, "no_results", context.ToolsUsed, cards.Count);
             return BuildLocalResponse(
                 request,
                 _gemini.ProviderId,
@@ -115,17 +125,20 @@ public class AgentOrchestrator : IAgentOrchestrator
             Timeout = TimeSpan.FromSeconds(Math.Clamp(_agentOptions.RequestTimeoutSeconds, 3, 60))
         };
 
-        var started = DateTime.UtcNow;
         try
         {
             var result = await _gemini.GenerateAsync(providerRequest, cancellationToken);
             _logger.LogInformation(
-                "Agent provider {Provider} model {Model} completed in {LatencyMs} ms for user {UserId}; tools {Tools}.",
+                "Ask Agent provider {Provider} model {Model} completed in {LatencyMs} ms for user {UserId}; tools {Tools}; cards {CardCount}; usage prompt {PromptTokens}, completion {CompletionTokens}, total {TotalTokens}.",
                 _gemini.ProviderId,
                 model,
                 (DateTime.UtcNow - started).TotalMilliseconds,
                 userId,
-                string.Join(",", context.ToolsUsed));
+                string.Join(",", context.ToolsUsed),
+                cards.Count,
+                result.Usage?.PromptTokens,
+                result.Usage?.CompletionTokens,
+                result.Usage?.TotalTokens);
 
             return new AgentChatResponseDto
             {
@@ -142,19 +155,48 @@ public class AgentOrchestrator : IAgentOrchestrator
                 Timestamp = DateTime.UtcNow
             };
         }
-        catch (AgentException)
+        catch (AgentException ex)
         {
+            _logger.LogWarning(
+                "Ask Agent request failed with code {ErrorCode} status {StatusCode} for user {UserId}; provider {Provider}; model {Model}; latency {LatencyMs} ms.",
+                ex.Code,
+                ex.StatusCode,
+                userId,
+                _gemini.ProviderId,
+                model,
+                (DateTime.UtcNow - started).TotalMilliseconds);
             throw;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(
-                "Agent provider {Provider} failed with {ExceptionType} for user {UserId}.",
+                "Ask Agent provider {Provider} failed with {ExceptionType} for user {UserId}; model {Model}; latency {LatencyMs} ms.",
                 _gemini.ProviderId,
                 ex.GetType().Name,
-                userId);
+                userId,
+                model,
+                (DateTime.UtcNow - started).TotalMilliseconds);
             throw new AgentException("agent_unavailable", "Ask Agent is currently unavailable. Please try again later.", 503);
         }
+    }
+
+    private void LogLocalCompletion(
+        int userId,
+        string model,
+        DateTime started,
+        string outcome,
+        List<string> toolsUsed,
+        int cardCount)
+    {
+        _logger.LogInformation(
+            "Ask Agent request completed locally with outcome {Outcome} in {LatencyMs} ms for user {UserId}; provider {Provider}; model {Model}; tools {Tools}; cards {CardCount}.",
+            outcome,
+            (DateTime.UtcNow - started).TotalMilliseconds,
+            userId,
+            _gemini.ProviderId,
+            model,
+            string.Join(",", toolsUsed),
+            cardCount);
     }
 
     private static void RejectClientProviderConfiguration(AgentChatRequestDto request)
