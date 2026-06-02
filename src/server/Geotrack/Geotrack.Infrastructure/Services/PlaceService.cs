@@ -1247,6 +1247,42 @@ public class PlaceService : IPlaceService
         if (request.BookingPartners is not null)
             await SyncOwnerUpdateBookingPartnersAsync(place.Id, request.BookingPartners);
 
+        if (request.Images is { Count: > 0 })
+        {
+            var existingImages = await _db.EntityImages
+                .Where(img => img.PlaceId == place.Id)
+                .ToListAsync();
+
+            _db.EntityImages.RemoveRange(existingImages);
+
+            var now = DateTime.UtcNow;
+            var mainSeen = false;
+            foreach (var img in request.Images.OrderBy(i => i.SortOrder))
+            {
+                if (string.IsNullOrWhiteSpace(img.Url)) continue;
+
+                var role = EntityImageRole.Normalize(img.ImageRole);
+                var isMain = !mainSeen && role == EntityImageRole.Cover;
+                if (isMain) mainSeen = true;
+
+                _db.EntityImages.Add(new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Place,
+                    PlaceId = place.Id,
+                    Url = img.Url,
+                    AltText = string.Empty,
+                    Caption = string.Empty,
+                    IsMain = isMain,
+                    ImageRole = role,
+                    SortOrder = img.SortOrder,
+                    ImagePosition = img.ImagePosition ?? "50% 50%",
+                    ImageSize = img.ImageSize ?? "cover",
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+            }
+        }
+
         place.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();

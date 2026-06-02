@@ -9,6 +9,8 @@ import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
+import { PhotoGalleryComponent } from '../../../../shared/components/photo-gallery/photo-gallery.component';
+import type { EntityImage } from '../../../../core/models/entity-image.model';
 import { HttpClient } from '@angular/common/http';
 import { PlaceDetailService } from '../../services/place-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
@@ -21,7 +23,7 @@ import type { MapEntityMarker, MapEntityType } from '../../../../core/services/m
 @Component({
   selector: 'app-place-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink],
+  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent],
   providers: [ReviewInteractionsService],
   templateUrl: './place-detail-page.component.html',
   styleUrl: './place-detail-page.component.scss',
@@ -55,7 +57,7 @@ export class PlaceDetailPageComponent {
   protected readonly scrollProgress = signal(0);
   protected readonly hoursExpanded = signal(false);
   protected readonly galleryOpen = signal(false);
-  protected readonly selectedImageUrl = signal<string | null>(null);
+  protected readonly galleryStartIndex = signal(0);
   protected readonly ownershipClaimOpen = signal(false);
   protected readonly ownershipProofFile = signal<File | null>(null);
   protected readonly ownershipProofFileName = signal('');
@@ -64,29 +66,32 @@ export class PlaceDetailPageComponent {
   protected readonly ownershipClaimSubmitting = signal(false);
   protected readonly ownershipClaimSubmitted = signal(false);
 
-  protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.place()?.heroImage ?? '');
-  protected readonly heroImagePosition = computed(() => {
-    const p = this.place();
-    const selected = this.selectedImageUrl();
-    if (!p) return '50% 50%';
-    if (!selected || selected === p.heroImage) return p.heroImagePosition || '50% 50%';
-    return p.images.find(image => image.url === selected)?.imagePosition || '50% 50%';
-  });
-  protected readonly heroImageSize = computed(() => {
-    const p = this.place();
-    const selected = this.selectedImageUrl();
-    if (!p) return 'cover';
-    if (!selected || selected === p.heroImage) return p.heroImageSize || 'cover';
-    return p.images.find(image => image.url === selected)?.imageSize || 'cover';
-  });
+  protected readonly heroImage = computed(() => this.place()?.heroImage ?? '');
+  protected readonly heroImagePosition = computed(() => this.place()?.heroImagePosition || '50% 50%');
+  protected readonly heroImageSize = computed(() => this.place()?.heroImageSize || 'cover');
   protected readonly heroImageTransform = computed(() => {
     const size = this.heroImageSize();
     if (size === 'cover') return 'none';
-
     const numeric = Number.parseFloat(size);
     if (!Number.isFinite(numeric) || numeric <= 100) return 'none';
-
     return `scale(${Math.min(numeric, 200) / 100})`;
+  });
+
+  protected readonly allGalleryImages = computed((): EntityImage[] => {
+    const p = this.place();
+    if (!p) return [];
+    const heroImg: EntityImage = {
+      id: '__cover__',
+      url: p.heroImage,
+      altText: p.title,
+      caption: '',
+      isMain: true,
+      imageRole: 'cover',
+      sortOrder: -1,
+      imagePosition: p.heroImagePosition || '50% 50%',
+      imageSize: p.heroImageSize || 'cover',
+    };
+    return p.heroImage ? [heroImg, ...p.images] : [...p.images];
   });
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
@@ -142,7 +147,6 @@ export class PlaceDetailPageComponent {
       this.scrollProgress.set(0);
       this.hoursExpanded.set(false);
       this.galleryOpen.set(false);
-      this.selectedImageUrl.set(null);
       const el = this.pdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
@@ -199,15 +203,8 @@ export class PlaceDetailPageComponent {
     void this.router.navigate(['/events', id], { queryParams: this.collectionQueryParams() });
   }
 
-  protected selectGalleryImage(url: string): void {
-    this.selectedImageUrl.set(url);
-  }
-
-  protected isGalleryImageActive(url: string): boolean {
-    return (this.selectedImageUrl() ?? this.place()?.heroImage ?? '') === url;
-  }
-
-  protected openGallery(): void {
+  protected openGallery(startIndex = 0): void {
+    this.galleryStartIndex.set(startIndex);
     this.galleryOpen.set(true);
   }
 

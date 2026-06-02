@@ -136,9 +136,6 @@
 }
 
 // ─── Spacer ───────────────────────────────────────────────────────────────────
-// Height = hero height (300px) minus the card's top overlap (32px).
-// This transparent gap reveals the hero image before the card starts.
-// As the user scrolls, the gap shrinks and the card covers more of the hero.
 
 .pd__scroll-spacer {
   height: 268px;
@@ -343,50 +340,6 @@
   opacity: 0.95;
 }
 
-.pd__gallery {
-  margin: -4px -20px 24px;
-  padding: 0 20px;
-  overflow-x: auto;
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar { display: none; }
-}
-
-.pd__gallery-track {
-  display: flex;
-  gap: 10px;
-  width: max-content;
-  padding-right: 20px;
-}
-
-.pd__gallery-thumb {
-  width: 96px;
-  height: 68px;
-  flex: 0 0 auto;
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #dde0e7;
-  cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.1s ease;
-
-  &:active { transform: scale(0.97); }
-
-  &:focus-visible {
-    outline: 2px solid #e8570a;
-    outline-offset: 2px;
-  }
-
-  &--active { border-color: #e8570a; }
-}
-
-.pd__gallery-img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
 
 .pd__divider {
   height: 1px;
@@ -444,6 +397,43 @@
   color: #4b5563;
   line-height: 1.65;
   margin: 0 0 8px;
+}
+
+.pd__view-photos {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 13px 16px;
+  background: #f8f9fb;
+  border: 1px solid #e8eaef;
+  border-radius: 14px;
+  color: #1a2b4c;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+
+  &:hover { background: #f0f2f6; border-color: #d8dae0; }
+  &:active { background: #e8eaef; }
+
+  svg:first-child {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: #e8570a;
+  }
+}
+
+.pd__view-photos-chevron {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-left: auto;
+  color: #9ca3af;
 }
 
 .pd__amenities {
@@ -1008,104 +998,6 @@
 }
 
 
-.pd__gallery-open {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 18px;
-  padding: 12px 18px;
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 999px;
-  background: rgba(255,255,255,.06);
-  color: #f8fafc;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.pd__gallery-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-}
-
-.pd__gallery-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,.72);
-  border: 0;
-  cursor: pointer;
-}
-
-.pd__gallery-modal-panel {
-  position: relative;
-  width: min(1040px, 100%);
-  max-height: min(86vh, 900px);
-  overflow: auto;
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 28px;
-  background: #070b12;
-  box-shadow: 0 30px 90px rgba(0,0,0,.55);
-}
-
-.pd__gallery-modal-head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 20px;
-  background: rgba(7,11,18,.92);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255,255,255,.08);
-}
-
-.pd__gallery-modal-head h2 {
-  margin: 0;
-  color: #f8fafc;
-  font-size: 18px;
-}
-
-.pd__gallery-close {
-  width: 38px;
-  height: 38px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255,255,255,.08);
-  color: #f8fafc;
-  font-size: 28px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.pd__gallery-layout {
-  columns: 3 240px;
-  column-gap: 14px;
-  padding: 16px;
-}
-
-.pd__gallery-item {
-  break-inside: avoid;
-  margin: 0 0 14px;
-  border-radius: 20px;
-  overflow: hidden;
-  background: rgba(255,255,255,.04);
-}
-
-.pd__gallery-item img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.pd__gallery-item figcaption {
-  padding: 10px 12px;
-  color: #cbd5e1;
-  font-size: 12px;
-}
 
 .pd__ownership-status { border-radius: 999px; padding: 10px 14px; font-size: 13px; font-weight: 800; }
 .pd__ownership-status--owned { background: rgba(16,185,129,.12); color: #065f46; }

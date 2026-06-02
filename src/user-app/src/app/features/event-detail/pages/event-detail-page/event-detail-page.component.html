@@ -157,13 +157,6 @@
           </div>
         }
 
-        <!-- ── About the Event ─────────────────────────────────────────── -->
-        @if (ev.images.length > 0) {
-          <button type="button" class="ed__gallery-open" (click)="openGallery()">
-            Open Gallery ({{ ev.images.length }})
-          </button>
-        }
-
         <div class="ed__detail-grid">
           <div class="ed__detail-main">
             <div class="ed__divider ed__divider--about"></div>
@@ -171,6 +164,19 @@
             <section class="ed__section ed__section--about">
               <h2 class="ed__section-title">About the Event</h2>
               <p class="ed__about">{{ ev.about }}</p>
+              @if (allGalleryImages().length > 0) {
+                <button type="button" class="ed__view-photos" (click)="openGallery(0)">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+                    <circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/>
+                    <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8.5 5l1.2-1.5h4.6L15.5 5"/>
+                  </svg>
+                  View gallery
+                  <svg class="ed__view-photos-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 18l6-6-6-6"/>
+                  </svg>
+                </button>
+              }
             </section>
 
             @if (ev.similar.length > 0) {
@@ -386,43 +392,12 @@
     </div><!-- /.ed__scroll -->
 
     @if (galleryOpen()) {
-      <div class="ed__gallery-modal" role="dialog" aria-modal="true" aria-label="Event gallery">
-        <button
-          type="button"
-          class="ed__gallery-modal-backdrop"
-          aria-label="Close gallery"
-          (click)="closeGallery()"
-        ></button>
-
-        <section class="ed__gallery-modal-panel">
-          <header class="ed__gallery-modal-head">
-            <h2>{{ ev.title }} gallery</h2>
-            <button
-              type="button"
-              class="ed__gallery-close"
-              aria-label="Close gallery"
-              (click)="closeGallery()"
-            >×</button>
-          </header>
-
-          <div class="ed__gallery-layout">
-            @for (image of ev.images; track image.id) {
-              <figure class="ed__gallery-item">
-                <img
-                  appImageFallback
-                  [src]="image.url"
-                  [alt]="image.altText || ev.title"
-                  loading="lazy"
-                  decoding="async"
-                />
-                @if (image.caption) {
-                  <figcaption>{{ image.caption }}</figcaption>
-                }
-              </figure>
-            }
-          </div>
-        </section>
-      </div>
+      <app-photo-gallery
+        [images]="allGalleryImages()"
+        [title]="ev.title"
+        [startIndex]="galleryStartIndex()"
+        (closed)="closeGallery()"
+      />
     }
 
   </article>

@@ -250,7 +250,22 @@ export class ContributionsService {
     const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
 
-    return this.http.put(`/api/places/${placeId}/owner-update`, {
+    // Build existing-image metadata (same logic as toFormData)
+    const images: { url: string; imageRole: string; sortOrder: number; imagePosition?: string; imageSize?: string }[] = [];
+    if (!basics.coverImageFile && basics.cardImageUrl) {
+      images.push({ url: basics.cardImageUrl, imageRole: 'card', sortOrder: -9, imagePosition: basics.cardImgBgPosition || '50% 50%', imageSize: basics.cardImgBgSize || 'cover' });
+    }
+    if (!basics.coverImageFile && basics.imageUrl) {
+      images.push({ url: basics.imageUrl, imageRole: 'cover', sortOrder: -10, imagePosition: basics.imgBgPosition || '50% 50%', imageSize: basics.imgBgSize || 'cover' });
+    }
+    (basics.galleryImageUrls ?? []).forEach((url, index) => {
+      const file = (basics.galleryImageFiles ?? [])[index];
+      if (url && !file && !url.startsWith('data:')) {
+        images.push({ url, imageRole: 'gallery', sortOrder: index });
+      }
+    });
+
+    const payload = {
       name: basics.name,
       description: details.description,
       website: details.website,
@@ -260,7 +275,27 @@ export class ContributionsService {
       tags: features.tags,
       amenities: toContributionAmenityApiValues(features.amenities, isAccommodation),
       bookingPartners: details.bookingPartners,
-    }).pipe(
+      images,
+      imagePosition: basics.imgBgPosition || '50% 50%',
+      imageSize: basics.imgBgSize || 'cover',
+      cardImagePosition: basics.cardImgBgPosition || '50% 50%',
+      cardImageSize: basics.cardImgBgSize || 'cover',
+    };
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(payload));
+
+    if (basics.coverImageFile) {
+      formData.append('coverImage', basics.coverImageFile);
+    }
+    if (basics.cardImageFile) {
+      formData.append('cardImage', basics.cardImageFile);
+    }
+    for (const file of basics.galleryImageFiles ?? []) {
+      if (file) formData.append('galleryImages', file);
+    }
+
+    return this.http.put(`/api/places/${placeId}/owner-update`, formData).pipe(
       tap(() => {
         this.analytics.track('contribution_updated', { entityId: placeId });
         this.loadMine();

@@ -17,10 +17,25 @@ public class OwnerUpdatePlaceRequestDto
     public string? VisitorTips { get; set; }
     public string? AccessNotes { get; set; }
     public string? AccessibilityNotes { get; set; }
+
+    public List<OwnerUpdatePlaceImageDto>? Images { get; set; }
+    public string? ImagePosition { get; set; }
+    public string? ImageSize { get; set; }
+    public string? CardImagePosition { get; set; }
+    public string? CardImageSize { get; set; }
 }
 
 public class OwnerUpdateBookingPartnerDto
 {
     public string Id { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
+}
+
+public class OwnerUpdatePlaceImageDto
+{
+    public string Url { get; set; } = string.Empty;
+    public string ImageRole { get; set; } = "gallery";
+    public int SortOrder { get; set; }
+    public string? ImagePosition { get; set; }
+    public string? ImageSize { get; set; }
 }

@@ -1,0 +1,89 @@
+<div
+  #root
+  class="gallery"
+  role="dialog"
+  aria-modal="true"
+  [attr.aria-label]="(title() || 'Photos') + ' gallery'"
+  tabindex="-1"
+>
+  <!-- Backdrop -->
+  <button type="button" class="gallery__backdrop" aria-label="Close gallery" (click)="close()"></button>
+
+  <!-- Header -->
+  <div class="gallery__header">
+    <span class="gallery__counter" aria-live="polite" aria-atomic="true">
+      {{ currentIndex() + 1 }}&thinsp;/&thinsp;{{ images().length }}
+    </span>
+    <button type="button" class="gallery__close" aria-label="Close gallery" (click)="close()">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6 6 18M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Swipeable track -->
+  <div
+    class="gallery__stage"
+    [class.gallery__stage--dragging]="isDragging()"
+    (pointerdown)="onPointerDown($event)"
+    (pointermove)="onPointerMove($event)"
+    (pointerup)="onPointerUp()"
+    (pointercancel)="onPointerCancel()"
+  >
+    <div
+      class="gallery__track"
+      [class.gallery__track--animated]="isAnimated()"
+      [style.transform]="trackTransform()"
+      (transitionend)="onTrackTransitionEnd()"
+    >
+      @for (img of wrappedImages(); track $index) {
+        <div class="gallery__slide">
+          <img
+            appImageFallback
+            class="gallery__img"
+            [src]="img.url"
+            [alt]="img.altText || title()"
+            draggable="false"
+            decoding="async"
+          />
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Prev / Next arrows (desktop / large screens) -->
+  @if (images().length > 1) {
+    <button type="button" class="gallery__nav gallery__nav--prev" aria-label="Previous photo" (click)="prevImage()">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"/>
+      </svg>
+    </button>
+    <button type="button" class="gallery__nav gallery__nav--next" aria-label="Next photo" (click)="nextImage()">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M9 18l6-6-6-6"/>
+      </svg>
+    </button>
+  }
+
+  <!-- Footer: caption + dots -->
+  <div class="gallery__footer">
+    @if (images()[currentIndex()]?.caption) {
+      <p class="gallery__caption">{{ images()[currentIndex()]!.caption }}</p>
+    }
+    @if (images().length > 1 && images().length <= 10) {
+      <div class="gallery__dots" role="list" aria-label="Photo navigation">
+        @for (img of images(); track img.id; let i = $index) {
+          <button
+            type="button"
+            class="gallery__dot"
+            [class.gallery__dot--active]="i === currentIndex()"
+            [attr.aria-label]="'Photo ' + (i + 1)"
+            [attr.aria-current]="i === currentIndex() ? 'true' : null"
+            role="listitem"
+            (click)="goToIndex(i)"
+          ></button>
+        }
+      </div>
+    }
+  </div>
+</div>

@@ -6,6 +6,8 @@ import { LocationService } from '../../../../core/services/location.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
+import { PhotoGalleryComponent } from '../../../../shared/components/photo-gallery/photo-gallery.component';
+import type { EntityImage } from '../../../../core/models/entity-image.model';
 import { EventDetailService } from '../../services/event-detail.service';
 import type { EventDetail } from '../../models/event-detail.model';
 import type { MapEntityMarker } from '../../../../core/services/map-api.service';
@@ -13,7 +15,7 @@ import type { MapEntityMarker } from '../../../../core/services/map-api.service'
 @Component({
   selector: 'app-event-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ImageFallbackDirective, RouterLink],
+  imports: [SectionHeaderComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent],
   templateUrl: './event-detail-page.component.html',
   styleUrl: './event-detail-page.component.scss',
 })
@@ -39,7 +41,25 @@ export class EventDetailPageComponent {
   /** 0 = transparent top bar, 1 = full navy + visible title. Driven by ed__scroll. */
   protected readonly scrollProgress = signal(0);
   protected readonly galleryOpen = signal(false);
+  protected readonly galleryStartIndex = signal(0);
   protected readonly heroImage = computed(() => this.event()?.heroImage ?? '');
+
+  protected readonly allGalleryImages = computed((): EntityImage[] => {
+    const ev = this.event();
+    if (!ev) return [];
+    const heroImg: EntityImage = {
+      id: '__cover__',
+      url: ev.heroImage,
+      altText: ev.title,
+      caption: '',
+      isMain: true,
+      imageRole: 'cover',
+      sortOrder: -1,
+      imagePosition: '50% 50%',
+      imageSize: 'cover',
+    };
+    return ev.heroImage ? [heroImg, ...ev.images] : [...ev.images];
+  });
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.event()?.latitude ?? null,
@@ -117,7 +137,8 @@ export class EventDetailPageComponent {
     void this.router.navigate(['/events', id], { queryParams: this.collectionQueryParams() });
   }
 
-  protected openGallery(): void {
+  protected openGallery(startIndex = 0): void {
+    this.galleryStartIndex.set(startIndex);
     this.galleryOpen.set(true);
   }
 

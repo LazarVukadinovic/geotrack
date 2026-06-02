@@ -188,34 +188,6 @@
         }
 
 
-        <!-- ── Booking partners ──────────────────────────────────────────── -->
-        @if (h.images.length > 1) {
-          <section class="hd__gallery" aria-label="Stay photos">
-            <div class="hd__gallery-track" role="list">
-              @for (image of h.images; track image.id) {
-                <button
-                  type="button"
-                  class="hd__gallery-thumb"
-                  [class.hd__gallery-thumb--active]="isGalleryImageActive(image.url)"
-                  [attr.aria-label]="'Show photo ' + ($index + 1) + ' of ' + h.images.length"
-                  (click)="selectGalleryImage(image.url)"
-                >
-                  <img
-                    appImageFallback
-                    class="hd__gallery-img"
-                    [src]="image.url"
-                    [alt]="image.altText || h.title"
-                    width="120"
-                    height="84"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </button>
-              }
-            </div>
-          </section>
-        }
-
         <div class="hd__detail-grid">
           <div class="hd__detail-side">
         @if (hasBookingPartners()) {
@@ -405,6 +377,19 @@
         <section class="hd__section hd__section--about">
           <h2 class="hd__section-title">About this property</h2>
           <p class="hd__about">{{ h.about }}</p>
+          @if (allGalleryImages().length > 0) {
+            <button type="button" class="hd__view-photos" (click)="openGallery(0)">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+                <circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/>
+                <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8.5 5l1.2-1.5h4.6L15.5 5"/>
+              </svg>
+              View gallery
+              <svg class="hd__view-photos-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 18l6-6-6-6"/>
+              </svg>
+            </button>
+          }
         </section>
 
         <!-- ── Amenities ──────────────────────────────────────────────────── -->
@@ -487,6 +472,15 @@
 
       </div><!-- /.hd__card -->
     </div><!-- /.hd__scroll -->
+
+    @if (galleryOpen()) {
+      <app-photo-gallery
+        [images]="allGalleryImages()"
+        [title]="h.title"
+        [startIndex]="galleryStartIndex()"
+        (closed)="closeGallery()"
+      />
+    }
 
     @if (ownershipClaimOpen()) {
       <div class="hd__claim-modal" role="dialog" aria-modal="true" aria-label="Request ownership">
