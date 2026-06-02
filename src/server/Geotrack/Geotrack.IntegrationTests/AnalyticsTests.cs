@@ -7,7 +7,9 @@ using System.Text.Json;
 using Geotrack.Application.Analytics;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.DTOs.Users;
+using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Analytics;
+using Geotrack.Domain.Entities.Interests;
 using Geotrack.Infrastructure;
 using Geotrack.IntegrationTests.Infrastructure;
 using Geotrack.Server.Controllers;
@@ -550,48 +552,78 @@ public sealed class AnalyticsTests
 
         int placeId;
         int tagId;
+        int interestTopicId;
+        double topicWeight;
         await using (var setup = app.Services.CreateAsyncScope())
         {
             var db = setup.ServiceProvider.GetRequiredService<AppDbContext>();
-            var place = await db.Places.FirstOrDefaultAsync(p => p.Name == "Banje Beach");
-            Assert.NotNull(place);
-            placeId = place.Id;
-            tagId = await db.PlaceTags
-                .Where(pt => pt.PlaceId == placeId)
-                .Select(pt => pt.TagId)
+            var topicLink = await db.PlaceTags
+                .Join(
+                    db.InterestTopicTags.Where(link => link.InterestTopic.IsActive),
+                    placeTag => placeTag.TagId,
+                    topicTag => topicTag.TagId,
+                    (placeTag, topicTag) => new
+                    {
+                        placeTag.PlaceId,
+                        placeTag.TagId,
+                        topicTag.InterestTopicId,
+                        topicTag.Weight
+                    })
+                .GroupBy(link => new { link.PlaceId, link.InterestTopicId })
+                .Select(group => new
+                {
+                    group.Key.PlaceId,
+                    group.Key.InterestTopicId,
+                    TagId = group.Min(link => link.TagId),
+                    TopicWeight = group.Sum(link => link.Weight)
+                })
+                .Where(link => link.TopicWeight >= 1.0 && link.TopicWeight < 10.0 / 7.0)
+                .OrderBy(link => link.PlaceId)
+                .ThenBy(link => link.InterestTopicId)
                 .FirstAsync();
+            placeId = topicLink.PlaceId;
+            tagId = topicLink.TagId;
+            interestTopicId = topicLink.InterestTopicId;
+            topicWeight = topicLink.TopicWeight;
         }
 
         await PostFavoriteAddedAsync(client, placeId);
         await WaitForSignalAsync(app, userId, tagId, signal => signal.Score >= 5.0);
+        await WaitForTopicSignalAsync(app, userId, interestTopicId, signal => signal.Score >= 5.0);
 
         var interests = await client.GetFromJsonAsync<GetUserInterestsResponseDto>("/api/user/me/interests");
         Assert.NotNull(interests);
-        Assert.Contains(interests!.InferredTags, tag => tag.TagId == tagId);
+        Assert.Contains(interests!.InferredTags, tag => tag.InterestTopicId == interestTopicId);
         Assert.Empty(interests.Tags);
 
-        var dismiss = await client.DeleteAsync($"/api/user/me/interests/inferred/{tagId}");
+        var dismiss = await client.DeleteAsync($"/api/user/me/interests/inferred/{interestTopicId}");
         Assert.Equal(HttpStatusCode.NoContent, dismiss.StatusCode);
 
         interests = await client.GetFromJsonAsync<GetUserInterestsResponseDto>("/api/user/me/interests");
         Assert.NotNull(interests);
-        Assert.DoesNotContain(interests!.InferredTags, tag => tag.TagId == tagId);
+        Assert.DoesNotContain(interests!.InferredTags, tag => tag.InterestTopicId == interestTopicId);
 
-        await PostFavoriteAddedAsync(client, placeId);
-        await WaitForSignalAsync(app, userId, tagId, signal => signal.EvidenceSinceDismissal >= 5.0);
+        await PostInterestEventAsync(client, placeId, AnalyticsEventTypes.ReviewCreated);
+        await WaitForTopicSignalAsync(
+            app,
+            userId,
+            interestTopicId,
+            signal => signal.IsDismissed && signal.EvidenceSinceDismissal >= 7.0 * topicWeight);
         interests = await client.GetFromJsonAsync<GetUserInterestsResponseDto>("/api/user/me/interests");
         Assert.NotNull(interests);
-        Assert.DoesNotContain(interests!.InferredTags, tag => tag.TagId == tagId);
+        Assert.DoesNotContain(interests!.InferredTags, tag => tag.InterestTopicId == interestTopicId);
 
-        await PostFavoriteAddedAsync(client, placeId);
-        await WaitForSignalAsync(app, userId, tagId, signal => !signal.IsDismissed);
+        await PostInterestEventAsync(client, placeId, AnalyticsEventTypes.ReviewCreated);
+        await WaitForTopicSignalAsync(app, userId, interestTopicId, signal => !signal.IsDismissed);
         interests = await client.GetFromJsonAsync<GetUserInterestsResponseDto>("/api/user/me/interests");
         Assert.NotNull(interests);
-        Assert.Contains(interests!.InferredTags, tag => tag.TagId == tagId);
+        Assert.Contains(interests!.InferredTags, tag => tag.InterestTopicId == interestTopicId);
 
         await using var verify = app.Services.CreateAsyncScope();
         var verifyDb = verify.ServiceProvider.GetRequiredService<AppDbContext>();
-        var signal = await verifyDb.UserInterestSignals.SingleAsync(s => s.UserId == userId && s.TagId == tagId);
+        var signal = await verifyDb.UserInterestTopicSignals.SingleAsync(s =>
+            s.UserId == userId &&
+            s.InterestTopicId == interestTopicId);
         Assert.False(signal.IsDismissed);
         Assert.Equal(0.0, signal.EvidenceSinceDismissal);
     }
@@ -748,6 +780,131 @@ public sealed class AnalyticsTests
         });
     }
 
+    [Fact]
+    public async Task Event_metadata_scrubs_secret_and_pii_keys_before_storage()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var sessionId = Guid.NewGuid();
+        var response = await client.PostAsJsonAsync(
+            "/api/interests/events",
+            new
+            {
+                anonymousSessionId = sessionId,
+                events = new object[]
+                {
+                    new
+                    {
+                        eventType = AnalyticsEventTypes.PageView,
+                        route = "/agent",
+                        metadata = new Dictionary<string, object?>
+                        {
+                            ["region"] = "Dubrovnik",
+                            ["email"] = "person@example.com",
+                            ["apiKey"] = "secret-key",
+                            ["refreshToken"] = "refresh-secret",
+                            ["prompt"] = "Find trips for my phone number",
+                            ["phoneNumber"] = "+381 00 000"
+                        },
+                    },
+                },
+            });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var row = await db.AnalyticsEvents.SingleAsync(evt => evt.AnonymousSessionId == sessionId);
+
+        Assert.Contains("Dubrovnik", row.MetadataJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("person@example.com", row.MetadataJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret-key", row.MetadataJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("refresh-secret", row.MetadataJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Find trips", row.MetadataJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("+381", row.MetadataJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Retention_cleanup_is_manual_configured_and_deletes_only_expired_rows()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync(
+            configurationOverrides: new Dictionary<string, string?>
+            {
+                ["AnalyticsRetention:RetentionDays"] = "30",
+                ["AnalyticsRetention:BatchSize"] = "10"
+            });
+
+        var now = DateTime.UtcNow;
+        var oldSessionId = Guid.NewGuid();
+        var emptyOldSessionId = Guid.NewGuid();
+        var newSessionId = Guid.NewGuid();
+
+        await using (var setup = app.Services.CreateAsyncScope())
+        {
+            var setupDb = setup.ServiceProvider.GetRequiredService<AppDbContext>();
+            setupDb.AnonymousSessions.AddRange(
+                new AnonymousSession
+                {
+                    Id = oldSessionId,
+                    CreatedAt = now.AddDays(-60),
+                    LastSeenAt = now.AddDays(-60)
+                },
+                new AnonymousSession
+                {
+                    Id = emptyOldSessionId,
+                    CreatedAt = now.AddDays(-60),
+                    LastSeenAt = now.AddDays(-60)
+                },
+                new AnonymousSession
+                {
+                    Id = newSessionId,
+                    CreatedAt = now.AddDays(-2),
+                    LastSeenAt = now.AddDays(-2)
+                });
+            setupDb.AnalyticsEvents.AddRange(
+                new AnalyticsEvent
+                {
+                    AnonymousSessionId = oldSessionId,
+                    EventType = AnalyticsEventTypes.PageView,
+                    Route = "/old",
+                    MetadataJson = "{}",
+                    OccurredAt = now.AddDays(-60)
+                },
+                new AnalyticsEvent
+                {
+                    AnonymousSessionId = newSessionId,
+                    EventType = AnalyticsEventTypes.PageView,
+                    Route = "/new",
+                    MetadataJson = "{}",
+                    OccurredAt = now.AddDays(-2)
+                });
+            await setupDb.SaveChangesAsync();
+        }
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var retention = scope.ServiceProvider.GetRequiredService<IAnalyticsRetentionService>();
+        var dryRun = await retention.CleanupExpiredAsync(now, execute: false);
+
+        Assert.False(dryRun.Execute);
+        Assert.Equal(30, dryRun.RetentionDays);
+        Assert.Equal(1, dryRun.DeletedAnalyticsEvents);
+        Assert.Equal(1, dryRun.DeletedAnonymousSessions);
+
+        var executed = await retention.CleanupExpiredAsync(now, execute: true);
+
+        Assert.True(executed.Execute);
+        Assert.Equal(1, executed.DeletedAnalyticsEvents);
+        Assert.Equal(1, executed.DeletedAnonymousSessions);
+
+        var verifyDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.False(await verifyDb.AnalyticsEvents.AnyAsync(evt => evt.Route == "/old"));
+        Assert.True(await verifyDb.AnalyticsEvents.AnyAsync(evt => evt.Route == "/new"));
+        Assert.False(await verifyDb.AnonymousSessions.AnyAsync(session => session.Id == emptyOldSessionId));
+        Assert.True(await verifyDb.AnonymousSessions.AnyAsync(session => session.Id == oldSessionId));
+        Assert.True(await verifyDb.AnonymousSessions.AnyAsync(session => session.Id == newSessionId));
+    }
+
     private static async Task<(HttpClient client, int userId)> RegisterFreshUserAsync(GeotrackApiFactory app)
     {
         var client = app.CreateClient();
@@ -778,6 +935,11 @@ public sealed class AnalyticsTests
 
     private static async Task PostFavoriteAddedAsync(HttpClient client, int placeId)
     {
+        await PostInterestEventAsync(client, placeId, AnalyticsEventTypes.FavoriteAdded);
+    }
+
+    private static async Task PostInterestEventAsync(HttpClient client, int placeId, string eventType)
+    {
         var response = await client.PostAsJsonAsync(
             "/api/interests/events",
             new
@@ -786,7 +948,7 @@ public sealed class AnalyticsTests
                 {
                     new
                     {
-                        eventType = AnalyticsEventTypes.FavoriteAdded,
+                        eventType,
                         entityType = AnalyticsEntityTypes.Place,
                         entityId = placeId,
                     },
@@ -812,6 +974,23 @@ public sealed class AnalyticsTests
                 return signal is not null && predicate(signal);
             },
             "Timed out waiting for inferred-interest signal processing.");
+
+    private static Task WaitForTopicSignalAsync(
+        GeotrackApiFactory app,
+        int userId,
+        int interestTopicId,
+        Func<UserInterestTopicSignal, bool> predicate) =>
+        WaitForAsync(
+            async () =>
+            {
+                await using var scope = app.Services.CreateAsyncScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var signal = await db.UserInterestTopicSignals
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(s => s.UserId == userId && s.InterestTopicId == interestTopicId);
+                return signal is not null && predicate(signal);
+            },
+            "Timed out waiting for inferred-interest topic signal processing.");
 
     private static async Task WaitForAsync(Func<Task<bool>> predicate, string timeoutMessage)
     {

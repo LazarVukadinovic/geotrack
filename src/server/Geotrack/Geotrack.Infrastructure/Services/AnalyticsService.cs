@@ -38,6 +38,19 @@ public class AnalyticsService : IAnalyticsService
 
     private static readonly string[] DedupeEventTypes = DedupeWindows.Keys.ToArray();
     private static readonly TimeSpan MaxDedupeWindow = DedupeWindows.Values.Max();
+    private static readonly string[] SensitiveMetadataKeyTokens =
+    [
+        "apikey",
+        "api_key",
+        "authorization",
+        "email",
+        "password",
+        "phone",
+        "prompt",
+        "refresh",
+        "secret",
+        "token"
+    ];
 
     private static readonly IReadOnlySet<string> InterestSignalCandidateEventTypes =
         new HashSet<string>(StringComparer.Ordinal)
@@ -385,15 +398,25 @@ public class AnalyticsService : IAnalyticsService
             return "{}";
         }
 
-        if (metadata.Count > MaxMetadataKeys ||
-            metadata.Keys.Any(key => string.IsNullOrWhiteSpace(key) || key.Length > MaxMetadataKeyLength))
+        var sanitized = SanitizeMetadata(metadata);
+        if (sanitized is null)
+        {
+            return null;
+        }
+
+        if (sanitized.Count == 0)
+        {
+            return "{}";
+        }
+
+        if (sanitized.Count > MaxMetadataKeys)
         {
             return null;
         }
 
         try
         {
-            var json = JsonSerializer.Serialize(metadata, MetadataJsonOptions);
+            var json = JsonSerializer.Serialize(sanitized, MetadataJsonOptions);
             return json.Length > MaxMetadataChars ? null : json;
         }
         catch (JsonException)
@@ -404,6 +427,45 @@ public class AnalyticsService : IAnalyticsService
         {
             return null;
         }
+    }
+
+    private static Dictionary<string, object?>? SanitizeMetadata(Dictionary<string, object?> metadata)
+    {
+        var sanitized = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        foreach (var pair in metadata)
+        {
+            var key = pair.Key?.Trim();
+            if (string.IsNullOrWhiteSpace(key) || key.Length > MaxMetadataKeyLength)
+            {
+                return null;
+            }
+
+            if (IsSensitiveMetadataKey(key))
+            {
+                continue;
+            }
+
+            sanitized[key] = pair.Value;
+        }
+
+        return sanitized;
+    }
+
+    private static bool IsSensitiveMetadataKey(string key)
+    {
+        var compact = key
+            .Trim()
+            .ToLowerInvariant()
+            .Replace("-", string.Empty)
+            .Replace("_", string.Empty)
+            .Replace(".", string.Empty)
+            .Replace(" ", string.Empty);
+
+        return SensitiveMetadataKeyTokens.Any(token =>
+            compact.Contains(
+                token.Replace("_", string.Empty),
+                StringComparison.Ordinal));
     }
 
     private static string? NormalizeToken(string? value)
