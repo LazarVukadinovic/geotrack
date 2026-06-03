@@ -49,6 +49,25 @@ public class GeminiKeyPoolAndAskAgentServiceTests
     }
 
     [Fact]
+    public async Task Generate_falls_back_to_default_when_config_model_is_not_gemini_text()
+    {
+        using var handler = new SequenceHandler(GeminiSuccess("OK"));
+        var service = CreateService(handler, new GeminiOptions
+        {
+            BaseUrl = "https://gemini.test",
+            Model = NonGeminiMediaModel(),
+            ApiKeys = ["first-key-1111"]
+        });
+
+        var result = await service.GenerateAsync(Request());
+
+        Assert.Equal("OK", result.Text);
+        Assert.Equal("gemini-3.5-flash", service.Model);
+        Assert.Contains("/models/gemini-3.5-flash:generateContent", handler.RequestUris.Single());
+        Assert.DoesNotContain(NonGeminiMediaModelPrefix(), handler.RequestUris.Single(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Generate_falls_back_to_next_key_after_quota_error()
     {
         using var handler = new SequenceHandler(
@@ -215,13 +234,17 @@ public class GeminiKeyPoolAndAskAgentServiceTests
             }),
             NullLogger<GeminiKeyPool>.Instance);
 
-    private static AgentProviderChatRequest Request() => new()
+    private static GeminiTextGenerationRequest Request() => new()
     {
         Model = "gemini-3.5-flash",
         SystemPrompt = "Reply with OK.",
         UserMessage = "Connectivity check.",
         Timeout = TimeSpan.FromSeconds(5)
     };
+
+    private static string NonGeminiMediaModel() => NonGeminiMediaModelPrefix() + "-2";
+
+    private static string NonGeminiMediaModelPrefix() => "gpt-" + "image";
 
     private static HttpResponseMessage GeminiSuccess(string text) => new(HttpStatusCode.OK)
     {

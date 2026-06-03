@@ -16,6 +16,8 @@ namespace Geotrack.IntegrationTests;
 
 public class AgentSecurityAndMcpTests
 {
+    private static readonly string[] FoodPlaceTypes = ["Restaurant", "Cafe", "Bar"];
+
     private static readonly string[] AllowedMcpTools =
     [
         "geotrack_search_places",
@@ -24,11 +26,16 @@ public class AgentSecurityAndMcpTests
         "geotrack_get_stay_details",
         "geotrack_search_events",
         "geotrack_get_event_details",
+        "geotrack_resolve_area",
+        "geotrack_search_catalog",
+        "geotrack_search_by_area",
+        "geotrack_get_area_overview",
+        "geotrack_get_category_options",
         "geotrack_get_map_filters"
     ];
 
     [Fact]
-    public async Task Provider_metadata_never_returns_api_key_values()
+    public async Task Agent_metadata_exposes_only_mcp_and_no_provider_model_or_key_values()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         using var client = app.CreateClient();
@@ -37,7 +44,11 @@ public class AgentSecurityAndMcpTests
 
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("\"providers\"", body);
+        Assert.Contains("\"mcp\"", body);
+        Assert.DoesNotContain("\"providers\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"models\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"defaultModel\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(NonGeminiMediaModelPrefix(), body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("apiKey", body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("EncryptedApiKey", body, StringComparison.OrdinalIgnoreCase);
     }
@@ -125,7 +136,7 @@ public class AgentSecurityAndMcpTests
             {
                 message = "Find restaurants",
                 provider = "gemini",
-                model = "gemini-2.5-flash",
+                model = NonGeminiMediaModel(),
                 keyMode = "session",
                 sessionApiKey = "user-supplied-key"
             });
@@ -135,6 +146,7 @@ public class AgentSecurityAndMcpTests
         var error = JsonSerializer.Deserialize<Dictionary<string, string>>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.NotNull(error);
         Assert.Equal("invalid_request", error!["code"]);
+        Assert.DoesNotContain(NonGeminiMediaModel(), body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("user-supplied-key", body, StringComparison.Ordinal);
     }
 
@@ -312,12 +324,18 @@ public class AgentSecurityAndMcpTests
             Assert.DoesNotContain("collection", name, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("profile", name, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("key", name, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("image", name, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("generate", name, StringComparison.OrdinalIgnoreCase);
         });
 
         Assert.All(toolElements, tool =>
         {
-            Assert.False(string.IsNullOrWhiteSpace(tool.GetProperty("name").GetString()));
-            Assert.False(string.IsNullOrWhiteSpace(tool.GetProperty("description").GetString()));
+            var name = tool.GetProperty("name").GetString();
+            var description = tool.GetProperty("description").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(name));
+            Assert.False(string.IsNullOrWhiteSpace(description));
+            Assert.DoesNotContain("image", description, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("generate", description, StringComparison.OrdinalIgnoreCase);
 
             var inputSchema = tool.GetProperty("inputSchema");
             Assert.Equal("object", inputSchema.GetProperty("type").GetString());
@@ -383,6 +401,100 @@ public class AgentSecurityAndMcpTests
         Assert.Contains("not allowed", error.GetProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Exception", invalidBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("apiKey", invalidBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Mcp_new_public_catalog_tools_return_bounded_public_payloads()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        var resolve = await ReadMcpTextPayloadAsync(await PostMcpJsonAsync(
+            client,
+            new
+            {
+                jsonrpc = "2.0",
+                id = 20,
+                method = "tools/call",
+                @params = new
+                {
+                    name = "geotrack_resolve_area",
+                    arguments = new { query = "Kragujevcu", limit = 5 }
+                }
+            }));
+
+        int kragujevacId;
+        using (var document = JsonDocument.Parse(resolve))
+        {
+            var match = document.RootElement
+                .GetProperty("matches")
+                .EnumerateArray()
+                .First(item => item.GetProperty("name").GetString() == "Kragujevac");
+            Assert.Equal("destination", match.GetProperty("type").GetString());
+            kragujevacId = match.GetProperty("id").GetInt32();
+        }
+
+        var byArea = await ReadMcpTextPayloadAsync(await PostMcpJsonAsync(
+            client,
+            new
+            {
+                jsonrpc = "2.0",
+                id = 21,
+                method = "tools/call",
+                @params = new
+                {
+                    name = "geotrack_search_by_area",
+                    arguments = new { areaType = "destination", areaId = kragujevacId, category = "restaurants", limit = 5 }
+                }
+            }));
+        using (var document = JsonDocument.Parse(byArea))
+        {
+            var places = document.RootElement.GetProperty("places").EnumerateArray().ToList();
+            Assert.NotEmpty(places);
+            Assert.All(places, item =>
+            {
+                var category = item.GetProperty("category").GetString();
+                Assert.Contains(FoodPlaceTypes, type => string.Equals(type, category, StringComparison.OrdinalIgnoreCase));
+            });
+        }
+
+        var overview = await ReadMcpTextPayloadAsync(await PostMcpJsonAsync(
+            client,
+            new
+            {
+                jsonrpc = "2.0",
+                id = 22,
+                method = "tools/call",
+                @params = new
+                {
+                    name = "geotrack_get_area_overview",
+                    arguments = new { areaType = "destination", areaId = kragujevacId, limitPerType = 3 }
+                }
+            }));
+        using (var document = JsonDocument.Parse(overview))
+        {
+            Assert.True(document.RootElement.GetProperty("counts").GetProperty("places").GetInt32() > 0);
+        }
+
+        var categories = await ReadMcpTextPayloadAsync(await PostMcpJsonAsync(
+            client,
+            new
+            {
+                jsonrpc = "2.0",
+                id = 23,
+                method = "tools/call",
+                @params = new
+                {
+                    name = "geotrack_get_category_options",
+                    arguments = new { categoryGroup = "restaurants" }
+                }
+            }));
+        using (var document = JsonDocument.Parse(categories))
+        {
+            var group = Assert.Single(document.RootElement.GetProperty("categoryGroups").EnumerateArray());
+            Assert.Equal("restaurants", group.GetProperty("id").GetString());
+            Assert.Contains("Restaurant", group.GetProperty("placeTypes").EnumerateArray().Select(item => item.GetString() ?? string.Empty));
+        }
     }
 
     [Fact]
@@ -487,9 +599,25 @@ public class AgentSecurityAndMcpTests
         return await client.SendAsync(request);
     }
 
+    private static async Task<string> ReadMcpTextPayloadAsync(HttpResponseMessage response)
+    {
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(body);
+        var result = document.RootElement.GetProperty("result");
+        Assert.False(result.GetProperty("isError").GetBoolean());
+        var content = Assert.Single(result.GetProperty("content").EnumerateArray());
+        Assert.Equal("text", content.GetProperty("type").GetString());
+        return content.GetProperty("text").GetString() ?? string.Empty;
+    }
+
     private static Dictionary<string, string?> NoGeminiKeysOverrides() =>
         Enumerable.Range(0, 50)
             .ToDictionary(index => $"Gemini:ApiKeys:{index}", _ => (string?)string.Empty);
+
+    private static string NonGeminiMediaModel() => NonGeminiMediaModelPrefix() + "-2";
+
+    private static string NonGeminiMediaModelPrefix() => "gpt-" + "image";
 
     private static string FindRepoRoot()
     {

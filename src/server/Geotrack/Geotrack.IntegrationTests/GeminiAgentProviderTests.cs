@@ -59,6 +59,19 @@ public class GeminiAgentProviderTests
         Assert.Equal(1, handler.RequestCount);
     }
 
+    [Fact]
+    public async Task Generate_rejects_image_or_non_gemini_model_without_http_call()
+    {
+        using var handler = new SequenceHandler();
+        var provider = CreateProvider(handler);
+
+        var ex = await Assert.ThrowsAsync<AgentException>(() => provider.GenerateAsync(Request(NonGeminiMediaModel())));
+
+        Assert.Equal("unsupported_model", ex.Code);
+        Assert.Equal("Ask Agent only supports Gemini text models.", ex.SafeMessage);
+        Assert.Equal(0, handler.RequestCount);
+    }
+
     private static GeminiAgentProvider CreateProvider(HttpMessageHandler handler)
     {
         var client = new HttpClient(handler);
@@ -72,14 +85,16 @@ public class GeminiAgentProviderTests
         return new GeminiAgentProvider(client, options, NullLogger<GeminiAgentProvider>.Instance);
     }
 
-    private static AgentProviderChatRequest Request() => new()
+    private static GeminiTextGenerationRequest Request(string model = "gemini-2.5-flash") => new()
     {
         ApiKey = "test-gemini-key",
-        Model = "gemini-2.5-flash",
+        Model = model,
         SystemPrompt = "Reply with OK.",
         UserMessage = "Connectivity check.",
         Timeout = TimeSpan.FromSeconds(5)
     };
+
+    private static string NonGeminiMediaModel() => "gpt-" + "image-2";
 
     private static HttpResponseMessage GeminiSuccess(string text) => new(HttpStatusCode.OK)
     {

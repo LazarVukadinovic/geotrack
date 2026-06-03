@@ -79,6 +79,44 @@ public class PublicVisibilityRegressionTests
     }
 
     [Fact]
+    public async Task New_public_catalog_tools_filter_non_public_content()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tools = scope.ServiceProvider.GetRequiredService<IGeoTrackToolService>();
+        var fixture = await SeedVisibilityFixtureAsync(db);
+
+        var catalog = await tools.SearchCatalogAsync(new GeoTrackCatalogSearchRequest
+        {
+            Query = fixture.PlaceSearchTerm,
+            AreaType = "destination",
+            AreaId = fixture.DestinationId,
+            EntityTypes = ["places"],
+            Limit = 20
+        });
+        var titles = catalog.Results.Select(item => item.Title).ToList();
+
+        Assert.Contains(fixture.PublishedPlaceTitle, titles);
+        Assert.DoesNotContain(fixture.DraftPlaceTitle, titles);
+        Assert.DoesNotContain(fixture.ArchivedPlaceTitle, titles);
+        Assert.DoesNotContain(fixture.ParentHiddenPlaceTitle, titles);
+
+        var area = await tools.SearchByAreaAsync(new GeoTrackAreaContentRequest
+        {
+            AreaType = "destination",
+            AreaId = fixture.DestinationId,
+            EntityTypes = ["places"],
+            Limit = 20
+        });
+        var areaTitles = area.Places.Select(item => item.Title).ToList();
+
+        Assert.DoesNotContain(fixture.DraftPlaceTitle, areaTitles);
+        Assert.DoesNotContain(fixture.ArchivedPlaceTitle, areaTitles);
+        Assert.DoesNotContain(fixture.ParentHiddenPlaceTitle, areaTitles);
+    }
+
+    [Fact]
     public async Task Mcp_tool_calls_filter_non_public_content_and_keep_published_content()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -185,32 +223,6 @@ public class PublicVisibilityRegressionTests
         {
             Assert.Equal(JsonValueKind.Null, archivedEventDetail.RootElement.ValueKind);
         }
-    }
-
-    [Fact]
-    public async Task Legacy_AgentService_filters_non_public_cards()
-    {
-        await using var app = await GeotrackApiFactory.CreateAsync();
-        await using var scope = app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var agent = scope.ServiceProvider.GetRequiredService<IAgentService>();
-        var fixture = await SeedVisibilityFixtureAsync(db);
-
-        var placeResponse = await agent.ProcessMessageAsync("recommend", userId: null);
-        var placeTitles = placeResponse.Cards?.Select(card => card.Title).ToList() ?? [];
-
-        Assert.Contains(fixture.PublishedPlaceTitle, placeTitles);
-        Assert.DoesNotContain(fixture.DraftPlaceTitle, placeTitles);
-        Assert.DoesNotContain(fixture.ArchivedPlaceTitle, placeTitles);
-        Assert.DoesNotContain(fixture.ParentHiddenPlaceTitle, placeTitles);
-
-        var eventResponse = await agent.ProcessMessageAsync("events", userId: null);
-        var eventTitles = eventResponse.Cards?.Select(card => card.Title).ToList() ?? [];
-
-        Assert.Contains(fixture.PublishedEventTitle, eventTitles);
-        Assert.DoesNotContain(fixture.DraftEventTitle, eventTitles);
-        Assert.DoesNotContain(fixture.ArchivedEventTitle, eventTitles);
-        Assert.DoesNotContain(fixture.ParentHiddenEventTitle, eventTitles);
     }
 
     [Fact]

@@ -21,6 +21,8 @@ namespace Geotrack.IntegrationTests;
 
 public class AgentCatalogGroundingTests
 {
+    private static readonly string[] FoodPlaceTypes = ["Restaurant", "Cafe", "Bar"];
+
     [Fact]
     public async Task Beaches_in_Dubrovnik_returns_beach_context_from_catalog()
     {
@@ -316,7 +318,119 @@ public class AgentCatalogGroundingTests
         Assert.Equal("sr", context.Plan?.Language);
         Assert.Equal("Dubrovnik", context.Plan?.DestinationName);
         Assert.Contains(context.Plan?.Categories ?? [], category => category == "beach");
+        Assert.Null(context.Plan?.QueryText);
         Assert.Contains(context.Places, place => string.Equals(place.Category, "Beach", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Serbian_restaurant_query_returns_food_cards_before_beaches()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var tools = scope.ServiceProvider.GetRequiredService<IGeoTrackToolService>();
+        var orchestrator = BuildOrchestrator(tools);
+
+        var response = await orchestrator.ChatAsync(ChatRequest("restorani u Dubrovniku"), userId: 1);
+
+        Assert.NotEmpty(response.Cards);
+        Assert.All(response.Cards, card => Assert.Equal("place", card.EntityType));
+        Assert.Contains(response.Cards, card => FoodPlaceTypes.Contains(card.PlaceType ?? string.Empty, StringComparer.OrdinalIgnoreCase));
+        Assert.DoesNotContain(response.Cards, card => string.Equals(card.PlaceType, "Beach", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Follow_up_beach_query_reuses_previous_Dubrovnik_context()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var tools = scope.ServiceProvider.GetRequiredService<IGeoTrackToolService>();
+        var orchestrator = BuildOrchestrator(tools);
+
+        var first = await orchestrator.ChatAsync(ChatRequest("koji su dobri restorani u Dubrovniku"), userId: 77);
+        var followUp = await orchestrator.ChatAsync(
+            new AgentChatRequestDto
+            {
+                Message = "a plaže",
+                ConversationId = first.ConversationId
+            },
+            userId: 77);
+
+        Assert.Equal(first.ConversationId, followUp.ConversationId);
+        Assert.NotEmpty(followUp.Cards);
+        Assert.All(followUp.Cards, card =>
+        {
+            Assert.Equal("place", card.EntityType);
+            Assert.Equal("Beach", card.PlaceType);
+            Assert.Contains("Dubrovnik", card.LocationName ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
+    public async Task Follow_up_beach_query_without_conversation_context_asks_for_area()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var tools = scope.ServiceProvider.GetRequiredService<IGeoTrackToolService>();
+
+        var context = await tools.BuildAgentContextAsync("a plaže", null, 5);
+
+        Assert.True(context.ClarificationNeeded);
+        Assert.False(context.SearchAttempted);
+    }
+
+    [Fact]
+    public async Task Explicit_new_area_overrides_current_context()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var tools = scope.ServiceProvider.GetRequiredService<IGeoTrackToolService>();
+
+        var context = await tools.BuildAgentContextAsync(
+            "šta ima u Kragujevcu",
+            new AgentContextOptionsDto { CurrentDestinationName = "Dubrovnik" },
+            5);
+
+        Assert.False(context.ClarificationNeeded);
+        Assert.Equal("Kragujevac", context.Plan?.AreaName);
+        Assert.Equal("Kragujevac", context.Plan?.DestinationName);
+        Assert.NotEmpty(context.Places.Concat(context.Stays).Concat(context.Events));
+    }
+
+    [Fact]
+    public async Task Serbian_general_queries_for_Kragujevac_and_Kopaonik_return_public_content()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var tools = scope.ServiceProvider.GetRequiredService<IGeoTrackToolService>();
+
+        var kragujevac = await tools.BuildAgentContextAsync("šta ima u Kragujevcu", null, 5);
+        var kopaonik = await tools.BuildAgentContextAsync("šta ima na Kopaoniku", null, 5);
+
+        Assert.Equal("Kragujevac", kragujevac.Plan?.AreaName);
+        Assert.Null(kragujevac.Plan?.QueryText);
+        Assert.False(kragujevac.NoResults);
+        Assert.NotEmpty(kragujevac.Places.Concat(kragujevac.Stays).Concat(kragujevac.Events));
+
+        Assert.Equal("Kopaonik", kopaonik.Plan?.AreaName);
+        Assert.Null(kopaonik.Plan?.QueryText);
+        Assert.False(kopaonik.NoResults);
+        Assert.NotEmpty(kopaonik.Places.Concat(kopaonik.Stays).Concat(kopaonik.Events));
+    }
+
+    [Fact]
+    public async Task Area_resolver_handles_Serbian_locative_suffixes()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var tools = scope.ServiceProvider.GetRequiredService<IGeoTrackToolService>();
+
+        var dubrovnik = await tools.ResolveAreaAsync(new GeoTrackAreaResolveRequest { Query = "Dubrovniku" });
+        var kragujevac = await tools.ResolveAreaAsync(new GeoTrackAreaResolveRequest { Query = "Kragujevcu" });
+        var kopaonik = await tools.ResolveAreaAsync(new GeoTrackAreaResolveRequest { Query = "Kopaoniku" });
+
+        Assert.Contains(dubrovnik.Matches, match => match.Type == "destination" && match.Name == "Dubrovnik");
+        Assert.Contains(kragujevac.Matches, match => match.Type == "destination" && match.Name == "Kragujevac");
+        Assert.Contains(kopaonik.Matches, match => match.Type == "destination" && match.Name == "Kopaonik");
     }
 
     [Fact]
@@ -638,21 +752,31 @@ public class AgentCatalogGroundingTests
         public Task<GeoTrackToolItemDto?> GetEventDetailsAsync(int id, CancellationToken cancellationToken = default) => Task.FromResult<GeoTrackToolItemDto?>(null);
         public Task<GeoTrackMapFiltersDto> GetMapFiltersAsync(GeoTrackMapFiltersRequest request, CancellationToken cancellationToken = default) =>
             Task.FromResult(new GeoTrackMapFiltersDto());
+        public Task<GeoTrackAreaResolveResponseDto> ResolveAreaAsync(GeoTrackAreaResolveRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new GeoTrackAreaResolveResponseDto());
+        public Task<GeoTrackCatalogSearchResponseDto> SearchCatalogAsync(GeoTrackCatalogSearchRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new GeoTrackCatalogSearchResponseDto());
+        public Task<GeoTrackAreaContentResponseDto> SearchByAreaAsync(GeoTrackAreaContentRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new GeoTrackAreaContentResponseDto());
+        public Task<GeoTrackAreaOverviewDto> GetAreaOverviewAsync(GeoTrackAreaOverviewRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new GeoTrackAreaOverviewDto());
+        public Task<GeoTrackCategoryOptionsResponseDto> GetCategoryOptionsAsync(GeoTrackCategoryOptionsRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new GeoTrackCategoryOptionsResponseDto());
     }
 
     private sealed class FakeGeminiAskAgentService : IGeminiAskAgentService
     {
-        public AgentProviderChatRequest? LastRequest { get; private set; }
+        public GeminiTextGenerationRequest? LastRequest { get; private set; }
         public string ProviderId => "gemini";
         public string Model => "gemini-test";
         public bool HasAvailableKey => true;
 
-        public Task<AgentProviderChatResult> GenerateAsync(
-            AgentProviderChatRequest request,
+        public Task<GeminiTextGenerationResult> GenerateAsync(
+            GeminiTextGenerationRequest request,
             CancellationToken cancellationToken = default)
         {
             LastRequest = request;
-            return Task.FromResult(new AgentProviderChatResult { Text = "Grounded answer" });
+            return Task.FromResult(new GeminiTextGenerationResult { Text = "Grounded answer" });
         }
     }
 
