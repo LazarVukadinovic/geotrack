@@ -12,6 +12,11 @@ public interface IGeoTrackToolService
     Task<IReadOnlyList<GeoTrackToolItemDto>> SearchEventsAsync(GeoTrackToolSearchRequest request, CancellationToken cancellationToken = default);
     Task<GeoTrackToolItemDto?> GetEventDetailsAsync(int id, CancellationToken cancellationToken = default);
     Task<GeoTrackMapFiltersDto> GetMapFiltersAsync(GeoTrackMapFiltersRequest request, CancellationToken cancellationToken = default);
+    Task<GeoTrackAreaResolveResponseDto> ResolveAreaAsync(GeoTrackAreaResolveRequest request, CancellationToken cancellationToken = default);
+    Task<GeoTrackCatalogSearchResponseDto> SearchCatalogAsync(GeoTrackCatalogSearchRequest request, CancellationToken cancellationToken = default);
+    Task<GeoTrackAreaContentResponseDto> SearchByAreaAsync(GeoTrackAreaContentRequest request, CancellationToken cancellationToken = default);
+    Task<GeoTrackAreaOverviewDto> GetAreaOverviewAsync(GeoTrackAreaOverviewRequest request, CancellationToken cancellationToken = default);
+    Task<GeoTrackCategoryOptionsResponseDto> GetCategoryOptionsAsync(GeoTrackCategoryOptionsRequest request, CancellationToken cancellationToken = default);
     Task<GeoTrackAgentContextDto> BuildAgentContextAsync(
         string message,
         AgentContextOptionsDto? contextOptions,

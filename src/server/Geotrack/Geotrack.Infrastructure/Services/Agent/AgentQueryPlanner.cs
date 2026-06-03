@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.DTOs.GeoTrackTools;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Services.Agent;
@@ -9,10 +10,12 @@ public class AgentQueryPlanner : IAgentQueryPlanner
 {
     private static readonly HashSet<string> StopWords = new(StringComparer.Ordinal)
     {
-        "a", "an", "and", "around", "at", "best", "by", "do", "find", "for", "give", "in", "me",
+        "a", "all", "an", "and", "around", "at", "best", "by", "do", "find", "for", "give", "in", "me",
         "near", "nearby", "of", "on", "please", "recommend", "show", "the", "to", "top", "what",
         "where", "with", "u", "kod", "oko", "na", "za", "mi", "prikazi", "prikaži", "preporuci",
-        "preporuči", "najbolje", "najbolji"
+        "preporuči", "najbolje", "najbolji", "koji", "koje", "su", "dobri", "dobre", "dobro",
+        "sta", "šta", "ima", "jos", "još", "nesto", "nešto", "da", "vidim", "videti", "vidjeti",
+        "obici", "obići", "mozes", "možeš"
     };
 
     private static readonly HashSet<string> RankingTokens = new(StringComparer.Ordinal)
@@ -23,30 +26,31 @@ public class AgentQueryPlanner : IAgentQueryPlanner
     private static readonly HashSet<string> SerbianTokens = new(StringComparer.Ordinal)
     {
         "plaza", "plaze", "restoran", "restorani", "dogadaj", "dogadjaj", "dogadaji", "dogadjaji",
-        "smestaj", "smjestaj", "smeštaj", "kafic", "kafić", "znamenitost", "znamenitosti", "preporuci", "preporuči"
+        "smestaj", "smjestaj", "smeštaj", "kafic", "kafić", "znamenitost", "znamenitosti",
+        "preporuci", "preporuči", "sta", "šta", "ima", "videti", "vidjeti", "obici", "obići"
     };
 
     private static readonly Dictionary<string, string[]> EntityAliases = new(StringComparer.Ordinal)
     {
-        ["places"] = ["place", "places", "attraction", "attractions", "landmark", "landmarks", "restaurant", "restaurants", "cafe", "cafes", "beach", "beaches", "mesto", "mesta", "mjesto", "mjesta", "znamenitost", "znamenitosti", "restoran", "restorani", "plaza", "plaze", "kafic"],
-        ["stays"] = ["stay", "stays", "hotel", "hotels", "accommodation", "accommodations", "lodging", "smeštaj", "smestaj", "smještaj", "smjestaj"],
-        ["events"] = ["event", "events", "festival", "festivals", "dogadaj", "dogadjaj", "dogadaji", "dogadjaji", "događaj", "događaji"]
+        ["places"] = ["place", "places", "attraction", "attractions", "landmark", "landmarks", "restaurant", "restaurants", "cafe", "cafes", "bar", "bars", "beach", "beaches", "mesto", "mesta", "mjesto", "mjesta", "znamenitost", "znamenitosti", "restoran", "restorani", "plaza", "plaze", "kafic", "kafić", "muzej", "museum"],
+        ["stays"] = ["stay", "stays", "hotel", "hotels", "hoteli", "accommodation", "accommodations", "lodging", "apartment", "apartments", "apartman", "apartmani", "smeštaj", "smestaj", "smještaj", "smjestaj"],
+        ["events"] = ["event", "events", "festival", "festivals", "concert", "concerts", "koncert", "koncerti", "manifestacija", "manifestacije", "dogadaj", "dogadjaj", "dogadaji", "dogadjaji", "događaj", "događaji"]
     };
 
     private static readonly Dictionary<string, ConceptDefinition> Concepts = new(StringComparer.Ordinal)
     {
         ["beach"] = new(
-            ["beach", "beaches", "plaza", "plaze", "plaža", "plaže"],
+            ["beach", "beaches", "plaza", "plaze", "plaža", "plaže", "kupanje", "more"],
             ["beaches"],
             ["Beach"],
             [],
             ["beach"]),
         ["restaurant"] = new(
-            ["restaurant", "restaurants", "restoran", "restorani", "dining", "food"],
-            ["food-drink", "fine-dining"],
-            ["Restaurant"],
+            ["restaurant", "restaurants", "restoran", "restorani", "dining", "food", "hrana", "jesti", "ručak", "rucak", "večera", "vecera", "bar", "bars", "wine bar", "kafić", "kafic", "cafe", "cafes", "coffee"],
+            ["food-drink", "fine-dining", "nightlife", "beach-bars", "food-market"],
+            ["Restaurant", "Cafe", "Bar"],
             [],
-            ["restaurant"]),
+            ["restaurants"]),
         ["cafe"] = new(
             ["cafe", "cafes", "café", "coffee", "kafa", "kafic", "kafić"],
             ["food-drink"],
@@ -54,13 +58,13 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             [],
             ["cafe"]),
         ["landmark"] = new(
-            ["attraction", "attractions", "landmark", "landmarks", "znamenitost", "znamenitosti"],
-            ["landmarks", "historic-sites", "culture", "history"],
-            ["Landmark"],
+            ["attraction", "attractions", "landmark", "landmarks", "znamenitost", "znamenitosti", "atrakcija", "atrakcije", "videti", "vidjeti", "obici", "obići", "museum", "muzej", "viewpoint", "nature", "hiking"],
+            ["landmarks", "historic-sites", "culture", "history", "nature", "hiking", "viewpoints"],
+            ["Landmark", "Museum", "Viewpoint", "Nature"],
             [],
-            ["landmark"]),
+            ["attractions"]),
         ["festival"] = new(
-            ["festival", "festivals"],
+            ["festival", "festivals", "manifestacija", "manifestacije", "koncert", "koncerti"],
             ["festivals", "culture"],
             [],
             ["Festival"],
@@ -91,6 +95,9 @@ public class AgentQueryPlanner : IAgentQueryPlanner
 
         var entityTypes = DetectEntityTypes(tokenSet);
         var concepts = DetectConcepts(normalized, tokenSet);
+        var category = ResolvePrimaryCategory(concepts, entityTypes);
+        var strictCategory = IsStrictCategory(category);
+        var followUpIntent = messageLocation is null && IsFollowUpIntent(tokenSet);
         var rankingIntent = tokenSet.Overlaps(RankingTokens) ? "top" : "all";
 
         var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -119,11 +126,13 @@ public class AgentQueryPlanner : IAgentQueryPlanner
 
         var genericTokens = BuildGenericTokenSet();
         var locationTokens = resolvedLocation?.NormalizedTokens ?? new HashSet<string>(StringComparer.Ordinal);
+        var locationText = resolvedLocation?.LocationText;
         var queryTerms = tokens
             .Where(token => token.Length > 1)
             .Where(token => !StopWords.Contains(token))
             .Where(token => !genericTokens.Contains(token))
-            .Where(token => !locationTokens.Contains(token))
+            .Where(token => !MatchesLocationToken(token, locationTokens))
+            .Where(token => !MatchesLocationText(token, locationText))
             .Distinct(StringComparer.Ordinal)
             .Take(8)
             .ToList();
@@ -158,6 +167,13 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             LocationUsed = resolvedLocation?.DisplayName,
             DestinationId = resolvedLocation?.DestinationId,
             DestinationName = resolvedLocation?.DestinationName,
+            AreaType = resolvedLocation?.AreaType,
+            AreaId = resolvedLocation?.AreaId,
+            AreaName = resolvedLocation?.DisplayName,
+            Category = category,
+            StrictCategoryMatch = strictCategory,
+            FallbackBehavior = strictCategory ? "no_unrelated_cards" : "broaden_if_general",
+            FollowUpIntent = followUpIntent ? "reuse_previous_area" : null,
             Tags = tags.OrderBy(item => item).ToList(),
             Categories = categories.OrderBy(item => item).ToList(),
             PlaceTypes = placeTypes.OrderBy(item => item).ToList(),
@@ -211,10 +227,46 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             return null;
         }
 
+        if (!string.IsNullOrWhiteSpace(contextOptions.ConversationAreaType) &&
+            contextOptions.ConversationAreaId is > 0)
+        {
+            var resolvedArea = await ResolveLocationFromAreaAsync(
+                contextOptions.ConversationAreaType,
+                contextOptions.ConversationAreaId.Value,
+                cancellationToken);
+            if (resolvedArea is not null)
+            {
+                return resolvedArea;
+            }
+        }
+
+        if (contextOptions.ConversationDestinationId is > 0)
+        {
+            var destinationFromConversation = await _db.Destinations
+                .AsNoTracking()
+                .WherePublicDestinations()
+                .Where(item => item.Id == contextOptions.ConversationDestinationId.Value)
+                .Select(item => new { item.Id, item.Name })
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (destinationFromConversation is not null)
+            {
+                return new ResolvedAgentLocation(
+                    destinationFromConversation.Id,
+                    destinationFromConversation.Name,
+                    "destination",
+                    destinationFromConversation.Id,
+                    destinationFromConversation.Name,
+                    destinationFromConversation.Name,
+                    AgentTextNormalizer.Tokenize(destinationFromConversation.Name).ToHashSet(StringComparer.Ordinal));
+            }
+        }
+
         if (contextOptions.DestinationId is > 0)
         {
             var destination = await _db.Destinations
                 .AsNoTracking()
+                .WherePublicDestinations()
                 .Where(item => item.Id == contextOptions.DestinationId.Value)
                 .Select(item => new { item.Id, item.Name })
                 .SingleOrDefaultAsync(cancellationToken);
@@ -224,6 +276,8 @@ public class AgentQueryPlanner : IAgentQueryPlanner
                 return new ResolvedAgentLocation(
                     destination.Id,
                     destination.Name,
+                    "destination",
+                    destination.Id,
                     destination.Name,
                     destination.Name,
                     AgentTextNormalizer.Tokenize(destination.Name).ToHashSet(StringComparer.Ordinal));
@@ -232,6 +286,8 @@ public class AgentQueryPlanner : IAgentQueryPlanner
 
         foreach (var value in new[]
         {
+            CleanContextText(contextOptions.ConversationDestinationName),
+            CleanContextText(contextOptions.ConversationAreaName),
             CleanContextText(contextOptions.CurrentDestinationName),
             CleanContextText(contextOptions.CurrentCity),
             CleanContextText(contextOptions.CurrentLocationName)
@@ -255,6 +311,107 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         return null;
     }
 
+    private async Task<ResolvedAgentLocation?> ResolveLocationFromAreaAsync(
+        string areaType,
+        int areaId,
+        CancellationToken cancellationToken)
+    {
+        var normalizedType = NormalizeAreaType(areaType);
+        if (normalizedType is null || areaId <= 0)
+        {
+            return null;
+        }
+
+        if (normalizedType == "destination")
+        {
+            var destination = await _db.Destinations
+                .AsNoTracking()
+                .WherePublicDestinations()
+                .Where(item => item.Id == areaId)
+                .Select(item => new { item.Id, item.Name })
+                .SingleOrDefaultAsync(cancellationToken);
+            return destination is null
+                ? null
+                : new ResolvedAgentLocation(
+                    destination.Id,
+                    destination.Name,
+                    "destination",
+                    destination.Id,
+                    destination.Name,
+                    destination.Name,
+                    AgentTextNormalizer.Tokenize(destination.Name).ToHashSet(StringComparer.Ordinal));
+        }
+
+        if (normalizedType == "location")
+        {
+            var location = await _db.Locations
+                .AsNoTracking()
+                .WherePublicLocations()
+                .Where(item => item.Id == areaId)
+                .Select(item => new
+                {
+                    item.Id,
+                    item.Name,
+                    item.DestinationId,
+                    DestinationName = item.Destination.Name
+                })
+                .SingleOrDefaultAsync(cancellationToken);
+            return location is null
+                ? null
+                : new ResolvedAgentLocation(
+                    location.DestinationId,
+                    location.DestinationName,
+                    "location",
+                    location.Id,
+                    location.Name == location.DestinationName ? location.Name : location.Name + ", " + location.DestinationName,
+                    location.Name,
+                    AgentTextNormalizer.Tokenize(location.Name).ToHashSet(StringComparer.Ordinal));
+        }
+
+        if (normalizedType == "region")
+        {
+            var region = await _db.Regions
+                .AsNoTracking()
+                .Where(item => item.Id == areaId &&
+                    item.Destinations.Any(destination => destination.Status == PublicVisibilityQueryExtensions.PublishedStatus))
+                .Select(item => new { item.Id, item.Name })
+                .SingleOrDefaultAsync(cancellationToken);
+            return region is null
+                ? null
+                : new ResolvedAgentLocation(
+                    null,
+                    null,
+                    "region",
+                    region.Id,
+                    region.Name,
+                    region.Name,
+                    AgentTextNormalizer.Tokenize(region.Name).ToHashSet(StringComparer.Ordinal));
+        }
+
+        if (normalizedType == "territory")
+        {
+            var territory = await _db.Territories
+                .AsNoTracking()
+                .Where(item => item.Id == areaId &&
+                    item.Regions.Any(region =>
+                        region.Destinations.Any(destination => destination.Status == PublicVisibilityQueryExtensions.PublishedStatus)))
+                .Select(item => new { item.Id, item.Name })
+                .SingleOrDefaultAsync(cancellationToken);
+            return territory is null
+                ? null
+                : new ResolvedAgentLocation(
+                    null,
+                    null,
+                    "territory",
+                    territory.Id,
+                    territory.Name,
+                    territory.Name,
+                    AgentTextNormalizer.Tokenize(territory.Name).ToHashSet(StringComparer.Ordinal));
+        }
+
+        return null;
+    }
+
     private async Task<ResolvedAgentLocation?> ResolveLocationFromTextAsync(
         string normalizedText,
         IReadOnlySet<string> tokenSet,
@@ -267,10 +424,13 @@ public class AgentQueryPlanner : IAgentQueryPlanner
 
         var destinations = await _db.Destinations
             .AsNoTracking()
+            .WherePublicDestinations()
             .Select(destination => new LocationCandidate
             {
                 DestinationId = destination.Id,
                 DestinationName = destination.Name,
+                AreaType = "destination",
+                AreaId = destination.Id,
                 DisplayName = destination.Name,
                 LocationText = destination.Name
             })
@@ -278,10 +438,13 @@ public class AgentQueryPlanner : IAgentQueryPlanner
 
         var locations = await _db.Locations
             .AsNoTracking()
+            .WherePublicLocations()
             .Select(location => new LocationCandidate
             {
                 DestinationId = location.DestinationId,
                 DestinationName = location.Destination.Name,
+                AreaType = "location",
+                AreaId = location.Id,
                 DisplayName = location.Name == location.Destination.Name
                     ? location.Destination.Name
                     : location.Name + ", " + location.Destination.Name,
@@ -289,8 +452,39 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             })
             .ToListAsync(cancellationToken);
 
+        var regions = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.Destinations.Any(destination => destination.Status == PublicVisibilityQueryExtensions.PublishedStatus))
+            .Select(region => new LocationCandidate
+            {
+                DestinationId = null,
+                DestinationName = null,
+                AreaType = "region",
+                AreaId = region.Id,
+                DisplayName = region.Name,
+                LocationText = region.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        var territories = await _db.Territories
+            .AsNoTracking()
+            .Where(territory => territory.Regions.Any(region =>
+                region.Destinations.Any(destination => destination.Status == PublicVisibilityQueryExtensions.PublishedStatus)))
+            .Select(territory => new LocationCandidate
+            {
+                DestinationId = null,
+                DestinationName = null,
+                AreaType = "territory",
+                AreaId = territory.Id,
+                DisplayName = territory.Name,
+                LocationText = territory.Name
+            })
+            .ToListAsync(cancellationToken);
+
         return destinations
             .Concat(locations)
+            .Concat(regions)
+            .Concat(territories)
             .Select(candidate => ScoreLocationCandidate(candidate, normalizedText, tokenSet))
             .Where(candidate => candidate.Score > 0)
             .OrderByDescending(candidate => candidate.Score)
@@ -309,13 +503,16 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             candidate.LocationText,
             candidate.DestinationName,
             candidate.DisplayName
-        };
+        }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .ToList();
 
         var bestScore = 0;
         var bestLength = 0;
         var bestTokens = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var name in names.Where(value => !string.IsNullOrWhiteSpace(value)))
+        foreach (var name in names)
         {
             var normalizedName = AgentTextNormalizer.Normalize(name);
             if (string.IsNullOrWhiteSpace(normalizedName))
@@ -333,7 +530,7 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             {
                 score = 320;
             }
-            else if (nameTokens.Count > 0 && nameTokens.All(tokenSet.Contains))
+            else if (NameMatchesTokens(name, tokenSet))
             {
                 score = 240 + nameTokens.Count * 30;
             }
@@ -350,11 +547,42 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             new ResolvedAgentLocation(
                 candidate.DestinationId,
                 candidate.DestinationName,
+                candidate.AreaType,
+                candidate.AreaId,
                 candidate.DisplayName,
                 candidate.LocationText,
                 bestTokens),
             bestScore,
             bestLength);
+    }
+
+    private static bool NameMatchesTokens(string name, IReadOnlySet<string> tokenSet)
+    {
+        var normalized = AgentTextNormalizer.Normalize(name);
+        var words = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return words.Length > 0 &&
+            words.All(word => AgentTextNormalizer.TokenVariants(word).Any(tokenSet.Contains));
+    }
+
+    private static bool MatchesLocationToken(string token, IReadOnlySet<string> locationTokens) =>
+        locationTokens.Contains(token) ||
+        AgentTextNormalizer.TokenVariants(token).Any(variant =>
+            locationTokens.Contains(variant) ||
+            (variant.Length > 4 && locationTokens.Any(locationToken =>
+                locationToken.StartsWith(variant, StringComparison.Ordinal) ||
+                variant.StartsWith(locationToken, StringComparison.Ordinal))));
+
+    private static bool MatchesLocationText(string token, string? locationText)
+    {
+        var normalizedLocation = AgentTextNormalizer.Normalize(locationText);
+        if (string.IsNullOrWhiteSpace(normalizedLocation))
+        {
+            return false;
+        }
+
+        return AgentTextNormalizer.TokenVariants(token).Any(variant =>
+            normalizedLocation == variant ||
+            (variant.Length > 4 && normalizedLocation.StartsWith(variant, StringComparison.Ordinal)));
     }
 
     private static HashSet<string> DetectEntityTypes(IReadOnlySet<string> tokens)
@@ -386,6 +614,52 @@ public class AgentQueryPlanner : IAgentQueryPlanner
 
         return result;
     }
+
+    private static string ResolvePrimaryCategory(
+        IReadOnlySet<string> concepts,
+        IReadOnlySet<string> entityTypes)
+    {
+        if (concepts.Contains("restaurant") || concepts.Contains("cafe"))
+        {
+            return "restaurants";
+        }
+
+        if (concepts.Contains("beach"))
+        {
+            return "beaches";
+        }
+
+        if (entityTypes.Contains("stays"))
+        {
+            return "stays";
+        }
+
+        if (entityTypes.Contains("events") || concepts.Contains("festival"))
+        {
+            return "events";
+        }
+
+        if (concepts.Contains("landmark"))
+        {
+            return "attractions";
+        }
+
+        return "general";
+    }
+
+    private static bool IsStrictCategory(string category) =>
+        category is "restaurants" or "beaches" or "stays" or "events" or "attractions";
+
+    private static bool IsFollowUpIntent(IReadOnlySet<string> tokens) =>
+        tokens.Count <= 4 &&
+        (tokens.Contains("a") ||
+         tokens.Contains("jos") ||
+         tokens.Contains("još") ||
+         tokens.Contains("more") ||
+         tokens.Contains("nesto") ||
+         tokens.Contains("nešto") ||
+         tokens.Contains("sta") ||
+         tokens.Contains("šta"));
 
     private static void AddMatchingTags(
         ISet<string> target,
@@ -477,6 +751,19 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         return cleaned.Length <= 100 ? cleaned : cleaned[..100];
     }
 
+    private static string? NormalizeAreaType(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "destination" or "destinations" => "destination",
+            "location" or "locations" => "location",
+            "region" or "regions" => "region",
+            "territory" or "territories" or "country" or "countries" => "territory",
+            _ => null
+        };
+    }
+
     private sealed record ConceptDefinition(
         string[] QueryAliases,
         string[] TagAliases,
@@ -494,15 +781,19 @@ public class AgentQueryPlanner : IAgentQueryPlanner
 
     private sealed class LocationCandidate
     {
-        public int DestinationId { get; init; }
-        public string DestinationName { get; init; } = string.Empty;
+        public int? DestinationId { get; init; }
+        public string? DestinationName { get; init; }
+        public string AreaType { get; init; } = "destination";
+        public int AreaId { get; init; }
         public string DisplayName { get; init; } = string.Empty;
         public string LocationText { get; init; } = string.Empty;
     }
 
     private sealed record ResolvedAgentLocation(
-        int DestinationId,
-        string DestinationName,
+        int? DestinationId,
+        string? DestinationName,
+        string AreaType,
+        int AreaId,
         string DisplayName,
         string LocationText,
         HashSet<string> NormalizedTokens);

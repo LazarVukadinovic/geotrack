@@ -30,8 +30,8 @@ public class GeminiAskAgentService : IGeminiAskAgentService
     public string Model => ResolveModel(_options.Model);
     public bool HasAvailableKey => _keyPool.AvailableKeyCount > 0;
 
-    public async Task<AgentProviderChatResult> GenerateAsync(
-        AgentProviderChatRequest request,
+    public async Task<GeminiTextGenerationResult> GenerateAsync(
+        GeminiTextGenerationRequest request,
         CancellationToken cancellationToken = default)
     {
         var attempts = _keyPool.GetAvailableKeys();
@@ -57,7 +57,7 @@ public class GeminiAskAgentService : IGeminiAskAgentService
             try
             {
                 return await _provider.GenerateAsync(
-                    new AgentProviderChatRequest
+                    new GeminiTextGenerationRequest
                     {
                         ApiKey = key.ApiKey,
                         Model = model,
@@ -112,8 +112,11 @@ public class GeminiAskAgentService : IGeminiAskAgentService
             ? GeminiOptions.DefaultModel
             : configuredModel.Trim();
 
-        return model.Length > 200 || model.Any(char.IsControl)
+        return model.Length > 200 || model.Any(char.IsControl) || !IsGeminiTextModel(model)
             ? GeminiOptions.DefaultModel
             : model;
     }
+
+    private static bool IsGeminiTextModel(string model) =>
+        model.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase);
 }

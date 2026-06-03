@@ -214,6 +214,50 @@ public class McpController : ControllerBase
                     Zoom = ReadOptionalDouble(args, "zoom") ?? 13d
                 },
                 cancellationToken),
+            "geotrack_resolve_area" => await _toolService.ResolveAreaAsync(
+                new GeoTrackAreaResolveRequest
+                {
+                    Query = ReadString(args, "query", required: true),
+                    Limit = ReadOptionalLimit(args, "limit", 10)
+                },
+                cancellationToken),
+            "geotrack_search_catalog" => await _toolService.SearchCatalogAsync(
+                new GeoTrackCatalogSearchRequest
+                {
+                    Query = ReadString(args, "query", required: false),
+                    AreaType = ReadString(args, "areaType", required: false),
+                    AreaId = ReadOptionalPositiveInt(args, "areaId"),
+                    Category = ReadString(args, "category", required: false),
+                    EntityTypes = ReadOptionalStringList(args, "entityTypes"),
+                    Limit = ReadOptionalLimit(args, "limit", 20)
+                },
+                cancellationToken),
+            "geotrack_search_by_area" => await _toolService.SearchByAreaAsync(
+                new GeoTrackAreaContentRequest
+                {
+                    AreaType = ReadString(args, "areaType", required: true),
+                    AreaId = ReadPositiveInt(args, "areaId"),
+                    Category = ReadString(args, "category", required: false),
+                    EntityTypes = ReadOptionalStringList(args, "entityTypes"),
+                    Limit = ReadOptionalLimit(args, "limit", 20)
+                },
+                cancellationToken),
+            "geotrack_get_area_overview" => await _toolService.GetAreaOverviewAsync(
+                new GeoTrackAreaOverviewRequest
+                {
+                    AreaType = ReadString(args, "areaType", required: true),
+                    AreaId = ReadPositiveInt(args, "areaId"),
+                    LimitPerType = ReadOptionalLimit(args, "limitPerType", 10)
+                },
+                cancellationToken),
+            "geotrack_get_category_options" => await _toolService.GetCategoryOptionsAsync(
+                new GeoTrackCategoryOptionsRequest
+                {
+                    AreaType = ReadString(args, "areaType", required: false),
+                    AreaId = ReadOptionalPositiveInt(args, "areaId"),
+                    CategoryGroup = ReadString(args, "categoryGroup", required: false)
+                },
+                cancellationToken),
             _ => throw new AgentException("tool_not_allowed", "The requested MCP tool is not allowed.", 400)
         };
 
@@ -289,6 +333,24 @@ public class McpController : ControllerBase
             value > 10)
         {
             throw new AgentException("invalid_tool_arguments", $"{name} must be between 1 and 10.", 400);
+        }
+
+        return value;
+    }
+
+    private static int? ReadOptionalLimit(JsonElement args, string name, int maximum)
+    {
+        if (!args.TryGetProperty(name, out var element) || element.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (element.ValueKind != JsonValueKind.Number ||
+            !element.TryGetInt32(out var value) ||
+            value <= 0 ||
+            value > maximum)
+        {
+            throw new AgentException("invalid_tool_arguments", $"{name} must be between 1 and {maximum}.", 400);
         }
 
         return value;
@@ -410,6 +472,78 @@ public class McpController : ControllerBase
         IdTool("geotrack_get_event_details", "Get safe public details for one GeoTrack event."),
         new()
         {
+            Name = "geotrack_resolve_area",
+            Description = "Resolve a user area phrase to public GeoTrack destinations, locations, regions, territories, places, or events. Read-only.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                required = new[] { "query" },
+                properties = new Dictionary<string, object>
+                {
+                    ["query"] = new { type = "string", minLength = 2, maxLength = 100 },
+                    ["limit"] = new { type = "integer", minimum = 1, maximum = 10 }
+                }
+            }
+        },
+        new()
+        {
+            Name = "geotrack_search_catalog",
+            Description = "Unified search over public GeoTrack catalog content. Read-only and capped at 20 results.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                properties = CatalogSearchProperties()
+            }
+        },
+        new()
+        {
+            Name = "geotrack_search_by_area",
+            Description = "Return grouped public catalog content inside a resolved area. Read-only and capped at 20 results per request.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                required = new[] { "areaType", "areaId" },
+                properties = AreaScopedProperties(includeLimit: true)
+            }
+        },
+        new()
+        {
+            Name = "geotrack_get_area_overview",
+            Description = "Summarize public GeoTrack content counts and top results for a resolved area. Read-only.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                required = new[] { "areaType", "areaId" },
+                properties = new Dictionary<string, object>
+                {
+                    ["areaType"] = AreaTypeSchema(),
+                    ["areaId"] = new { type = "integer", minimum = 1 },
+                    ["limitPerType"] = new { type = "integer", minimum = 1, maximum = 10 }
+                }
+            }
+        },
+        new()
+        {
+            Name = "geotrack_get_category_options",
+            Description = "Return known public category groups, tags, and type names Ask Agent can use. Read-only.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                properties = new Dictionary<string, object>
+                {
+                    ["areaType"] = AreaTypeSchema(),
+                    ["areaId"] = new { type = "integer", minimum = 1 },
+                    ["categoryGroup"] = new { type = "string", minLength = 2, maxLength = 50 }
+                }
+            }
+        },
+        new()
+        {
             Name = "geotrack_get_map_filters",
             Description = "Get bounded public map category counts for a validated viewport. Read-only.",
             InputSchema = new
@@ -492,6 +626,30 @@ public class McpController : ControllerBase
         type = "number",
         minimum,
         maximum
+    };
+
+    private static Dictionary<string, object> CatalogSearchProperties()
+    {
+        var properties = AreaScopedProperties(includeLimit: true);
+        properties["query"] = new { type = "string", minLength = 2, maxLength = 100 };
+        return properties;
+    }
+
+    private static Dictionary<string, object> AreaScopedProperties(bool includeLimit) => new()
+    {
+        ["areaType"] = AreaTypeSchema(),
+        ["areaId"] = new { type = "integer", minimum = 1 },
+        ["category"] = new { type = "string", minLength = 2, maxLength = 50 },
+        ["entityTypes"] = StringArraySchema(),
+        ["limit"] = includeLimit
+            ? new { type = "integer", minimum = 1, maximum = 20 }
+            : new { type = "integer", minimum = 1, maximum = 10 }
+    };
+
+    private static object AreaTypeSchema() => new
+    {
+        type = "string",
+        @enum = new[] { "destination", "location", "region", "territory", "place", "stay", "event" }
     };
 
     private static object StringArraySchema() => new

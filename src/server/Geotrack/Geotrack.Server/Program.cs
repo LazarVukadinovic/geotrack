@@ -64,7 +64,14 @@ builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
 
     options.UseNpgsql(
         configuredConnectionString,
-        npgsqlOptions => npgsqlOptions.UseNetTopologySuite());
+        npgsqlOptions =>
+        {
+            npgsqlOptions.UseNetTopologySuite();
+            npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorCodesToAdd: null);
+        });
 });
 
 builder.Services.AddControllers()
@@ -203,9 +210,6 @@ builder.Services.AddScoped<IContentHtmlSanitizer, ContentHtmlSanitizer>();
 
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IInterestTopicService, InterestTopicService>();
-builder.Services.AddScoped<IAgentService, AgentService>();
-builder.Services.AddScoped<IApiKeyEncryptionService, ApiKeyEncryptionService>();
-builder.Services.AddScoped<IAiProviderKeyService, AiProviderKeyService>();
 builder.Services.AddScoped<IAgentQueryPlanner, AgentQueryPlanner>();
 builder.Services.AddScoped<IGeoTrackToolService, GeoTrackToolService>();
 builder.Services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
@@ -595,81 +599,88 @@ var shouldAutoMigrate =
 
 if (shouldAutoMigrate || shouldSeedOperationalUsers || shouldSeedDemoContent || shouldSeedPublicContent)
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    using var strategyScope = app.Services.CreateScope();
+    var strategyDb = strategyScope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var strategy = strategyDb.Database.CreateExecutionStrategy();
 
-    await db.Database.MigrateAsync();
-
-    if ((shouldSeedDemoContent || shouldSeedPublicContent) &&
-        app.Configuration.GetValue<bool>("Seed:ImportLocalBoundaries:Enabled"))
+    await strategy.ExecuteAsync(async () =>
     {
-        var localBoundaryImport = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm0", true))
+        await db.Database.MigrateAsync();
+
+        if ((shouldSeedDemoContent || shouldSeedPublicContent) &&
+            app.Configuration.GetValue<bool>("Seed:ImportLocalBoundaries:Enabled"))
         {
-            await localBoundaryImport.ImportLocalBoundariesAsync("ADM0");
-        }
+            var localBoundaryImport = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
 
-        if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm1", true))
-        {
-            await localBoundaryImport.ImportLocalBoundariesAsync("ADM1");
-        }
-    }
-
-    if (shouldSeedOperationalUsers)
-    {
-        var logger = scope.ServiceProvider
-            .GetRequiredService<ILoggerFactory>()
-            .CreateLogger(nameof(OperationalUserSeeder));
-        await OperationalUserSeeder.EnsureAsync(db, app.Configuration, logger);
-    }
-
-    if (shouldSeedDemoContent)
-    {
-        await SeedData.InitializeAsync(db);
-    }
-    else if (shouldSeedPublicContent)
-    {
-        await SeedData.EnsureRequiredPublicContentAsync(db);
-    }
-
-    if ((shouldSeedDemoContent || shouldSeedPublicContent) &&
-        app.Configuration.GetValue("Seed:SyncAdm1Regions:Enabled", true))
-    {
-        foreach (var syncCountryIso3 in ResolveSeedAdm1SyncCountryIso3s(app.Configuration))
-        {
-            var syncTerritoryId = await db.Territories
-                .AsNoTracking()
-                .Where(territory => territory.CountryIso3 == syncCountryIso3)
-                .OrderBy(territory => territory.Id)
-                .Select(territory => (int?)territory.Id)
-                .FirstOrDefaultAsync();
-
-            if (syncTerritoryId.HasValue)
+            if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm0", true))
             {
-                var regionSync = scope.ServiceProvider.GetRequiredService<IAdmBoundaryRegionSyncService>();
-                var syncSummary = await regionSync.SyncRegionsFromAdm1CandidatesAsync(
-                    syncTerritoryId.Value,
-                    dryRun: false,
-                    forceUpdateGeometry: false,
-                    createMissingRegions: true,
-                    linkExistingRegions: true);
+                await localBoundaryImport.ImportLocalBoundariesAsync("ADM0");
+            }
 
-                var logger = scope.ServiceProvider
-                    .GetRequiredService<ILoggerFactory>()
-                    .CreateLogger("SeedAdm1RegionSync");
-                logger.LogInformation(
-                    "Seed ADM1 region sync for {CountryIso3}: {CreatedCount} created, {LinkedExistingCount} linked, {UpdatedCount} updated, {ExistingLinkedCount} already linked, {AmbiguousCount} ambiguous, {FailedCount} failed.",
-                    syncSummary.CountryIso3,
-                    syncSummary.CreatedCount,
-                    syncSummary.LinkedExistingCount,
-                    syncSummary.UpdatedCount,
-                    syncSummary.ExistingLinkedCount,
-                    syncSummary.AmbiguousCount,
-                    syncSummary.FailedCount);
+            if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm1", true))
+            {
+                await localBoundaryImport.ImportLocalBoundariesAsync("ADM1");
             }
         }
-    }
+
+        if (shouldSeedOperationalUsers)
+        {
+            var logger = scope.ServiceProvider
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger(nameof(OperationalUserSeeder));
+            await OperationalUserSeeder.EnsureAsync(db, app.Configuration, logger);
+        }
+
+        if (shouldSeedDemoContent)
+        {
+            await SeedData.InitializeAsync(db);
+        }
+        else if (shouldSeedPublicContent)
+        {
+            await SeedData.EnsureRequiredPublicContentAsync(db);
+        }
+
+        if ((shouldSeedDemoContent || shouldSeedPublicContent) &&
+            app.Configuration.GetValue("Seed:SyncAdm1Regions:Enabled", true))
+        {
+            foreach (var syncCountryIso3 in ResolveSeedAdm1SyncCountryIso3s(app.Configuration))
+            {
+                var syncTerritoryId = await db.Territories
+                    .AsNoTracking()
+                    .Where(territory => territory.CountryIso3 == syncCountryIso3)
+                    .OrderBy(territory => territory.Id)
+                    .Select(territory => (int?)territory.Id)
+                    .FirstOrDefaultAsync();
+
+                if (syncTerritoryId.HasValue)
+                {
+                    var regionSync = scope.ServiceProvider.GetRequiredService<IAdmBoundaryRegionSyncService>();
+                    var syncSummary = await regionSync.SyncRegionsFromAdm1CandidatesAsync(
+                        syncTerritoryId.Value,
+                        dryRun: false,
+                        forceUpdateGeometry: false,
+                        createMissingRegions: true,
+                        linkExistingRegions: true);
+
+                    var logger = scope.ServiceProvider
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("SeedAdm1RegionSync");
+                    logger.LogInformation(
+                        "Seed ADM1 region sync for {CountryIso3}: {CreatedCount} created, {LinkedExistingCount} linked, {UpdatedCount} updated, {ExistingLinkedCount} already linked, {AmbiguousCount} ambiguous, {FailedCount} failed.",
+                        syncSummary.CountryIso3,
+                        syncSummary.CreatedCount,
+                        syncSummary.LinkedExistingCount,
+                        syncSummary.UpdatedCount,
+                        syncSummary.ExistingLinkedCount,
+                        syncSummary.AmbiguousCount,
+                        syncSummary.FailedCount);
+                }
+            }
+        }
+    });
 }
 
 if (!app.Environment.IsDevelopment())

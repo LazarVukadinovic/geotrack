@@ -87,6 +87,19 @@ internal static class AgentTextNormalizer
 
         yield return token;
 
+        if (token.EndsWith("vcu", StringComparison.Ordinal) && token.Length > 5)
+        {
+            yield return token[..^3] + "vac";
+        }
+
+        if (token.EndsWith("u", StringComparison.Ordinal) && token.Length > 4)
+        {
+            var stem = token[..^1];
+            yield return stem;
+            yield return stem + "s";
+            yield break;
+        }
+
         if (token.EndsWith("ies", StringComparison.Ordinal) && token.Length > 3)
         {
             yield return token[..^3] + "y";
@@ -100,11 +113,19 @@ internal static class AgentTextNormalizer
             yield return token + "s";
         }
 
-        if (token.EndsWith("u", StringComparison.Ordinal) && token.Length > 4)
+        if (token.EndsWith("vc", StringComparison.Ordinal) && token.Length > 4)
         {
-            var stem = token[..^1];
-            yield return stem;
-            yield return stem + "s";
+            yield return token[..^1] + "ac";
+        }
+
+        if (token.EndsWith("vcs", StringComparison.Ordinal) && token.Length > 5)
+        {
+            yield return token[..^2] + "ac";
+        }
+
+        if (token.EndsWith("iji", StringComparison.Ordinal) && token.Length > 5)
+        {
+            yield return token[..^3] + "ija";
         }
     }
 }

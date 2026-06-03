@@ -10,9 +10,8 @@ using Microsoft.Extensions.Options;
 
 namespace Geotrack.Infrastructure.Services.Agent;
 
-public class GeminiAgentProvider : IAgentProvider
+public class GeminiAgentProvider
 {
-    private const string ProviderId = "gemini";
     private const int MaxTransientAttempts = 3;
     private readonly HttpClient _httpClient;
     private readonly GeminiOptions _geminiOptions;
@@ -28,32 +27,8 @@ public class GeminiAgentProvider : IAgentProvider
         _logger = logger;
     }
 
-    public string Id => ProviderId;
-
-    public AgentProviderMetadataDto GetMetadata(int? userId)
-    {
-        var model = NormalizeModel(_geminiOptions.Model);
-        var hasConfiguredKey = _geminiOptions.ApiKeys.Any(key => !string.IsNullOrWhiteSpace(key));
-        return new AgentProviderMetadataDto
-        {
-            Id = ProviderId,
-            DisplayName = "GeoTrack AI",
-            Enabled = hasConfiguredKey,
-            Models = new List<AgentProviderModelDto>
-            {
-                new()
-                {
-                    Id = model,
-                    DisplayName = model,
-                    IsDefault = true
-                }
-            },
-            DefaultModel = model
-        };
-    }
-
-    public async Task<AgentProviderChatResult> GenerateAsync(
-        AgentProviderChatRequest request,
+    public async Task<GeminiTextGenerationResult> GenerateAsync(
+        GeminiTextGenerationRequest request,
         CancellationToken cancellationToken = default)
     {
         var model = NormalizeModel(request.Model);
@@ -157,7 +132,7 @@ public class GeminiAgentProvider : IAgentProvider
                     throw new AgentException("provider_unavailable", "Gemini did not return an answer.", 503);
                 }
 
-                return new AgentProviderChatResult
+                return new GeminiTextGenerationResult
                 {
                     Text = text.Trim(),
                     Usage = body?.UsageMetadata is null
@@ -191,15 +166,17 @@ public class GeminiAgentProvider : IAgentProvider
         var candidate = string.IsNullOrWhiteSpace(model)
             ? GeminiOptions.DefaultModel
             : model.Trim();
-        if (candidate.Length > 200 || candidate.Any(char.IsControl))
+        if (candidate.Length > 200 ||
+            candidate.Any(char.IsControl) ||
+            !candidate.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase))
         {
-            throw new AgentException("unsupported_model", "The selected model is not available for this provider.", 400);
+            throw new AgentException("unsupported_model", "Ask Agent only supports Gemini text models.", 400);
         }
 
         return candidate;
     }
 
-    private static HttpRequestMessage CreateGenerateContentRequest(Uri url, AgentProviderChatRequest request)
+    private static HttpRequestMessage CreateGenerateContentRequest(Uri url, GeminiTextGenerationRequest request)
     {
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
         httpRequest.Headers.TryAddWithoutValidation("x-goog-api-key", request.ApiKey);

@@ -5,7 +5,6 @@ namespace Geotrack.Application.DTOs.Agent;
 
 public class AgentProvidersResponseDto
 {
-    public List<AgentProviderMetadataDto> Providers { get; set; } = new();
     public AgentMcpMetadataDto Mcp { get; set; } = new();
 }
 
@@ -15,32 +14,6 @@ public class AgentMcpMetadataDto
     public string? Url { get; set; }
     public string Transport { get; set; } = "remote-http";
     public bool PrivateToolsEnabled { get; set; }
-}
-
-public class AgentProviderMetadataDto
-{
-    public string Id { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public bool Enabled { get; set; }
-    public List<AgentProviderModelDto> Models { get; set; } = new();
-    public string? DefaultModel { get; set; }
-}
-
-public class AgentProviderModelDto
-{
-    public string Id { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public bool IsDefault { get; set; }
-}
-
-public class AgentApiKeyMetadataDto
-{
-    public string Provider { get; set; } = string.Empty;
-    public string KeyLast4 { get; set; } = string.Empty;
-    public string? DisplayName { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
-    public DateTime? LastUsedAt { get; set; }
 }
 
 public class AgentChatRequestDto
@@ -62,6 +35,12 @@ public class AgentContextOptionsDto
     public string? CurrentDestinationName { get; set; }
     public string? CurrentLocationName { get; set; }
     public string? Language { get; set; }
+    public string? ConversationAreaType { get; set; }
+    public int? ConversationAreaId { get; set; }
+    public string? ConversationAreaName { get; set; }
+    public int? ConversationDestinationId { get; set; }
+    public string? ConversationDestinationName { get; set; }
+    public string? ConversationCategory { get; set; }
 }
 
 public class AgentChatResponseDto
@@ -71,8 +50,6 @@ public class AgentChatResponseDto
     public string Role { get; set; } = "assistant";
     public string Type { get; set; } = "text";
     public string Text { get; set; } = string.Empty;
-    public string Provider { get; set; } = string.Empty;
-    public string Model { get; set; } = string.Empty;
     public List<string> ToolsUsed { get; set; } = new();
     public List<AgentResultCardDto> Cards { get; set; } = new();
     public AgentUsageMetadataDto? Usage { get; set; }
