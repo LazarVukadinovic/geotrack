@@ -649,11 +649,11 @@
     }
 
     @if (ownershipClaimOpen()) {
-      <div class="pd__claim-modal" role="dialog" aria-modal="true" aria-label="Request ownership">
+      <div class="pd__claim-modal" role="dialog" aria-modal="true" aria-labelledby="ownership-claim-title" aria-describedby="ownership-claim-description">
         <button type="button" class="pd__claim-backdrop" aria-label="Close ownership request" (click)="closeOwnershipClaim()"></button>
         <section class="pd__claim-panel">
           <header class="pd__claim-head">
-            <h2>Request ownership</h2>
+            <h2 id="ownership-claim-title">Request ownership</h2>
             <button type="button" class="pd__claim-close" aria-label="Close" (click)="closeOwnershipClaim()">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6 6 18M6 6l12 12"/>
@@ -661,13 +661,21 @@
             </button>
           </header>
           <div class="pd__claim-body">
-            <p>Upload a PDF document that proves you own or manage this place.</p>
-            <label class="pd__claim-upload">
+            <p id="ownership-claim-description">Upload a PDF document that proves you own or manage this place.</p>
+            <input #ownershipProofInput id="ownership-proof-file" style="display: none;" type="file" accept="application/pdf" (change)="onOwnershipProofSelected($event)" />
+            <label
+              class="pd__claim-upload"
+              role="button"
+              tabindex="0"
+              for="ownership-proof-file"
+              [attr.aria-describedby]="ownershipClaimError() ? 'ownership-claim-error' : 'ownership-claim-description'"
+              (keydown.enter)="ownershipProofInput.click()"
+              (keydown.space)="$event.preventDefault(); ownershipProofInput.click()"
+            >
               <span>{{ ownershipProofFileName() || 'Choose PDF document' }}</span>
-              <input style="display: none;" type="file" accept="application/pdf" (change)="onOwnershipProofSelected($event)" />
             </label>
             @if (ownershipClaimError()) {
-              <p class="pd__claim-error" role="alert">{{ ownershipClaimError() }}</p>
+              <p id="ownership-claim-error" class="pd__claim-error" role="alert">{{ ownershipClaimError() }}</p>
             }
           </div>
           <footer class="pd__claim-actions">

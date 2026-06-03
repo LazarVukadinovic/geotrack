@@ -132,7 +132,6 @@ function createComponent(
       resolveRoutingOrigin: vi.fn(() => Promise.resolve(null)),
       ensureIpFallback: vi.fn(() => Promise.resolve(null)),
     } as unknown as LocationService,
-    { replaceState: vi.fn() } as unknown as AngularLocation,
     {
       readSelection: vi.fn(() => savedFilters),
       clearSelection: vi.fn(),

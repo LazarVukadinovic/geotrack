@@ -27,6 +27,11 @@ a {
   text-decoration: none;
 }
 
+[role='button']:focus-visible {
+  outline: 2px solid var(--color-accent-orange);
+  outline-offset: 3px;
+}
+
 img {
   max-width: 100%;
   display: block;

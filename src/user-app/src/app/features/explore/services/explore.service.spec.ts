@@ -2,6 +2,7 @@ import { ApplicationRef, computed, signal, type WritableSignal } from '@angular/
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { AuthService } from '../../../core/services/auth.service';
 import { DestinationService } from '../../../core/services/destination.service';
