@@ -9,6 +9,21 @@ public class ContributionPlaceTypeDto
     public bool IsOwnable { get; set; }
 }
 
+public class ContributionFeatureOptionDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+}
+
+public class ContributionFeatureOptionsDto
+{
+    public List<ContributionFeatureOptionDto> Characteristics { get; set; } = new();
+    public List<ContributionFeatureOptionDto> Amenities { get; set; } = new();
+    public List<ContributionFeatureOptionDto> StayAmenities { get; set; } = new();
+    public Dictionary<string, List<string>> CharacteristicIdsByPlaceType { get; set; } = new();
+    public Dictionary<string, List<string>> AmenityIdsByPlaceType { get; set; } = new();
+}
+
 public class PlaceContributionImageDto
 {
     public int Id { get; set; }
@@ -124,6 +139,8 @@ public class UpsertPlaceContributionDto
     public string? ImageSize { get; set; }
     public string? CardImagePosition { get; set; }
     public string? CardImageSize { get; set; }
+    public string? OwnershipProofDocumentUrl { get; set; }
+    public string? OwnershipProofOriginalFileName { get; set; }
     public List<string> Tags { get; set; } = new();
     public List<string> Amenities { get; set; } = new();
     public List<string> StayAmenities { get; set; } = new();

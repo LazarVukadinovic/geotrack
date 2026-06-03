@@ -6428,8 +6428,11 @@ public static class SeedData
 
     private static async Task EnsureExploreDemoPlaceTagsAsync(AppDbContext db, IReadOnlyDictionary<string, Tag> tagLookup)
     {
-        var placesByName = await db.Places
-            .ToDictionaryAsync(place => place.Name, StringComparer.OrdinalIgnoreCase);
+        var placesByName = (await db.Places
+                .OrderBy(place => place.Id)
+                .ToListAsync())
+            .GroupBy(place => place.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         async Task AddIfExistsAsync(string placeName, params string[] tagSlugs)
         {

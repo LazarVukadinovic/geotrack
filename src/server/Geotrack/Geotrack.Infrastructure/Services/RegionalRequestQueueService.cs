@@ -403,6 +403,7 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
                     AltText = image.AltText,
                     Caption = image.Caption,
                     IsMain = image.IsMain,
+                    ImageRole = image.ImageRole,
                     SortOrder = image.SortOrder,
                     ImagePosition = image.ImagePosition,
                     ImageSize = image.ImageSize

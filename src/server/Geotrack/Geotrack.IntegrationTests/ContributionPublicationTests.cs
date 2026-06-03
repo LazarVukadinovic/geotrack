@@ -132,6 +132,73 @@ public sealed class ContributionPublicationTests
     }
 
     [Fact]
+    public async Task Approved_owned_contribution_detail_uses_published_place_after_owner_edit()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+
+        using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var createdContribution = await CreatePlaceContributionAsync(contributorClient);
+
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", SeedRegionName);
+
+        using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
+        var approvalResponse = await reviewerClient.PostAsJsonAsync(
+            $"/api/contributions/{createdContribution.Contribution.Id}/approve",
+            new ReviewPlaceContributionRequestDto { Note = "Ready for owner edits." });
+        approvalResponse.EnsureSuccessStatusCode();
+
+        var approved = await approvalResponse.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(approved);
+        var placeId = Assert.IsType<int>(approved!.Contribution.PlaceId);
+
+        var updatePayload = new
+        {
+            name = "Beta Villa Updated",
+            description = "Updated approved description from owner edit.",
+            website = "https://betavilla.example/updated",
+            contactEmail = "updated@betavilla.example",
+            phoneNumber = "+3857654321",
+            tags = new[] { "Romantic", "Sea View" },
+            amenities = new[] { "spa", "sea-view" },
+            bookingPartners = new[]
+            {
+                new { id = "booking", url = "https://partners.example/booking/beta-villa-updated" }
+            }
+        };
+
+        var ownerUpdateResponse = await PutOwnerUpdateAsync(contributorClient, placeId, updatePayload);
+        ownerUpdateResponse.EnsureSuccessStatusCode();
+
+        var contributionDetail = await contributorClient.GetFromJsonAsync<PlaceContributionResponseDto>(
+            $"/api/contributions/{createdContribution.Contribution.Id}");
+        Assert.NotNull(contributionDetail);
+        Assert.Equal("Beta Villa Updated", contributionDetail!.Contribution.Name);
+        Assert.Equal("Updated approved description from owner edit.", contributionDetail.Contribution.Description);
+        Assert.Equal("updated@betavilla.example", contributionDetail.Contribution.ContactEmail);
+        Assert.Contains("Romantic", contributionDetail.Contribution.Tags);
+        Assert.Contains("Sea View", contributionDetail.Contribution.Tags);
+        Assert.Contains("spa", contributionDetail.Contribution.StayAmenities);
+        Assert.Contains("sea-view", contributionDetail.Contribution.StayAmenities);
+        Assert.Contains(
+            contributionDetail.Contribution.BookingPartners,
+            partner => partner.Id == "booking" && partner.Url == "https://partners.example/booking/beta-villa-updated");
+
+        var contributions = await contributorClient.GetFromJsonAsync<GetPlaceContributionsResponseDto>("/api/contributions");
+        Assert.NotNull(contributions);
+        var card = Assert.Single(contributions!.Contributions, item => item.Id == createdContribution.Contribution.Id);
+        Assert.Equal("Beta Villa Updated", card.Name);
+        Assert.Equal("Approved", card.Status);
+        Assert.Equal(placeId, card.PublishedPlaceId);
+
+        var publicHotelDetail = await contributorClient.GetFromJsonAsync<HotelDetailDto>(
+            $"/api/places/hotels/{placeId}");
+        Assert.NotNull(publicHotelDetail);
+        Assert.StartsWith("Updated approved description from owner edit", publicHotelDetail!.About);
+        Assert.Contains(publicHotelDetail.Tags, tag => tag.Label == "Romantic");
+        Assert.Contains(publicHotelDetail.Amenities, amenity => amenity.Label == "Spa");
+    }
+
+    [Fact]
     public async Task Regional_manager_cannot_review_update_for_target_place_outside_assigned_region()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -763,6 +830,7 @@ public sealed class ContributionPublicationTests
         var payload = new
         {
             name = "Beta Villa",
+            placeType = "Stay",
             stayType = "Villa",
             address = "123 Coast Road",
             city = "Dubrovnik",
@@ -779,6 +847,11 @@ public sealed class ContributionPublicationTests
             pricePerNight = 123.45m,
             tags = new[] { "Coastal", "Private" },
             amenities = new[] { "wifi", "pool" },
+            images = new[]
+            {
+                new { url = "/images/beta-villa-card.jpg", imageRole = "card", sortOrder = -9 },
+                new { url = "/images/beta-villa-cover.jpg", imageRole = "cover", sortOrder = -10 }
+            },
             bookingPartners = new[]
             {
                 new { id = "booking", url = "https://partners.example/booking/beta-villa" },
@@ -793,7 +866,11 @@ public sealed class ContributionPublicationTests
         AddOwnershipProofDocument(formData);
 
         var response = await client.PostAsync("/api/contributions", formData);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            Assert.True(response.IsSuccessStatusCode, error);
+        }
 
         var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
         Assert.NotNull(created);
@@ -851,6 +928,19 @@ public sealed class ContributionPublicationTests
         AddOwnershipProofDocument(formData, ownershipProof);
 
         return await client.PostAsync(endpoint, formData);
+    }
+
+    private static async Task<HttpResponseMessage> PutOwnerUpdateAsync(
+        HttpClient client,
+        int placeId,
+        object payload)
+    {
+        using var formData = new MultipartFormDataContent();
+        formData.Add(
+            new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            "payload");
+
+        return await client.PutAsync($"/api/places/{placeId}/owner-update", formData);
     }
 
     private static void AddOwnershipProofDocument(

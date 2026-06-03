@@ -66,6 +66,7 @@ export interface PlaceContributionImage {
   altText?: string | null;
   caption?: string | null;
   isMain: boolean;
+  imageRole?: string | null;
   sortOrder: number;
   imagePosition: string;
   imageSize: string;

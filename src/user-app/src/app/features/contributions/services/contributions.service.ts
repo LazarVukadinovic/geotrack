@@ -179,6 +179,8 @@ interface UpsertPlaceContributionPayload {
   imageSize: string;
   cardImagePosition?: string;
   cardImageSize?: string;
+  ownershipProofDocumentUrl?: string | null;
+  ownershipProofOriginalFileName?: string | null;
   description: string;
   phone: string;
   contactEmail: string;
@@ -382,6 +384,8 @@ export class ContributionsService {
       imageSize: basics.imgBgSize || 'cover',
       cardImagePosition: basics.cardImgBgPosition || '50% 50%',
       cardImageSize: basics.cardImgBgSize || 'cover',
+      ownershipProofDocumentUrl: basics.ownershipProofDocumentUrl ?? null,
+      ownershipProofOriginalFileName: basics.ownershipProofOriginalFileName ?? null,
       description: details.description,
       phone: details.phone,
       contactEmail: details.contactEmail,

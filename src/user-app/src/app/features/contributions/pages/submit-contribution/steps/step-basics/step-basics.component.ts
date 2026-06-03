@@ -14,7 +14,7 @@ const DEFAULT_PICKER_LAT = 44.82;
 const DEFAULT_PICKER_LNG = 20.46;
 const MAX_OWNERSHIP_PROOF_BYTES = 10 * 1024 * 1024;
 const FALLBACK_OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe', 'bar']);
-const HIDDEN_CONTRIBUTION_PLACE_TYPES = new Set(['beach', 'nature']);
+const HIDDEN_CONTRIBUTION_PLACE_TYPES = new Set(['beach', 'nature', 'shopping']);
 const COVER_IMAGE_OUTPUT = { width: 1600, height: 900 };
 const CARD_IMAGE_OUTPUT = { width: 960, height: 720 };
 

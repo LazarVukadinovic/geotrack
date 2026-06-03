@@ -78,11 +78,10 @@ public class PlaceContributionService : IPlaceContributionService
 
         var includeReviewNote = HasCompletedReview(contribution.Status);
 
-        if (contribution.Type == PlaceContributionType.ClaimOwnership &&
-            contribution.Status == PlaceContributionStatus.Approved &&
+        if (contribution.Status == PlaceContributionStatus.Approved &&
             contribution.PlaceId.HasValue)
         {
-            return await MapApprovedOwnershipDetailAsync(contribution, includeReviewNote);
+            return await MapApprovedPublishedPlaceDetailAsync(contribution, includeReviewNote);
         }
 
         var hasPendingOwnershipClaim = contribution.PlaceId.HasValue &&
@@ -146,6 +145,67 @@ public class PlaceContributionService : IPlaceContributionService
                 IsOwnable = type.IsOwnable
             })
             .ToListAsync();
+    }
+
+    public async Task<ContributionFeatureOptionsDto> GetFeatureOptionsAsync()
+    {
+        var characteristics = await _db.Tags
+            .AsNoTracking()
+            .Where(tag => tag.ForPlace)
+            .OrderBy(tag => tag.TagType != null ? tag.TagType.FilterOrder : 1000)
+            .ThenBy(tag => tag.Name)
+            .Select(tag => new ContributionFeatureOptionDto
+            {
+                Id = tag.Slug,
+                Label = tag.Name
+            })
+            .ToListAsync();
+
+        var amenities = await _db.Amenities
+            .AsNoTracking()
+            .OrderBy(amenity => amenity.Name)
+            .Select(amenity => new ContributionFeatureOptionDto
+            {
+                Id = amenity.Icon != "" ? amenity.Icon : amenity.Name,
+                Label = amenity.Name
+            })
+            .ToListAsync();
+
+        var stayAmenities = await _db.StayAmenities
+            .AsNoTracking()
+            .OrderBy(amenity => amenity.Name)
+            .Select(amenity => new ContributionFeatureOptionDto
+            {
+                Id = amenity.Slug,
+                Label = amenity.Name
+            })
+            .ToListAsync();
+
+        characteristics = MergeFeatureOptions(characteristics, DefaultContributionCharacteristics());
+        amenities = ExcludeAmenityFeatureOptions(
+            MergeFeatureOptions(amenities, DefaultContributionAmenities()),
+            "family",
+            "family-friendly");
+        stayAmenities = ExcludeAmenityFeatureOptions(
+            MergeFeatureOptions(stayAmenities, DefaultContributionStayAmenities()),
+            "family",
+            "family-friendly");
+
+        var allAmenityIds = amenities.Select(option => option.Id)
+            .Concat(stayAmenities.Select(option => option.Id))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new ContributionFeatureOptionsDto
+        {
+            Characteristics = characteristics,
+            Amenities = amenities,
+            StayAmenities = stayAmenities,
+            CharacteristicIdsByPlaceType = BuildContributionCharacteristicIdsByPlaceType(
+                characteristics.Select(option => option.Id).ToList()),
+            AmenityIdsByPlaceType = BuildContributionAmenityIdsByPlaceType(allAmenityIds)
+        };
     }
 
     public async Task<PlaceContributionDetailDto> CreateAsync(
@@ -366,6 +426,7 @@ public class PlaceContributionService : IPlaceContributionService
         ContributionReferenceResolution? references = null;
 
         var requiresOwnershipProof = await RequiresOwnershipProofAsync(type, request);
+        var allowsOwnershipProof = await AllowsOwnershipProofAsync(type, request);
         if (requiresOwnershipProof &&
             string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl) &&
             ownershipProofBytes is null or { Length: 0 })
@@ -437,7 +498,7 @@ public class PlaceContributionService : IPlaceContributionService
             contribution.OwnershipProofContentType = NormalizeOptional(ownershipProofContentType);
             contribution.OwnershipProofUploadedAt = now;
         }
-        else if (!requiresOwnershipProof && !string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl))
+        else if (!allowsOwnershipProof && !string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl))
         {
             await _mediaStorage.DeleteAsync(contribution.OwnershipProofDocumentUrl);
             contribution.OwnershipProofDocumentUrl = null;
@@ -773,6 +834,14 @@ public class PlaceContributionService : IPlaceContributionService
         return contributionType == PlaceContributionType.ClaimOwnership;
     }
 
+    private async Task<bool> AllowsOwnershipProofAsync(
+        PlaceContributionType contributionType,
+        UpsertPlaceContributionDto request)
+    {
+        return contributionType == PlaceContributionType.ClaimOwnership ||
+            await ResolveRequestedPlaceTypeOwnableAsync(request);
+    }
+
     private async Task<string?> ResolveRequestedPlaceTypeNameAsync(UpsertPlaceContributionDto request)
     {
         if (!string.IsNullOrWhiteSpace(request.PlaceType))
@@ -794,13 +863,16 @@ public class PlaceContributionService : IPlaceContributionService
     {
         if (request.PlaceTypeId.HasValue)
         {
-            var isOwnable = await _db.PlaceTypes
+            var placeType = await _db.PlaceTypes
                 .AsNoTracking()
                 .Where(placeType => placeType.Id == request.PlaceTypeId.Value)
-                .Select(placeType => (bool?)placeType.IsOwnable)
+                .Select(placeType => new { placeType.Name, placeType.IsOwnable })
                 .SingleOrDefaultAsync();
 
-            return isOwnable ?? throw new KeyNotFoundException("Place type not found.");
+            if (placeType is null)
+                throw new KeyNotFoundException("Place type not found.");
+
+            return placeType.IsOwnable || LegacyOwnershipProofRequiredPlaceTypes.Contains(placeType.Name);
         }
 
         var placeTypeName = NormalizeOptional(request.PlaceType);
@@ -1972,7 +2044,7 @@ public class PlaceContributionService : IPlaceContributionService
             .Select(image => image.Url)
             .ToList();
 
-        if (contribution.Type == PlaceContributionType.ClaimOwnership &&
+        if (contribution.Status == PlaceContributionStatus.Approved &&
             contribution.Place is not null)
         {
             var publishedCardImage = GetPublishedCardImage(contribution.Place);
@@ -2003,23 +2075,26 @@ public class PlaceContributionService : IPlaceContributionService
         cardImageUrl ??= firstContributionImage?.Url;
         coverImageUrl ??= firstContributionImage?.Url;
 
+        var usesPublishedPlace = contribution.Status == PlaceContributionStatus.Approved &&
+            contribution.Place is not null;
+
         return new PlaceContributionListItemDto
         {
             Id = contribution.Id,
             Type = contribution.Type.ToString(),
             EntityType = "Place",
-            Name = contribution.Name,
-            Subtitle = contribution.Subtitle,
+            Name = usesPublishedPlace ? contribution.Place!.Name : contribution.Name,
+            Subtitle = usesPublishedPlace ? contribution.Place!.Subtitle : contribution.Subtitle,
             PlaceType = contribution.PlaceType?.Name,
             StayType = contribution.StayType?.Name,
-            Location = BuildLocationLabel(contribution),
+            Location = usesPublishedPlace ? BuildLocationLabelFromPlace(contribution.Place!) : BuildLocationLabel(contribution),
             CardImageUrl = cardImageUrl,
             MainImageUrl = cardImageUrl,
             CoverImageUrl = coverImageUrl,
             GalleryImageUrls = galleryImageUrls,
             Status = contribution.Status.ToString(),
             SubmittedAt = contribution.SubmittedAt,
-            UpdatedAt = contribution.UpdatedAt,
+            UpdatedAt = usesPublishedPlace ? contribution.Place!.UpdatedAt : contribution.UpdatedAt,
             PlaceId = contribution.PlaceId,
             PublishedPlaceId = contribution.PlaceId,
             HasOwnershipProofDocument = !string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl)
@@ -2230,7 +2305,7 @@ public class PlaceContributionService : IPlaceContributionService
             detail.ImageSize = coverImage?.ImageSize ?? "cover";
     }
 
-    private async Task<PlaceContributionDetailDto> MapApprovedOwnershipDetailAsync(
+    private async Task<PlaceContributionDetailDto> MapApprovedPublishedPlaceDetailAsync(
         PlaceContribution contribution,
         bool includeReviewNote)
     {
@@ -2413,6 +2488,145 @@ public class PlaceContributionService : IPlaceContributionService
             _ when Enum.TryParse<PlaceContributionType>(value, ignoreCase: true, out var parsed) => parsed,
             _ => throw new InvalidOperationException("Unsupported contribution type.")
         };
+    }
+
+    private static List<ContributionFeatureOptionDto> DefaultContributionCharacteristics() => new()
+    {
+        FeatureOption("luxury", "Luxury"),
+        FeatureOption("budget-friendly", "Budget-Friendly"),
+        FeatureOption("family-friendly", "Family Friendly"),
+        FeatureOption("adults-only", "Adults Only"),
+        FeatureOption("pet-friendly", "Pet Friendly"),
+        FeatureOption("beachfront", "Beachfront"),
+        FeatureOption("romantic", "Romantic"),
+        FeatureOption("mountain-view", "Mountain View"),
+        FeatureOption("city-center", "City Center"),
+        FeatureOption("countryside", "Countryside"),
+        FeatureOption("eco-friendly", "Eco-Friendly"),
+        FeatureOption("business", "Business"),
+        FeatureOption("lakefront", "Lakefront"),
+        FeatureOption("historic", "Historic"),
+        FeatureOption("quiet-area", "Quiet Area"),
+        FeatureOption("wellness", "Wellness"),
+        FeatureOption("spa", "Spa"),
+        FeatureOption("viewpoint", "Viewpoint"),
+        FeatureOption("local-cuisine", "Local Cuisine"),
+        FeatureOption("fine-dining", "Fine Dining"),
+        FeatureOption("outdoor-dining", "Outdoor Dining"),
+        FeatureOption("traditional", "Traditional"),
+        FeatureOption("breakfast", "Breakfast"),
+        FeatureOption("dessert", "Dessert"),
+        FeatureOption("workspace", "Workspace"),
+        FeatureOption("live-music", "Live Music"),
+        FeatureOption("nightlife", "Nightlife"),
+        FeatureOption("cocktails", "Cocktails"),
+        FeatureOption("rooftop", "Rooftop"),
+        FeatureOption("walking-route", "Walking Route"),
+        FeatureOption("architecture", "Architecture"),
+        FeatureOption("unesco", "UNESCO"),
+        FeatureOption("art", "Art"),
+        FeatureOption("interactive", "Interactive"),
+        FeatureOption("educational", "Educational"),
+        FeatureOption("modern-art", "Modern Art"),
+        FeatureOption("local-art", "Local Art"),
+        FeatureOption("garden", "Garden"),
+        FeatureOption("botanical-garden", "Botanical Garden")
+    };
+
+    private static List<ContributionFeatureOptionDto> DefaultContributionAmenities() => new()
+    {
+        FeatureOption("outdoor", "OUTDOOR SEATING"),
+        FeatureOption("wifi", "WIFI"),
+        FeatureOption("parking", "PARKING"),
+        FeatureOption("ac", "A/C"),
+        FeatureOption("breakfast", "BREAKFAST"),
+        FeatureOption("sea", "SEA VIEW"),
+        FeatureOption("pool", "POOL"),
+        FeatureOption("spa", "SPA"),
+        FeatureOption("gym", "GYM"),
+        FeatureOption("dining", "DINING")
+    };
+
+    private static List<ContributionFeatureOptionDto> DefaultContributionStayAmenities() => new()
+    {
+        FeatureOption("free-wifi", "Free WiFi"),
+        FeatureOption("swimming-pool", "Swimming Pool"),
+        FeatureOption("breakfast-included", "Breakfast Included"),
+        FeatureOption("parking", "Parking"),
+        FeatureOption("spa", "Spa"),
+        FeatureOption("fitness-center", "Fitness Center"),
+        FeatureOption("restaurant", "Restaurant"),
+        FeatureOption("air-conditioning", "Air Conditioning"),
+        FeatureOption("outdoor-seating", "Outdoor Seating"),
+        FeatureOption("sea-view", "Sea View")
+    };
+
+    private static Dictionary<string, List<string>> BuildContributionCharacteristicIdsByPlaceType(IReadOnlyCollection<string> availableIds)
+    {
+        string[] Pick(params string[] ids) =>
+            ids.Where(id => availableIds.Contains(id, StringComparer.OrdinalIgnoreCase)).ToArray();
+
+        return new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["stay"] = Pick("luxury", "budget-friendly", "family-friendly", "adults-only", "pet-friendly", "romantic", "mountain-view", "city-center", "countryside", "eco-friendly", "business", "lakefront", "historic", "quiet-area", "wellness", "spa", "viewpoint").ToList(),
+            ["restaurant"] = Pick("luxury", "budget-friendly", "family-friendly", "pet-friendly", "romantic", "city-center", "countryside", "eco-friendly", "lakefront", "historic", "local-cuisine", "fine-dining", "outdoor-dining", "traditional").ToList(),
+            ["cafe"] = Pick("budget-friendly", "family-friendly", "pet-friendly", "romantic", "city-center", "countryside", "eco-friendly", "lakefront", "historic", "quiet-area", "breakfast", "dessert", "workspace").ToList(),
+            ["bar"] = Pick("luxury", "budget-friendly", "adults-only", "romantic", "beachfront", "mountain-view", "city-center", "countryside", "lakefront", "historic", "live-music", "nightlife", "cocktails", "rooftop").ToList(),
+            ["landmark"] = Pick("family-friendly", "mountain-view", "city-center", "countryside", "lakefront", "historic", "viewpoint", "architecture", "walking-route", "unesco").ToList(),
+            ["museum"] = Pick("family-friendly", "city-center", "historic", "art", "interactive", "educational", "architecture").ToList(),
+            ["gallery"] = Pick("romantic", "city-center", "historic", "art", "modern-art", "local-art", "quiet-area").ToList(),
+            ["park"] = Pick("family-friendly", "pet-friendly", "eco-friendly", "walking-route", "quiet-area", "garden", "botanical-garden", "lakefront", "historic").ToList(),
+            ["beach"] = Pick("family-friendly", "beachfront", "romantic", "eco-friendly").ToList(),
+            ["nature"] = Pick("family-friendly", "pet-friendly", "mountain-view", "countryside", "eco-friendly", "lakefront").ToList()
+        };
+    }
+
+    private static Dictionary<string, List<string>> BuildContributionAmenityIdsByPlaceType(IReadOnlyCollection<string> availableIds)
+    {
+        string[] Pick(params string[] ids) =>
+            ids.Where(id => availableIds.Contains(id, StringComparer.OrdinalIgnoreCase)).ToArray();
+
+        return new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["stay"] = Pick("free-wifi", "swimming-pool", "breakfast-included", "parking", "spa", "fitness-center", "restaurant", "air-conditioning", "outdoor-seating", "sea-view").ToList(),
+            ["restaurant"] = Pick("outdoor", "wifi", "parking", "ac", "sea").ToList(),
+            ["cafe"] = Pick("outdoor", "wifi", "breakfast", "parking", "ac", "sea").ToList(),
+            ["bar"] = Pick("outdoor", "wifi", "parking", "ac").ToList(),
+            ["beach"] = Pick("parking", "outdoor", "wifi", "sea").ToList(),
+            ["landmark"] = Pick("parking", "wifi", "ac").ToList(),
+            ["nature"] = Pick("parking", "outdoor").ToList(),
+            ["museum"] = Pick("parking", "wifi", "ac").ToList(),
+            ["gallery"] = Pick("parking", "wifi", "ac").ToList(),
+            ["park"] = Pick("parking", "outdoor").ToList()
+        };
+    }
+
+    private static ContributionFeatureOptionDto FeatureOption(string id, string label) => new()
+    {
+        Id = id,
+        Label = label
+    };
+
+    private static List<ContributionFeatureOptionDto> MergeFeatureOptions(
+        IEnumerable<ContributionFeatureOptionDto> primary,
+        IEnumerable<ContributionFeatureOptionDto> fallback)
+    {
+        return primary
+            .Concat(fallback)
+            .Where(option => !string.IsNullOrWhiteSpace(option.Id) && !string.IsNullOrWhiteSpace(option.Label))
+            .DistinctBy(option => option.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<ContributionFeatureOptionDto> ExcludeAmenityFeatureOptions(
+        IEnumerable<ContributionFeatureOptionDto> options,
+        params string[] excludedIds)
+    {
+        var excluded = excludedIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return options
+            .Where(option => !excluded.Contains(option.Id) &&
+                             !string.Equals(option.Label, "Family Friendly", StringComparison.OrdinalIgnoreCase))
+            .ToList();
     }
 
     private static string NormalizeRequired(string? value, string fieldName)

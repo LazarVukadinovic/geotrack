@@ -126,6 +126,31 @@ describe('ContributionsService', () => {
     httpMock.expectOne('/api/contributions').flush({ contributions: [] });
   });
 
+  it('preserves existing ownership proof metadata when editing without selecting a new PDF', () => {
+    const draft = makePlaceDraft();
+    draft.basics = {
+      ...draft.basics!,
+      placeType: 'Bar',
+      ownershipProofFile: null,
+      ownershipProofDocumentUrl: '/media/uploads/contributions/existing-proof.pdf',
+      ownershipProofOriginalFileName: 'existing-proof.pdf',
+    };
+
+    service.updatePlace(42, draft).subscribe();
+
+    const req = httpMock.expectOne('/api/contributions/places/42');
+    const body = req.request.body as FormData;
+    const payload = JSON.parse(body.get('payload') as string) as Record<string, unknown>;
+
+    expect(payload['placeType']).toBe('Bar');
+    expect(payload['ownershipProofDocumentUrl']).toBe('/media/uploads/contributions/existing-proof.pdf');
+    expect(payload['ownershipProofOriginalFileName']).toBe('existing-proof.pdf');
+    expect(body.has('ownershipProofDocument')).toBe(false);
+
+    req.flush({ contribution: makeApiContribution({ entityType: 'Place', placeType: 'Bar', stayType: null }) });
+    httpMock.expectOne('/api/contributions').flush({ contributions: [] });
+  });
+
   it('maps legacy Stay contribution entity values to the current Place contribution entity type', () => {
     let actual: ContributionDetail | undefined;
 
@@ -243,13 +268,18 @@ function makePlaceDraft(): ContributionDraftData {
     basics: {
       name: 'Canonical Cafe',
       placeType: 'Cafe',
+      placeTypeId: null,
       stayType: 'Hotel',
       address: '10 Market Lane',
       city: 'Dubrovnik',
       region: 'Dalmatia',
       country: 'Croatia',
       imageUrl: '',
+      cardImageUrl: '',
+      cardImageFile: null,
       coverImageFile: null,
+      galleryImageUrls: [],
+      galleryImageFiles: [],
       ownershipProofFile: makePdfFile(),
       lat: 42.6413,
       lng: 18.1089,
