@@ -298,8 +298,8 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         return sort switch
         {
             "oldest" => query.OrderBy(contribution => contribution.SubmittedAt).ThenBy(contribution => contribution.Id),
-            "status" => query.OrderBy(contribution => contribution.Status).ThenByDescending(contribution => contribution.SubmittedAt),
-            "type" => query.OrderBy(contribution => contribution.Type).ThenByDescending(contribution => contribution.SubmittedAt),
+            "status" => query.OrderBy(contribution => contribution.Status).ThenByDescending(contribution => contribution.SubmittedAt).ThenByDescending(contribution => contribution.Id),
+            "type" => query.OrderBy(contribution => contribution.Type).ThenByDescending(contribution => contribution.SubmittedAt).ThenByDescending(contribution => contribution.Id),
             _ => query.OrderByDescending(contribution => contribution.SubmittedAt).ThenByDescending(contribution => contribution.Id)
         };
     }
@@ -561,9 +561,11 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         {
             "oldest" => items.OrderBy(item => item.SubmittedAt).ThenBy(item => item.RequestKey, StringComparer.Ordinal),
             "status" => items.OrderBy(item => item.Status, StringComparer.Ordinal)
-                .ThenByDescending(item => item.SubmittedAt),
+                .ThenByDescending(item => item.SubmittedAt)
+                .ThenByDescending(item => item.RequestKey, StringComparer.Ordinal),
             "type" => items.OrderBy(item => item.EntityType, StringComparer.Ordinal)
-                .ThenByDescending(item => item.SubmittedAt),
+                .ThenByDescending(item => item.SubmittedAt)
+                .ThenByDescending(item => item.RequestKey, StringComparer.Ordinal),
             _ => items.OrderByDescending(item => item.SubmittedAt).ThenByDescending(item => item.RequestKey, StringComparer.Ordinal)
         };
     }

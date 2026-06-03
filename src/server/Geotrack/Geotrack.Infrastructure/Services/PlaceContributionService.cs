@@ -692,7 +692,8 @@ public class PlaceContributionService : IPlaceContributionService
                 .ThenInclude(p => p!.Location)
                     .ThenInclude(l => l.Destination)
             .Include(c => c.Place)
-                .ThenInclude(p => p!.Images);
+                .ThenInclude(p => p!.Images)
+            .AsSplitQuery();
     }
 
     private async Task<IQueryable<PlaceContribution>> ApplyReviewerScopeAsync(
@@ -999,6 +1000,7 @@ public class PlaceContributionService : IPlaceContributionService
                 .ThenInclude(pa => pa.Amenity)
             .Include(p => p.PlaceBookingPartners)
                 .ThenInclude(pb => pb.BookingPartner)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(p => p.Id == placeId);
 
         if (place is null)
@@ -1429,6 +1431,7 @@ public class PlaceContributionService : IPlaceContributionService
             .Include(p => p.PlaceTags)
             .Include(p => p.PlaceAmenities)
             .Include(p => p.PlaceBookingPartners)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(p => p.Id == placeId);
 
         if (place is null)
@@ -2305,6 +2308,7 @@ public class PlaceContributionService : IPlaceContributionService
             .Include(p => p.Stay)
                 .ThenInclude(stay => stay!.StayAmenities)
                     .ThenInclude(stayStayAmenity => stayStayAmenity.StayAmenity)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(p => p.Id == contribution.PlaceId.Value);
 
         if (place is null)

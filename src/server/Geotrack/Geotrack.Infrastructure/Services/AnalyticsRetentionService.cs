@@ -35,6 +35,7 @@ public sealed class AnalyticsRetentionService : IAnalyticsRetentionService
         var eventQuery = _db.AnalyticsEvents
             .Where(evt => evt.OccurredAt < cutoffUtc)
             .OrderBy(evt => evt.OccurredAt)
+            .ThenBy(evt => evt.Id)
             .Take(batchSize);
 
         var eventIds = await eventQuery
@@ -45,6 +46,7 @@ public sealed class AnalyticsRetentionService : IAnalyticsRetentionService
             .Where(session => session.LastSeenAt < cutoffUtc)
             .Where(session => !_db.AnalyticsEvents.Any(evt => evt.AnonymousSessionId == session.Id))
             .OrderBy(session => session.LastSeenAt)
+            .ThenBy(session => session.Id)
             .Take(batchSize);
 
         var sessionIds = await sessionQuery
