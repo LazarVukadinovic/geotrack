@@ -136,6 +136,20 @@ describe('AgentService', () => {
     req.flush(chatResponse());
   });
 
+  it('sends returned conversation id on follow-up chat requests', () => {
+    flushAgentInfo();
+
+    service.sendMessage('Find restaurants in Dubrovnik');
+    const first = httpMock.expectOne('/api/agent/chat');
+    expect(first.request.body.conversationId).toBeUndefined();
+    first.flush(chatResponse({ conversationId: 'conversation-1' }));
+
+    service.sendMessage('And beaches?');
+    const followUp = httpMock.expectOne('/api/agent/chat');
+    expect(followUp.request.body.conversationId).toBe('conversation-1');
+    followUp.flush(chatResponse({ conversationId: 'conversation-1' }));
+  });
+
   it('attaches structured result cards from the chat response', () => {
     flushAgentInfo();
 
@@ -228,6 +242,29 @@ describe('AgentService', () => {
     expect(service.messages().at(-1)?.cards?.[0]?.imageUrl).toBeNull();
   });
 
+  it('keeps no-result responses from inheriting previous cards', () => {
+    flushAgentInfo();
+
+    service.sendMessage('Show me beaches in Dubrovnik');
+    const first = httpMock.expectOne('/api/agent/chat');
+    first.flush(chatResponse({
+      cards: [
+        {
+          entityType: 'place',
+          id: 12,
+          title: 'Catalog Beach',
+          detailRoute: '/places/12',
+        },
+      ],
+    }));
+
+    service.sendMessage('Show me volcano observatories');
+    const second = httpMock.expectOne('/api/agent/chat');
+    second.flush(chatResponse({ conversationId: 'conversation-1', cards: [] }));
+
+    expect(service.messages().at(-1)?.cards).toEqual([]);
+  });
+
   it('renders backend unavailable chat errors without asking for a key', () => {
     flushAgentInfo();
 
@@ -251,7 +288,6 @@ describe('AgentService', () => {
     const req = httpMock.expectOne('/api/agent/providers');
     expect(req.request.method).toBe('GET');
     req.flush({
-      providers: [],
       mcp: mcpMetadata(),
     } satisfies AgentProvidersResponse);
   }
@@ -266,6 +302,7 @@ describe('AgentService', () => {
   }
 
   function chatResponse(overrides: Partial<{
+    conversationId: string;
     cards: Array<{
       entityType: 'place' | 'stay' | 'event';
       id: number;

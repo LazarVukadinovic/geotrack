@@ -124,6 +124,25 @@ describe('AgentPageComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('#agent-settings-dialog')).toBeNull();
   });
 
+  it('keeps Tab focus inside the Agent settings dialog', () => {
+    openSettings();
+
+    const dialog = (fixture.nativeElement as HTMLElement).querySelector('#agent-settings-dialog') as HTMLElement;
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), summary'));
+    expect(focusable.length).toBeGreaterThan(1);
+
+    focusable[focusable.length - 1].focus();
+    const tabEvent = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(tabEvent);
+
+    expect(tabEvent.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(focusable[0]);
+  });
+
   it('still sends chat messages from the composer', () => {
     const nativeElement = fixture.nativeElement as HTMLElement;
     const input = nativeElement.querySelector('#agent-message-input') as HTMLInputElement;

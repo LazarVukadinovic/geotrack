@@ -78,6 +78,37 @@ export class AgentPageComponent {
     this.closeSettings();
   }
 
+  @HostListener('document:keydown.tab', ['$event'])
+  protected onDocumentTab(event: Event): void {
+    if (!this.settingsOpen()) return;
+
+    const keyboardEvent = event as KeyboardEvent;
+    const dialog = this.settingsDialog()?.nativeElement;
+    if (!dialog) return;
+
+    const focusable = this.getFocusableElements(dialog);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+
+    if (keyboardEvent.shiftKey && (!active || active === first || !dialog.contains(active))) {
+      keyboardEvent.preventDefault();
+      last.focus();
+      return;
+    }
+
+    if (!keyboardEvent.shiftKey && (!active || active === last || !dialog.contains(active))) {
+      keyboardEvent.preventDefault();
+      first.focus();
+    }
+  }
+
   protected onPillSelected(pill: SuggestionPill): void {
     this.agentService.sendMessage(pill.prompt);
   }
@@ -102,5 +133,17 @@ export class AgentPageComponent {
     // scrollTop write during an in-progress animation is silently ignored,
     // which leaves newly added messages off-screen on real iPhone.
     el.scrollTop = el.scrollHeight;
+  }
+
+  private getFocusableElements(dialog: HTMLElement): HTMLElement[] {
+    return Array.from(dialog.querySelectorAll<HTMLElement>([
+      'button:not([disabled])',
+      'summary',
+      'a[href]',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(','))).filter((el) => el.getAttribute('aria-hidden') !== 'true');
   }
 }

@@ -68,6 +68,7 @@ export class AgentService {
   private readonly _mcp = signal<AgentProvidersResponse['mcp'] | null>(null);
   private readonly _statusMessage = signal<string | null>(null);
   private readonly _isLoadingAgentInfo = signal(false);
+  private conversationId: string | null = null;
 
   readonly messages = this._messages.asReadonly();
   readonly isTyping = this._isTyping.asReadonly();
@@ -124,10 +125,12 @@ export class AgentService {
 
     this.http.post<ApiAgentChatResponse>('/api/agent/chat', {
       message: trimmed,
+      ...(this.conversationId ? { conversationId: this.conversationId } : {}),
       contextOptions: this.buildSafeContextOptions(),
     }).subscribe({
       next: (res) => {
         this._isTyping.set(false);
+        this.conversationId = cleanContextText(res.conversationId) ?? this.conversationId;
         const cards = normalizeCards(res.cards);
         const response: ChatMessage = {
           id: res.id || crypto.randomUUID(),

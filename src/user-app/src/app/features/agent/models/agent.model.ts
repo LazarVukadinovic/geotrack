@@ -49,7 +49,6 @@ export interface AgentMcpMetadata {
 }
 
 export interface AgentProvidersResponse {
-  providers?: never[];
   mcp: AgentMcpMetadata;
 }
 
