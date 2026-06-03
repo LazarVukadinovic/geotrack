@@ -551,6 +551,11 @@
               class="relative rounded-lg overflow-hidden mb-3 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
               style="height: 200px;"
               (click)="openPinModal()"
+              (keydown.enter)="openPinModal()"
+              (keydown.space)="$event.preventDefault(); openPinModal()"
+              role="button"
+              tabindex="0"
+              aria-label="Pin place location on map"
               title="Click to pin location"
             >
               <div #miniMapContainer class="w-full h-full"></div>
@@ -733,22 +738,26 @@
 >
   <div
     class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="place-pin-dialog-title"
     style="width: 760px; max-width: 95vw; max-height: 90vh;"
     (click)="$event.stopPropagation()"
   >
     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
       <div>
-        <h4 class="text-sm font-bold text-gray-900">Pin Location on Map</h4>
+        <h4 id="place-pin-dialog-title" class="text-sm font-bold text-gray-900">Pin Location on Map</h4>
         <p class="text-xs text-gray-500 mt-0.5">Click anywhere on the map to place the pin.</p>
       </div>
       <button
         type="button"
         (click)="closePinModal()"
+        aria-label="Close place pin dialog"
         class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none"
       >x</button>
     </div>
 
-    <div #modalMapContainer style="height: 420px; width: 100%; cursor: crosshair;"></div>
+    <div #modalMapContainer style="height: 420px; width: 100%; cursor: crosshair;" role="region" aria-label="Place pin selection map"></div>
 
     <div class="px-5 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center gap-4">
       @if (modalPinLat !== null && modalPinLng !== null) {

@@ -170,6 +170,28 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     ));
   }
 
+  get mapAccessibilitySummary(): string {
+    if (this.errorMessage) {
+      return `Regional map unavailable. ${this.errorMessage}`;
+    }
+
+    if (!this.activeRegionId) {
+      return 'No active assigned region is selected.';
+    }
+
+    const markerCount = this.mapData?.markers.length ?? 0;
+    const zoneCount = this.mapData?.zones.filter(zone => zone.entityType !== 'Region').length ?? 0;
+    const selected = this.selectedEntity
+      ? ` Selected entity: ${this.selectedEntity.title}.`
+      : this.selectedZone
+        ? ` Selected zone: ${this.selectedZone.displayName || this.selectedZone.name}.`
+        : this.droppedPin
+          ? ` Dropped pin at ${this.droppedPin.latitude.toFixed(4)}, ${this.droppedPin.longitude.toFixed(4)}.`
+          : '';
+
+    return `${this.regionDisplayName || 'Active region'} map has ${markerCount} mapped marker${markerCount === 1 ? '' : 's'} and ${zoneCount} editable zone${zoneCount === 1 ? '' : 's'}.${selected}`;
+  }
+
   get assignedRegionBoundary(): AdminMapAssignedRegionBoundary | null {
     return this.mapData?.assignedRegionBoundary ?? null;
   }
@@ -450,6 +472,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.markerGroup = L.layerGroup().addTo(this.map);
     this.droppedPinGroup = L.layerGroup().addTo(this.map);
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
+    this.configureLeafletZoomControlLabels();
 
     this.map.on('click', (event: { latlng?: { lat: number; lng: number } }) => {
       if (!event.latlng) return;
@@ -593,8 +616,9 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `gt-admin-marker gt-admin-marker--${marker.entityType.toLowerCase()}`;
-    button.setAttribute('aria-label', marker.title);
-    button.title = marker.title;
+    const label = `Open ${marker.entityType.toLowerCase()} marker: ${marker.title}`;
+    button.setAttribute('aria-label', label);
+    button.title = label;
 
     const fallback = document.createElement('span');
     fallback.className = 'gt-admin-marker__fallback';
@@ -638,6 +662,19 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
       iconSize: [28, 36],
       iconAnchor: [14, 36],
     });
+  }
+
+  private configureLeafletZoomControlLabels(): void {
+    const container = this.map?.getContainer?.() as HTMLElement | undefined;
+    if (!container) return;
+
+    const zoomIn = container.querySelector<HTMLAnchorElement>('.leaflet-control-zoom-in');
+    const zoomOut = container.querySelector<HTMLAnchorElement>('.leaflet-control-zoom-out');
+
+    zoomIn?.setAttribute('aria-label', 'Zoom in');
+    zoomIn?.setAttribute('title', 'Zoom in');
+    zoomOut?.setAttribute('aria-label', 'Zoom out');
+    zoomOut?.setAttribute('title', 'Zoom out');
   }
 
   private activateEntity(entity: PopupEntity): void {

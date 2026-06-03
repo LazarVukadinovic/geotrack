@@ -77,12 +77,15 @@
             required
             email
             autocomplete="email"
+            aria-required="true"
+            [attr.aria-invalid]="emailInput.invalid && emailInput.touched ? 'true' : null"
+            [attr.aria-describedby]="emailInput.invalid && emailInput.touched ? 'admin-login-email-error' : null"
             class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-[#aab4c4] transition-colors outline-none focus:bg-white"
             (focus)="onFieldFocus($event, emailInput)"
             (blur)="onFieldBlur($event, emailInput)"
           />
           <!-- Validation messages -->
-          <div *ngIf="emailInput.invalid && emailInput.touched" class="mt-1.5 flex items-center gap-1.5">
+          <div *ngIf="emailInput.invalid && emailInput.touched" id="admin-login-email-error" role="alert" class="mt-1.5 flex items-center gap-1.5">
             <svg class="w-3.5 h-3.5 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
@@ -109,6 +112,9 @@
               placeholder="••••••••"
               required
               autocomplete="current-password"
+              aria-required="true"
+              [attr.aria-invalid]="passwordInput.invalid && passwordInput.touched ? 'true' : null"
+              [attr.aria-describedby]="passwordInput.invalid && passwordInput.touched ? 'admin-login-password-error' : null"
               class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 pr-10 text-sm text-gray-900 placeholder-[#aab4c4] transition-colors outline-none focus:bg-white"
               (focus)="onFieldFocus($event, passwordInput)"
               (blur)="onFieldBlur($event, passwordInput)"
@@ -130,7 +136,7 @@
             </button>
           </div>
           <!-- Validation messages -->
-          <div *ngIf="passwordInput.invalid && passwordInput.touched" class="mt-1.5 flex items-center gap-1.5">
+          <div *ngIf="passwordInput.invalid && passwordInput.touched" id="admin-login-password-error" role="alert" class="mt-1.5 flex items-center gap-1.5">
             <svg class="w-3.5 h-3.5 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
@@ -152,9 +158,9 @@
             />
             <span>Remember me</span>
           </label>
-          <a href="#" class="text-blue-600 hover:text-blue-800 font-medium no-underline transition-colors">
-            Forgot password?
-          </a>
+          <span class="text-gray-400 font-medium" aria-disabled="true">
+            Password reset unavailable
+          </span>
         </div>
 
         <!-- ── Submit ── -->
@@ -179,6 +185,8 @@
         <!-- ── General error ── -->
         <div
           *ngIf="authError()"
+          id="admin-login-auth-error"
+          role="alert"
           class="mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5"
         >
           <svg class="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

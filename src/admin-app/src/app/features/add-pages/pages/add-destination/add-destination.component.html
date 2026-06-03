@@ -315,6 +315,11 @@
               class="relative rounded-lg overflow-hidden mb-2 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
               style="height: 200px;"
               (click)="openZoneModal()"
+              (keydown.enter)="openZoneModal()"
+              (keydown.space)="$event.preventDefault(); openZoneModal()"
+              role="button"
+              tabindex="0"
+              aria-label="Set destination center on map"
               title="Click to set center"
             >
               <div #miniMapContainer class="w-full h-full"></div>
@@ -450,13 +455,18 @@
   [style.display]="zoneModalOpen ? 'flex' : 'none'"
   (click)="onModalBackdropClick($event)">
 
-  <div class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+  <div
+       class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="destination-center-dialog-title"
        style="width: 760px; max-width: 95vw; max-height: 90vh;"
        (click)="$event.stopPropagation()">
 
     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-      <h4 class="text-sm font-bold text-gray-900">Set Destination Center</h4>
+      <h4 id="destination-center-dialog-title" class="text-sm font-bold text-gray-900">Set Destination Center</h4>
       <button type="button" (click)="closeZoneModal()"
+              aria-label="Close destination center dialog"
               class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none">
         &times;
       </button>
@@ -470,7 +480,7 @@
       </button>
     </div>
 
-    <div #modalMapContainer style="height: 420px; width: 100%;"></div>
+    <div #modalMapContainer style="height: 420px; width: 100%;" role="region" aria-label="Destination center selection map"></div>
 
     <div class="px-5 py-2 bg-gray-50 border-t border-gray-100">
       <p class="text-xs text-gray-500">{{ drawHint }}</p>
