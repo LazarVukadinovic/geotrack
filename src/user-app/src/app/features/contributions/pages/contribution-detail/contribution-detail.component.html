@@ -304,7 +304,7 @@
     <div class="fixed inset-0 bg-black/40 z-[60]" (click)="closeOwnershipModal()"></div>
     <div class="fixed left-5 right-5 bottom-6 z-[70] bg-white rounded-2xl shadow-2xl overflow-hidden">
       <header class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-slate-100">
-        <h2 class="text-base font-bold text-slate-800">Request Ownership</h2>
+        <h2 class="text-base font-bold text-slate-800">{{ ownershipClaimIsEdit() ? 'Update Document' : 'Request Ownership' }}</h2>
         <button type="button" (click)="closeOwnershipModal()" [disabled]="ownershipClaimSubmitting()"
           class="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 transition-colors">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

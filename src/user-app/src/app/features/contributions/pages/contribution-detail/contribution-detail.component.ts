@@ -26,6 +26,7 @@ export class ContributionDetailPageComponent implements OnInit {
   protected readonly hasError = signal(false);
 
   protected readonly ownershipClaimOpen = signal(false);
+  protected readonly ownershipClaimIsEdit = signal(false);
   protected readonly ownershipProofFile = signal<File | null>(null);
   protected readonly ownershipProofFileName = signal('');
   protected readonly ownershipClaimError = signal('');
@@ -110,10 +111,13 @@ export class ContributionDetailPageComponent implements OnInit {
 
     if (detail.isOwnership && detail.status === 'Approved' && detail.publishedPlaceId != null) {
       this.router.navigate(['/contributions', detail.id, 'edit'], {
-        state: {
-          locationLocked: true,
-        },
+        state: { locationLocked: true },
       });
+      return;
+    }
+
+    if (detail.isOwnership && (detail.status === 'PendingReview' || detail.status === 'Rejected')) {
+      this.openOwnershipModal(true);
       return;
     }
 
@@ -123,7 +127,8 @@ export class ContributionDetailPageComponent implements OnInit {
     });
   }
 
-  protected openOwnershipModal(): void {
+  protected openOwnershipModal(isEdit = false): void {
+    this.ownershipClaimIsEdit.set(isEdit);
     this.ownershipProofFile.set(null);
     this.ownershipProofFileName.set('');
     this.ownershipClaimError.set('');
@@ -133,6 +138,7 @@ export class ContributionDetailPageComponent implements OnInit {
   protected closeOwnershipModal(): void {
     if (this.ownershipClaimSubmitting()) return;
     this.ownershipClaimOpen.set(false);
+    this.ownershipClaimIsEdit.set(false);
     this.ownershipProofFile.set(null);
     this.ownershipProofFileName.set('');
     this.ownershipClaimError.set('');
@@ -163,25 +169,47 @@ export class ContributionDetailPageComponent implements OnInit {
     if (cover) images.push({ url: cover, imageRole: 'cover', sortOrder: -10 });
     if (card && card !== cover) images.push({ url: card, imageRole: 'card', sortOrder: -9 });
 
-    const formData = new FormData();
-    formData.append('payload', JSON.stringify({
+    const payload = {
       type: 'ClaimOwnership',
       placeId: detail.publishedPlaceId,
       placeType: detail.placeType || 'Place',
-      placeTypeId: null,
+      placeTypeId: detail.placeTypeId ?? null,
       name: detail.name,
-      description: '',
+      description: detail.description || '',
+      locationId: detail.locationId ?? null,
+      address: detail.address || '',
+      city: detail.city || '',
+      region: detail.region || '',
+      country: detail.country || '',
+      latitude: detail.latitude ?? null,
+      longitude: detail.longitude ?? null,
+      imagePosition: detail.imagePosition || '50% 50%',
+      imageSize: detail.imageSize || 'cover',
+      cardImagePosition: detail.cardImagePosition || '50% 50%',
+      cardImageSize: detail.cardImageSize || 'cover',
+      tags: detail.tags ?? [],
+      amenities: detail.amenities ?? [],
+      bookingPartners: detail.bookingPartners ?? [],
       images: images.length > 0 ? images : undefined,
-    }));
+    };
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(payload));
     formData.append('ownershipProofDocument', file);
 
     this.ownershipClaimSubmitting.set(true);
     this.ownershipClaimError.set('');
 
-    this.http.post('/api/contributions/places', formData).subscribe({
+    const isEdit = this.ownershipClaimIsEdit();
+    const request$ = isEdit
+      ? this.http.put(`/api/contributions/places/${detail.id}`, formData)
+      : this.http.post('/api/contributions/places', formData);
+
+    request$.subscribe({
       next: () => {
         this.ownershipClaimSubmitting.set(false);
         this.ownershipClaimOpen.set(false);
+        this.ownershipClaimIsEdit.set(false);
         this.ownershipProofFile.set(null);
         this.ownershipProofFileName.set('');
         this.fetchDetail();
