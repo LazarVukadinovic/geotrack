@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.DTOs.GeoTrackTools;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Services.Agent;
@@ -16,7 +17,12 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         "sta", "šta", "ima", "jos", "još", "nesto", "nešto", "da", "vidim", "videti", "vidjeti",
         "obici", "obići", "mozes", "možeš", "li", "imaju", "neki", "neka", "neku", "od",
         "zanimljivo", "zanimljive", "zanimljivosti", "vidi", "vidis", "vidiš", "raditi",
-        "things", "see"
+        "posetiti", "poseti", "posjetiti", "posjeti", "koju", "koj", "destinaciju",
+        "preporucio", "preporučio", "preporucujes", "preporučuješ", "ako", "volim", "bi",
+        "objasni", "definisi", "definiši", "je", "things", "see", "like", "likes",
+        "gde", "gdje", "mogu", "moze", "može", "idem", "ici", "ići", "savetovao",
+        "savjetovao", "savetuj", "savjetuj", "negde", "negdje", "ovim", "tim",
+        "destinacijama", "mestima", "mjestima"
     };
 
     private static readonly HashSet<string> RankingTokens = new(StringComparer.Ordinal)
@@ -30,11 +36,14 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         "smestaj", "smjestaj", "kafic", "kafici", "znamenitost", "znamenitosti",
         "preporuci", "sta", "ima", "videti", "vidjeti", "vidi", "obici",
         "aktivnosti", "blizini", "mojoj", "moze", "vazi", "najbolje", "najbolji",
-        "atrakcija", "atrakcije", "atrakciju"
+        "atrakcija", "atrakcije", "atrakciju", "skijanje", "skijam", "ski", "zima", "sneg",
+        "pecanje", "pecati", "ribolov", "riba", "jezero", "reka", "rijeka", "ajde"
     };
 
     private static readonly string[] CategoryPriority =
     [
+        "SKIING_WINTER",
+        "FISHING_WATER_ACTIVITY",
         "FOOD_DRINK",
         "BEACHES",
         "STAYS",
@@ -75,16 +84,46 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         var taxonomy = await _taxonomyProvider.GetTaxonomyAsync(cancellationToken);
         var vocabulary = await LoadCatalogVocabularyAsync(cancellationToken);
         var matchedConcepts = MatchConcepts(taxonomy, normalized, tokenSet);
+        var language = DetectLanguage(tokenSet, contextOptions?.Language);
 
-        var nearbyIntent = HasConcept(matchedConcepts, "NEARBY");
+        var nearbyIntent = IsNearbyIntent(normalized);
         var hasUserCoordinates = HasUsableCoordinates(contextOptions?.Latitude, contextOptions?.Longitude);
         var acceptanceIntent = IsAcceptanceIntent(matchedConcepts, normalized, tokenSet);
         var hasNewCategoryIntent = matchedConcepts.Any(concept => !IsSpecialConcept(concept.Id));
+        var generalKnowledgeIntent = IsGeneralKnowledgeIntent(normalized, tokenSet);
+        var knowledgeDefinition = generalKnowledgeIntent
+            ? ResolveKnowledgeDefinition(taxonomy, normalized, tokenSet)
+            : null;
+        var preferenceRecommendationIntent = IsPreferenceRecommendationIntent(normalized, tokenSet);
+        var contextReferenceIntent = IsContextReferenceIntent(normalized);
+        var beachWaterRecommendationCandidate = IsBeachWaterRecommendationIntent(
+            normalized,
+            tokenSet,
+            HasConcept(matchedConcepts, "BEACHES") || HasConcept(matchedConcepts, "BEACH_WATER"));
+        var skiingWinterRecommendationIntent = IsSkiingWinterRecommendationIntent(
+            normalized,
+            tokenSet,
+            HasConcept(matchedConcepts, "SKIING_WINTER"));
+        var fishingWaterActivityIntent = IsFishingWaterActivityIntent(
+            tokenSet,
+            HasConcept(matchedConcepts, "FISHING_WATER_ACTIVITY"));
 
-        var messageLocation = await _areaResolver.ResolveFromTextAsync(original, includeEntities: false, cancellationToken);
-        var resolvedLocation = messageLocation ?? (nearbyIntent ? null : await _areaResolver.ResolveFromContextAsync(contextOptions, cancellationToken));
-        var usesCurrentContext = messageLocation is null && resolvedLocation is not null;
-        var usesUserLocation = nearbyIntent && messageLocation is null && hasUserCoordinates;
+        var messageLocation = generalKnowledgeIntent
+            ? null
+            : await _areaResolver.ResolveFromTextAsync(original, includeEntities: false, cancellationToken);
+        var followUpIntent = messageLocation is null && (contextReferenceIntent || IsFollowUpIntent(tokenSet, normalized));
+        var beachWaterRecommendationIntent = beachWaterRecommendationCandidate &&
+            messageLocation is null &&
+            !followUpIntent;
+        var usesUserLocation = nearbyIntent &&
+            messageLocation is null &&
+            hasUserCoordinates;
+        var contextDestinationIds = contextReferenceIntent
+            ? ResolveContextDestinationIds(contextOptions)
+            : new List<int>();
+        var contextDestinationNames = contextReferenceIntent
+            ? ResolveContextDestinationNames(contextOptions)
+            : new List<string>();
         var pendingConcept = ResolvePendingConcept(
             taxonomy,
             contextOptions,
@@ -94,9 +133,29 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             nearbyIntent);
         var pendingCompletion = pendingConcept is not null;
 
-        var followUpIntent = messageLocation is null && IsFollowUpIntent(tokenSet);
-        var primaryConcept = pendingConcept ?? ResolvePrimaryConcept(matchedConcepts, contextOptions, followUpIntent, acceptanceIntent);
-        var category = primaryConcept?.Category ?? "general";
+        var contextResolutionOptions = ResolveContextOptionsForIntent(
+            contextOptions,
+            useFullConversationContext: acceptanceIntent || followUpIntent || contextReferenceIntent);
+        var shouldUseContext = ShouldUseContext(
+            generalKnowledgeIntent,
+            beachWaterRecommendationIntent,
+            skiingWinterRecommendationIntent,
+            preferenceRecommendationIntent,
+            nearbyIntent,
+            acceptanceIntent,
+            followUpIntent,
+            contextReferenceIntent,
+            hasNewCategoryIntent,
+            rankingIntent: tokenSet.Overlaps(RankingTokens),
+            contextResolutionOptions);
+        var resolvedLocation = messageLocation ?? (shouldUseContext && contextDestinationIds.Count == 0
+            ? await _areaResolver.ResolveFromContextAsync(contextResolutionOptions, cancellationToken)
+            : null);
+        var usesCurrentContext = messageLocation is null && resolvedLocation is not null;
+        var primaryConcept = generalKnowledgeIntent
+            ? null
+            : pendingConcept ?? ResolvePrimaryConcept(matchedConcepts, contextOptions, followUpIntent, acceptanceIntent);
+        var category = generalKnowledgeIntent ? "general_knowledge" : primaryConcept?.Category ?? "general";
         var strictCategory = primaryConcept?.Strict == true;
         var fallbackAllowed = primaryConcept?.FallbackAllowed ?? !strictCategory;
         if (pendingCompletion)
@@ -104,7 +163,9 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             strictCategory = contextOptions?.PendingStrictCategory ?? strictCategory;
             fallbackAllowed = contextOptions?.PendingFallbackAllowed ?? fallbackAllowed;
         }
-        var categoryGroup = primaryConcept is null || IsSpecialConcept(primaryConcept.Id)
+        var categoryGroup = generalKnowledgeIntent
+            ? "GENERAL_KNOWLEDGE"
+            : primaryConcept is null || IsSpecialConcept(primaryConcept.Id)
             ? "GENERAL_DISCOVERY"
             : primaryConcept.Id;
 
@@ -158,28 +219,63 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             entityTypes = ["places", "events"];
         }
 
-        var hasCatalogIntent = entityTypes.Count > 0 ||
+        if (preferenceRecommendationIntent &&
+            string.Equals(categoryGroup, "SKIING_WINTER", StringComparison.OrdinalIgnoreCase))
+        {
+            queryTerms.Clear();
+        }
+
+        if (skiingWinterRecommendationIntent &&
+            string.Equals(categoryGroup, "SKIING_WINTER", StringComparison.OrdinalIgnoreCase))
+        {
+            queryTerms.Clear();
+        }
+
+        if (fishingWaterActivityIntent &&
+            string.Equals(categoryGroup, "FISHING_WATER_ACTIVITY", StringComparison.OrdinalIgnoreCase))
+        {
+            queryTerms.Clear();
+        }
+
+        if (beachWaterRecommendationIntent)
+        {
+            queryTerms.Clear();
+        }
+
+        var hasCatalogIntent = !generalKnowledgeIntent && (entityTypes.Count > 0 ||
             matchedConcepts.Any(concept => !IsSpecialConcept(concept.Id)) ||
             rankingIntent == "top" ||
             resolvedLocation is not null ||
-            usesUserLocation;
+            usesUserLocation ||
+            contextDestinationIds.Count > 0);
         var genericDiscoveryWithoutSpecificTerm = hasCatalogIntent &&
             resolvedLocation is null &&
+            contextDestinationIds.Count == 0 &&
             !usesUserLocation &&
+            !beachWaterRecommendationIntent &&
+            !skiingWinterRecommendationIntent &&
+            !fishingWaterActivityIntent &&
+            !preferenceRecommendationIntent &&
             queryTerms.Count == 0 &&
             (entityTypes.Count > 0 ||
              matchedConcepts.Any(concept => !IsSpecialConcept(concept.Id)) ||
              rankingIntent == "top");
-
-        var language = DetectLanguage(tokenSet, contextOptions?.Language);
         var missingNearbyLocation = nearbyIntent && !hasUserCoordinates && messageLocation is null;
         var clarificationNeeded = genericDiscoveryWithoutSpecificTerm || missingNearbyLocation || (messageLocation?.IsAmbiguous == true);
+        var highLevelIntent = ResolveHighLevelIntent(
+            generalKnowledgeIntent,
+            beachWaterRecommendationIntent,
+            skiingWinterRecommendationIntent,
+            fishingWaterActivityIntent,
+            preferenceRecommendationIntent,
+            nearbyIntent,
+            acceptanceIntent,
+            followUpIntent,
+            hasCatalogIntent);
 
         return new GeoTrackAgentQueryPlanDto
         {
-            Intent = clarificationNeeded
-                ? "clarification_needed"
-                : hasCatalogIntent ? "catalog_search" : "general_help",
+            Intent = highLevelIntent,
             Language = language,
             OriginalMessage = original,
             NormalizedMessage = normalized,
@@ -191,6 +287,8 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             LocationUsed = resolvedLocation?.DisplayName,
             DestinationId = resolvedLocation?.DestinationId,
             DestinationName = resolvedLocation?.DestinationName,
+            ContextDestinationIds = contextDestinationIds,
+            ContextDestinationNames = contextDestinationNames,
             AreaType = resolvedLocation?.AreaType,
             AreaId = resolvedLocation?.AreaId,
             AreaName = resolvedLocation?.DisplayName,
@@ -216,9 +314,13 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             EventCategories = eventCategories.OrderBy(item => item).ToList(),
             QueryTerms = queryTerms,
             QueryText = queryTerms.Count == 0 ? null : string.Join(' ', queryTerms),
+            KnowledgeTopic = knowledgeDefinition?.Id,
+            KnowledgeAnswer = knowledgeDefinition is null
+                ? null
+                : language == "sr" ? knowledgeDefinition.AnswerSr : knowledgeDefinition.AnswerEn,
             RankingIntent = rankingIntent,
             UsesCurrentContext = usesCurrentContext,
-            SearchCatalog = hasCatalogIntent && !clarificationNeeded,
+            SearchCatalog = hasCatalogIntent && !clarificationNeeded && !generalKnowledgeIntent,
             ClarificationNeeded = clarificationNeeded,
             ClarificationQuestion = clarificationNeeded
                 ? BuildClarificationQuestion(language, missingNearbyLocation, messageLocation?.IsAmbiguous == true)
@@ -392,17 +494,364 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             tokens.All(token => StopWords.Contains(token) || token.Length <= 2 || token is "ajde" or "moze" or "vazi" or "ok");
     }
 
-    private static bool IsFollowUpIntent(IReadOnlySet<string> tokens) =>
-        tokens.Count <= 5 &&
+    private static bool IsNearbyIntent(string normalized)
+    {
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return AgentTextNormalizer.ContainsPhrase(normalized, "u mojoj blizini") ||
+            AgentTextNormalizer.ContainsPhrase(normalized, "blizu mene") ||
+            AgentTextNormalizer.ContainsPhrase(normalized, "kod mene") ||
+            AgentTextNormalizer.ContainsPhrase(normalized, "oko mene") ||
+            AgentTextNormalizer.ContainsPhrase(normalized, "u blizini mene") ||
+            AgentTextNormalizer.ContainsPhrase(normalized, "near me") ||
+            AgentTextNormalizer.ContainsPhrase(normalized, "nearby") ||
+            AgentTextNormalizer.ContainsPhrase(normalized, "around me") ||
+            AgentTextNormalizer.ContainsPhrase(normalized, "close to me");
+    }
+
+    private static bool IsGeneralKnowledgeIntent(string normalized, IReadOnlySet<string> tokens)
+    {
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return normalized.StartsWith("sta je ", StringComparison.Ordinal) ||
+            normalized.StartsWith("what is ", StringComparison.Ordinal) ||
+            normalized.StartsWith("objasni sta je ", StringComparison.Ordinal) ||
+            normalized.StartsWith("objasni mi sta je ", StringComparison.Ordinal) ||
+            normalized.StartsWith("definisi ", StringComparison.Ordinal) ||
+            normalized.StartsWith("definisi mi ", StringComparison.Ordinal) ||
+            (tokens.Contains("objasni") && tokens.Contains("je"));
+    }
+
+    private static AgentKnowledgeDefinitionDto? ResolveKnowledgeDefinition(
+        AgentTaxonomyDto taxonomy,
+        string normalized,
+        IReadOnlySet<string> tokens)
+    {
+        foreach (var definition in taxonomy.KnowledgeDefinitions)
+        {
+            if (definition.Aliases.Any(alias =>
+                {
+                    var normalizedAlias = AgentTextNormalizer.Normalize(alias);
+                    if (string.IsNullOrWhiteSpace(normalizedAlias))
+                    {
+                        return false;
+                    }
+
+                    if (normalizedAlias.Contains(' ', StringComparison.Ordinal))
+                    {
+                        return AgentTextNormalizer.ContainsPhrase(normalized, normalizedAlias);
+                    }
+
+                    return AgentTextNormalizer.TermVariants(alias).Any(tokens.Contains);
+                }))
+            {
+                return definition;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsBeachWaterRecommendationIntent(
+        string normalized,
+        IReadOnlySet<string> tokens,
+        bool hasBeachWaterConcept)
+    {
+        if (!hasBeachWaterConcept || string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return normalized.Contains("gde ima", StringComparison.Ordinal) ||
+            normalized.Contains("gdje ima", StringComparison.Ordinal) ||
+            normalized.Contains("gde imaju", StringComparison.Ordinal) ||
+            normalized.Contains("gdje imaju", StringComparison.Ordinal) ||
+            normalized.Contains("gde moze", StringComparison.Ordinal) ||
+            normalized.Contains("gdje moze", StringComparison.Ordinal) ||
+            normalized.Contains("gde mogu", StringComparison.Ordinal) ||
+            normalized.Contains("gdje mogu", StringComparison.Ordinal) ||
+            normalized.Contains("where can", StringComparison.Ordinal) ||
+            normalized.Contains("where should", StringComparison.Ordinal) ||
+            normalized.Contains("savetovao", StringComparison.Ordinal) ||
+            normalized.Contains("savjetovao", StringComparison.Ordinal) ||
+            normalized.Contains("preporuci", StringComparison.Ordinal) ||
+            normalized.Contains("preporuc", StringComparison.Ordinal) ||
+            tokens.Contains("more") ||
+            tokens.Contains("kupam") ||
+            tokens.Contains("kupa") ||
+            tokens.Contains("kupanje") ||
+            tokens.Contains("beach") ||
+            tokens.Contains("beaches");
+    }
+
+    private static bool IsPreferenceRecommendationIntent(string normalized, IReadOnlySet<string> tokens)
+    {
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return normalized.Contains("ako volim", StringComparison.Ordinal) ||
+            normalized.Contains("if i like", StringComparison.Ordinal) ||
+            normalized.Contains("gde da idem", StringComparison.Ordinal) ||
+            normalized.Contains("gdje da idem", StringComparison.Ordinal) ||
+            normalized.Contains("where should i go", StringComparison.Ordinal) ||
+            normalized.Contains("preporuci mi mesto za", StringComparison.Ordinal) ||
+            normalized.Contains("preporuci mi mjesto za", StringComparison.Ordinal) ||
+            normalized.Contains("preporuci mi destinaciju", StringComparison.Ordinal) ||
+            normalized.Contains("preporucujes ako volim", StringComparison.Ordinal) ||
+            normalized.Contains("preporucio ako volim", StringComparison.Ordinal) ||
+            (tokens.Contains("volim") &&
+             (tokens.Contains("destinaciju") || tokens.Contains("preporuci") || tokens.Contains("preporucujes") || tokens.Contains("preporucio"))) ||
+            (tokens.Contains("like") &&
+             (tokens.Contains("recommend") || tokens.Contains("destination") || tokens.Contains("go")));
+    }
+
+    private static bool IsSkiingWinterRecommendationIntent(
+        string normalized,
+        IReadOnlySet<string> tokens,
+        bool hasSkiingConcept)
+    {
+        if (!hasSkiingConcept || string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return tokens.Contains("skijanje") ||
+            tokens.Contains("skijam") ||
+            tokens.Contains("skijas") ||
+            tokens.Contains("ski") ||
+            tokens.Contains("skiing") ||
+            tokens.Contains("snowboard") ||
+            tokens.Contains("sneg") ||
+            tokens.Contains("snijeg") ||
+            tokens.Contains("snow") ||
+            tokens.Contains("zima") ||
+            tokens.Contains("zimski") ||
+            tokens.Contains("winter") ||
+            normalized.Contains("ski centar", StringComparison.Ordinal) ||
+            normalized.Contains("ski center", StringComparison.Ordinal) ||
+            normalized.Contains("ski centre", StringComparison.Ordinal);
+    }
+
+    private static bool IsFishingWaterActivityIntent(
+        IReadOnlySet<string> tokens,
+        bool hasFishingConcept)
+    {
+        if (!hasFishingConcept)
+        {
+            return false;
+        }
+
+        return tokens.Contains("pecanje") ||
+            tokens.Contains("pecati") ||
+            tokens.Contains("pecam") ||
+            tokens.Contains("ribolov") ||
+            tokens.Contains("riba") ||
+            tokens.Contains("fishing") ||
+            tokens.Contains("angling") ||
+            tokens.Contains("jezero") ||
+            tokens.Contains("lake") ||
+            tokens.Contains("reka") ||
+            tokens.Contains("rijeka") ||
+            tokens.Contains("river");
+    }
+
+    private static bool IsContextReferenceIntent(string normalized)
+    {
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return normalized.Contains("na ovim destinacijama", StringComparison.Ordinal) ||
+            normalized.Contains("u ovim destinacijama", StringComparison.Ordinal) ||
+            normalized.Contains("na tim destinacijama", StringComparison.Ordinal) ||
+            normalized.Contains("u tim destinacijama", StringComparison.Ordinal) ||
+            normalized.Contains("u tim mestima", StringComparison.Ordinal) ||
+            normalized.Contains("u tim mjestima", StringComparison.Ordinal) ||
+            normalized.Contains("na tim mestima", StringComparison.Ordinal) ||
+            normalized.Contains("na tim mjestima", StringComparison.Ordinal) ||
+            normalized.Contains("these destinations", StringComparison.Ordinal) ||
+            normalized.Contains("those destinations", StringComparison.Ordinal);
+    }
+
+    private static bool IsFollowUpIntent(IReadOnlySet<string> tokens, string normalized) =>
+        normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length <= 8 &&
         (tokens.Contains("a") ||
+         normalized.StartsWith("and ", StringComparison.Ordinal) ||
          tokens.Contains("jos") ||
          tokens.Contains("još") ||
-         tokens.Contains("more") ||
+         normalized is "more" ||
          tokens.Contains("nesto") ||
          tokens.Contains("nešto") ||
          tokens.Contains("sta") ||
          tokens.Contains("šta") ||
-         tokens.Contains("od"));
+         tokens.Contains("od") ||
+         tokens.Contains("tu") ||
+         tokens.Contains("tamo") ||
+         normalized.Contains("u ovom gradu", StringComparison.Ordinal) ||
+         normalized.Contains("u toj oblasti", StringComparison.Ordinal));
+
+    private static bool ShouldUseContext(
+        bool generalKnowledgeIntent,
+        bool beachWaterRecommendationIntent,
+        bool skiingWinterRecommendationIntent,
+        bool preferenceRecommendationIntent,
+        bool nearbyIntent,
+        bool acceptanceIntent,
+        bool followUpIntent,
+        bool contextReferenceIntent,
+        bool hasNewCategoryIntent,
+        bool rankingIntent,
+        AgentContextOptionsDto? contextOptions)
+    {
+        if (generalKnowledgeIntent || nearbyIntent || contextOptions is null)
+        {
+            return false;
+        }
+
+        if (acceptanceIntent || followUpIntent || contextReferenceIntent)
+        {
+            return true;
+        }
+
+        if (beachWaterRecommendationIntent || skiingWinterRecommendationIntent || preferenceRecommendationIntent)
+        {
+            return false;
+        }
+
+        return hasNewCategoryIntent || rankingIntent;
+    }
+
+    private static AgentContextOptionsDto? ResolveContextOptionsForIntent(
+        AgentContextOptionsDto? contextOptions,
+        bool useFullConversationContext)
+    {
+        if (contextOptions is null || useFullConversationContext)
+        {
+            return contextOptions;
+        }
+
+        return new AgentContextOptionsDto
+        {
+            Latitude = contextOptions.Latitude,
+            Longitude = contextOptions.Longitude,
+            LocationSource = contextOptions.LocationSource,
+            DestinationId = contextOptions.DestinationId,
+            CurrentCity = contextOptions.CurrentCity,
+            CurrentDestinationName = contextOptions.CurrentDestinationName,
+            CurrentLocationName = contextOptions.CurrentLocationName,
+            Language = contextOptions.Language
+        };
+    }
+
+    private static string ResolveHighLevelIntent(
+        bool generalKnowledgeIntent,
+        bool beachWaterRecommendationIntent,
+        bool skiingWinterRecommendationIntent,
+        bool fishingWaterActivityIntent,
+        bool preferenceRecommendationIntent,
+        bool nearbyIntent,
+        bool acceptanceIntent,
+        bool followUpIntent,
+        bool hasCatalogIntent)
+    {
+        if (generalKnowledgeIntent)
+        {
+            return "GENERAL_KNOWLEDGE";
+        }
+
+        if (nearbyIntent)
+        {
+            return "NEARBY_DISCOVERY";
+        }
+
+        if (beachWaterRecommendationIntent)
+        {
+            return "BEACH_WATER_RECOMMENDATION";
+        }
+
+        if (skiingWinterRecommendationIntent)
+        {
+            return "SKIING_WINTER_RECOMMENDATION";
+        }
+
+        if (fishingWaterActivityIntent)
+        {
+            return "FISHING_WATER_ACTIVITY";
+        }
+
+        if (acceptanceIntent)
+        {
+            return "FALLBACK_ACCEPTANCE";
+        }
+
+        if (preferenceRecommendationIntent)
+        {
+            return "PREFERENCE_RECOMMENDATION";
+        }
+
+        if (followUpIntent)
+        {
+            return "FOLLOW_UP";
+        }
+
+        return hasCatalogIntent ? "CATALOG_DISCOVERY" : "GENERAL_HELP";
+    }
+
+    private static List<int> ResolveContextDestinationIds(AgentContextOptionsDto? contextOptions)
+    {
+        if (contextOptions is null)
+        {
+            return [];
+        }
+
+        var ids = (contextOptions.ConversationDestinationIds ?? new List<int>())
+            .Where(id => id > 0)
+            .ToList();
+        if (contextOptions.ConversationDestinationId is > 0)
+        {
+            ids.Add(contextOptions.ConversationDestinationId.Value);
+        }
+
+        if (contextOptions.DestinationId is > 0)
+        {
+            ids.Add(contextOptions.DestinationId.Value);
+        }
+
+        return ids
+            .Distinct()
+            .Take(6)
+            .ToList();
+    }
+
+    private static List<string> ResolveContextDestinationNames(AgentContextOptionsDto? contextOptions)
+    {
+        if (contextOptions is null)
+        {
+            return [];
+        }
+
+        return (contextOptions.ConversationDestinationNames ?? new List<string>())
+            .Concat(new[]
+            {
+                contextOptions.ConversationDestinationName,
+                contextOptions.CurrentDestinationName
+            })
+            .Select(DisplayTextSafety.CleanOptional)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(6)
+            .ToList();
+    }
 
     private static bool ShouldClearDiscoveryQuery(
         AgentTaxonomyConceptDto? concept,
