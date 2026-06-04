@@ -53,6 +53,9 @@ export interface AgentProvidersResponse {
 }
 
 export interface AgentContextOptions {
+  latitude?: number;
+  longitude?: number;
+  locationSource?: string;
   destinationId?: number;
   currentCity?: string;
   currentDestinationName?: string;

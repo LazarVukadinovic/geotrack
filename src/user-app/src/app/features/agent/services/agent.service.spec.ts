@@ -99,6 +99,9 @@ describe('AgentService', () => {
     expect(req.request.body).toMatchObject({
       message: 'Find restaurants near Kotor',
       contextOptions: {
+        latitude: 42.65,
+        longitude: 18.09,
+        locationSource: 'manual',
         destinationId: 42,
         currentDestinationName: 'Dubrovnik',
         currentCity: 'Dubrovnik',
@@ -120,7 +123,7 @@ describe('AgentService', () => {
     req.flush(chatResponse());
   });
 
-  it('omits precise coordinates from chat context', () => {
+  it('includes available location coordinates in chat context', () => {
     flushAgentInfo();
 
     service.sendMessage('Show me top attractions');
@@ -129,25 +132,60 @@ describe('AgentService', () => {
     expect(req.request.body.contextOptions).toMatchObject({
       destinationId: 42,
       currentDestinationName: 'Dubrovnik',
+      latitude: 42.65,
+      longitude: 18.09,
+      locationSource: 'manual',
     });
-    expect(req.request.body.contextOptions.latitude).toBeUndefined();
-    expect(req.request.body.contextOptions.longitude).toBeUndefined();
 
     req.flush(chatResponse());
   });
 
-  it('sends returned conversation id on follow-up chat requests', () => {
+  it('sends a stable conversation id on follow-up chat requests', () => {
     flushAgentInfo();
 
     service.sendMessage('Find restaurants in Dubrovnik');
     const first = httpMock.expectOne('/api/agent/chat');
-    expect(first.request.body.conversationId).toBeUndefined();
-    first.flush(chatResponse({ conversationId: 'conversation-1' }));
+    expect(first.request.body.conversationId).toEqual(expect.any(String));
+    const conversationId = first.request.body.conversationId;
+    first.flush(chatResponse({ conversationId }));
 
     service.sendMessage('And beaches?');
     const followUp = httpMock.expectOne('/api/agent/chat');
-    expect(followUp.request.body.conversationId).toBe('conversation-1');
-    followUp.flush(chatResponse({ conversationId: 'conversation-1' }));
+    expect(followUp.request.body.conversationId).toBe(conversationId);
+    followUp.flush(chatResponse({ conversationId }));
+  });
+
+  it('reuses the same conversation id for rapid sends before the first response returns', () => {
+    flushAgentInfo();
+
+    service.sendMessage('plaze');
+    const first = httpMock.expectOne('/api/agent/chat');
+    const conversationId = first.request.body.conversationId;
+    expect(conversationId).toEqual(expect.any(String));
+
+    service.sendMessage('dubrovnik');
+    const followUp = httpMock.expectOne('/api/agent/chat');
+    expect(followUp.request.body.conversationId).toBe(conversationId);
+
+    first.flush(chatResponse({ conversationId }));
+    followUp.flush(chatResponse({ conversationId }));
+  });
+
+  it('starting a new chat creates a new conversation id', () => {
+    flushAgentInfo();
+
+    service.sendMessage('Find restaurants in Dubrovnik');
+    const first = httpMock.expectOne('/api/agent/chat');
+    const firstConversationId = first.request.body.conversationId;
+    first.flush(chatResponse({ conversationId: firstConversationId }));
+
+    service.startNewChat();
+    service.sendMessage('Find beaches in Dubrovnik');
+    const next = httpMock.expectOne('/api/agent/chat');
+
+    expect(next.request.body.conversationId).toEqual(expect.any(String));
+    expect(next.request.body.conversationId).not.toBe(firstConversationId);
+    next.flush(chatResponse({ conversationId: next.request.body.conversationId }));
   });
 
   it('attaches structured result cards from the chat response', () => {
