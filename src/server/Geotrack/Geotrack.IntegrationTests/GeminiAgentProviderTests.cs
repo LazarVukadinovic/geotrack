@@ -4,6 +4,7 @@ using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Options;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure.Services.Agent;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -60,6 +61,48 @@ public class GeminiAgentProviderTests
     }
 
     [Fact]
+    public async Task Generate_omits_null_optional_fields_from_request_payload()
+    {
+        using var handler = new SequenceHandler(GeminiSuccess("OK"));
+        var provider = CreateProvider(handler);
+
+        await provider.GenerateAsync(Request());
+
+        var body = Assert.Single(handler.RequestBodies);
+        Assert.Contains("\"systemInstruction\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"role\":\"user\"", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"role\":null", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"tools\"", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Generate_maps_failed_precondition_and_logs_sanitized_provider_message()
+    {
+        using var handler = new SequenceHandler(
+            GeminiError(
+                HttpStatusCode.BadRequest,
+                "FAILED_PRECONDITION",
+                "User location is not supported for the API use. secret prompt text secret-key-123456"));
+        var logger = new RecordingLogger<GeminiAgentProvider>();
+        var provider = CreateProvider(handler, logger);
+        var request = Request();
+        request.ApiKey = "secret-key-123456";
+        request.UserMessage = "secret prompt text";
+
+        var ex = await Assert.ThrowsAsync<AgentException>(() => provider.GenerateAsync(request));
+
+        Assert.Equal("provider_config_error", ex.Code);
+        Assert.Equal(400, ex.StatusCode);
+        var logText = string.Join('\n', logger.Messages);
+        Assert.Contains("FAILED_PRECONDITION", logText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("User location is not supported", logText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("content count 1", logText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tool declaration count 0", logText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret prompt text", logText, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-key-123456", logText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Generate_rejects_image_or_non_gemini_model_without_http_call()
     {
         using var handler = new SequenceHandler();
@@ -72,7 +115,9 @@ public class GeminiAgentProviderTests
         Assert.Equal(0, handler.RequestCount);
     }
 
-    private static GeminiAgentProvider CreateProvider(HttpMessageHandler handler)
+    private static GeminiAgentProvider CreateProvider(
+        HttpMessageHandler handler,
+        ILogger<GeminiAgentProvider>? logger = null)
     {
         var client = new HttpClient(handler);
         var options = Options.Create(new GeminiOptions
@@ -82,7 +127,7 @@ public class GeminiAgentProviderTests
             ApiKeys = ["test-gemini-key"]
         });
 
-        return new GeminiAgentProvider(client, options, NullLogger<GeminiAgentProvider>.Instance);
+        return new GeminiAgentProvider(client, options, logger ?? NullLogger<GeminiAgentProvider>.Instance);
     }
 
     private static GeminiTextGenerationRequest Request(string model = "gemini-2.5-flash") => new()
@@ -148,14 +193,18 @@ public class GeminiAgentProviderTests
         }
 
         public int RequestCount { get; private set; }
+        public List<string> RequestBodies { get; } = new();
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             RequestCount++;
             Assert.DoesNotContain("key", request.RequestUri?.Query ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-            return Task.FromResult(_responses.Dequeue());
+            RequestBodies.Add(request.Content is null
+                ? string.Empty
+                : await request.Content.ReadAsStringAsync(cancellationToken));
+            return _responses.Dequeue();
         }
 
         protected override void Dispose(bool disposing)
@@ -169,6 +218,27 @@ public class GeminiAgentProviderTests
             }
 
             base.Dispose(disposing);
+        }
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull =>
+            NullLogger.Instance.BeginScope(state);
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
         }
     }
 }

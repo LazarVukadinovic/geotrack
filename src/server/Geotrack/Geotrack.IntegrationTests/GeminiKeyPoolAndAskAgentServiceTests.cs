@@ -82,6 +82,29 @@ public class GeminiKeyPoolAndAskAgentServiceTests
     }
 
     [Fact]
+    public async Task Generate_tries_configured_fallback_model_for_failed_precondition_without_rotating_keys()
+    {
+        using var handler = new SequenceHandler(
+            GeminiError(HttpStatusCode.BadRequest, "FAILED_PRECONDITION", "Gemini API free tier is not available for this request."),
+            GeminiSuccess("OK"));
+        var service = CreateService(handler, new GeminiOptions
+        {
+            BaseUrl = "https://gemini.test",
+            Model = "gemini-3.1-flash-lite",
+            FallbackModels = ["gemini-3.5-flash"],
+            ApiKeys = ["first-key-1111", "second-key-2222"],
+            KeyCooldownSeconds = 300
+        });
+
+        var result = await service.GenerateAsync(Request());
+
+        Assert.Equal("OK", result.Text);
+        Assert.Equal(["first-key-1111", "first-key-1111"], handler.ApiKeys);
+        Assert.Contains("/models/gemini-3.1-flash-lite:generateContent", handler.RequestUris[0]);
+        Assert.Contains("/models/gemini-3.5-flash:generateContent", handler.RequestUris[1]);
+    }
+
+    [Fact]
     public void Rate_limited_key_is_put_on_cooldown_and_skipped()
     {
         var pool = CreatePool(new GeminiOptions

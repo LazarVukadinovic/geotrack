@@ -31,6 +31,7 @@ public class AgentSecurityAndMcpTests
         "geotrack_search_by_area",
         "geotrack_get_area_overview",
         "geotrack_get_category_options",
+        "geotrack_find_nearby_public_content",
         "geotrack_get_map_filters"
     ];
 
@@ -494,6 +495,31 @@ public class AgentSecurityAndMcpTests
             var group = Assert.Single(document.RootElement.GetProperty("categoryGroups").EnumerateArray());
             Assert.Equal("restaurants", group.GetProperty("id").GetString());
             Assert.Contains("Restaurant", group.GetProperty("placeTypes").EnumerateArray().Select(item => item.GetString() ?? string.Empty));
+        }
+
+        var nearby = await ReadMcpTextPayloadAsync(await PostMcpJsonAsync(
+            client,
+            new
+            {
+                jsonrpc = "2.0",
+                id = 24,
+                method = "tools/call",
+                @params = new
+                {
+                    name = "geotrack_find_nearby_public_content",
+                    arguments = new { latitude = 42.6413, longitude = 18.1089, radiusKm = 10, categoryGroup = "beaches", limit = 5 }
+                }
+            }));
+        using (var document = JsonDocument.Parse(nearby))
+        {
+            var results = document.RootElement.GetProperty("results").EnumerateArray().ToList();
+            Assert.NotEmpty(results);
+            Assert.All(results, item =>
+            {
+                Assert.Equal("place", item.GetProperty("entityType").GetString());
+                Assert.Equal("Beach", item.GetProperty("category").GetString());
+                Assert.True(item.TryGetProperty("distanceKm", out var distance) && distance.ValueKind == JsonValueKind.Number);
+            });
         }
     }
 

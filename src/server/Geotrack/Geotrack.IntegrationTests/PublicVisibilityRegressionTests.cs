@@ -114,6 +114,21 @@ public class PublicVisibilityRegressionTests
         Assert.DoesNotContain(fixture.DraftPlaceTitle, areaTitles);
         Assert.DoesNotContain(fixture.ArchivedPlaceTitle, areaTitles);
         Assert.DoesNotContain(fixture.ParentHiddenPlaceTitle, areaTitles);
+
+        var nearby = await tools.FindNearbyPublicContentAsync(new GeoTrackNearbySearchRequest
+        {
+            Latitude = 42.6402,
+            Longitude = 18.1083,
+            RadiusKm = 5,
+            EntityTypes = ["places"],
+            Limit = 20
+        });
+        var nearbyTitles = nearby.Results.Select(item => item.Title).ToList();
+
+        Assert.Contains(fixture.PublishedPlaceTitle, nearbyTitles);
+        Assert.DoesNotContain(fixture.DraftPlaceTitle, nearbyTitles);
+        Assert.DoesNotContain(fixture.ArchivedPlaceTitle, nearbyTitles);
+        Assert.DoesNotContain(fixture.ParentHiddenPlaceTitle, nearbyTitles);
     }
 
     [Fact]
