@@ -23,6 +23,7 @@ import { PlacesListService } from '../../../../core/services/places-list.service
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
+import { AdminFormDraftService } from '../../../../core/services/admin-form-draft.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
 import {
@@ -53,6 +54,35 @@ interface DayHours {
   open: boolean;
   openTime: string;
   closeTime: string;
+}
+
+interface PlaceFormDraft {
+  activeRegionId: number | null;
+  placeName: string;
+  summary: string;
+  parentLocationId: number | null;
+  placeTypeId: number | null;
+  bestTimeToVisit: string;
+  visitorTips: string;
+  accessNotes: string;
+  accessibilityNotes: string;
+  website: string;
+  contactPhone: string;
+  admissionPrice: string;
+  bookingLink: string;
+  opsEnabled: boolean;
+  days: DayHours[];
+  streetAddress: string;
+  pinLat: string;
+  pinLng: string;
+  modalPinLat: number | null;
+  modalPinLng: number | null;
+  pinConfirmed: boolean;
+  descriptionHtml: string;
+  selectedTagIds: number[];
+  cardImageName: string;
+  coverImageName: string;
+  galleryImageNames: string[];
 }
 
 interface MapReverseGeocodeDto {
@@ -188,6 +218,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private regionViewport: AdminMapViewport | null = null;
   private regionBoundaryZone: AdminMapZone | null = null;
   private scopeValidationResult: RegionalScopeValidationResult | null = null;
+  private unregisterDraftSource: (() => void) | null = null;
 
   constructor(
     private readonly zone: NgZone,
@@ -200,6 +231,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly auth: AuthService,
     private readonly http: HttpClient,
     private readonly adminMapService: AdminMapService,
+    private readonly formDrafts: AdminFormDraftService,
   ) {}
 
   ngOnInit(): void {
@@ -210,6 +242,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.applyInitialCoordinatesFromRoute();
     this.loadPlaceTypes();
     this.loadPlaceTags();
+    this.registerDraftSource();
   }
 
   ngAfterViewInit(): void {
@@ -219,6 +252,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       if (coordinates && this.pinConfirmed) {
         this.updateMiniMapPin(coordinates.latitude, coordinates.longitude);
       }
+      this.restoreSavedDraftIfPresent();
     }, 0);
   }
 
@@ -232,6 +266,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.reverseGeocodeSubscription?.unsubscribe();
     this.viewportSubscription?.unsubscribe();
     this.validationSubscription?.unsubscribe();
+    this.unregisterDraftSource?.();
 
     if (this.tagSearchHandle) {
       clearTimeout(this.tagSearchHandle);
@@ -569,6 +604,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
             this.syncEmptyState();
             this.notifyStateChanged();
           }
+          this.restoreSavedDraftIfPresent();
         }, 0);
 
         this.notifyStateChanged();
@@ -855,6 +891,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: created => {
+          this.formDrafts.clearDraft(this.draftFormType());
           this.feedbackMessage = 'Place published.';
           this.router.navigate(['/places'], {
             queryParams: { regionId: created.regionId },
@@ -890,6 +927,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: updated => {
+          this.formDrafts.clearDraft(this.draftFormType());
           this.feedbackMessage = 'Place updated.';
           this.router.navigate(['/places/detail', updated.id], {
             queryParams: { regionId: updated.regionId },
@@ -1744,5 +1782,122 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private notifyStateChanged(): void {
     this.cdr.markForCheck();
+  }
+
+  private registerDraftSource(): void {
+    this.unregisterDraftSource = this.formDrafts.register({
+      formType: this.draftFormType(),
+      snapshot: () => this.buildDraftSnapshot(),
+    });
+  }
+
+  private draftFormType(): string {
+    return this.isEditMode ? 'place-edit' : 'place-new';
+  }
+
+  private buildDraftSnapshot(): PlaceFormDraft | null {
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const hasDraft =
+      Boolean(this.placeName.trim()) ||
+      Boolean(this.summary.trim()) ||
+      Boolean(this.bestTimeToVisit.trim()) ||
+      Boolean(this.visitorTips.trim()) ||
+      Boolean(this.accessNotes.trim()) ||
+      Boolean(this.accessibilityNotes.trim()) ||
+      Boolean(this.website.trim()) ||
+      Boolean(this.contactPhone.trim()) ||
+      Boolean(this.admissionPrice.trim()) ||
+      Boolean(this.bookingLink.trim()) ||
+      Boolean(this.streetAddress.trim()) ||
+      Boolean(descriptionHtml) ||
+      Boolean(this.parentLocationId) ||
+      Boolean(this.placeTypeId) ||
+      this.selectedTagIds.size > 0 ||
+      this.pinConfirmed ||
+      Boolean(this.cardImageName) ||
+      Boolean(this.coverImageName) ||
+      this.galleryImages.length > 0;
+
+    if (!hasDraft) return null;
+
+    return {
+      activeRegionId: this.activeRegionId,
+      placeName: this.placeName,
+      summary: this.summary,
+      parentLocationId: this.parentLocationId,
+      placeTypeId: this.placeTypeId,
+      bestTimeToVisit: this.bestTimeToVisit,
+      visitorTips: this.visitorTips,
+      accessNotes: this.accessNotes,
+      accessibilityNotes: this.accessibilityNotes,
+      website: this.website,
+      contactPhone: this.contactPhone,
+      admissionPrice: this.admissionPrice,
+      bookingLink: this.bookingLink,
+      opsEnabled: this.opsEnabled,
+      days: this.days.map(day => ({ ...day })),
+      streetAddress: this.streetAddress,
+      pinLat: this.pinLat,
+      pinLng: this.pinLng,
+      modalPinLat: this.modalPinLat,
+      modalPinLng: this.modalPinLng,
+      pinConfirmed: this.pinConfirmed,
+      descriptionHtml,
+      selectedTagIds: [...this.selectedTagIds],
+      cardImageName: this.cardImageName,
+      coverImageName: this.coverImageName,
+      galleryImageNames: this.galleryImages.map(image => image.name),
+    };
+  }
+
+  private restoreSavedDraftIfPresent(): void {
+    const draft = this.formDrafts.loadDraft<PlaceFormDraft>(this.draftFormType());
+    const payload = draft?.payload;
+    if (!payload) return;
+
+    if (typeof payload.activeRegionId === 'number') {
+      this.setActiveRegion(payload.activeRegionId, false);
+      this.loadParentLocations();
+      this.loadRegionViewport(payload.activeRegionId);
+    }
+
+    this.placeName = payload.placeName ?? this.placeName;
+    this.summary = payload.summary ?? this.summary;
+    this.parentLocationId = payload.parentLocationId;
+    this.placeTypeId = payload.placeTypeId;
+    this.bestTimeToVisit = payload.bestTimeToVisit ?? this.bestTimeToVisit;
+    this.visitorTips = payload.visitorTips ?? this.visitorTips;
+    this.accessNotes = payload.accessNotes ?? this.accessNotes;
+    this.accessibilityNotes = payload.accessibilityNotes ?? this.accessibilityNotes;
+    this.website = payload.website ?? this.website;
+    this.contactPhone = payload.contactPhone ?? this.contactPhone;
+    this.admissionPrice = payload.admissionPrice ?? this.admissionPrice;
+    this.bookingLink = payload.bookingLink ?? this.bookingLink;
+    this.opsEnabled = Boolean(payload.opsEnabled);
+    this.days = Array.isArray(payload.days) ? payload.days.map(day => ({ ...day })) : this.days;
+    this.streetAddress = payload.streetAddress ?? this.streetAddress;
+    this.pinLat = payload.pinLat ?? this.pinLat;
+    this.pinLng = payload.pinLng ?? this.pinLng;
+    this.modalPinLat = payload.modalPinLat;
+    this.modalPinLng = payload.modalPinLng;
+    this.pinConfirmed = Boolean(payload.pinConfirmed);
+    this.selectedTagIds = new Set(payload.selectedTagIds ?? []);
+    this.classItems = this.classItems.map(item => ({
+      ...item,
+      checked: this.selectedTagIds.has(item.tag.id),
+    }));
+
+    if (this.editorRef?.nativeElement) {
+      this.editorRef.nativeElement.innerHTML = payload.descriptionHtml ?? '';
+      this.syncEmptyState();
+    }
+
+    const coordinates = this.readPinnedCoordinates();
+    if (coordinates && this.pinConfirmed) {
+      setTimeout(() => this.updateMiniMapPin(coordinates.latitude, coordinates.longitude), 0);
+    }
+
+    this.feedbackMessage = 'Recovered a saved draft. Image files must be selected again.';
+    this.notifyStateChanged();
   }
 }
