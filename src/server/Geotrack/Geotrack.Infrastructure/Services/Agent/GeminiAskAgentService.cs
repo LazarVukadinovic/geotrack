@@ -96,6 +96,15 @@ public class GeminiAskAgentService : IGeminiAskAgentService
                         ex.Code,
                         modelOrder[modelIndex + 1]);
                 }
+                catch (AgentException ex) when (IsProviderConfigurationError(ex))
+                {
+                    _keyPool.MarkConfigurationUnavailable(key);
+                    _logger.LogWarning(
+                        "Gemini API key {KeyFingerprint} hit provider configuration error while serving Ask Agent; status {StatusCode}.",
+                        key.Fingerprint,
+                        ex.StatusCode);
+                    break;
+                }
                 catch (AgentException)
                 {
                     throw;
@@ -120,6 +129,9 @@ public class GeminiAskAgentService : IGeminiAskAgentService
     private static bool IsModelFallbackCandidate(AgentException ex) =>
         string.Equals(ex.Code, "provider_config_error", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(ex.Code, "unsupported_model", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsProviderConfigurationError(AgentException ex) =>
+        string.Equals(ex.Code, "provider_config_error", StringComparison.OrdinalIgnoreCase);
 
     private static AgentException TemporarilyUnavailable() =>
         new("agent_unavailable", "Ask Agent is currently unavailable. Please try again later.", 503);

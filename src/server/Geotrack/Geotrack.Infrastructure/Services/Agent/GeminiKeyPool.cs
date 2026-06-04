@@ -12,6 +12,7 @@ public interface IGeminiKeyPool
     int AvailableKeyCount { get; }
     IReadOnlyList<GeminiApiKeyLease> GetAvailableKeys();
     void MarkRateLimited(GeminiApiKeyLease key, TimeSpan? retryAfter = null);
+    void MarkConfigurationUnavailable(GeminiApiKeyLease key, TimeSpan? retryAfter = null);
     void MarkInvalid(GeminiApiKeyLease key);
 }
 
@@ -110,6 +111,27 @@ public class GeminiKeyPool : IGeminiKeyPool
             state.CooldownUntil = DateTimeOffset.UtcNow.Add(cooldown);
             _logger.LogWarning(
                 "Gemini API key {KeyFingerprint} entered cooldown for {CooldownSeconds} seconds.",
+                state.Fingerprint,
+                (int)cooldown.TotalSeconds);
+        }
+    }
+
+    public void MarkConfigurationUnavailable(GeminiApiKeyLease key, TimeSpan? retryAfter = null)
+    {
+        lock (_gate)
+        {
+            var state = Find(key);
+            if (state is null)
+            {
+                return;
+            }
+
+            var cooldown = retryAfter.HasValue && retryAfter.Value > _cooldown
+                ? retryAfter.Value
+                : _cooldown;
+            state.CooldownUntil = DateTimeOffset.UtcNow.Add(cooldown);
+            _logger.LogWarning(
+                "Gemini API key {KeyFingerprint} entered provider-configuration cooldown for {CooldownSeconds} seconds.",
                 state.Fingerprint,
                 (int)cooldown.TotalSeconds);
         }
