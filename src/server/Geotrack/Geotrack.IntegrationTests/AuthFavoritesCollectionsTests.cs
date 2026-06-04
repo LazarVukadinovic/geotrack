@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.IdentityModel.Tokens.Jwt;
 using System.Text.Json;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.DTOs.Favorites;
@@ -48,7 +49,10 @@ public sealed class AuthFavoritesCollectionsTests
         Assert.NotNull(tokenPair);
         Assert.False(string.IsNullOrWhiteSpace(tokenPair.AccessToken));
         Assert.Equal(string.Empty, tokenPair.RefreshToken);
-        Assert.Equal(900, tokenPair.ExpiresIn);
+        Assert.Equal(3600, tokenPair.ExpiresIn);
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(tokenPair.AccessToken);
+        var remaining = jwt.ValidTo - DateTime.UtcNow;
+        Assert.InRange(remaining.TotalMinutes, 55, 61);
         Assert.True(login.Headers.TryGetValues("Set-Cookie", out var authCookies));
         Assert.Contains(authCookies, value => value.Contains("geotrack_refresh=", StringComparison.Ordinal));
 

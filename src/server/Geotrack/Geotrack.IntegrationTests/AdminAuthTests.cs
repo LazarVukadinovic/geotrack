@@ -41,6 +41,7 @@ public sealed class AdminAuthTests
 
         var session = await ReadAdminSessionWithoutRefreshTokenAsync(response);
         Assert.False(string.IsNullOrWhiteSpace(session.AccessToken));
+        Assert.Equal(3600, session.ExpiresIn);
         Assert.True(session.ExpiresAt > DateTime.UtcNow);
         Assert.Equal("elena@example.com", session.User.Email);
         Assert.True(session.User.CanAccessRegionalAdmin);
@@ -200,6 +201,7 @@ public sealed class AdminAuthTests
 
         var refreshedSession = await ReadAdminSessionWithoutRefreshTokenAsync(refresh);
         Assert.False(string.IsNullOrWhiteSpace(refreshedSession.AccessToken));
+        Assert.Equal(3600, refreshedSession.ExpiresIn);
         Assert.Contains(RoleNames.RegionalManager, refreshedSession.User.Roles);
 
         var logout = await client.PostAsJsonAsync("/api/admin/auth/logout", new { });
