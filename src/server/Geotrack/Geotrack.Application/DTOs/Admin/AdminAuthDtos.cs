@@ -22,7 +22,7 @@ public class AdminLoginResponseDto
 {
     public string AccessToken { get; set; } = string.Empty;
     public DateTime ExpiresAt { get; set; }
-    public int ExpiresIn { get; set; } = 900;
+    public int ExpiresIn { get; set; } = 3600;
     public bool SessionPersistent { get; set; }
     public AdminAuthUserDto User { get; set; } = new();
 
