@@ -61,7 +61,7 @@ describe('authInterceptor', () => {
     const request = TestBed.inject(HttpTestingController).expectOne('/api/auth/login');
     expect(request.request.headers.has('Authorization')).toBe(false);
 
-    request.flush({ accessToken: 'next-token', expiresIn: 900, sessionPersistent: false });
+    request.flush({ accessToken: 'next-token', expiresIn: 3600, sessionPersistent: false });
   });
 
   it('does not attach auth when there is no local session hint', () => {
