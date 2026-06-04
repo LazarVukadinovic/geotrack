@@ -214,7 +214,7 @@
 
             <section class="pd__section pd__section--about">
               <h2 class="pd__section-title">About this place</h2>
-              <p class="pd__about">{{ p.about }}</p>
+              <p class="pd__about" [innerHTML]="p.about"></p>
               @if (allGalleryImages().length > 0) {
                 <button type="button" class="pd__view-photos" (click)="openGallery(0)">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">

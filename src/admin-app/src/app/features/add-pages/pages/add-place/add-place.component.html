@@ -10,11 +10,6 @@
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
     <app-topbar [title]="isEditMode ? 'Edit Place' : 'New Place'" [showBack]="true"></app-topbar>
 
-    @if (isEditMode) {
-      <div class="px-8 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-700 font-medium">
-        This screen is create-only for now. Existing places are still protected from local mock edits.
-      </div>
-    }
 
     <div class="flex-1 overflow-y-auto px-8 py-6">
       @if (errorMessage) {

@@ -16,7 +16,8 @@ internal static class RegionalEntityImageRequestNormalizer
 
     public static List<PreparedRegionalEntityImage> Normalize(
         IEnumerable<RegionalEntityImageInputDto>? images,
-        string fallbackAltText)
+        string fallbackAltText,
+        ISet<string>? existingEventImageUrls = null)
     {
         var inputs = (images ?? Enumerable.Empty<RegionalEntityImageInputDto>())
             .Select((image, index) => new { Image = image, Index = index })
@@ -39,7 +40,7 @@ internal static class RegionalEntityImageRequestNormalizer
             {
                 var image = item.Image;
                 return new PreparedRegionalEntityImage(
-                    NormalizeManagedRegionalImageUrl(image.Url),
+                    NormalizeManagedRegionalImageUrl(image.Url, existingEventImageUrls),
                     NormalizeOptionalText(image.AltText, 300, "Image alt text is too long.") ?? fallbackAltText,
                     NormalizeOptionalText(image.Caption, 500, "Image caption is too long."),
                     normalizedIndex == mainIndex,
@@ -48,11 +49,14 @@ internal static class RegionalEntityImageRequestNormalizer
             .ToList();
     }
 
-    private static string NormalizeManagedRegionalImageUrl(string? value)
+    private static string NormalizeManagedRegionalImageUrl(string? value, ISet<string>? existingEventImageUrls)
     {
         var normalized = value?.Trim() ?? string.Empty;
         if (normalized.Length == 0 || normalized.Length > 1000)
             throw new InvalidOperationException("Image URL is invalid.");
+
+        if (existingEventImageUrls?.Contains(normalized) == true)
+            return normalized;
 
         if (!normalized.StartsWith(ManagedRegionalMediaPrefix, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Image URL must come from the regional image upload endpoint.");

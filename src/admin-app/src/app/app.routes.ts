@@ -208,6 +208,12 @@ export const routes: Routes = [
           import('./features/add-pages/pages/add-event/add-event.component').then(m => m.NewEventComponent),
       },
       {
+        path: 'events/edit/:id',
+        canActivate: [regionalManagerGuard],
+        loadComponent: () =>
+          import('./features/add-pages/pages/add-event/add-event.component').then(m => m.NewEventComponent),
+      },
+      {
         path: 'requests',
         canActivate: [regionalManagerGuard],
         loadComponent: () =>
