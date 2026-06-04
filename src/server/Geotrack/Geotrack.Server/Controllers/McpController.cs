@@ -258,6 +258,17 @@ public class McpController : ControllerBase
                     CategoryGroup = ReadString(args, "categoryGroup", required: false)
                 },
                 cancellationToken),
+            "geotrack_find_nearby_public_content" => await _toolService.FindNearbyPublicContentAsync(
+                new GeoTrackNearbySearchRequest
+                {
+                    Latitude = ReadLatitude(args, "latitude"),
+                    Longitude = ReadLongitude(args, "longitude"),
+                    RadiusKm = ReadOptionalRadiusKm(args, "radiusKm"),
+                    Category = ReadString(args, "categoryGroup", required: false),
+                    EntityTypes = ReadOptionalStringList(args, "entityTypes"),
+                    Limit = ReadOptionalLimit(args, "limit", 20)
+                },
+                cancellationToken),
             _ => throw new AgentException("tool_not_allowed", "The requested MCP tool is not allowed.", 400)
         };
 
@@ -438,6 +449,28 @@ public class McpController : ControllerBase
         return value;
     }
 
+    private static double ReadLatitude(JsonElement args, string name)
+    {
+        var value = ReadDouble(args, name);
+        if (value is < -90 or > 90)
+        {
+            throw new AgentException("invalid_tool_arguments", $"{name} must be between -90 and 90.", 400);
+        }
+
+        return value;
+    }
+
+    private static double ReadLongitude(JsonElement args, string name)
+    {
+        var value = ReadDouble(args, name);
+        if (value is < -180 or > 180)
+        {
+            throw new AgentException("invalid_tool_arguments", $"{name} must be between -180 and 180.", 400);
+        }
+
+        return value;
+    }
+
     private static double? ReadOptionalDouble(JsonElement args, string name)
     {
         if (!args.TryGetProperty(name, out var element) || element.ValueKind == JsonValueKind.Null)
@@ -446,6 +479,22 @@ public class McpController : ControllerBase
         }
 
         return ReadDouble(args, name);
+    }
+
+    private static double? ReadOptionalRadiusKm(JsonElement args, string name)
+    {
+        var value = ReadOptionalDouble(args, name);
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        if (value.Value <= 0d || value.Value > 100d)
+        {
+            throw new AgentException("invalid_tool_arguments", $"{name} must be between 0 and 100.", 400);
+        }
+
+        return value;
     }
 
     private static object Result(JsonElement? id, object result) => new
@@ -539,6 +588,26 @@ public class McpController : ControllerBase
                     ["areaType"] = AreaTypeSchema(),
                     ["areaId"] = new { type = "integer", minimum = 1 },
                     ["categoryGroup"] = new { type = "string", minLength = 2, maxLength = 50 }
+                }
+            }
+        },
+        new()
+        {
+            Name = "geotrack_find_nearby_public_content",
+            Description = "Find public GeoTrack catalog content near caller-provided coordinates. Read-only and capped at 20 results.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                required = new[] { "latitude", "longitude" },
+                properties = new Dictionary<string, object>
+                {
+                    ["latitude"] = NumberSchema(-90, 90),
+                    ["longitude"] = NumberSchema(-180, 180),
+                    ["radiusKm"] = NumberSchema(0.1, 100),
+                    ["categoryGroup"] = new { type = "string", minLength = 2, maxLength = 50 },
+                    ["entityTypes"] = StringArraySchema(),
+                    ["limit"] = new { type = "integer", minimum = 1, maximum = 20 }
                 }
             }
         },
