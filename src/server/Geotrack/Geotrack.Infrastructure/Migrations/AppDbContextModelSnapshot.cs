@@ -2486,6 +2486,14 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<bool>("OperatingHoursEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("OperatingHoursJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("OriginalSnapshotJson")
                         .IsRequired()
                         .HasColumnType("jsonb");

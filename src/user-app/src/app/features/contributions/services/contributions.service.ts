@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, map, tap } from 'rxjs';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { BasicsData } from '../pages/submit-contribution/steps/step-basics/step-basics.component';
-import { DetailsData } from '../pages/submit-contribution/steps/step-details/step-details.component';
+import type { ContributionOperatingHour, DetailsData } from '../pages/submit-contribution/steps/step-details/step-details.component';
 import { FeaturesData } from '../pages/submit-contribution/steps/step-features/step-features.component';
 import {
   normalizeContributionAmenityIds,
@@ -74,6 +74,8 @@ export interface ContributionDetail extends ContributionListItem {
   cardImageSize: string;
   description: string;
   openingHours: string;
+  operatingHoursEnabled: boolean;
+  operatingHours: ContributionOperatingHour[];
   phone: string;
   contactEmail: string;
   website: string;
@@ -140,6 +142,8 @@ interface ApiContributionDetail extends ApiContributionListItem {
   cardImageSize?: string | null;
   description: string;
   openingHours?: string | null;
+  operatingHoursEnabled?: boolean | null;
+  operatingHours?: ContributionOperatingHour[] | null;
   phone: string;
   contactEmail: string;
   website: string;
@@ -185,6 +189,8 @@ interface UpsertPlaceContributionPayload {
   ownershipProofOriginalFileName?: string | null;
   description: string;
   openingHours?: string;
+  operatingHoursEnabled?: boolean;
+  operatingHours?: ContributionOperatingHour[];
   phone: string;
   contactEmail: string;
   website: string;
@@ -273,7 +279,8 @@ export class ContributionsService {
     const payload = {
       name: basics.name,
       description: details.description,
-      openingHours: details.openingHoursEnabled ? details.openingHours : '',
+      operatingHoursEnabled: details.openingHoursEnabled,
+      operatingHours: details.openingHoursEnabled ? details.operatingHours : [],
       website: isAccommodation ? '' : details.website,
       contactEmail: details.contactEmail,
       phoneNumber: details.phone,
@@ -361,8 +368,9 @@ export class ContributionsService {
       },
       details: {
         description: detail.description ?? '',
-        openingHoursEnabled: !!detail.openingHours?.trim(),
+        openingHoursEnabled: detail.operatingHoursEnabled || !!detail.openingHours?.trim(),
         openingHours: detail.openingHours ?? '',
+        operatingHours: detail.operatingHours,
         phone: detail.phone ?? '',
         contactEmail: detail.contactEmail ?? '',
         website: isAccommodation ? '' : detail.website ?? '',
@@ -398,7 +406,8 @@ export class ContributionsService {
       ownershipProofDocumentUrl: basics.ownershipProofDocumentUrl ?? null,
       ownershipProofOriginalFileName: basics.ownershipProofOriginalFileName ?? null,
       description: details.description,
-      openingHours: details.openingHoursEnabled ? details.openingHours : '',
+      operatingHoursEnabled: details.openingHoursEnabled,
+      operatingHours: details.openingHoursEnabled ? details.operatingHours : [],
       phone: details.phone,
       contactEmail: details.contactEmail,
       website: isAccommodation ? '' : details.website,
@@ -485,6 +494,7 @@ interface NormalizedDetailsData {
   description: string;
   openingHoursEnabled: boolean;
   openingHours: string;
+  operatingHours: ContributionOperatingHour[];
   phone: string;
   contactEmail: string;
   website: string;
@@ -505,6 +515,7 @@ function normalizeDetails(details: DetailsData | null, isAccommodation = false):
     description: details?.description ?? '',
     openingHoursEnabled: details?.openingHoursEnabled ?? false,
     openingHours: details?.openingHours?.trim() ?? '',
+    operatingHours: details?.operatingHours ?? [],
     phone: details?.phone ?? '',
     contactEmail: details?.contactEmail?.trim() ?? '',
     website: isAccommodation ? '' : website,
@@ -621,6 +632,8 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     cardImageSize: cardImage?.imageSize || item.cardImageSize || 'cover',
     description: item.description ?? '',
     openingHours: item.openingHours ?? '',
+    operatingHoursEnabled: item.operatingHoursEnabled ?? false,
+    operatingHours: item.operatingHours ?? [],
     phone: item.phone ?? '',
     contactEmail: item.contactEmail ?? '',
     website: item.website ?? '',

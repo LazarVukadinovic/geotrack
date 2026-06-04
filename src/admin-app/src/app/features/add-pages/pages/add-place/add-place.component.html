@@ -303,25 +303,53 @@
                   <span class="text-xs font-medium text-gray-600 w-24 flex-shrink-0">{{ day.name }}</span>
 
                   @if (day.open) {
-                    <select
-                      class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-xs text-gray-700 bg-white outline-none appearance-none"
-                      style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px;"
-                      [(ngModel)]="day.openTime"
-                    >
-                      @for (time of allHours; track time) {
-                        <option>{{ time }}</option>
-                      }
-                    </select>
+                    <div class="relative flex-1 min-w-0">
+                      <input
+                        type="text"
+                        inputmode="numeric"
+                        maxlength="5"
+                        placeholder="HH:mm"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-9 text-xs text-gray-700 bg-white outline-none"
+                        [ngModel]="day.openTime"
+                        (ngModelChange)="onTimeInput(day, 'openTime', $event)"
+                        (blur)="onTimeBlur(day, 'openTime')"
+                      />
+                      <button
+                        type="button"
+                        class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-gray-400 hover:text-blue-600 bg-transparent border-none cursor-pointer"
+                        (mousedown)="$event.preventDefault()"
+                        (click)="openTimePicker(day, 'openTime')"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" stroke-width="1.5"/>
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v6l4 2"/>
+                        </svg>
+                      </button>
+                    </div>
                     <span class="text-xs text-gray-400 flex-shrink-0">to</span>
-                    <select
-                      class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-xs text-gray-700 bg-white outline-none appearance-none"
-                      style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px;"
-                      [(ngModel)]="day.closeTime"
-                    >
-                      @for (time of allHours; track time) {
-                        <option>{{ time }}</option>
-                      }
-                    </select>
+                    <div class="relative flex-1 min-w-0">
+                      <input
+                        type="text"
+                        inputmode="numeric"
+                        maxlength="5"
+                        placeholder="HH:mm"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-9 text-xs text-gray-700 bg-white outline-none"
+                        [ngModel]="day.closeTime"
+                        (ngModelChange)="onTimeInput(day, 'closeTime', $event)"
+                        (blur)="onTimeBlur(day, 'closeTime')"
+                      />
+                      <button
+                        type="button"
+                        class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-gray-400 hover:text-blue-600 bg-transparent border-none cursor-pointer"
+                        (mousedown)="$event.preventDefault()"
+                        (click)="openTimePicker(day, 'closeTime')"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" stroke-width="1.5"/>
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v6l4 2"/>
+                        </svg>
+                      </button>
+                    </div>
                     <button
                       type="button"
                       class="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 text-base border-none bg-transparent cursor-pointer"
@@ -338,6 +366,97 @@
                 </div>
               }
             </div>
+            @if (activeTimePicker) {
+              <div
+                class="fixed inset-0 z-50 flex items-center justify-center"
+                style="background: rgba(0,0,0,0.45);"
+                (click)="closeTimePicker()"
+              >
+                <div class="bg-white rounded-2xl shadow-2xl overflow-hidden" style="width: 420px;" (click)="$event.stopPropagation()">
+                  <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                      <p class="text-sm text-gray-500">{{ activeTimePicker.day.name }}</p>
+                      <p class="text-xl font-bold text-gray-800 mt-0.5">
+                        {{ activeTimePicker.field === 'openTime' ? 'Opens at' : 'Closes at' }}
+                        <span class="text-blue-600">{{ activeTimePicker.day[activeTimePicker.field] }}</span>
+                      </p>
+                    </div>
+                    <button type="button" (click)="closeTimePicker()"
+                      class="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-none bg-transparent cursor-pointer">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="px-8 pt-6 pb-4">
+                    <div class="flex rounded-xl bg-gray-100 p-1 mb-6">
+                      <button type="button"
+                        class="flex-1 rounded-lg py-2.5 text-sm font-bold transition-colors"
+                        [class.bg-white]="timePickerMode === 'hour'"
+                        [class.shadow-sm]="timePickerMode === 'hour'"
+                        [class.text-blue-600]="timePickerMode === 'hour'"
+                        [class.text-gray-500]="timePickerMode !== 'hour'"
+                        (click)="setTimePickerMode('hour')">Hours</button>
+                      <button type="button"
+                        class="flex-1 rounded-lg py-2.5 text-sm font-bold transition-colors"
+                        [class.bg-white]="timePickerMode === 'minute'"
+                        [class.shadow-sm]="timePickerMode === 'minute'"
+                        [class.text-blue-600]="timePickerMode === 'minute'"
+                        [class.text-gray-500]="timePickerMode !== 'minute'"
+                        (click)="setTimePickerMode('minute')">Minutes</button>
+                    </div>
+                    <div class="relative mx-auto rounded-full bg-gray-50 border border-gray-200 select-none"
+                      style="width: 320px; height: 320px;"
+                      #clockFace
+                      [style.cursor]="timePickerMode === 'minute' ? 'pointer' : 'default'"
+                      (mousedown)="onMinutePointerDown($event, clockFace)"
+                      (mousemove)="onMinutePointerMove($event, clockFace)"
+                      (mouseup)="onMinutePointerUp()"
+                      (mouseleave)="onMinutePointerUp()"
+                      (touchstart)="onMinutePointerDown($event, clockFace)"
+                      (touchmove)="onMinutePointerMove($event, clockFace)"
+                      (touchend)="onMinutePointerUp()">
+                      <div class="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600 z-10"></div>
+                      @if (timePickerMode === 'hour') {
+                        @for (hour of clockOuterHours; track hour) {
+                          <button type="button"
+                            class="absolute h-10 w-10 rounded-full text-sm font-bold border-none cursor-pointer transition-colors"
+                            [class.bg-blue-600]="isSelectedClockHour(hour)"
+                            [class.text-white]="isSelectedClockHour(hour)"
+                            [class.text-gray-700]="!isSelectedClockHour(hour)"
+                            [ngStyle]="clockHourStyle(hour, 'outer')"
+                            (click)="selectClockHour(hour)">{{ formatClockPart(hour) }}</button>
+                        }
+                        @for (hour of clockInnerHours; track hour) {
+                          <button type="button"
+                            class="absolute h-9 w-9 rounded-full text-xs font-bold border-none cursor-pointer transition-colors"
+                            [class.bg-blue-600]="isSelectedClockHour(hour)"
+                            [class.text-white]="isSelectedClockHour(hour)"
+                            [class.text-gray-500]="!isSelectedClockHour(hour)"
+                            [ngStyle]="clockHourStyle(hour, 'inner')"
+                            (click)="selectClockHour(hour)">{{ formatClockPart(hour) }}</button>
+                        }
+                      } @else {
+                        @for (minute of clockMinutes; track minute) {
+                          <div class="absolute text-sm font-bold text-gray-700 pointer-events-none select-none"
+                            style="z-index: 1;"
+                            [ngStyle]="clockButtonStyle(minute, 60)">{{ formatClockPart(minute) }}</div>
+                        }
+                        <div class="absolute w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-md pointer-events-none"
+                          style="z-index: 2;"
+                          [ngStyle]="minuteCircleStyle()">
+                          {{ formatClockPart(currentMinute()) }}
+                        </div>
+                      }
+                    </div>
+                  </div>
+                  <div class="px-6 py-4 flex justify-end border-t border-gray-100 mt-2">
+                    <button type="button" (click)="closeTimePicker()"
+                      class="px-7 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl border-none cursor-pointer hover:bg-blue-700">Done</button>
+                  </div>
+                </div>
+              </div>
+            }
 
             @if (!opsEnabled) {
               <p class="text-xs text-gray-400 mt-2 text-center">Enable the toggle above to edit opening hours.</p>

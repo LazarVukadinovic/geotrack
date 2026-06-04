@@ -5,6 +5,8 @@ public class OwnerUpdatePlaceRequestDto
     public string? Name { get; set; }
     public string? Description { get; set; }
     public string? OpeningHours { get; set; }
+    public bool? OperatingHoursEnabled { get; set; }
+    public List<OwnerUpdateOperatingHourDto>? OperatingHours { get; set; }
     public string? Website { get; set; }
     public string? ContactEmail { get; set; }
     public string? PhoneNumber { get; set; }
@@ -23,6 +25,14 @@ public class OwnerUpdatePlaceRequestDto
     public string? ImageSize { get; set; }
     public string? CardImagePosition { get; set; }
     public string? CardImageSize { get; set; }
+}
+
+public class OwnerUpdateOperatingHourDto
+{
+    public string DayOfWeek { get; set; } = string.Empty;
+    public bool IsOpen { get; set; }
+    public string? OpenTime { get; set; }
+    public string? CloseTime { get; set; }
 }
 
 public class OwnerUpdateBookingPartnerDto

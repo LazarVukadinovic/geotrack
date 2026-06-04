@@ -14,6 +14,15 @@ interface DayHours {
   closeTime: string;
 }
 
+type TimeField = 'openTime' | 'closeTime';
+
+export interface ContributionOperatingHour {
+  dayOfWeek: string;
+  isOpen: boolean;
+  openTime?: string | null;
+  closeTime?: string | null;
+}
+
 export interface DetailsData {
   description: string;
   phone: string;
@@ -21,6 +30,7 @@ export interface DetailsData {
   website: string;
   openingHoursEnabled: boolean;
   openingHours: string;
+  operatingHours: ContributionOperatingHour[];
   bookingPartners: BookingPartner[];
 }
 @Component({
@@ -37,13 +47,19 @@ export class StepDetailsComponent {
   changed = output<DetailsData>();
   submitted = false;
   openingHoursError = '';
+  activeTimePicker: { day: DayHours; field: TimeField } | null = null;
+  timePickerMode: 'hour' | 'minute' = 'hour';
+  isDraggingMinute = false;
+  readonly minuteHandRadius = 100;
+  readonly clockOuterHours = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  readonly clockInnerHours = [0, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+  readonly clockMinutes = Array.from({ length: 12 }, (_, index) => index * 5);
 
   bookingPartners = [
     { id: 'booking', label: 'Booking.com' },
     { id: 'airbnb', label: 'Airbnb' },
     { id: 'hotel', label: 'Official Website' },
   ];
-  allHours = Array.from({ length: 24 }, (_, hour) => `${hour.toString().padStart(2, '0')}:00`);
   days: DayHours[] = [
     { name: 'Monday', open: true, openTime: '09:00', closeTime: '17:00' },
     { name: 'Tuesday', open: true, openTime: '09:00', closeTime: '17:00' },
@@ -58,7 +74,11 @@ export class StepDetailsComponent {
       const d = this.data();
       if (d) {
         Object.assign(this.form, d);
-        this.applyOpeningHoursText(d.openingHours);
+        if (d.operatingHours?.length) {
+          this.applyOperatingHours(d.operatingHours);
+        } else {
+          this.applyOpeningHoursText(d.openingHours);
+        }
         this.moveAccommodationWebsiteToBookingPartner();
       }
     });
@@ -70,6 +90,7 @@ export class StepDetailsComponent {
     website: '',
     openingHoursEnabled: false,
     openingHours: '',
+    operatingHours: [],
     bookingPartners: [],
   };
 
@@ -127,8 +148,154 @@ export class StepDetailsComponent {
     this.changed.emit(this.normalizedForm());
   }
 
+  openTimePicker(day: DayHours, field: TimeField): void {
+    this.activeTimePicker = { day, field };
+    this.timePickerMode = 'hour';
+  }
+
+  closeTimePicker(): void {
+    this.activeTimePicker = null;
+  }
+
+  onTimeInput(day: DayHours, field: TimeField, value: string): void {
+    day[field] = value.replace(/[^\d:]/g, '').slice(0, 5);
+    this.onOpeningHoursChanged();
+  }
+
+  onTimeBlur(day: DayHours, field: TimeField): void {
+    const normalized = this.normalizeTimeInput(day[field]);
+    if (normalized) {
+      day[field] = normalized;
+      this.onOpeningHoursChanged();
+    }
+  }
+
+  selectClockHour(hour: number): void {
+    const picker = this.activeTimePicker;
+    if (!picker) return;
+
+    const [, minutes] = picker.day[picker.field].split(':');
+    picker.day[picker.field] = `${this.padTimePart(hour)}:${minutes || '00'}`;
+    this.timePickerMode = 'minute';
+    this.onOpeningHoursChanged();
+  }
+
+  minuteCircleStyle(): Record<string, string> {
+    const minute = this.currentMinute();
+    const angle = (minute / 60) * 360 - 90;
+    const radius = 100;
+    const x = Math.cos(angle * Math.PI / 180) * radius;
+    const y = Math.sin(angle * Math.PI / 180) * radius;
+    return {
+      left: `calc(50% + ${x}px)`,
+      top: `calc(50% + ${y}px)`,
+      transform: 'translate(-50%, -50%)',
+    };
+  }
+
+  minuteHandAngle(): number {
+    const picker = this.activeTimePicker;
+    if (!picker) return 0;
+    return (Number(picker.day[picker.field].slice(3, 5)) || 0) / 60 * 360;
+  }
+
+  currentMinute(): number {
+    const picker = this.activeTimePicker;
+    if (!picker) return 0;
+    return Number(picker.day[picker.field].slice(3, 5)) || 0;
+  }
+
+  onMinutePointerDown(event: MouseEvent | TouchEvent, el: HTMLElement): void {
+    if (this.timePickerMode !== 'minute') return;
+    this.isDraggingMinute = true;
+    this.applyMinuteFromEvent(event, el);
+    event.preventDefault();
+  }
+
+  onMinutePointerMove(event: MouseEvent | TouchEvent, el: HTMLElement): void {
+    if (!this.isDraggingMinute) return;
+    this.applyMinuteFromEvent(event, el);
+    event.preventDefault();
+  }
+
+  onMinutePointerUp(): void {
+    this.isDraggingMinute = false;
+  }
+
+  private applyMinuteFromEvent(event: MouseEvent | TouchEvent, el: HTMLElement): void {
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let clientX: number, clientY: number;
+    if (window.TouchEvent && event instanceof TouchEvent) {
+      if (!event.touches.length) return;
+      clientX = event.touches[0].clientX;
+      clientY = event.touches[0].clientY;
+    } else {
+      clientX = (event as MouseEvent).clientX;
+      clientY = (event as MouseEvent).clientY;
+    }
+    const angle = Math.atan2(clientY - cy, clientX - cx) * 180 / Math.PI + 90;
+    const minute = Math.round(((angle % 360) + 360) % 360 / 360 * 60) % 60;
+    const picker = this.activeTimePicker;
+    if (!picker) return;
+    const [hours] = picker.day[picker.field].split(':');
+    picker.day[picker.field] = `${hours || '00'}:${this.padTimePart(minute)}`;
+    this.onOpeningHoursChanged();
+  }
+
+  selectClockMinute(minute: number): void {
+    const picker = this.activeTimePicker;
+    if (!picker) return;
+
+    const [hours] = picker.day[picker.field].split(':');
+    picker.day[picker.field] = `${hours || '00'}:${this.padTimePart(minute)}`;
+    this.onOpeningHoursChanged();
+  }
+
+  clockHourStyle(hour: number, ring: 'outer' | 'inner'): Record<string, string> {
+    const arr = ring === 'outer' ? this.clockOuterHours : this.clockInnerHours;
+    const index = arr.indexOf(hour);
+    const angle = (index / 12) * 360 - 90;
+    const radius = ring === 'outer' ? 100 : 68;
+    const x = Math.cos(angle * Math.PI / 180) * radius;
+    const y = Math.sin(angle * Math.PI / 180) * radius;
+    return {
+      left: `calc(50% + ${x}px)`,
+      top: `calc(50% + ${y}px)`,
+      transform: 'translate(-50%, -50%)',
+    };
+  }
+
+  clockButtonStyle(value: number, total: number): Record<string, string> {
+    const angle = (value / total) * 360 - 90;
+    const radius = 100;
+    const x = Math.cos(angle * Math.PI / 180) * radius;
+    const y = Math.sin(angle * Math.PI / 180) * radius;
+    return {
+      left: `calc(50% + ${x}px)`,
+      top: `calc(50% + ${y}px)`,
+      transform: 'translate(-50%, -50%)',
+    };
+  }
+
+  isSelectedClockHour(hour: number): boolean {
+    const picker = this.activeTimePicker;
+    return !!picker && Number(picker.day[picker.field].slice(0, 2)) === hour;
+  }
+
+  isSelectedClockMinute(minute: number): boolean {
+    const picker = this.activeTimePicker;
+    return !!picker && Number(picker.day[picker.field].slice(3, 5)) === minute;
+  }
+
+  formatClockPart(value: number): string {
+    return this.padTimePart(value);
+  }
+
   private normalizedForm(): DetailsData {
     const openingHours = this.form.openingHoursEnabled ? this.buildOpeningHoursText() : '';
+    const operatingHours = this.form.openingHoursEnabled ? this.buildOperatingHoursPayload() : [];
     return {
       description: this.form.description.trim(),
       phone: this.form.phone.trim(),
@@ -136,6 +303,7 @@ export class StepDetailsComponent {
       website: this.isAccommodation() ? '' : this.form.website.trim(),
       openingHoursEnabled: this.form.openingHoursEnabled,
       openingHours,
+      operatingHours,
       bookingPartners: this.isAccommodation() ? this.form.bookingPartners.map(partner => ({
         id: partner.id,
         url: partner.url.trim(),
@@ -149,12 +317,32 @@ export class StepDetailsComponent {
       .join('\n');
   }
 
+  private buildOperatingHoursPayload(): ContributionOperatingHour[] {
+    return this.days.map(day => day.open
+      ? {
+          dayOfWeek: day.name,
+          isOpen: true,
+          openTime: day.openTime,
+          closeTime: day.closeTime,
+        }
+      : {
+          dayOfWeek: day.name,
+          isOpen: false,
+          openTime: null,
+          closeTime: null,
+        });
+  }
+
   private validateOpeningHours(): string {
     if (!this.form.openingHoursEnabled) return '';
 
     for (const day of this.days) {
-      if (day.open && this.toMinutes(day.openTime) >= this.toMinutes(day.closeTime)) {
-        return `${day.name} opening time must be before closing time.`;
+      if (day.open && day.openTime === day.closeTime) {
+        return `${day.name} opening time and closing time cannot be the same.`;
+      }
+
+      if (day.open && (!this.isValidClockTime(day.openTime) || !this.isValidClockTime(day.closeTime))) {
+        return `${day.name} opening hours must use 24-hour HH:mm format.`;
       }
     }
 
@@ -176,12 +364,43 @@ export class StepDetailsComponent {
 
     if (byDay.size === 0) return;
 
-    this.days = this.days.map(day => ({ ...day, ...(byDay.get(day.name.toLowerCase()) ?? {}) }));
+    for (const day of this.days) {
+      const patch = byDay.get(day.name.toLowerCase());
+      if (patch) Object.assign(day, patch);
+    }
   }
 
-  private toMinutes(value: string): number {
-    const [hours, minutes] = value.split(':').map(part => Number(part));
-    return hours * 60 + minutes;
+  private applyOperatingHours(hours: ContributionOperatingHour[]): void {
+    const byDay = new Map(hours.map(hour => [hour.dayOfWeek.toLowerCase(), hour]));
+    for (const day of this.days) {
+      const incoming = byDay.get(day.name.toLowerCase());
+      if (!incoming) continue;
+      day.open = incoming.isOpen;
+      day.openTime = incoming.openTime ?? day.openTime;
+      day.closeTime = incoming.closeTime ?? day.closeTime;
+    }
+  }
+
+  private normalizeTimeInput(value: string): string | null {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(\d{1,2})(?::?(\d{0,2}))?$/);
+    if (!match) return null;
+
+    const hours = Number(match[1]);
+    const minutes = Number((match[2] || '0').padEnd(2, '0'));
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      return null;
+    }
+
+    return `${this.padTimePart(hours)}:${this.padTimePart(minutes)}`;
+  }
+
+  private isValidClockTime(value: string): boolean {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+  }
+
+  private padTimePart(value: number): string {
+    return value.toString().padStart(2, '0');
   }
 
   private moveAccommodationWebsiteToBookingPartner(): void {

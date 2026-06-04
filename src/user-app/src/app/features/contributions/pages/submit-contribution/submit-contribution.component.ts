@@ -79,7 +79,7 @@ export class SubmitContributionComponent implements OnInit {
   protected readonly draft = signal<ContributionDraft>({
     basics: null,
     features: { tags: [], amenities: [] },
-    details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, openingHours: '', bookingPartners: [] },
+    details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, openingHours: '', operatingHours: [], bookingPartners: [] },
   });
 
   ngOnInit(): void {
@@ -166,6 +166,9 @@ export class SubmitContributionComponent implements OnInit {
       locationName?: string | null;
       website?: string | null;
       openingHours?: string | null;
+      operatingHoursEnabled?: boolean | null;
+      operatingHours?: { dayOfWeek?: string | null; isOpen?: boolean; openTime?: string | null; closeTime?: string | null }[] | null;
+      openingHoursSchedule?: { day?: string | null; hours?: string | null }[] | null;
       contactEmail?: string | null;
       phoneNumber?: string | null;
       category?: string | null;
@@ -184,6 +187,17 @@ export class SubmitContributionComponent implements OnInit {
         const cardUrl = card?.url || coverUrl;
         const galleryUrls = gallery.filter(url => url !== coverUrl && url !== cardUrl);
         const placeType = toTitleCase(place.category ?? '') || 'Place';
+        const operatingHours = place.operatingHours?.length
+          ? place.operatingHours
+              .filter(h => !!h.dayOfWeek)
+              .map(h => ({
+                dayOfWeek: h.dayOfWeek!,
+                isOpen: h.isOpen ?? false,
+                openTime: h.isOpen ? (h.openTime ?? null) : null,
+                closeTime: h.isOpen ? (h.closeTime ?? null) : null,
+              }))
+          : parsePlaceOpeningHoursSchedule(place.openingHoursSchedule);
+        const openingHoursEnabled = place.operatingHoursEnabled ?? (operatingHours.length > 0 || !!place.openingHours?.trim());
 
         this.draft.update(d => ({
           ...d,
@@ -219,8 +233,9 @@ export class SubmitContributionComponent implements OnInit {
           },
           details: {
             description: place.about ?? (typeof navState['placeAbout'] === 'string' ? navState['placeAbout'] : ''),
-            openingHoursEnabled: !!place.openingHours?.trim(),
+            openingHoursEnabled,
             openingHours: place.openingHours ?? '',
+            operatingHours,
             phone: place.phoneNumber ?? '',
             contactEmail: place.contactEmail ?? '',
             website: place.website ?? '',
@@ -357,7 +372,7 @@ export class SubmitContributionComponent implements OnInit {
     this.draft.set({
       basics: null,
       features: { tags: [], amenities: [] },
-      details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, openingHours: '', bookingPartners: [] },
+      details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, openingHours: '', operatingHours: [], bookingPartners: [] },
     });
     this.editId.set(null);
     this.entityType.set('Place');
@@ -424,4 +439,57 @@ function toTitleCase(value: string): string {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(' ');
+}
+
+function parsePlaceOpeningHoursSchedule(
+  schedule: { day?: string | null; hours?: string | null }[] | null | undefined,
+): DetailsData['operatingHours'] {
+  return (schedule ?? [])
+    .reduce<DetailsData['operatingHours']>((result, item) => {
+      const dayOfWeek = normalizeScheduleDay(item.day);
+      if (!dayOfWeek) return result;
+
+      const hoursText = (item.hours ?? '').trim();
+      if (!hoursText || /^closed$/i.test(hoursText)) {
+        return [...result, { dayOfWeek, isOpen: false, openTime: null, closeTime: null }];
+      }
+
+      const match = hoursText.match(/^(\d{2}:\d{2})\s*[-–]\s*(\d{2}:\d{2})$/);
+      if (!match) return result;
+
+      return [...result, {
+        dayOfWeek,
+        isOpen: true,
+        openTime: match[1],
+        closeTime: match[2],
+      }];
+    }, []);
+}
+
+function normalizeScheduleDay(value: string | null | undefined): string | null {
+  switch ((value ?? '').trim().toLowerCase()) {
+    case 'mon':
+    case 'monday':
+      return 'Monday';
+    case 'tue':
+    case 'tuesday':
+      return 'Tuesday';
+    case 'wed':
+    case 'wednesday':
+      return 'Wednesday';
+    case 'thu':
+    case 'thursday':
+      return 'Thursday';
+    case 'fri':
+    case 'friday':
+      return 'Friday';
+    case 'sat':
+    case 'saturday':
+      return 'Saturday';
+    case 'sun':
+    case 'sunday':
+      return 'Sunday';
+    default:
+      return null;
+  }
 }

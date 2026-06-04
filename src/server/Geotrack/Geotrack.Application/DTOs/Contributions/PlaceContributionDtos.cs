@@ -79,6 +79,8 @@ public class PlaceContributionDetailDto : PlaceContributionListItemDto
     public int? StayTypeId { get; set; }
     public string? Address { get; set; }
     public string? OpeningHours { get; set; }
+    public bool OperatingHoursEnabled { get; set; }
+    public List<ContributionOperatingHourDto> OperatingHours { get; set; } = new();
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public string Description { get; set; } = string.Empty;
@@ -122,6 +124,8 @@ public class UpsertPlaceContributionDto
     public string? Subtitle { get; set; }
     public string? Address { get; set; }
     public string? OpeningHours { get; set; }
+    public bool OperatingHoursEnabled { get; set; }
+    public List<ContributionOperatingHourDto>? OperatingHours { get; set; }
     public string Description { get; set; } = string.Empty;
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
@@ -152,6 +156,14 @@ public class ContributionBookingPartnerDto
 {
     public string Id { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
+}
+
+public class ContributionOperatingHourDto
+{
+    public string DayOfWeek { get; set; } = string.Empty;
+    public bool IsOpen { get; set; }
+    public string? OpenTime { get; set; }
+    public string? CloseTime { get; set; }
 }
 
 public class PlaceContributionResponseDto

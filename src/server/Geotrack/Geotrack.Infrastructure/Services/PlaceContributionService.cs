@@ -306,6 +306,10 @@ public class PlaceContributionService : IPlaceContributionService
                 ownershipProofContentType)).MediaUrl;
         }
 
+        var operatingHours = type == PlaceContributionType.ClaimOwnership
+            ? BuildOperatingHoursFromPlace(targetPlace!)
+            : NormalizeOperatingHours(request.OperatingHoursEnabled, request.OperatingHours);
+
         var contribution = new PlaceContribution
         {
             Type = type,
@@ -330,9 +334,11 @@ public class PlaceContributionService : IPlaceContributionService
             Address = type == PlaceContributionType.ClaimOwnership
                 ? targetPlace!.Address
                 : NormalizeOptional(request.Address),
-            OpeningHours = type == PlaceContributionType.ClaimOwnership
-                ? targetPlace!.OpeningHours
-                : NormalizeOptional(request.OpeningHours),
+            OpeningHours = operatingHours.Enabled
+                ? BuildOpeningHoursSummary(operatingHours.Hours)
+                : null,
+            OperatingHoursEnabled = operatingHours.Enabled,
+            OperatingHoursJson = operatingHours.Json,
             Description = type == PlaceContributionType.ClaimOwnership
                 ? targetPlace!.Description
                 : NormalizeDescription(request.Description),
@@ -521,7 +527,12 @@ public class PlaceContributionService : IPlaceContributionService
         contribution.Name = NormalizeRequired(request.Name, "Name");
         contribution.Subtitle = NormalizeOptional(request.Subtitle);
         contribution.Address = NormalizeOptional(request.Address);
-        contribution.OpeningHours = NormalizeOptional(request.OpeningHours);
+        var operatingHours = NormalizeOperatingHours(request.OperatingHoursEnabled, request.OperatingHours);
+        contribution.OpeningHours = operatingHours.Enabled
+            ? BuildOpeningHoursSummary(operatingHours.Hours)
+            : null;
+        contribution.OperatingHoursEnabled = operatingHours.Enabled;
+        contribution.OperatingHoursJson = operatingHours.Json;
         contribution.Description = NormalizeDescription(request.Description);
         contribution.Latitude = references!.Latitude;
         contribution.Longitude = references!.Longitude;
@@ -972,6 +983,12 @@ public class PlaceContributionService : IPlaceContributionService
             contribution.Address = targetPlace.Address;
         if (string.IsNullOrWhiteSpace(contribution.OpeningHours))
             contribution.OpeningHours = targetPlace.OpeningHours;
+        if (!contribution.OperatingHoursEnabled && targetPlace.OperatingHoursEnabled)
+        {
+            contribution.OperatingHoursEnabled = true;
+            contribution.OperatingHoursJson = targetPlace.OperatingHoursJson;
+            contribution.OpeningHours = targetPlace.OpeningHours;
+        }
         if (string.IsNullOrWhiteSpace(contribution.Description))
             contribution.Description = targetPlace.Description;
         if (!contribution.Latitude.HasValue)
@@ -1034,6 +1051,8 @@ public class PlaceContributionService : IPlaceContributionService
             place.Subtitle,
             place.Address,
             place.OpeningHours,
+            place.OperatingHoursEnabled,
+            place.OperatingHoursJson,
             place.Description,
             place.Latitude,
             place.Longitude,
@@ -1424,6 +1443,8 @@ public class PlaceContributionService : IPlaceContributionService
             Subtitle = contribution.Subtitle,
             Address = contribution.Address,
             OpeningHours = contribution.OpeningHours,
+            OperatingHoursEnabled = contribution.OperatingHoursEnabled,
+            OperatingHoursJson = contribution.OperatingHoursJson,
             Description = contribution.Description,
             Latitude = contribution.Latitude.Value,
             Longitude = contribution.Longitude.Value,
@@ -1471,6 +1492,8 @@ public class PlaceContributionService : IPlaceContributionService
         place.Subtitle = contribution.Subtitle;
         place.Address = contribution.Address;
         place.OpeningHours = contribution.OpeningHours;
+        place.OperatingHoursEnabled = contribution.OperatingHoursEnabled;
+        place.OperatingHoursJson = contribution.OperatingHoursJson;
         place.Description = contribution.Description;
         place.Latitude = contribution.Latitude.Value;
         place.Longitude = contribution.Longitude.Value;
@@ -2151,6 +2174,8 @@ public class PlaceContributionService : IPlaceContributionService
             StayTypeId = contribution.StayTypeId,
             Address = contribution.Address,
             OpeningHours = contribution.OpeningHours,
+            OperatingHoursEnabled = contribution.OperatingHoursEnabled,
+            OperatingHours = DeserializeOperatingHours(contribution.OperatingHoursJson),
             Latitude = contribution.Latitude,
             Longitude = contribution.Longitude,
             Description = contribution.Description,
@@ -2272,6 +2297,12 @@ public class PlaceContributionService : IPlaceContributionService
             detail.Address = place.Address;
         if (string.IsNullOrWhiteSpace(detail.OpeningHours))
             detail.OpeningHours = place.OpeningHours;
+        if (!detail.OperatingHoursEnabled && place.OperatingHoursEnabled)
+        {
+            detail.OperatingHoursEnabled = true;
+            detail.OperatingHours = DeserializeOperatingHours(place.OperatingHoursJson);
+            detail.OpeningHours = place.OpeningHours;
+        }
         if (string.IsNullOrWhiteSpace(detail.Description))
             detail.Description = place.Description;
         if (!detail.Latitude.HasValue)
@@ -2370,6 +2401,8 @@ public class PlaceContributionService : IPlaceContributionService
         detail.StayTypeId = place.Stay?.StayTypeId;
         detail.Address = place.Address;
         detail.OpeningHours = place.OpeningHours;
+        detail.OperatingHoursEnabled = place.OperatingHoursEnabled;
+        detail.OperatingHours = DeserializeOperatingHours(place.OperatingHoursJson);
         detail.Latitude = place.Latitude;
         detail.Longitude = place.Longitude;
         detail.Description = place.Description;
@@ -2773,9 +2806,120 @@ public class PlaceContributionService : IPlaceContributionService
         _ = NormalizePricePerNight(request.PricePerNight);
         _ = NormalizeBookingPartners(request.BookingPartners);
         _ = NormalizeImages(request.Images).ToList();
+        _ = NormalizeOperatingHours(request.OperatingHoursEnabled, request.OperatingHours);
 
         if (ParseType(request.Type) == PlaceContributionType.UpdatePlace && !request.PlaceId.HasValue)
             throw new InvalidOperationException("PlaceId is required for update contributions.");
+    }
+
+    private static OperatingHoursResult NormalizeOperatingHours(
+        bool enabled,
+        IReadOnlyCollection<ContributionOperatingHourDto>? hours)
+    {
+        if (!enabled)
+            return new OperatingHoursResult(false, null, []);
+
+        var normalizedHours = new List<ContributionOperatingHourDto>();
+        var seenDays = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var input in hours ?? Array.Empty<ContributionOperatingHourDto>())
+        {
+            var day = NormalizeDayOfWeek(input.DayOfWeek);
+            if (!seenDays.Add(day))
+                throw new InvalidOperationException("Operating hours contain duplicate days.");
+
+            if (!input.IsOpen)
+            {
+                normalizedHours.Add(new ContributionOperatingHourDto
+                {
+                    DayOfWeek = day,
+                    IsOpen = false
+                });
+                continue;
+            }
+
+            var openTime = NormalizeClockTime(input.OpenTime, "Opening time is invalid.");
+            var closeTime = NormalizeClockTime(input.CloseTime, "Closing time is invalid.");
+            if (openTime == closeTime)
+                throw new InvalidOperationException("Opening time and closing time cannot be the same.");
+
+            normalizedHours.Add(new ContributionOperatingHourDto
+            {
+                DayOfWeek = day,
+                IsOpen = true,
+                OpenTime = openTime,
+                CloseTime = closeTime
+            });
+        }
+
+        if (normalizedHours.Count == 0)
+            throw new InvalidOperationException("Operating hours are required when enabled.");
+
+        return new OperatingHoursResult(
+            true,
+            JsonSerializer.Serialize(normalizedHours, JsonOptions),
+            normalizedHours);
+    }
+
+    private static OperatingHoursResult BuildOperatingHoursFromPlace(Place place)
+    {
+        if (!place.OperatingHoursEnabled)
+            return new OperatingHoursResult(false, null, []);
+
+        var hours = DeserializeOperatingHours(place.OperatingHoursJson);
+        return new OperatingHoursResult(
+            hours.Count > 0,
+            hours.Count > 0 ? JsonSerializer.Serialize(hours, JsonOptions) : null,
+            hours);
+    }
+
+    private static string NormalizeDayOfWeek(string? dayOfWeek)
+    {
+        var normalized = (dayOfWeek ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "monday" => "Monday",
+            "tuesday" => "Tuesday",
+            "wednesday" => "Wednesday",
+            "thursday" => "Thursday",
+            "friday" => "Friday",
+            "saturday" => "Saturday",
+            "sunday" => "Sunday",
+            _ => throw new InvalidOperationException("Operating hours day is invalid.")
+        };
+    }
+
+    private static string NormalizeClockTime(string? value, string errorMessage)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^([01]\d|2[0-3]):[0-5]\d$"))
+            throw new InvalidOperationException(errorMessage);
+
+        return normalized;
+    }
+
+    private static string? BuildOpeningHoursSummary(IReadOnlyCollection<ContributionOperatingHourDto> hours)
+    {
+        if (!hours.Any(h => h.IsOpen))
+            return null;
+
+        return string.Join(", ", hours.Select(h =>
+            h.IsOpen ? $"{h.DayOfWeek}: {h.OpenTime}–{h.CloseTime}" : $"{h.DayOfWeek}: Closed"));
+    }
+
+    private static List<ContributionOperatingHourDto> DeserializeOperatingHours(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<ContributionOperatingHourDto>>(json, JsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     private static string NormalizeDescription(string? description) =>
@@ -3141,4 +3285,9 @@ public class PlaceContributionService : IPlaceContributionService
         int LocationId,
         double Latitude,
         double Longitude);
+
+    private sealed record OperatingHoursResult(
+        bool Enabled,
+        string? Json,
+        IReadOnlyList<ContributionOperatingHourDto> Hours);
 }

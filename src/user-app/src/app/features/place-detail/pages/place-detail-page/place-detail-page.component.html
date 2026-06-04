@@ -294,7 +294,7 @@
                   @if (hoursExpanded()) {
                     <div class="pd__hours-schedule">
                       @if (p.openingHoursSchedule && p.openingHoursSchedule.length > 0) {
-                        @for (day of p.openingHoursSchedule; track day.day) {
+                        @for (day of p.openingHoursSchedule; track day.day + ':' + $index) {
                           <div class="pd__hours-day">
                             <span class="pd__hours-day-name">{{ day.day }}</span>
                             <span class="pd__hours-day-val">{{ day.hours }}</span>

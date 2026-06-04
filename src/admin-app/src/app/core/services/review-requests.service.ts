@@ -181,6 +181,8 @@ export class ReviewRequestsService {
       ...detail,
       ...this.normalizeQueueItem(detail),
       openingHours: detail.openingHours ?? null,
+      operatingHoursEnabled: detail.operatingHoursEnabled ?? null,
+      operatingHours: Array.isArray(detail.operatingHours) ? detail.operatingHours : null,
       tags: Array.isArray(detail.tags) ? detail.tags : [],
       amenities: Array.isArray(detail.amenities) ? detail.amenities : [],
       stayAmenities: Array.isArray(detail.stayAmenities) ? detail.stayAmenities : [],

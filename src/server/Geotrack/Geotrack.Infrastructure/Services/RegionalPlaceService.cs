@@ -1034,8 +1034,8 @@ public class RegionalPlaceService : IRegionalPlaceService
 
             var openTime = NormalizeClockTime(input.OpenTime, "Opening time is invalid.");
             var closeTime = NormalizeClockTime(input.CloseTime, "Closing time is invalid.");
-            if (TimeSpan.Parse(openTime) >= TimeSpan.Parse(closeTime))
-                throw new InvalidOperationException("Opening time must be before closing time.");
+            if (openTime == closeTime)
+                throw new InvalidOperationException("Opening time and closing time cannot be the same.");
 
             normalizedHours.Add(new RegionalPlaceOperatingHourDto
             {

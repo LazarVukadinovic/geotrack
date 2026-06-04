@@ -20,6 +20,8 @@ public class PlaceDetailDto
     public string? Distance { get; set; }
     public string? OpenStatus { get; set; }
     public string? OpeningHours { get; set; }
+    public bool OperatingHoursEnabled { get; set; }
+    public List<PlaceOperatingHourDto>? OperatingHours { get; set; }
     public List<OpeningHoursDayDto>? OpeningHoursSchedule { get; set; }
     public string? Website { get; set; }
     public string? About { get; set; }
@@ -48,6 +50,14 @@ public class OpeningHoursDayDto
 {
     public string Day { get; set; } = string.Empty;
     public string Hours { get; set; } = string.Empty;
+}
+
+public class PlaceOperatingHourDto
+{
+    public string DayOfWeek { get; set; } = string.Empty;
+    public bool IsOpen { get; set; }
+    public string? OpenTime { get; set; }
+    public string? CloseTime { get; set; }
 }
 
 public class TagLabelDto

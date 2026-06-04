@@ -66,7 +66,8 @@ get hiddenGalleryCount(): number {
 
 get hasOpeningHours(): boolean {
   const details = this.draft().details;
-  return !!details?.openingHoursEnabled && !!details.openingHours?.trim();
+  return !!details?.openingHoursEnabled &&
+    (!!details.openingHours?.trim() || (details.operatingHours?.length ?? 0) > 0);
 }
 
 openSingleImage(url: string, caption: string): void {

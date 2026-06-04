@@ -34,6 +34,8 @@ public class PlaceContribution
 
     public string? Address { get; set; }
     public string? OpeningHours { get; set; }
+    public bool OperatingHoursEnabled { get; set; }
+    public string? OperatingHoursJson { get; set; }
 
     public string Description { get; set; } = string.Empty;
 

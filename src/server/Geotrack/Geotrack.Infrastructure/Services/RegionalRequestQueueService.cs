@@ -378,6 +378,8 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             Description = contribution.Description,
             Address = contribution.Address,
             OpeningHours = contribution.OpeningHours,
+            OperatingHoursEnabled = contribution.OperatingHoursEnabled,
+            OperatingHours = DeserializeOperatingHours(contribution.OperatingHoursJson),
             LocationName = contribution.Location?.Name,
             DestinationName = contribution.Location?.Destination?.Name,
             Country = contribution.Location?.Destination?.Region?.Territory?.Name,
@@ -736,6 +738,23 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         catch (JsonException)
         {
             return new List<ContributionBookingPartnerDto>();
+        }
+    }
+
+    private static List<ContributionOperatingHourDto> DeserializeOperatingHours(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return new List<ContributionOperatingHourDto>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<ContributionOperatingHourDto>>(json,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                ?? new List<ContributionOperatingHourDto>();
+        }
+        catch (JsonException)
+        {
+            return new List<ContributionOperatingHourDto>();
         }
     }
 

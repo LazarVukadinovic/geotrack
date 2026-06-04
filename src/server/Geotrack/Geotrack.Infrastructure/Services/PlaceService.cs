@@ -19,6 +19,7 @@ public class PlaceService : IPlaceService
 {
     private const int ListingMaxTake = 50;
     private const string PublishedStatus = "Published";
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
@@ -257,6 +258,8 @@ public class PlaceService : IPlaceService
             Distance = detailDistance,
             OpenStatus = DeriveOpenStatus(place.OpeningHours),
             OpeningHours = DisplayTextSafety.CleanOptional(place.OpeningHours),
+            OperatingHoursEnabled = place.OperatingHoursEnabled,
+            OperatingHours = ParseStructuredOperatingHours(place.OperatingHoursJson),
             OpeningHoursSchedule = ParseOpeningHoursSchedule(place.OperatingHoursJson),
             Website = DisplayTextSafety.CleanOptional(place.Website),
             About = DisplayTextSafety.CleanOptional(place.Description),
@@ -1101,18 +1104,218 @@ public class PlaceService : IPlaceService
     private static string? DeriveOpenStatus(string? hours) =>
         string.IsNullOrWhiteSpace(hours) ? null : "Open";
 
-    private static List<OpeningHoursDayDto>? ParseOpeningHoursSchedule(string? json)
+    private static List<PlaceOperatingHourDto>? ParseStructuredOperatingHours(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
         try
         {
-            return JsonSerializer.Deserialize<List<OpeningHoursDayDto>>(json,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var result = new List<PlaceOperatingHourDto>();
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                var dayOfWeek = ReadJsonString(item, "dayOfWeek");
+                if (string.IsNullOrWhiteSpace(dayOfWeek))
+                    continue;
+
+                var isOpen = ReadJsonBoolean(item, "isOpen");
+                result.Add(new PlaceOperatingHourDto
+                {
+                    DayOfWeek = dayOfWeek,
+                    IsOpen = isOpen,
+                    OpenTime = isOpen ? ReadJsonString(item, "openTime") : null,
+                    CloseTime = isOpen ? ReadJsonString(item, "closeTime") : null,
+                });
+            }
+
+            return result.Count == 0 ? null : result;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static List<OpeningHoursDayDto>? ParseOpeningHoursSchedule(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var schedule = new List<OpeningHoursDayDto>();
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                var legacyDay = ReadJsonString(item, "day");
+                var legacyHours = ReadJsonString(item, "hours");
+                if (!string.IsNullOrWhiteSpace(legacyDay))
+                {
+                    schedule.Add(new OpeningHoursDayDto
+                    {
+                        Day = NormalizeOpeningHoursDayLabel(legacyDay),
+                        Hours = NormalizeOpeningHoursText(legacyHours)
+                    });
+                    continue;
+                }
+
+                var dayOfWeek = ReadJsonString(item, "dayOfWeek");
+                if (string.IsNullOrWhiteSpace(dayOfWeek))
+                    continue;
+
+                var isOpen = ReadJsonBoolean(item, "isOpen");
+                var openTime = ReadJsonString(item, "openTime");
+                var closeTime = ReadJsonString(item, "closeTime");
+                schedule.Add(new OpeningHoursDayDto
+                {
+                    Day = NormalizeOpeningHoursDayLabel(dayOfWeek),
+                    Hours = isOpen && !string.IsNullOrWhiteSpace(openTime) && !string.IsNullOrWhiteSpace(closeTime)
+                        ? $"{openTime.Trim()} - {closeTime.Trim()}"
+                        : "Closed"
+                });
+            }
+
+            return schedule.Count == 0 ? null : schedule;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadJsonString(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+    }
+
+    private static bool ReadJsonBoolean(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.True;
+    }
+
+    private static string NormalizeOpeningHoursDayLabel(string value)
+    {
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "mon" or "monday" => "Monday",
+            "tue" or "tuesday" => "Tuesday",
+            "wed" or "wednesday" => "Wednesday",
+            "thu" or "thursday" => "Thursday",
+            "fri" or "friday" => "Friday",
+            "sat" or "saturday" => "Saturday",
+            "sun" or "sunday" => "Sunday",
+            var other => other
+        };
+    }
+
+    private static string NormalizeOpeningHoursText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Closed";
+
+        return value.Trim().Replace('–', '-').Replace(" - ", " - ").Replace("-", " - ");
+    }
+
+    private static OwnerUpdateOperatingHoursResult NormalizeOwnerUpdateOperatingHours(
+        bool enabled,
+        IReadOnlyCollection<OwnerUpdateOperatingHourDto>? hours)
+    {
+        if (!enabled)
+            return new OwnerUpdateOperatingHoursResult(false, null, []);
+
+        var normalizedHours = new List<OwnerUpdateOperatingHourDto>();
+        var seenDays = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var input in hours ?? Array.Empty<OwnerUpdateOperatingHourDto>())
+        {
+            var day = NormalizeOwnerUpdateDayOfWeek(input.DayOfWeek);
+            if (!seenDays.Add(day))
+                throw new InvalidOperationException("Operating hours contain duplicate days.");
+
+            if (!input.IsOpen)
+            {
+                normalizedHours.Add(new OwnerUpdateOperatingHourDto
+                {
+                    DayOfWeek = day,
+                    IsOpen = false
+                });
+                continue;
+            }
+
+            var openTime = NormalizeOwnerUpdateClockTime(input.OpenTime, "Opening time is invalid.");
+            var closeTime = NormalizeOwnerUpdateClockTime(input.CloseTime, "Closing time is invalid.");
+            if (openTime == closeTime)
+                throw new InvalidOperationException("Opening time and closing time cannot be the same.");
+
+            normalizedHours.Add(new OwnerUpdateOperatingHourDto
+            {
+                DayOfWeek = day,
+                IsOpen = true,
+                OpenTime = openTime,
+                CloseTime = closeTime
+            });
+        }
+
+        if (normalizedHours.Count == 0)
+            throw new InvalidOperationException("Operating hours are required when enabled.");
+
+        return new OwnerUpdateOperatingHoursResult(
+            true,
+            JsonSerializer.Serialize(normalizedHours, JsonOptions),
+            normalizedHours);
+    }
+
+    private static List<OwnerUpdateOperatingHourDto> DeserializeOwnerUpdateOperatingHours(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<OwnerUpdateOperatingHourDto>>(json, JsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static string NormalizeOwnerUpdateDayOfWeek(string? dayOfWeek)
+    {
+        var normalized = (dayOfWeek ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "monday" => "Monday",
+            "tuesday" => "Tuesday",
+            "wednesday" => "Wednesday",
+            "thursday" => "Thursday",
+            "friday" => "Friday",
+            "saturday" => "Saturday",
+            "sunday" => "Sunday",
+            _ => throw new InvalidOperationException("Operating hours day is invalid.")
+        };
+    }
+
+    private static string NormalizeOwnerUpdateClockTime(string? value, string errorMessage)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        if (!TimeSpan.TryParseExact(normalized, "hh\\:mm", null, out _))
+            throw new InvalidOperationException(errorMessage);
+
+        return normalized;
+    }
+
+    private static string? BuildOwnerUpdateOpeningHoursSummary(IReadOnlyCollection<OwnerUpdateOperatingHourDto> hours)
+    {
+        var firstOpen = hours.FirstOrDefault(hour => hour.IsOpen);
+        return firstOpen is null
+            ? "Closed"
+            : $"{firstOpen.DayOfWeek} {firstOpen.OpenTime} - {firstOpen.CloseTime}";
     }
 
     private static string? TrimDescription(string? description, int maxLength)
@@ -1204,8 +1407,21 @@ public class PlaceService : IPlaceService
         if (request.Description != null)
             place.Description = request.Description.Trim();
 
-        if (request.OpeningHours != null)
+        if (request.OperatingHoursEnabled.HasValue || request.OperatingHours is not null)
+        {
+            var operatingHours = NormalizeOwnerUpdateOperatingHours(
+                request.OperatingHoursEnabled ?? place.OperatingHoursEnabled,
+                request.OperatingHours ?? DeserializeOwnerUpdateOperatingHours(place.OperatingHoursJson));
+            place.OperatingHoursEnabled = operatingHours.Enabled;
+            place.OperatingHoursJson = operatingHours.Json;
+            place.OpeningHours = operatingHours.Enabled ? BuildOwnerUpdateOpeningHoursSummary(operatingHours.Hours) : null;
+        }
+        else if (request.OpeningHours != null)
+        {
             place.OpeningHours = string.IsNullOrWhiteSpace(request.OpeningHours) ? null : request.OpeningHours.Trim();
+            place.OperatingHoursEnabled = false;
+            place.OperatingHoursJson = null;
+        }
 
         if (request.Website != null)
             place.Website = string.IsNullOrWhiteSpace(request.Website) ? null : request.Website.Trim();
@@ -1345,6 +1561,8 @@ public class PlaceService : IPlaceService
             ReviewCount = FormatReviewCountLabel(reviewStats.Count),
             OpenStatus = DeriveOpenStatus(refreshedPlace.OpeningHours),
             OpeningHours = DisplayTextSafety.CleanOptional(refreshedPlace.OpeningHours),
+            OperatingHoursEnabled = refreshedPlace.OperatingHoursEnabled,
+            OperatingHours = ParseStructuredOperatingHours(refreshedPlace.OperatingHoursJson),
             OpeningHoursSchedule = ParseOpeningHoursSchedule(refreshedPlace.OperatingHoursJson),
             Website = DisplayTextSafety.CleanOptional(refreshedPlace.Website),
             About = DisplayTextSafety.CleanOptional(refreshedPlace.Description),
@@ -1670,4 +1888,9 @@ public class PlaceService : IPlaceService
         public double? DistanceMeters { get; set; }
         public List<string> Tags { get; set; } = new();
     }
+
+    private sealed record OwnerUpdateOperatingHoursResult(
+        bool Enabled,
+        string? Json,
+        IReadOnlyList<OwnerUpdateOperatingHourDto> Hours);
 }

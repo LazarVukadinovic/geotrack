@@ -49,6 +49,12 @@ describe('ContributionsService', () => {
     expect(payload['stayType']).toBeUndefined();
     expect(payload['amenities']).toEqual(['wifi']);
     expect(payload['bookingPartners']).toEqual([]);
+    expect(payload['openingHours']).toBeUndefined();
+    expect(payload['operatingHoursEnabled']).toBe(true);
+    expect(payload['operatingHours']).toEqual([
+      { dayOfWeek: 'Monday', isOpen: true, openTime: '09:00', closeTime: '17:00' },
+      { dayOfWeek: 'Tuesday', isOpen: false, openTime: null, closeTime: null },
+    ]);
     expect(((req.request.body as FormData).get('ownershipProofDocument') as File).name)
       .toBe('ownership-proof.pdf');
 
@@ -291,6 +297,10 @@ function makePlaceDraft(): ContributionDraftData {
       description: 'A place contribution.',
       openingHoursEnabled: true,
       openingHours: 'Mon-Fri 09:00-17:00',
+      operatingHours: [
+        { dayOfWeek: 'Monday', isOpen: true, openTime: '09:00', closeTime: '17:00' },
+        { dayOfWeek: 'Tuesday', isOpen: false, openTime: null, closeTime: null },
+      ],
       phone: '+385111222',
       contactEmail: 'hello@example.com',
       website: 'https://example.com',
@@ -341,6 +351,11 @@ function makeApiContribution(overrides: Partial<Record<string, unknown>> = {}): 
     imageSize: 'cover',
     description: 'A place contribution.',
     openingHours: 'Mon-Fri 09:00-17:00',
+    operatingHoursEnabled: true,
+    operatingHours: [
+      { dayOfWeek: 'Monday', isOpen: true, openTime: '09:00', closeTime: '17:00' },
+      { dayOfWeek: 'Tuesday', isOpen: false, openTime: null, closeTime: null },
+    ],
     phone: '+385111222',
     contactEmail: 'hello@example.com',
     website: 'https://example.com',

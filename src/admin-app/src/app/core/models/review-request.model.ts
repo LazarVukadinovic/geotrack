@@ -76,6 +76,8 @@ export interface ReviewRequestDetail extends ReviewRequest {
   description?: string | null;
   address?: string | null;
   openingHours?: string | null;
+  operatingHoursEnabled?: boolean | null;
+  operatingHours?: { dayOfWeek: string; isOpen: boolean; openTime?: string | null; closeTime?: string | null }[] | null;
   locationName?: string | null;
   destinationName?: string | null;
   city?: string | null;
