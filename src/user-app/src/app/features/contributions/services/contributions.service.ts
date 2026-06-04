@@ -249,8 +249,8 @@ export class ContributionsService {
   ownerUpdatePlace(placeId: number, draft: ContributionDraftData): Observable<unknown> {
     const basics = requireBasics(draft.basics);
     const features = normalizeFeatures(draft.features);
-    const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
+    const details = normalizeDetails(draft.details, isAccommodation);
 
     // Build existing-image metadata (same logic as toFormData)
     const images: { url: string; imageRole: string; sortOrder: number; imagePosition?: string; imageSize?: string }[] = [];
@@ -270,7 +270,7 @@ export class ContributionsService {
     const payload = {
       name: basics.name,
       description: details.description,
-      website: details.website,
+      website: isAccommodation ? '' : details.website,
       contactEmail: details.contactEmail,
       phoneNumber: details.phone,
       bookingExternalLink: details.bookingPartners[0]?.url ?? null,
@@ -318,6 +318,11 @@ export class ContributionsService {
     const coverImageUrl = detail.coverImageUrl || detail.cardImageUrl || detail.galleryImageUrls[0] || '';
     const cardImageUrl = detail.cardImageUrl || detail.galleryImageUrls[0] || coverImageUrl;
     const galleryImageUrls = withoutSelectedImages(detail.galleryImageUrls, cardImageUrl, coverImageUrl);
+    const isAccommodation = isAccommodationPlaceType(detail.placeType || (detail.stayType ? 'Stay' : 'Place'));
+    const bookingPartners = normalizeOfficialWebsitePartner(
+      detail.bookingPartners ?? [],
+      isAccommodation ? detail.website : '',
+    );
 
     return {
       basics: {
@@ -354,8 +359,8 @@ export class ContributionsService {
         description: detail.description ?? '',
         phone: detail.phone ?? '',
         contactEmail: detail.contactEmail ?? '',
-        website: detail.website ?? '',
-        bookingPartners: detail.bookingPartners ?? [],
+        website: isAccommodation ? '' : detail.website ?? '',
+        bookingPartners,
       },
     };
   }
@@ -363,8 +368,8 @@ export class ContributionsService {
   private toFormData(draft: ContributionDraftData, options?: { type?: ContributionType; placeId?: number | null }): FormData {
     const basics = requireBasics(draft.basics);
     const features = normalizeFeatures(draft.features);
-    const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
+    const details = normalizeDetails(draft.details, isAccommodation);
 
     const payload: UpsertPlaceContributionPayload = {
       type: options?.type ?? 'CreatePlace',
@@ -389,7 +394,7 @@ export class ContributionsService {
       description: details.description,
       phone: details.phone,
       contactEmail: details.contactEmail,
-      website: details.website,
+      website: isAccommodation ? '' : details.website,
       tags: features.tags,
       amenities: toContributionAmenityApiValues(features.amenities, isAccommodation),
       bookingPartners: isAccommodation ? details.bookingPartners : [],
@@ -477,17 +482,39 @@ interface NormalizedDetailsData {
   bookingPartners: ContributionBookingPartner[];
 }
 
-function normalizeDetails(details: DetailsData | null): NormalizedDetailsData {
+function normalizeDetails(details: DetailsData | null, isAccommodation = false): NormalizedDetailsData {
+  const website = details?.website?.trim() ?? '';
+  const bookingPartners = normalizeOfficialWebsitePartner(
+    (details?.bookingPartners ?? []).map(partner => ({
+      id: partner.id,
+      url: partner.url.trim(),
+    })),
+    isAccommodation ? website : '',
+  );
+
   return {
     description: details?.description ?? '',
     phone: details?.phone ?? '',
     contactEmail: details?.contactEmail?.trim() ?? '',
-    website: details?.website?.trim() ?? '',
-    bookingPartners: (details?.bookingPartners ?? []).map(partner => ({
-      id: partner.id,
-      url: partner.url.trim(),
-    })),
+    website: isAccommodation ? '' : website,
+    bookingPartners,
   };
+}
+
+function normalizeOfficialWebsitePartner(
+  bookingPartners: ContributionBookingPartner[],
+  website: string,
+): ContributionBookingPartner[] {
+  const normalized = bookingPartners.map(partner => ({
+    id: partner.id,
+    url: partner.url.trim(),
+  }));
+
+  if (!website.trim() || normalized.some(partner => partner.id === 'hotel')) {
+    return normalized;
+  }
+
+  return [...normalized, { id: 'hotel', url: website.trim() }];
 }
 
 function mapListItem(item: ApiContributionListItem): ContributionListItem {

@@ -187,41 +187,17 @@
           </div>
         }
 
-
-        <div class="hd__detail-grid">
-          <div class="hd__detail-side">
         @if (hasBookingPartners()) {
           <div class="hd__divider hd__divider--booking"></div>
 
           <section class="hd__section hd__section--booking">
             <div class="hd__booking">
-              <p class="hd__booking-heading">Bookings completed on partner sites</p>
+              @if (hasBookingPartners()) {
+                <p class="hd__booking-heading">Bookings completed on partner sites</p>
 
-              @for (partner of primaryBookingPartners(); track partner.id) {
-                <a
-                  class="hd__partner-btn hd__partner-btn--{{ partner.variant }}"
-                  [href]="partner.url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  (click)="onPartnerClick(partner)"
-                >
-                  <span>{{ partner.name }}</span>
-                  <svg class="hd__partner-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
-                  </svg>
-                </a>
-              }
-
-              @if (secondaryBookingPartners().length) {
-                @if (primaryBookingPartners().length) {
-                  <p class="hd__booking-also">Also available on</p>
-                }
-
-                @for (partner of secondaryBookingPartners(); track partner.id) {
+                @for (partner of primaryBookingPartners(); track partner.id) {
                   <a
-                    class="hd__partner-btn hd__partner-btn--muted"
+                    class="hd__partner-btn hd__partner-btn--{{ partner.variant }}"
                     [href]="partner.url"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -235,11 +211,38 @@
                     </svg>
                   </a>
                 }
+
+                @if (secondaryBookingPartners().length) {
+                  @if (primaryBookingPartners().length) {
+                    <p class="hd__booking-also">Also available on</p>
+                  }
+
+                  @for (partner of secondaryBookingPartners(); track partner.id) {
+                    <a
+                      class="hd__partner-btn hd__partner-btn--muted"
+                      [href]="partner.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      (click)="onPartnerClick(partner)"
+                    >
+                      <span>{{ partner.name }}</span>
+                      <svg class="hd__partner-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                      </svg>
+                    </a>
+                  }
+                }
               }
+
             </div>
           </section>
         }
 
+
+        <div class="hd__detail-grid">
+          <div class="hd__detail-side">
             @if (h.contactEmail || h.phoneNumber) {
               <div class="hd__divider hd__divider--contact"></div>
 

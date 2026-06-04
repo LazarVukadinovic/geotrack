@@ -4,6 +4,8 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { ContributionDetail, ContributionListItem, ContributionsService, contributionCanDelete, contributionCanEdit, contributionCanRequestOwnership } from '../../services/contributions.service';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
+import { PlaceDetailService } from '../../../place-detail/services/place-detail.service';
+import { HotelDetailService } from '../../../hotel-detail/services/hotel-detail.service';
 
 const MAX_PROOF_BYTES = 10 * 1024 * 1024;
 
@@ -18,6 +20,8 @@ export class MyContributionsPageComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
   private readonly contributions = inject(ContributionsService);
+  private readonly placeDetailService = inject(PlaceDetailService);
+  private readonly hotelDetailService = inject(HotelDetailService);
 
   private readonly PAGE_INITIAL = 2;
   private readonly PAGE_STEP = 5;
@@ -300,8 +304,15 @@ export class MyContributionsPageComponent implements OnInit {
   protected viewPlace(event: Event, item: ContributionListItem): void {
     event.stopPropagation();
     if (item.publishedPlaceId != null) {
-      this.router.navigate(['/places', item.publishedPlaceId]);
+      this.placeDetailService.invalidate(item.publishedPlaceId);
+      this.hotelDetailService.invalidate(item.publishedPlaceId);
+      this.router.navigate([this.isStay(item) ? '/stays' : '/places', item.publishedPlaceId]);
     }
+  }
+
+  private isStay(item: ContributionListItem): boolean {
+    return (item.placeType ?? '').trim().toLowerCase() === 'stay' ||
+      !!(item.stayType ?? '').trim();
   }
 
   protected reload(): void {

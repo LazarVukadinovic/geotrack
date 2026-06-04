@@ -181,7 +181,7 @@ public class PlaceContributionService : IPlaceContributionService
             })
             .ToListAsync();
 
-        characteristics = MergeFeatureOptions(characteristics, DefaultContributionCharacteristics());
+        characteristics = MergeFeatureOptions(DefaultContributionCharacteristics(), characteristics);
         amenities = ExcludeAmenityFeatureOptions(
             MergeFeatureOptions(amenities, DefaultContributionAmenities()),
             "family",
@@ -1429,6 +1429,7 @@ public class PlaceContributionService : IPlaceContributionService
             Longitude = contribution.Longitude.Value,
             ContactEmail = contribution.ContactEmail,
             Number = contribution.PhoneNumber,
+            Website = contribution.Website,
             PlaceTypeId = contribution.PlaceTypeId.Value,
             LocationId = contribution.LocationId.Value,
             CreatedAt = now,
@@ -2611,11 +2612,30 @@ public class PlaceContributionService : IPlaceContributionService
         IEnumerable<ContributionFeatureOptionDto> primary,
         IEnumerable<ContributionFeatureOptionDto> fallback)
     {
-        return primary
-            .Concat(fallback)
-            .Where(option => !string.IsNullOrWhiteSpace(option.Id) && !string.IsNullOrWhiteSpace(option.Label))
-            .DistinctBy(option => option.Id, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<ContributionFeatureOptionDto>();
+
+        foreach (var option in primary.Concat(fallback))
+        {
+            var id = option.Id?.Trim();
+            var label = option.Label?.Trim();
+            var key = Slugify(label ?? id ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(id) ||
+                string.IsNullOrWhiteSpace(label) ||
+                string.IsNullOrWhiteSpace(key) ||
+                !seen.Add(key))
+            {
+                continue;
+            }
+
+            result.Add(new ContributionFeatureOptionDto
+            {
+                Id = id,
+                Label = label
+            });
+        }
+
+        return result;
     }
 
     private static List<ContributionFeatureOptionDto> ExcludeAmenityFeatureOptions(
@@ -3068,7 +3088,7 @@ public class PlaceContributionService : IPlaceContributionService
     {
         "booking" => "Booking.com",
         "airbnb" => "Airbnb",
-        "hotel" => "Hotel Website",
+        "hotel" => "Official Website",
         "expedia" => "Expedia",
         _ => ToTitle(id)
     };
@@ -3087,7 +3107,7 @@ public class PlaceContributionService : IPlaceContributionService
         return slug switch
         {
             "booking-com" => "booking",
-            "hotel-website" => "hotel",
+            "hotel-website" or "official-website" => "hotel",
             _ => slug
         };
     }

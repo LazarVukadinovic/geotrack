@@ -417,6 +417,7 @@ public class PlaceService : IPlaceService
                 Icon = sa.StayAmenity.IconKey ?? string.Empty
             }) ?? Enumerable.Empty<AmenityDto>();
         var images = ToImageDtos(place.Images);
+        var bookingPartners = BuildHotelBookingPartners(place);
 
         return new HotelDetailDto
         {
@@ -437,17 +438,10 @@ public class PlaceService : IPlaceService
             Distance = detailDistance,
             PricePerNight = place.Stay?.PricePerNight,
             About = DisplayTextSafety.CleanOptional(place.Description),
+            Website = null,
             ContactEmail = place.ContactEmail,
             PhoneNumber = place.Number,
-            BookingPartners = place.PlaceBookingPartners
-                .Select(pb => new BookingPartnerDto
-                {
-                    Id = pb.BookingPartner.Id,
-                    Name = pb.BookingPartner.Name,
-                    Variant = pb.BookingPartner.Variant,
-                    Url = pb.Url
-                })
-                .ToList(),
+            BookingPartners = bookingPartners,
             Amenities = stayAmenities
                 .GroupBy(a => new { a.Label, a.Icon })
                 .Select(g => g.First())
@@ -1186,10 +1180,17 @@ public class PlaceService : IPlaceService
                 .ThenInclude(l => l.Destination)
             .Include(p => p.Images)
             .Include(p => p.Stay)
+                .ThenInclude(stay => stay!.StayAmenities)
+                    .ThenInclude(stayAmenity => stayAmenity.StayAmenity)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
+            .Include(p => p.PlaceAmenities)
+                .ThenInclude(placeAmenity => placeAmenity.Amenity)
+            .Include(p => p.PlaceBookingPartners)
+                .ThenInclude(placeBookingPartner => placeBookingPartner.BookingPartner)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(p =>
                 p.Id == placeId &&
                 p.Status == PublishedStatus &&
@@ -1289,29 +1290,64 @@ public class PlaceService : IPlaceService
 
         var reviewStats = await GetPlaceReviewStatsAsync(placeId);
         var previewReviews = await GetPlaceReviewPreviewAsync(placeId);
-        var images = ToImageDtos(place.Images);
+        var refreshedPlace = await _db.Places
+            .AsNoTracking()
+            .Include(p => p.PlaceType)
+            .Include(p => p.Location)
+                .ThenInclude(l => l.Destination)
+            .Include(p => p.Images)
+            .Include(p => p.Stay)
+                .ThenInclude(stay => stay!.StayAmenities)
+                    .ThenInclude(stayAmenity => stayAmenity.StayAmenity)
+            .Include(p => p.PlaceTags)
+                .ThenInclude(pt => pt.Tag)
+            .Include(p => p.PlaceAmenities)
+                .ThenInclude(placeAmenity => placeAmenity.Amenity)
+            .Include(p => p.PlaceBookingPartners)
+                .ThenInclude(placeBookingPartner => placeBookingPartner.BookingPartner)
+            .AsSplitQuery()
+            .SingleAsync(p => p.Id == placeId);
+
+        var images = ToImageDtos(refreshedPlace.Images);
+        var ownerUpdateAmenities = refreshedPlace.Stay is not null
+            ? refreshedPlace.Stay.StayAmenities
+                .Select(stayAmenity => new AmenityDto
+                {
+                    Id = stayAmenity.StayAmenityId,
+                    Label = DisplayTextSafety.CleanRequired(stayAmenity.StayAmenity.Name, "Amenity"),
+                    Icon = DisplayTextSafety.CleanOptional(stayAmenity.StayAmenity.IconKey) ?? string.Empty
+                })
+                .ToList()
+            : refreshedPlace.PlaceAmenities
+                .Select(placeAmenity => new AmenityDto
+                {
+                    Id = placeAmenity.AmenityId,
+                    Label = DisplayTextSafety.CleanRequired(placeAmenity.Amenity.Name, "Amenity"),
+                    Icon = DisplayTextSafety.CleanOptional(placeAmenity.Amenity.Icon) ?? string.Empty
+                })
+                .ToList();
 
         return new PlaceDetailDto
         {
-            Id = place.Id,
-            Title = DisplayTextSafety.CleanRequired(place.Name, "Place"),
-            Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
-            LocationId = place.LocationId,
-            LocationName = DisplayTextSafety.CleanOptional(place.Location?.Name),
-            Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
-            Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
-            HeroImage = GetCoverImageUrl(place.Images) ?? images.FirstOrDefault()?.Url,
+            Id = refreshedPlace.Id,
+            Title = DisplayTextSafety.CleanRequired(refreshedPlace.Name, "Place"),
+            Location = DisplayTextSafety.CleanOptional(refreshedPlace.Location?.Name),
+            LocationId = refreshedPlace.LocationId,
+            LocationName = DisplayTextSafety.CleanOptional(refreshedPlace.Location?.Name),
+            Latitude = HasUsableCoordinates(refreshedPlace.Latitude, refreshedPlace.Longitude) ? refreshedPlace.Latitude : null,
+            Longitude = HasUsableCoordinates(refreshedPlace.Latitude, refreshedPlace.Longitude) ? refreshedPlace.Longitude : null,
+            HeroImage = GetCoverImageUrl(refreshedPlace.Images) ?? images.FirstOrDefault()?.Url,
             Images = images,
-            Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
+            Tags = DisplayTextSafety.CleanLabels(refreshedPlace.PlaceTags.Select(pt => pt.Tag.Name))
                 .Select(label => new TagLabelDto { Label = label })
                 .ToList(),
             Rating = reviewStats.AverageRating,
             ReviewCount = FormatReviewCountLabel(reviewStats.Count),
-            OpenStatus = DeriveOpenStatus(place.OpeningHours),
-            OpeningHours = DisplayTextSafety.CleanOptional(place.OpeningHours),
-            OpeningHoursSchedule = ParseOpeningHoursSchedule(place.OperatingHoursJson),
-            Website = DisplayTextSafety.CleanOptional(place.Website),
-            About = DisplayTextSafety.CleanOptional(place.Description),
+            OpenStatus = DeriveOpenStatus(refreshedPlace.OpeningHours),
+            OpeningHours = DisplayTextSafety.CleanOptional(refreshedPlace.OpeningHours),
+            OpeningHoursSchedule = ParseOpeningHoursSchedule(refreshedPlace.OperatingHoursJson),
+            Website = DisplayTextSafety.CleanOptional(refreshedPlace.Website),
+            About = DisplayTextSafety.CleanOptional(refreshedPlace.Description),
             Reviews = previewReviews
                 .Select(r => new ReviewDto
                 {
@@ -1330,27 +1366,20 @@ public class PlaceService : IPlaceService
             RelatedEvents = new List<PlaceRelatedEventDto>(),
             Similar = new List<SimilarPlaceDto>(),
             IsSaved = false,
-            IsOwnable = place.PlaceType?.IsOwnable ?? false,
+            IsOwnable = refreshedPlace.PlaceType?.IsOwnable ?? false,
             IsOwnedByCurrentUser = true,
             HasPendingOwnershipClaim = false,
-            ContentType = "place",
-            Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant(),
-            ContactEmail = DisplayTextSafety.CleanOptional(place.ContactEmail),
-            PhoneNumber = DisplayTextSafety.CleanOptional(place.Number),
-            AdmissionPriceRange = DisplayTextSafety.CleanOptional(place.AdmissionPriceRange),
-            BookingExternalLink = DisplayTextSafety.CleanOptional(place.BookingExternalLink),
-            Amenities = place.PlaceAmenities
-                .Select(placeAmenity => new AmenityDto
-                {
-                    Id = placeAmenity.AmenityId,
-                    Label = DisplayTextSafety.CleanRequired(placeAmenity.Amenity.Name, "Amenity"),
-                    Icon = DisplayTextSafety.CleanOptional(placeAmenity.Amenity.Icon) ?? string.Empty
-                })
-                .ToList(),
-            BestTimeToVisit = DisplayTextSafety.CleanOptional(place.BestTimeToVisit),
-            VisitorTips = DisplayTextSafety.CleanOptional(place.VisitorTips),
-            AccessNotes = DisplayTextSafety.CleanOptional(place.AccessNotes),
-            AccessibilityNotes = DisplayTextSafety.CleanOptional(place.AccessibilityNotes)
+            ContentType = refreshedPlace.Stay is not null ? "hotel" : "place",
+            Category = DisplayTextSafety.CleanOptional(refreshedPlace.PlaceType?.Name)?.ToLowerInvariant(),
+            ContactEmail = DisplayTextSafety.CleanOptional(refreshedPlace.ContactEmail),
+            PhoneNumber = DisplayTextSafety.CleanOptional(refreshedPlace.Number),
+            AdmissionPriceRange = DisplayTextSafety.CleanOptional(refreshedPlace.AdmissionPriceRange),
+            BookingExternalLink = DisplayTextSafety.CleanOptional(refreshedPlace.BookingExternalLink),
+            Amenities = ownerUpdateAmenities,
+            BestTimeToVisit = DisplayTextSafety.CleanOptional(refreshedPlace.BestTimeToVisit),
+            VisitorTips = DisplayTextSafety.CleanOptional(refreshedPlace.VisitorTips),
+            AccessNotes = DisplayTextSafety.CleanOptional(refreshedPlace.AccessNotes),
+            AccessibilityNotes = DisplayTextSafety.CleanOptional(refreshedPlace.AccessibilityNotes)
         };
     }
 
@@ -1580,11 +1609,50 @@ public class PlaceService : IPlaceService
     {
         "booking" => "Booking.com",
         "airbnb" => "Airbnb",
-        "hotel" => "Hotel Website",
+        "hotel" => "Official Website",
         "expedia" => "Expedia",
         _ => string.Join(" ", id.Split('-', '_', StringSplitOptions.RemoveEmptyEntries)
             .Select(part => char.ToUpperInvariant(part[0]) + part[1..]))
     };
+
+    private static List<BookingPartnerDto> BuildHotelBookingPartners(Place place)
+    {
+        var partners = place.PlaceBookingPartners
+            .Select(pb => new BookingPartnerDto
+            {
+                Id = pb.BookingPartner.Id,
+                Name = NormalizeHotelBookingPartnerName(pb.BookingPartner.Name),
+                Variant = pb.BookingPartner.Variant,
+                Url = pb.Url
+            })
+            .ToList();
+
+        var website = DisplayTextSafety.CleanOptional(place.Website);
+        if (!string.IsNullOrWhiteSpace(website) &&
+            !partners.Any(partner =>
+                IsOfficialWebsitePartner(partner.Name) ||
+                string.Equals(partner.Url, website, StringComparison.OrdinalIgnoreCase)))
+        {
+            partners.Add(new BookingPartnerDto
+            {
+                Id = 0,
+                Name = "Official Website",
+                Variant = "muted",
+                Url = website
+            });
+        }
+
+        return partners;
+    }
+
+    private static string NormalizeHotelBookingPartnerName(string name) =>
+        IsOfficialWebsitePartner(name) ? "Official Website" : name;
+
+    private static bool IsOfficialWebsitePartner(string? name)
+    {
+        var normalized = (name ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized is "hotel website" or "official website";
+    }
 
     private sealed class PlaceListProjection
     {

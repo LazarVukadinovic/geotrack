@@ -25,6 +25,7 @@ interface ApiHotelDetail {
   rating?: number;
   reviewCount?: string;
   distance?: string;
+  website?: string | null;
   contactEmail?: string | null;
   phoneNumber?: string | null;
   about?: string;
@@ -123,6 +124,7 @@ export class HotelDetailService {
           reviewCount: dto.reviewCount,
           distance: dto.distance ?? '',
           about: dto.about ?? '',
+          website: dto.website ?? null,
           contactEmail: dto.contactEmail ?? null,
           phoneNumber: dto.phoneNumber ?? null,
           bookingPartners: dto.bookingPartners.map(b => ({

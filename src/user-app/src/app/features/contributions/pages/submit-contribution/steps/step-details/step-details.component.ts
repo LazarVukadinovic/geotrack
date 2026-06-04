@@ -30,12 +30,15 @@ export class StepDetailsComponent {
   bookingPartners = [
     { id: 'booking', label: 'Booking.com' },
     { id: 'airbnb', label: 'Airbnb' },
-    { id: 'hotel', label: 'Hotel Website' },
+    { id: 'hotel', label: 'Official Website' },
   ];
     constructor() {
     effect(() => {
       const d = this.data();
-      if (d) Object.assign(this.form, d);
+      if (d) {
+        Object.assign(this.form, d);
+        this.moveAccommodationWebsiteToBookingPartner();
+      }
     });
   }
   form: DetailsData = {
@@ -54,7 +57,7 @@ export class StepDetailsComponent {
   }
 
   isValid(): boolean {
-    return !this.websiteError() &&
+    return (this.isAccommodation() || !this.websiteError()) &&
       (!this.isAccommodation() || this.form.bookingPartners.every(partner => !this.partnerUrlError(partner.id)));
   }
 
@@ -97,12 +100,28 @@ export class StepDetailsComponent {
       description: this.form.description.trim(),
       phone: this.form.phone.trim(),
       contactEmail: this.form.contactEmail.trim(),
-      website: this.form.website.trim(),
+      website: this.isAccommodation() ? '' : this.form.website.trim(),
       bookingPartners: this.isAccommodation() ? this.form.bookingPartners.map(partner => ({
         id: partner.id,
         url: partner.url.trim(),
       })) : [],
     };
+  }
+
+  private moveAccommodationWebsiteToBookingPartner(): void {
+    if (!this.isAccommodation()) return;
+
+    const website = this.form.website.trim();
+    if (!website || this.form.bookingPartners.some(partner => partner.id === 'hotel')) {
+      this.form.website = '';
+      return;
+    }
+
+    this.form.bookingPartners = [
+      ...this.form.bookingPartners,
+      { id: 'hotel', url: website },
+    ];
+    this.form.website = '';
   }
 
   private validateOptionalUrl(value: string, label: string): string {

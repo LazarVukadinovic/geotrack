@@ -167,8 +167,8 @@ export class StepFeaturesComponent implements OnInit {
         this.selectedTags = normalizeCharacteristicTags(this.selectedTags, this.availableCharacteristics());
 
         const amenities = [
-          ...normalizeOptions(response.amenities),
-          ...normalizeOptions(response.stayAmenities),
+          ...normalizeAmenityOptions(response.amenities),
+          ...normalizeAmenityOptions(response.stayAmenities),
         ];
         if (amenities.length > 0) {
           this.backendAmenities.set(dedupeOptions(amenities).map(option => ({
@@ -196,6 +196,22 @@ export class StepFeaturesComponent implements OnInit {
 }
 
 function normalizeOptions(values: readonly ContributionFeatureOption[] | null | undefined): ContributionFeatureOption[] {
+  const seen = new Set<string>();
+  const normalized: ContributionFeatureOption[] = [];
+
+  for (const option of values ?? []) {
+    const id = option.id?.trim() ?? '';
+    const label = option.label?.trim() ?? '';
+    const key = characteristicKey(label || id);
+    if (!id || !label || !key || seen.has(key)) continue;
+    seen.add(key);
+    normalized.push({ id, label });
+  }
+
+  return normalized;
+}
+
+function normalizeAmenityOptions(values: readonly ContributionFeatureOption[] | null | undefined): ContributionFeatureOption[] {
   return (values ?? [])
     .map(option => ({
       id: option.id?.trim() ?? '',
