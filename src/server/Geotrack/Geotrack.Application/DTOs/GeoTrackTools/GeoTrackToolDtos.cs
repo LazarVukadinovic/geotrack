@@ -43,9 +43,28 @@ public class GeoTrackToolItemDto
     public int? ReviewCount { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public double? DistanceKm { get; set; }
     public DateTime? StartsAt { get; set; }
     public DateTime? EndsAt { get; set; }
     public List<string> Tags { get; set; } = new();
+}
+
+public class GeoTrackNearbySearchRequest
+{
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+    public double? RadiusKm { get; set; }
+    public string? Category { get; set; }
+    public List<string> EntityTypes { get; set; } = new();
+    public int? Limit { get; set; }
+}
+
+public class GeoTrackNearbySearchResponseDto
+{
+    public List<GeoTrackToolItemDto> Results { get; set; } = new();
+    public int Count { get; set; }
+    public double RadiusKm { get; set; }
+    public string? Category { get; set; }
 }
 
 public class GeoTrackAreaResolveRequest
@@ -204,7 +223,10 @@ public class GeoTrackAgentQueryPlanDto
     public string Language { get; set; } = "en";
     public string OriginalMessage { get; set; } = string.Empty;
     public string NormalizedMessage { get; set; } = string.Empty;
+    public string? CategoryGroup { get; set; }
     public List<string> EntityTypes { get; set; } = new();
+    public List<string> RequestedEntityTypes { get; set; } = new();
+    public string? AreaPhrase { get; set; }
     public string? LocationText { get; set; }
     public string? LocationUsed { get; set; }
     public int? DestinationId { get; set; }
@@ -216,6 +238,13 @@ public class GeoTrackAgentQueryPlanDto
     public bool StrictCategoryMatch { get; set; }
     public string FallbackBehavior { get; set; } = "none";
     public string? FollowUpIntent { get; set; }
+    public bool UsesUserLocation { get; set; }
+    public bool NearbyIntent { get; set; }
+    public bool HasUserCoordinates { get; set; }
+    public bool FallbackAllowed { get; set; }
+    public string? ToolPlan { get; set; }
+    public int MaxResults { get; set; }
+    public string? ExplanationForLogsOnly { get; set; }
     public List<string> Tags { get; set; } = new();
     public List<string> Categories { get; set; } = new();
     public List<string> PlaceTypes { get; set; } = new();

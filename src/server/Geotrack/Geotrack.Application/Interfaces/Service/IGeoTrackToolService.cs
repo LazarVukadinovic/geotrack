@@ -17,6 +17,7 @@ public interface IGeoTrackToolService
     Task<GeoTrackAreaContentResponseDto> SearchByAreaAsync(GeoTrackAreaContentRequest request, CancellationToken cancellationToken = default);
     Task<GeoTrackAreaOverviewDto> GetAreaOverviewAsync(GeoTrackAreaOverviewRequest request, CancellationToken cancellationToken = default);
     Task<GeoTrackCategoryOptionsResponseDto> GetCategoryOptionsAsync(GeoTrackCategoryOptionsRequest request, CancellationToken cancellationToken = default);
+    Task<GeoTrackNearbySearchResponseDto> FindNearbyPublicContentAsync(GeoTrackNearbySearchRequest request, CancellationToken cancellationToken = default);
     Task<GeoTrackAgentContextDto> BuildAgentContextAsync(
         string message,
         AgentContextOptionsDto? contextOptions,

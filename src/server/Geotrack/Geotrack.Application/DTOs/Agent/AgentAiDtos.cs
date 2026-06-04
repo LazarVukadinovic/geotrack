@@ -30,6 +30,7 @@ public class AgentContextOptionsDto
 {
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public string? LocationSource { get; set; }
     public int? DestinationId { get; set; }
     public string? CurrentCity { get; set; }
     public string? CurrentDestinationName { get; set; }
@@ -41,6 +42,13 @@ public class AgentContextOptionsDto
     public int? ConversationDestinationId { get; set; }
     public string? ConversationDestinationName { get; set; }
     public string? ConversationCategory { get; set; }
+    public string? ConversationOfferedFallbackCategory { get; set; }
+    public string? PendingCategoryGroup { get; set; }
+    public List<string> PendingRequestedEntityTypes { get; set; } = new();
+    public string? PendingOriginalQuery { get; set; }
+    public string? PendingReason { get; set; }
+    public bool? PendingFallbackAllowed { get; set; }
+    public bool? PendingStrictCategory { get; set; }
 }
 
 public class AgentChatResponseDto
