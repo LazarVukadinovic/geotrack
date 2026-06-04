@@ -64,6 +64,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
   data = input<BasicsData | null>(null);
   locationLocked = input<boolean>(false);
+  ownershipProofLocked = input<boolean>(false);
   saved = output<BasicsData>();
 
   placeTypes = signal<ContributionPlaceTypeOption[]>(defaultPlaceTypes());
@@ -106,7 +107,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     this.form.placeTypeId = type.id;
     this.ownershipProofError.set('');
 
-    if (!this.requiresOwnershipProof()) {
+    if (!this.requiresOwnershipProof() && !this.ownershipProofLocked()) {
       this.form.ownershipProofFile = null;
       this.form.ownershipProofDocumentUrl = null;
       this.form.ownershipProofOriginalFileName = null;
@@ -120,6 +121,8 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   }
 
   onOwnershipProofSelected(e: Event): void {
+    if (this.ownershipProofLocked()) return;
+
     const file = (e.target as HTMLInputElement).files?.[0];
     (e.target as HTMLInputElement).value = '';
     if (!file) return;

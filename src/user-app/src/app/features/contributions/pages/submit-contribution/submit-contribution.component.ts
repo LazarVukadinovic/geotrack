@@ -58,6 +58,8 @@ export class SubmitContributionComponent implements OnInit {
     return this.editId() ? 'Edit Place' : 'Add New Place';
   });
   protected readonly savesDirectly = computed(() => this.editStatus() === 'Approved' && this.editPlaceId() != null);
+  protected readonly ownershipProofLocked = computed(() =>
+    this.savesDirectly() && !!this.draft().basics?.ownershipProofDocumentUrl);
   protected readonly submitLabel = computed(() => this.savesDirectly() ? 'Save' : 'Submit');
   protected readonly submittingLabel = computed(() => this.savesDirectly() ? 'Saving...' : 'Submitting...');
   protected readonly isAccommodationDraft = computed(() => this.draft().basics?.placeType === 'Stay');
