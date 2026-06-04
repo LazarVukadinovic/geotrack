@@ -1,7 +1,6 @@
 using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.DTOs.GeoTrackTools;
 using Geotrack.Application.Interfaces.Service;
-using Geotrack.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Infrastructure.Services.Agent;
@@ -15,7 +14,9 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         "where", "with", "u", "kod", "oko", "na", "za", "mi", "prikazi", "prikaži", "preporuci",
         "preporuči", "najbolje", "najbolji", "koji", "koje", "su", "dobri", "dobre", "dobro",
         "sta", "šta", "ima", "jos", "još", "nesto", "nešto", "da", "vidim", "videti", "vidjeti",
-        "obici", "obići", "mozes", "možeš"
+        "obici", "obići", "mozes", "možeš", "li", "imaju", "neki", "neka", "neku", "od",
+        "zanimljivo", "zanimljive", "zanimljivosti", "vidi", "vidis", "vidiš", "raditi",
+        "things", "see"
     };
 
     private static readonly HashSet<string> RankingTokens = new(StringComparer.Ordinal)
@@ -25,57 +26,41 @@ public class AgentQueryPlanner : IAgentQueryPlanner
 
     private static readonly HashSet<string> SerbianTokens = new(StringComparer.Ordinal)
     {
-        "plaza", "plaze", "restoran", "restorani", "dogadaj", "dogadjaj", "dogadaji", "dogadjaji",
-        "smestaj", "smjestaj", "smeštaj", "kafic", "kafić", "znamenitost", "znamenitosti",
-        "preporuci", "preporuči", "sta", "šta", "ima", "videti", "vidjeti", "obici", "obići"
+        "plaza", "plaze", "restoran", "restorani", "restorana", "dogadjaj", "dogadjaji",
+        "smestaj", "smjestaj", "kafic", "kafici", "znamenitost", "znamenitosti",
+        "preporuci", "sta", "ima", "videti", "vidjeti", "vidi", "obici",
+        "aktivnosti", "blizini", "mojoj", "moze", "vazi", "najbolje", "najbolji",
+        "atrakcija", "atrakcije", "atrakciju"
     };
 
-    private static readonly Dictionary<string, string[]> EntityAliases = new(StringComparer.Ordinal)
-    {
-        ["places"] = ["place", "places", "attraction", "attractions", "landmark", "landmarks", "restaurant", "restaurants", "cafe", "cafes", "bar", "bars", "beach", "beaches", "mesto", "mesta", "mjesto", "mjesta", "znamenitost", "znamenitosti", "restoran", "restorani", "plaza", "plaze", "kafic", "kafić", "muzej", "museum"],
-        ["stays"] = ["stay", "stays", "hotel", "hotels", "hoteli", "accommodation", "accommodations", "lodging", "apartment", "apartments", "apartman", "apartmani", "smeštaj", "smestaj", "smještaj", "smjestaj"],
-        ["events"] = ["event", "events", "festival", "festivals", "concert", "concerts", "koncert", "koncerti", "manifestacija", "manifestacije", "dogadaj", "dogadjaj", "dogadaji", "dogadjaji", "događaj", "događaji"]
-    };
+    private static readonly string[] CategoryPriority =
+    [
+        "FOOD_DRINK",
+        "BEACHES",
+        "STAYS",
+        "EVENTS",
+        "SIGHTS_ATTRACTIONS",
+        "GENERAL_DISCOVERY"
+    ];
 
-    private static readonly Dictionary<string, ConceptDefinition> Concepts = new(StringComparer.Ordinal)
-    {
-        ["beach"] = new(
-            ["beach", "beaches", "plaza", "plaze", "plaža", "plaže", "kupanje", "more"],
-            ["beaches"],
-            ["Beach"],
-            [],
-            ["beach"]),
-        ["restaurant"] = new(
-            ["restaurant", "restaurants", "restoran", "restorani", "dining", "food", "hrana", "jesti", "ručak", "rucak", "večera", "vecera", "bar", "bars", "wine bar", "kafić", "kafic", "cafe", "cafes", "coffee"],
-            ["food-drink", "fine-dining", "nightlife", "beach-bars", "food-market"],
-            ["Restaurant", "Cafe", "Bar"],
-            [],
-            ["restaurants"]),
-        ["cafe"] = new(
-            ["cafe", "cafes", "café", "coffee", "kafa", "kafic", "kafić"],
-            ["food-drink"],
-            ["Cafe"],
-            [],
-            ["cafe"]),
-        ["landmark"] = new(
-            ["attraction", "attractions", "landmark", "landmarks", "znamenitost", "znamenitosti", "atrakcija", "atrakcije", "videti", "vidjeti", "obici", "obići", "museum", "muzej", "viewpoint", "nature", "hiking"],
-            ["landmarks", "historic-sites", "culture", "history", "nature", "hiking", "viewpoints"],
-            ["Landmark", "Museum", "Viewpoint", "Nature"],
-            [],
-            ["attractions"]),
-        ["festival"] = new(
-            ["festival", "festivals", "manifestacija", "manifestacije", "koncert", "koncerti"],
-            ["festivals", "culture"],
-            [],
-            ["Festival"],
-            ["festival"])
-    };
+    private static readonly string[] SpecialConceptIds =
+    [
+        "NEARBY",
+        "FOLLOW_UP_ACCEPTANCE"
+    ];
 
     private readonly AppDbContext _db;
+    private readonly IAgentTaxonomyProvider _taxonomyProvider;
+    private readonly IAgentAreaResolver _areaResolver;
 
-    public AgentQueryPlanner(AppDbContext db)
+    public AgentQueryPlanner(
+        AppDbContext db,
+        IAgentTaxonomyProvider taxonomyProvider,
+        IAgentAreaResolver areaResolver)
     {
         _db = db;
+        _taxonomyProvider = taxonomyProvider;
+        _areaResolver = areaResolver;
     }
 
     public async Task<GeoTrackAgentQueryPlanDto> PlanAsync(
@@ -87,17 +72,43 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         var normalized = AgentTextNormalizer.Normalize(original);
         var tokens = AgentTextNormalizer.Tokenize(normalized);
         var tokenSet = tokens.ToHashSet(StringComparer.Ordinal);
+        var taxonomy = await _taxonomyProvider.GetTaxonomyAsync(cancellationToken);
         var vocabulary = await LoadCatalogVocabularyAsync(cancellationToken);
+        var matchedConcepts = MatchConcepts(taxonomy, normalized, tokenSet);
 
-        var messageLocation = await ResolveLocationFromTextAsync(normalized, tokenSet, cancellationToken);
-        var resolvedLocation = messageLocation ?? await ResolveLocationFromContextAsync(contextOptions, cancellationToken);
+        var nearbyIntent = HasConcept(matchedConcepts, "NEARBY");
+        var hasUserCoordinates = HasUsableCoordinates(contextOptions?.Latitude, contextOptions?.Longitude);
+        var acceptanceIntent = IsAcceptanceIntent(matchedConcepts, normalized, tokenSet);
+        var hasNewCategoryIntent = matchedConcepts.Any(concept => !IsSpecialConcept(concept.Id));
+
+        var messageLocation = await _areaResolver.ResolveFromTextAsync(original, includeEntities: false, cancellationToken);
+        var resolvedLocation = messageLocation ?? (nearbyIntent ? null : await _areaResolver.ResolveFromContextAsync(contextOptions, cancellationToken));
         var usesCurrentContext = messageLocation is null && resolvedLocation is not null;
+        var usesUserLocation = nearbyIntent && messageLocation is null && hasUserCoordinates;
+        var pendingConcept = ResolvePendingConcept(
+            taxonomy,
+            contextOptions,
+            messageLocation,
+            hasNewCategoryIntent,
+            acceptanceIntent,
+            nearbyIntent);
+        var pendingCompletion = pendingConcept is not null;
 
-        var entityTypes = DetectEntityTypes(tokenSet);
-        var concepts = DetectConcepts(normalized, tokenSet);
-        var category = ResolvePrimaryCategory(concepts, entityTypes);
-        var strictCategory = IsStrictCategory(category);
         var followUpIntent = messageLocation is null && IsFollowUpIntent(tokenSet);
+        var primaryConcept = pendingConcept ?? ResolvePrimaryConcept(matchedConcepts, contextOptions, followUpIntent, acceptanceIntent);
+        var category = primaryConcept?.Category ?? "general";
+        var strictCategory = primaryConcept?.Strict == true;
+        var fallbackAllowed = primaryConcept?.FallbackAllowed ?? !strictCategory;
+        if (pendingCompletion)
+        {
+            strictCategory = contextOptions?.PendingStrictCategory ?? strictCategory;
+            fallbackAllowed = contextOptions?.PendingFallbackAllowed ?? fallbackAllowed;
+        }
+        var categoryGroup = primaryConcept is null || IsSpecialConcept(primaryConcept.Id)
+            ? "GENERAL_DISCOVERY"
+            : primaryConcept.Id;
+
+        var entityTypes = ResolveEntityTypes(primaryConcept, matchedConcepts, resolvedLocation is not null || usesUserLocation);
         var rankingIntent = tokenSet.Overlaps(RankingTokens) ? "top" : "all";
 
         var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -106,25 +117,20 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         var stayTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var eventCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var conceptKey in concepts)
+        if (primaryConcept is not null && !IsSpecialConcept(primaryConcept.Id))
         {
-            if (!Concepts.TryGetValue(conceptKey, out var concept))
+            foreach (var categoryAlias in primaryConcept.CategoryAliases)
             {
-                continue;
+                categories.Add(categoryAlias);
             }
 
-            categories.Add(conceptKey);
-            AddMatchingTags(tags, vocabulary.Tags, concept.TagAliases);
-            AddMatchingTypes(placeTypes, vocabulary.PlaceTypes, concept.PlaceTypeAliases);
-            AddMatchingTypes(eventCategories, vocabulary.EventTypes, concept.EventTypeAliases);
+            AddMatchingTags(tags, vocabulary.Tags, primaryConcept.Tags);
+            AddMatchingTypes(placeTypes, vocabulary.PlaceTypes, primaryConcept.PlaceTypes);
+            AddMatchingTypes(stayTypes, vocabulary.StayTypes, primaryConcept.StayTypes);
+            AddMatchingTypes(eventCategories, vocabulary.EventTypes, primaryConcept.EventCategories);
         }
 
-        if (entityTypes.Contains("stays"))
-        {
-            AddMatchingTypes(stayTypes, vocabulary.StayTypes, ["hotel", "apartment", "villa", "stay"]);
-        }
-
-        var genericTokens = BuildGenericTokenSet();
+        var genericTokens = BuildGenericTokenSet(taxonomy);
         var locationTokens = resolvedLocation?.NormalizedTokens ?? new HashSet<string>(StringComparer.Ordinal);
         var locationText = resolvedLocation?.LocationText;
         var queryTerms = tokens
@@ -137,22 +143,37 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             .Take(8)
             .ToList();
 
-        if (entityTypes.Count == 0 && resolvedLocation is not null)
+        if (ShouldClearDiscoveryQuery(primaryConcept, queryTerms, resolvedLocation, nearbyIntent))
         {
-            entityTypes.Add("all");
+            queryTerms.Clear();
+        }
+
+        if (acceptanceIntent && resolvedLocation is not null)
+        {
+            queryTerms.Clear();
+            strictCategory = false;
+            fallbackAllowed = true;
+            category = "general";
+            categoryGroup = "GENERAL_DISCOVERY";
+            entityTypes = ["places", "events"];
         }
 
         var hasCatalogIntent = entityTypes.Count > 0 ||
-            concepts.Count > 0 ||
+            matchedConcepts.Any(concept => !IsSpecialConcept(concept.Id)) ||
             rankingIntent == "top" ||
-            resolvedLocation is not null;
+            resolvedLocation is not null ||
+            usesUserLocation;
         var genericDiscoveryWithoutSpecificTerm = hasCatalogIntent &&
             resolvedLocation is null &&
+            !usesUserLocation &&
             queryTerms.Count == 0 &&
-            (entityTypes.Count > 0 || concepts.Count > 0 || rankingIntent == "top");
+            (entityTypes.Count > 0 ||
+             matchedConcepts.Any(concept => !IsSpecialConcept(concept.Id)) ||
+             rankingIntent == "top");
 
         var language = DetectLanguage(tokenSet, contextOptions?.Language);
-        var clarificationNeeded = genericDiscoveryWithoutSpecificTerm;
+        var missingNearbyLocation = nearbyIntent && !hasUserCoordinates && messageLocation is null;
+        var clarificationNeeded = genericDiscoveryWithoutSpecificTerm || missingNearbyLocation || (messageLocation?.IsAmbiguous == true);
 
         return new GeoTrackAgentQueryPlanDto
         {
@@ -162,7 +183,10 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             Language = language,
             OriginalMessage = original,
             NormalizedMessage = normalized,
+            CategoryGroup = categoryGroup,
             EntityTypes = entityTypes.Count == 0 ? [] : entityTypes.ToList(),
+            RequestedEntityTypes = entityTypes.Count == 0 ? [] : entityTypes.ToList(),
+            AreaPhrase = messageLocation?.LocationText,
             LocationText = resolvedLocation?.LocationText,
             LocationUsed = resolvedLocation?.DisplayName,
             DestinationId = resolvedLocation?.DestinationId,
@@ -172,8 +196,19 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             AreaName = resolvedLocation?.DisplayName,
             Category = category,
             StrictCategoryMatch = strictCategory,
-            FallbackBehavior = strictCategory ? "no_unrelated_cards" : "broaden_if_general",
-            FollowUpIntent = followUpIntent ? "reuse_previous_area" : null,
+            FallbackBehavior = fallbackAllowed ? "broaden_if_general" : "no_unrelated_cards",
+            FollowUpIntent = pendingCompletion
+                ? "complete_pending_clarification"
+                : acceptanceIntent ? "execute_previous_fallback" : followUpIntent ? "reuse_previous_area" : null,
+            UsesUserLocation = usesUserLocation,
+            NearbyIntent = nearbyIntent,
+            HasUserCoordinates = hasUserCoordinates,
+            FallbackAllowed = fallbackAllowed,
+            ToolPlan = usesUserLocation
+                ? "geotrack_find_nearby_public_content"
+                : "taxonomy_area_catalog_search",
+            MaxResults = 10,
+            ExplanationForLogsOnly = BuildPlanExplanation(categoryGroup, resolvedLocation, usesCurrentContext, usesUserLocation, acceptanceIntent, pendingCompletion),
             Tags = tags.OrderBy(item => item).ToList(),
             Categories = categories.OrderBy(item => item).ToList(),
             PlaceTypes = placeTypes.OrderBy(item => item).ToList(),
@@ -186,9 +221,7 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             SearchCatalog = hasCatalogIntent && !clarificationNeeded,
             ClarificationNeeded = clarificationNeeded,
             ClarificationQuestion = clarificationNeeded
-                ? language == "sr"
-                    ? "Koji grad ili region da pretražim?"
-                    : "Which city or region should I search?"
+                ? BuildClarificationQuestion(language, missingNearbyLocation, messageLocation?.IsAmbiguous == true)
                 : null
         };
     }
@@ -218,351 +251,178 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         return new CatalogVocabulary(tags, placeTypes, stayTypes, eventTypes);
     }
 
-    private async Task<ResolvedAgentLocation?> ResolveLocationFromContextAsync(
-        AgentContextOptionsDto? contextOptions,
-        CancellationToken cancellationToken)
+    private static List<AgentTaxonomyConceptDto> MatchConcepts(
+        AgentTaxonomyDto taxonomy,
+        string normalized,
+        IReadOnlySet<string> tokens)
     {
-        if (contextOptions is null)
-        {
-            return null;
-        }
-
-        if (!string.IsNullOrWhiteSpace(contextOptions.ConversationAreaType) &&
-            contextOptions.ConversationAreaId is > 0)
-        {
-            var resolvedArea = await ResolveLocationFromAreaAsync(
-                contextOptions.ConversationAreaType,
-                contextOptions.ConversationAreaId.Value,
-                cancellationToken);
-            if (resolvedArea is not null)
+        return taxonomy.Concepts
+            .Where(concept => concept.Aliases.Any(alias =>
             {
-                return resolvedArea;
-            }
-        }
-
-        if (contextOptions.ConversationDestinationId is > 0)
-        {
-            var destinationFromConversation = await _db.Destinations
-                .AsNoTracking()
-                .WherePublicDestinations()
-                .Where(item => item.Id == contextOptions.ConversationDestinationId.Value)
-                .Select(item => new { item.Id, item.Name })
-                .SingleOrDefaultAsync(cancellationToken);
-
-            if (destinationFromConversation is not null)
-            {
-                return new ResolvedAgentLocation(
-                    destinationFromConversation.Id,
-                    destinationFromConversation.Name,
-                    "destination",
-                    destinationFromConversation.Id,
-                    destinationFromConversation.Name,
-                    destinationFromConversation.Name,
-                    AgentTextNormalizer.Tokenize(destinationFromConversation.Name).ToHashSet(StringComparer.Ordinal));
-            }
-        }
-
-        if (contextOptions.DestinationId is > 0)
-        {
-            var destination = await _db.Destinations
-                .AsNoTracking()
-                .WherePublicDestinations()
-                .Where(item => item.Id == contextOptions.DestinationId.Value)
-                .Select(item => new { item.Id, item.Name })
-                .SingleOrDefaultAsync(cancellationToken);
-
-            if (destination is not null)
-            {
-                return new ResolvedAgentLocation(
-                    destination.Id,
-                    destination.Name,
-                    "destination",
-                    destination.Id,
-                    destination.Name,
-                    destination.Name,
-                    AgentTextNormalizer.Tokenize(destination.Name).ToHashSet(StringComparer.Ordinal));
-            }
-        }
-
-        foreach (var value in new[]
-        {
-            CleanContextText(contextOptions.ConversationDestinationName),
-            CleanContextText(contextOptions.ConversationAreaName),
-            CleanContextText(contextOptions.CurrentDestinationName),
-            CleanContextText(contextOptions.CurrentCity),
-            CleanContextText(contextOptions.CurrentLocationName)
-        })
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                continue;
-            }
-
-            var resolved = await ResolveLocationFromTextAsync(
-                AgentTextNormalizer.Normalize(value),
-                AgentTextNormalizer.Tokenize(value).ToHashSet(StringComparer.Ordinal),
-                cancellationToken);
-            if (resolved is not null)
-            {
-                return resolved;
-            }
-        }
-
-        return null;
-    }
-
-    private async Task<ResolvedAgentLocation?> ResolveLocationFromAreaAsync(
-        string areaType,
-        int areaId,
-        CancellationToken cancellationToken)
-    {
-        var normalizedType = NormalizeAreaType(areaType);
-        if (normalizedType is null || areaId <= 0)
-        {
-            return null;
-        }
-
-        if (normalizedType == "destination")
-        {
-            var destination = await _db.Destinations
-                .AsNoTracking()
-                .WherePublicDestinations()
-                .Where(item => item.Id == areaId)
-                .Select(item => new { item.Id, item.Name })
-                .SingleOrDefaultAsync(cancellationToken);
-            return destination is null
-                ? null
-                : new ResolvedAgentLocation(
-                    destination.Id,
-                    destination.Name,
-                    "destination",
-                    destination.Id,
-                    destination.Name,
-                    destination.Name,
-                    AgentTextNormalizer.Tokenize(destination.Name).ToHashSet(StringComparer.Ordinal));
-        }
-
-        if (normalizedType == "location")
-        {
-            var location = await _db.Locations
-                .AsNoTracking()
-                .WherePublicLocations()
-                .Where(item => item.Id == areaId)
-                .Select(item => new
+                var normalizedAlias = AgentTextNormalizer.Normalize(alias);
+                if (normalizedAlias.Contains(' ', StringComparison.Ordinal))
                 {
-                    item.Id,
-                    item.Name,
-                    item.DestinationId,
-                    DestinationName = item.Destination.Name
-                })
-                .SingleOrDefaultAsync(cancellationToken);
-            return location is null
-                ? null
-                : new ResolvedAgentLocation(
-                    location.DestinationId,
-                    location.DestinationName,
-                    "location",
-                    location.Id,
-                    location.Name == location.DestinationName ? location.Name : location.Name + ", " + location.DestinationName,
-                    location.Name,
-                    AgentTextNormalizer.Tokenize(location.Name).ToHashSet(StringComparer.Ordinal));
+                    var aliasTokens = AgentTextNormalizer.Tokenize(alias).ToHashSet(StringComparer.Ordinal);
+                    return AgentTextNormalizer.ContainsPhrase(normalized, normalizedAlias) ||
+                        (aliasTokens.Count > 0 && aliasTokens.All(tokens.Contains));
+                }
+
+                return AgentTextNormalizer.ContainsPhrase(normalized, normalizedAlias) ||
+                    AgentTextNormalizer.TermVariants(alias).Any(tokens.Contains);
+            }))
+            .ToList();
+    }
+
+    private static AgentTaxonomyConceptDto? ResolvePrimaryConcept(
+        IReadOnlyCollection<AgentTaxonomyConceptDto> matchedConcepts,
+        AgentContextOptionsDto? contextOptions,
+        bool followUpIntent,
+        bool acceptanceIntent)
+    {
+        if (acceptanceIntent)
+        {
+            return matchedConcepts.FirstOrDefault(concept => concept.Id == "GENERAL_DISCOVERY") ??
+                matchedConcepts.FirstOrDefault(concept => concept.Id == "FOLLOW_UP_ACCEPTANCE");
         }
 
-        if (normalizedType == "region")
+        foreach (var id in CategoryPriority)
         {
-            var region = await _db.Regions
-                .AsNoTracking()
-                .Where(item => item.Id == areaId &&
-                    item.Destinations.Any(destination => destination.Status == PublicVisibilityQueryExtensions.PublishedStatus))
-                .Select(item => new { item.Id, item.Name })
-                .SingleOrDefaultAsync(cancellationToken);
-            return region is null
-                ? null
-                : new ResolvedAgentLocation(
-                    null,
-                    null,
-                    "region",
-                    region.Id,
-                    region.Name,
-                    region.Name,
-                    AgentTextNormalizer.Tokenize(region.Name).ToHashSet(StringComparer.Ordinal));
+            var concept = matchedConcepts.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (concept is not null)
+            {
+                return concept;
+            }
         }
 
-        if (normalizedType == "territory")
+        if (followUpIntent && !string.IsNullOrWhiteSpace(contextOptions?.ConversationCategory))
         {
-            var territory = await _db.Territories
-                .AsNoTracking()
-                .Where(item => item.Id == areaId &&
-                    item.Regions.Any(region =>
-                        region.Destinations.Any(destination => destination.Status == PublicVisibilityQueryExtensions.PublishedStatus)))
-                .Select(item => new { item.Id, item.Name })
-                .SingleOrDefaultAsync(cancellationToken);
-            return territory is null
-                ? null
-                : new ResolvedAgentLocation(
-                    null,
-                    null,
-                    "territory",
-                    territory.Id,
-                    territory.Name,
-                    territory.Name,
-                    AgentTextNormalizer.Tokenize(territory.Name).ToHashSet(StringComparer.Ordinal));
+            var normalizedCategory = AgentTextNormalizer.Normalize(contextOptions.ConversationCategory);
+            return matchedConcepts.FirstOrDefault(concept =>
+                    string.Equals(AgentTextNormalizer.Normalize(concept.Category), normalizedCategory, StringComparison.Ordinal)) ??
+                null;
         }
 
         return null;
     }
 
-    private async Task<ResolvedAgentLocation?> ResolveLocationFromTextAsync(
-        string normalizedText,
-        IReadOnlySet<string> tokenSet,
-        CancellationToken cancellationToken)
+    private static AgentTaxonomyConceptDto? ResolvePendingConcept(
+        AgentTaxonomyDto taxonomy,
+        AgentContextOptionsDto? contextOptions,
+        AgentAreaResolutionDto? messageLocation,
+        bool hasNewCategoryIntent,
+        bool acceptanceIntent,
+        bool nearbyIntent)
     {
-        if (string.IsNullOrWhiteSpace(normalizedText))
+        if (contextOptions is null ||
+            !string.Equals(contextOptions.PendingReason, "missing_area", StringComparison.OrdinalIgnoreCase) ||
+            messageLocation is null ||
+            hasNewCategoryIntent ||
+            acceptanceIntent ||
+            nearbyIntent ||
+            string.IsNullOrWhiteSpace(contextOptions.PendingCategoryGroup))
         {
             return null;
         }
 
-        var destinations = await _db.Destinations
-            .AsNoTracking()
-            .WherePublicDestinations()
-            .Select(destination => new LocationCandidate
-            {
-                DestinationId = destination.Id,
-                DestinationName = destination.Name,
-                AreaType = "destination",
-                AreaId = destination.Id,
-                DisplayName = destination.Name,
-                LocationText = destination.Name
-            })
-            .ToListAsync(cancellationToken);
-
-        var locations = await _db.Locations
-            .AsNoTracking()
-            .WherePublicLocations()
-            .Select(location => new LocationCandidate
-            {
-                DestinationId = location.DestinationId,
-                DestinationName = location.Destination.Name,
-                AreaType = "location",
-                AreaId = location.Id,
-                DisplayName = location.Name == location.Destination.Name
-                    ? location.Destination.Name
-                    : location.Name + ", " + location.Destination.Name,
-                LocationText = location.Name
-            })
-            .ToListAsync(cancellationToken);
-
-        var regions = await _db.Regions
-            .AsNoTracking()
-            .Where(region => region.Destinations.Any(destination => destination.Status == PublicVisibilityQueryExtensions.PublishedStatus))
-            .Select(region => new LocationCandidate
-            {
-                DestinationId = null,
-                DestinationName = null,
-                AreaType = "region",
-                AreaId = region.Id,
-                DisplayName = region.Name,
-                LocationText = region.Name
-            })
-            .ToListAsync(cancellationToken);
-
-        var territories = await _db.Territories
-            .AsNoTracking()
-            .Where(territory => territory.Regions.Any(region =>
-                region.Destinations.Any(destination => destination.Status == PublicVisibilityQueryExtensions.PublishedStatus)))
-            .Select(territory => new LocationCandidate
-            {
-                DestinationId = null,
-                DestinationName = null,
-                AreaType = "territory",
-                AreaId = territory.Id,
-                DisplayName = territory.Name,
-                LocationText = territory.Name
-            })
-            .ToListAsync(cancellationToken);
-
-        return destinations
-            .Concat(locations)
-            .Concat(regions)
-            .Concat(territories)
-            .Select(candidate => ScoreLocationCandidate(candidate, normalizedText, tokenSet))
-            .Where(candidate => candidate.Score > 0)
-            .OrderByDescending(candidate => candidate.Score)
-            .ThenByDescending(candidate => candidate.MatchLength)
-            .Select(candidate => candidate.Location)
-            .FirstOrDefault();
+        return taxonomy.Concepts.FirstOrDefault(concept =>
+            !IsSpecialConcept(concept.Id) &&
+            string.Equals(concept.Id, contextOptions.PendingCategoryGroup, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static ScoredLocationCandidate ScoreLocationCandidate(
-        LocationCandidate candidate,
-        string normalizedText,
-        IReadOnlySet<string> tokenSet)
+    private static HashSet<string> ResolveEntityTypes(
+        AgentTaxonomyConceptDto? primaryConcept,
+        IReadOnlyCollection<AgentTaxonomyConceptDto> matchedConcepts,
+        bool hasAreaOrUserLocation)
     {
-        var names = new[]
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        if (primaryConcept is not null && !IsSpecialConcept(primaryConcept.Id))
         {
-            candidate.LocationText,
-            candidate.DestinationName,
-            candidate.DisplayName
-        }
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value!)
-            .ToList();
-
-        var bestScore = 0;
-        var bestLength = 0;
-        var bestTokens = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var name in names)
-        {
-            var normalizedName = AgentTextNormalizer.Normalize(name);
-            if (string.IsNullOrWhiteSpace(normalizedName))
-            {
-                continue;
-            }
-
-            var nameTokens = AgentTextNormalizer.Tokenize(name).ToHashSet(StringComparer.Ordinal);
-            var score = 0;
-            if (normalizedText == normalizedName)
-            {
-                score = 400;
-            }
-            else if (AgentTextNormalizer.ContainsPhrase(normalizedText, normalizedName))
-            {
-                score = 320;
-            }
-            else if (NameMatchesTokens(name, tokenSet))
-            {
-                score = 240 + nameTokens.Count * 30;
-            }
-
-            if (score > bestScore)
-            {
-                bestScore = score;
-                bestLength = normalizedName.Length;
-                bestTokens = nameTokens;
-            }
+            result.UnionWith(primaryConcept.TargetEntityTypes
+                .Select(NormalizeEntityType)
+                .Where(value => value is not null)
+                .Select(value => value!));
         }
 
-        return new ScoredLocationCandidate(
-            new ResolvedAgentLocation(
-                candidate.DestinationId,
-                candidate.DestinationName,
-                candidate.AreaType,
-                candidate.AreaId,
-                candidate.DisplayName,
-                candidate.LocationText,
-                bestTokens),
-            bestScore,
-            bestLength);
+        foreach (var concept in matchedConcepts.Where(concept => !IsSpecialConcept(concept.Id)))
+        {
+            result.UnionWith(concept.TargetEntityTypes
+                .Select(NormalizeEntityType)
+                .Where(value => value is not null)
+                .Select(value => value!));
+        }
+
+        if (result.Count == 0 && hasAreaOrUserLocation)
+        {
+            result.Add("all");
+        }
+
+        return result;
     }
 
-    private static bool NameMatchesTokens(string name, IReadOnlySet<string> tokenSet)
+    private static string? NormalizeEntityType(string? value)
     {
-        var normalized = AgentTextNormalizer.Normalize(name);
-        var words = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return words.Length > 0 &&
-            words.All(word => AgentTextNormalizer.TokenVariants(word).Any(tokenSet.Contains));
+        var normalized = value?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "all" => "all",
+            "place" or "places" => "places",
+            "stay" or "stays" => "stays",
+            "event" or "events" => "events",
+            _ => null
+        };
     }
+
+    private static bool HasConcept(IEnumerable<AgentTaxonomyConceptDto> concepts, string id) =>
+        concepts.Any(concept => string.Equals(concept.Id, id, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsSpecialConcept(string id) =>
+        SpecialConceptIds.Contains(id, StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsAcceptanceIntent(
+        IReadOnlyCollection<AgentTaxonomyConceptDto> matchedConcepts,
+        string normalized,
+        IReadOnlySet<string> tokens)
+    {
+        if (!HasConcept(matchedConcepts, "FOLLOW_UP_ACCEPTANCE"))
+        {
+            return false;
+        }
+
+        return normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length <= 3 ||
+            tokens.All(token => StopWords.Contains(token) || token.Length <= 2 || token is "ajde" or "moze" or "vazi" or "ok");
+    }
+
+    private static bool IsFollowUpIntent(IReadOnlySet<string> tokens) =>
+        tokens.Count <= 5 &&
+        (tokens.Contains("a") ||
+         tokens.Contains("jos") ||
+         tokens.Contains("još") ||
+         tokens.Contains("more") ||
+         tokens.Contains("nesto") ||
+         tokens.Contains("nešto") ||
+         tokens.Contains("sta") ||
+         tokens.Contains("šta") ||
+         tokens.Contains("od"));
+
+    private static bool ShouldClearDiscoveryQuery(
+        AgentTaxonomyConceptDto? concept,
+        IReadOnlyCollection<string> queryTerms,
+        AgentAreaResolutionDto? resolvedLocation,
+        bool nearbyIntent)
+    {
+        if (queryTerms.Count == 0 || (resolvedLocation is null && !nearbyIntent) || concept is null)
+        {
+            return false;
+        }
+
+        return concept.Id is "SIGHTS_ATTRACTIONS" or "GENERAL_DISCOVERY" &&
+            queryTerms.All(IsDiscoveryOnlyTerm);
+    }
+
+    private static bool IsDiscoveryOnlyTerm(string term) =>
+        StopWords.Contains(term) ||
+        term is "aktivnost" or "aktivnosti" or "zanimljivo" or "zanimljive" or "zanimljivosti" or
+            "vidi" or "vidim" or "videti" or "vidjeti" or "raditi" or "things" or "see";
 
     private static bool MatchesLocationToken(string token, IReadOnlySet<string> locationTokens) =>
         locationTokens.Contains(token) ||
@@ -585,81 +445,44 @@ public class AgentQueryPlanner : IAgentQueryPlanner
             (variant.Length > 4 && normalizedLocation.StartsWith(variant, StringComparison.Ordinal)));
     }
 
-    private static HashSet<string> DetectEntityTypes(IReadOnlySet<string> tokens)
-    {
-        var result = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (entityType, aliases) in EntityAliases)
-        {
-            if (aliases.SelectMany(AgentTextNormalizer.TermVariants).Any(tokens.Contains))
-            {
-                result.Add(entityType);
-            }
-        }
+    private static bool HasUsableCoordinates(double? latitude, double? longitude) =>
+        latitude.HasValue &&
+        longitude.HasValue &&
+        !double.IsNaN(latitude.Value) &&
+        !double.IsNaN(longitude.Value) &&
+        !double.IsInfinity(latitude.Value) &&
+        !double.IsInfinity(longitude.Value) &&
+        latitude.Value >= -90 &&
+        latitude.Value <= 90 &&
+        longitude.Value >= -180 &&
+        longitude.Value <= 180 &&
+        (latitude.Value != 0d || longitude.Value != 0d);
 
-        return result;
-    }
+    private static string BuildClarificationQuestion(string language, bool missingNearbyLocation, bool ambiguousArea) =>
+        ambiguousArea
+            ? language == "sr"
+                ? "Na koju tačno oblast misliš?"
+                : "Which exact area do you mean?"
+            : missingNearbyLocation
+                ? language == "sr"
+                    ? "Uključi lokaciju ili izaberi destinaciju koju da pretražim."
+                    : "Enable location or choose a destination I should search."
+                : language == "sr"
+                    ? "Koji grad ili region da pretražim?"
+                    : "Which city or region should I search?";
 
-    private static HashSet<string> DetectConcepts(string normalized, IReadOnlySet<string> tokens)
-    {
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (key, concept) in Concepts)
-        {
-            if (concept.QueryAliases.Any(alias =>
-                    AgentTextNormalizer.ContainsPhrase(normalized, AgentTextNormalizer.Normalize(alias)) ||
-                    AgentTextNormalizer.TermVariants(alias).Any(tokens.Contains)))
-            {
-                result.Add(key);
-            }
-        }
-
-        return result;
-    }
-
-    private static string ResolvePrimaryCategory(
-        IReadOnlySet<string> concepts,
-        IReadOnlySet<string> entityTypes)
-    {
-        if (concepts.Contains("restaurant") || concepts.Contains("cafe"))
-        {
-            return "restaurants";
-        }
-
-        if (concepts.Contains("beach"))
-        {
-            return "beaches";
-        }
-
-        if (entityTypes.Contains("stays"))
-        {
-            return "stays";
-        }
-
-        if (entityTypes.Contains("events") || concepts.Contains("festival"))
-        {
-            return "events";
-        }
-
-        if (concepts.Contains("landmark"))
-        {
-            return "attractions";
-        }
-
-        return "general";
-    }
-
-    private static bool IsStrictCategory(string category) =>
-        category is "restaurants" or "beaches" or "stays" or "events" or "attractions";
-
-    private static bool IsFollowUpIntent(IReadOnlySet<string> tokens) =>
-        tokens.Count <= 4 &&
-        (tokens.Contains("a") ||
-         tokens.Contains("jos") ||
-         tokens.Contains("još") ||
-         tokens.Contains("more") ||
-         tokens.Contains("nesto") ||
-         tokens.Contains("nešto") ||
-         tokens.Contains("sta") ||
-         tokens.Contains("šta"));
+    private static string BuildPlanExplanation(
+        string categoryGroup,
+        AgentAreaResolutionDto? resolvedLocation,
+        bool usesCurrentContext,
+        bool usesUserLocation,
+        bool acceptanceIntent,
+        bool pendingCompletion) =>
+        usesUserLocation
+            ? $"nearby:{categoryGroup}"
+            : resolvedLocation is null
+                ? $"category:{categoryGroup};area:missing;fallbackAccepted:{acceptanceIntent}"
+                : $"category:{categoryGroup};area:{resolvedLocation.AreaType};context:{usesCurrentContext};fallbackAccepted:{acceptanceIntent};pendingCompleted:{pendingCompletion}";
 
     private static void AddMatchingTags(
         ISet<string> target,
@@ -694,25 +517,14 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         }
     }
 
-    private static HashSet<string> BuildGenericTokenSet()
+    private static HashSet<string> BuildGenericTokenSet(AgentTaxonomyDto taxonomy)
     {
         var terms = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var alias in EntityAliases.Values.SelectMany(value => value))
+        foreach (var alias in taxonomy.Concepts.SelectMany(concept => concept.Aliases))
         {
             foreach (var term in AgentTextNormalizer.TermVariants(alias))
             {
                 terms.Add(term);
-            }
-        }
-
-        foreach (var concept in Concepts.Values)
-        {
-            foreach (var alias in concept.QueryAliases)
-            {
-                foreach (var term in AgentTextNormalizer.TermVariants(alias))
-                {
-                    terms.Add(term);
-                }
             }
         }
 
@@ -738,39 +550,6 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         return tokens.Overlaps(SerbianTokens) ? "sr" : "en";
     }
 
-    private static string? CleanContextText(string? value)
-    {
-        var cleaned = value?.Trim();
-        if (string.IsNullOrWhiteSpace(cleaned) ||
-            string.Equals(cleaned, "Explore", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(cleaned, "Nearby", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        return cleaned.Length <= 100 ? cleaned : cleaned[..100];
-    }
-
-    private static string? NormalizeAreaType(string? value)
-    {
-        var normalized = value?.Trim().ToLowerInvariant();
-        return normalized switch
-        {
-            "destination" or "destinations" => "destination",
-            "location" or "locations" => "location",
-            "region" or "regions" => "region",
-            "territory" or "territories" or "country" or "countries" => "territory",
-            _ => null
-        };
-    }
-
-    private sealed record ConceptDefinition(
-        string[] QueryAliases,
-        string[] TagAliases,
-        string[] PlaceTypeAliases,
-        string[] EventTypeAliases,
-        string[] CategoryAliases);
-
     private sealed record VocabularyItem(string Name, string Key);
 
     private sealed record CatalogVocabulary(
@@ -778,28 +557,4 @@ public class AgentQueryPlanner : IAgentQueryPlanner
         List<VocabularyItem> PlaceTypes,
         List<VocabularyItem> StayTypes,
         List<VocabularyItem> EventTypes);
-
-    private sealed class LocationCandidate
-    {
-        public int? DestinationId { get; init; }
-        public string? DestinationName { get; init; }
-        public string AreaType { get; init; } = "destination";
-        public int AreaId { get; init; }
-        public string DisplayName { get; init; } = string.Empty;
-        public string LocationText { get; init; } = string.Empty;
-    }
-
-    private sealed record ResolvedAgentLocation(
-        int? DestinationId,
-        string? DestinationName,
-        string AreaType,
-        int AreaId,
-        string DisplayName,
-        string LocationText,
-        HashSet<string> NormalizedTokens);
-
-    private sealed record ScoredLocationCandidate(
-        ResolvedAgentLocation Location,
-        int Score,
-        int MatchLength);
 }

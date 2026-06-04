@@ -21,11 +21,24 @@ public class GeoTrackToolService : IGeoTrackToolService
     private static readonly GeometryFactory ViewportGeometryFactory = new(new PrecisionModel(), 4326);
     private readonly AppDbContext _db;
     private readonly IAgentQueryPlanner _planner;
+    private readonly IAgentDatabaseCapabilityService _capabilities;
+    private readonly IAgentTaxonomyProvider? _taxonomyProvider;
 
     public GeoTrackToolService(AppDbContext db, IAgentQueryPlanner planner)
+        : this(db, planner, new DisabledAgentDatabaseCapabilityService(), taxonomyProvider: null)
+    {
+    }
+
+    public GeoTrackToolService(
+        AppDbContext db,
+        IAgentQueryPlanner planner,
+        IAgentDatabaseCapabilityService capabilities,
+        IAgentTaxonomyProvider? taxonomyProvider)
     {
         _db = db;
         _planner = planner;
+        _capabilities = capabilities;
+        _taxonomyProvider = taxonomyProvider;
     }
 
     public async Task<IReadOnlyList<GeoTrackToolItemDto>> SearchPlacesAsync(
@@ -48,14 +61,26 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         if (criteria.PlaceTypeTerms.Count > 0 || criteria.TagTerms.Count > 0)
         {
-            query = query.Where(place =>
-                criteria.PlaceTypeTerms.Contains(place.PlaceType.Name.ToLower()) ||
-                place.PlaceTags.Any(tag =>
-                    criteria.TagTerms.Contains(tag.Tag.Slug.ToLower()) ||
-                    criteria.TagTerms.Contains(tag.Tag.Name.ToLower())));
+            if (request.StrictCategory &&
+                string.Equals(NormalizeCategoryId(request.Category), "beaches", StringComparison.Ordinal) &&
+                criteria.PlaceTypeTerms.Count > 0)
+            {
+                query = query.Where(place => criteria.PlaceTypeTerms.Contains(place.PlaceType.Name.ToLower()));
+            }
+            else
+            {
+                query = query.Where(place =>
+                    criteria.PlaceTypeTerms.Contains(place.PlaceType.Name.ToLower()) ||
+                    place.PlaceTags.Any(tag =>
+                        criteria.TagTerms.Contains(tag.Tag.Slug.ToLower()) ||
+                        criteria.TagTerms.Contains(tag.Tag.Name.ToLower())));
+            }
         }
 
-        query = ApplyPlaceTextFilter(query, criteria.Query);
+        query = ApplyPlaceTextFilter(
+            query,
+            criteria.Query,
+            await _capabilities.GetCapabilitiesAsync(cancellationToken));
 
         var items = await query
             .OrderByDescending(place => place.PlaceReviews.Select(review => (double?)review.Rating).Average() ?? 0)
@@ -164,7 +189,10 @@ public class GeoTrackToolService : IGeoTrackToolService
                     criteria.TagTerms.Contains(tag.Tag.Name.ToLower())));
         }
 
-        query = ApplyPlaceTextFilter(query, criteria.Query);
+        query = ApplyPlaceTextFilter(
+            query,
+            criteria.Query,
+            await _capabilities.GetCapabilitiesAsync(cancellationToken));
 
         var items = await query
             .OrderByDescending(place => place.PlaceReviews.Select(review => (double?)review.Rating).Average() ?? 0)
@@ -276,7 +304,10 @@ public class GeoTrackToolService : IGeoTrackToolService
                     criteria.TagTerms.Contains(tag.Tag.Name.ToLower())));
         }
 
-        query = ApplyEventTextFilter(query, criteria.Query);
+        query = ApplyEventTextFilter(
+            query,
+            criteria.Query,
+            await _capabilities.GetCapabilitiesAsync(cancellationToken));
 
         var items = await query
             .OrderBy(evt => evt.StartDate)
@@ -769,7 +800,9 @@ public class GeoTrackToolService : IGeoTrackToolService
         GeoTrackCategoryOptionsRequest request,
         CancellationToken cancellationToken = default)
     {
-        var groups = BuildCategoryGroups();
+        var groups = _taxonomyProvider is null
+            ? BuildCategoryGroups()
+            : await BuildCategoryGroupsAsync(cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.CategoryGroup))
         {
             groups = groups
@@ -777,10 +810,216 @@ public class GeoTrackToolService : IGeoTrackToolService
                 .ToList();
         }
 
-        await Task.CompletedTask;
         return new GeoTrackCategoryOptionsResponseDto
         {
             CategoryGroups = groups
+        };
+    }
+
+    public async Task<GeoTrackNearbySearchResponseDto> FindNearbyPublicContentAsync(
+        GeoTrackNearbySearchRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!HasUsableCoordinates(request.Latitude, request.Longitude))
+        {
+            throw new AgentException("invalid_tool_arguments", "Coordinates are invalid.", 400);
+        }
+
+        var limit = NormalizeCatalogLimit(request.Limit);
+        var radiusKm = NormalizeRadiusKm(request.RadiusKm);
+        var radiusMeters = radiusKm * 1000d;
+        var userPoint = SpatialPointFactory.Create(request.Latitude, request.Longitude);
+        var category = BuildCategorySpec(request.Category);
+        var entityTypes = ResolveRequestedEntityTypes(request.EntityTypes, category);
+        var results = new List<GeoTrackToolItemDto>();
+
+        if (entityTypes.Contains("places"))
+        {
+            var query = _db.Places
+                .AsNoTracking()
+                .WherePublicPlaces()
+                .Where(place => place.Stay == null)
+                .Where(place => EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null);
+
+            query = ApplyPlaceCategoryFilter(query, category, includeStays: false);
+
+            results.AddRange(await query
+                .Select(place => new
+                {
+                    Item = new GeoTrackToolItemDto
+                    {
+                        Id = place.Id,
+                        EntityType = "place",
+                        Title = place.Name,
+                        Description = Trim(place.Description, 280),
+                        Location = place.Location.Name,
+                        Destination = place.Location.Destination.Name,
+                        Category = place.PlaceType.Name,
+                        DetailRoute = "/places/" + place.Id,
+                        ImageUrl = place.Images
+                            .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
+                            .ThenBy(image => image.SortOrder)
+                            .ThenBy(image => image.CreatedAt)
+                            .ThenBy(image => image.Id)
+                            .Select(image => image.Url)
+                            .FirstOrDefault(),
+                        Rating = place.PlaceReviews.Select(review => (double?)review.Rating).Average(),
+                        ReviewCount = place.PlaceReviews.Count(),
+                        Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
+                        Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
+                        Tags = place.PlaceTags
+                            .OrderBy(tag => tag.Tag.Name)
+                            .Select(tag => tag.Tag.Name)
+                            .Take(8)
+                            .ToList()
+                    },
+                    DistanceMeters = EF.Property<Point>(place, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
+                })
+                .Where(row => row.DistanceMeters <= radiusMeters)
+                .OrderBy(row => row.DistanceMeters)
+                .Take(limit)
+                .ToListAsync(cancellationToken)
+                .ContinueWith(task => task.Result.Select(row =>
+                {
+                    row.Item.DistanceKm = Math.Round(row.DistanceMeters / 1000d, 2);
+                    return row.Item;
+                }), cancellationToken));
+        }
+
+        if (entityTypes.Contains("stays"))
+        {
+            var query = _db.Places
+                .AsNoTracking()
+                .WherePublicPlaces()
+                .Where(place => place.Stay != null)
+                .Where(place => EF.Property<Point?>(place, SpatialPointFactory.CoordinatesPropertyName) != null);
+
+            query = ApplyPlaceCategoryFilter(query, category, includeStays: true);
+
+            results.AddRange(await query
+                .Select(place => new
+                {
+                    Item = new GeoTrackToolItemDto
+                    {
+                        Id = place.Id,
+                        EntityType = "stay",
+                        Title = place.Name,
+                        Description = Trim(place.Description, 280),
+                        Location = place.Location.Name,
+                        Destination = place.Location.Destination.Name,
+                        Category = place.Stay != null ? place.Stay.StayType.Name : "Stay",
+                        DetailRoute = "/stays/" + place.Id,
+                        ImageUrl = place.Images
+                            .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
+                            .ThenBy(image => image.SortOrder)
+                            .ThenBy(image => image.CreatedAt)
+                            .ThenBy(image => image.Id)
+                            .Select(image => image.Url)
+                            .FirstOrDefault(),
+                        Rating = place.PlaceReviews.Select(review => (double?)review.Rating).Average(),
+                        ReviewCount = place.PlaceReviews.Count(),
+                        Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
+                        Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
+                        Tags = place.PlaceTags
+                            .OrderBy(tag => tag.Tag.Name)
+                            .Select(tag => tag.Tag.Name)
+                            .Take(8)
+                            .ToList()
+                    },
+                    DistanceMeters = EF.Property<Point>(place, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
+                })
+                .Where(row => row.DistanceMeters <= radiusMeters)
+                .OrderBy(row => row.DistanceMeters)
+                .Take(limit)
+                .ToListAsync(cancellationToken)
+                .ContinueWith(task => task.Result.Select(row =>
+                {
+                    row.Item.DistanceKm = Math.Round(row.DistanceMeters / 1000d, 2);
+                    return row.Item;
+                }), cancellationToken));
+        }
+
+        if (entityTypes.Contains("events"))
+        {
+            var query = _db.Events
+                .AsNoTracking()
+                .WherePublicEvents()
+                .Where(evt => evt.EndDate >= DateTime.UtcNow)
+                .Where(evt => EF.Property<Point?>(evt, SpatialPointFactory.CoordinatesPropertyName) != null);
+
+            query = ApplyEventCategoryFilter(query, category);
+
+            results.AddRange(await query
+                .Select(evt => new
+                {
+                    Item = new GeoTrackToolItemDto
+                    {
+                        Id = evt.Id,
+                        EntityType = "event",
+                        Title = evt.Name,
+                        Description = Trim(evt.Description, 280),
+                        Location = evt.Place != null
+                            ? evt.Place.Name
+                            : evt.Location != null ? evt.Location.Name : evt.Destination.Name,
+                        Destination = evt.Destination.Name,
+                        Category = evt.EventType.Name,
+                        DetailRoute = "/events/" + evt.Id,
+                        ImageUrl = evt.Images
+                            .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
+                            .ThenBy(image => image.SortOrder)
+                            .ThenBy(image => image.CreatedAt)
+                            .ThenBy(image => image.Id)
+                            .Select(image => image.Url)
+                            .FirstOrDefault(),
+                        Latitude = evt.Place != null && HasUsableCoordinates(evt.Place.Latitude, evt.Place.Longitude)
+                            ? evt.Place.Latitude
+                            : evt.Location != null && HasUsableCoordinates(evt.Location.Latitude, evt.Location.Longitude)
+                                ? evt.Location.Latitude
+                                : HasUsableCoordinates(evt.Destination.Latitude, evt.Destination.Longitude) ? evt.Destination.Latitude : null,
+                        Longitude = evt.Place != null && HasUsableCoordinates(evt.Place.Latitude, evt.Place.Longitude)
+                            ? evt.Place.Longitude
+                            : evt.Location != null && HasUsableCoordinates(evt.Location.Latitude, evt.Location.Longitude)
+                                ? evt.Location.Longitude
+                                : HasUsableCoordinates(evt.Destination.Latitude, evt.Destination.Longitude) ? evt.Destination.Longitude : null,
+                        StartsAt = evt.StartDate,
+                        EndsAt = evt.EndDate,
+                        Tags = evt.EventTags
+                            .OrderBy(tag => tag.Tag.Name)
+                            .Select(tag => tag.Tag.Name)
+                            .Take(8)
+                            .ToList()
+                    },
+                    DistanceMeters = EF.Property<Point>(evt, SpatialPointFactory.CoordinatesPropertyName).Distance(userPoint)
+                })
+                .Where(row => row.DistanceMeters <= radiusMeters)
+                .OrderBy(row => row.DistanceMeters)
+                .Take(limit)
+                .ToListAsync(cancellationToken)
+                .ContinueWith(task => task.Result.Select(row =>
+                {
+                    row.Item.DistanceKm = Math.Round(row.DistanceMeters / 1000d, 2);
+                    return row.Item;
+                }), cancellationToken));
+        }
+
+        var ranked = NormalizeImageUrls(results)
+            .GroupBy(item => $"{item.EntityType}:{item.Id}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(item => CatalogEntityRank(item.EntityType, category.Id))
+            .ThenByDescending(item => CategoryMatchRank(item, category))
+            .ThenBy(item => item.DistanceKm ?? double.MaxValue)
+            .ThenByDescending(item => item.Rating ?? 0)
+            .ThenByDescending(item => item.ReviewCount ?? 0)
+            .ThenBy(item => item.Title)
+            .Take(limit)
+            .ToList();
+
+        return new GeoTrackNearbySearchResponseDto
+        {
+            Results = ranked,
+            Count = ranked.Count,
+            RadiusKm = radiusKm,
+            Category = category.Id
         };
     }
 
@@ -804,6 +1043,37 @@ public class GeoTrackToolService : IGeoTrackToolService
 
         if (plan.ClarificationNeeded || !plan.SearchCatalog)
         {
+            return context;
+        }
+
+        if (plan.UsesUserLocation && HasUsableCoordinates(contextOptions?.Latitude ?? 0d, contextOptions?.Longitude ?? 0d))
+        {
+            var nearby = await FindNearbyPublicContentAsync(
+                new GeoTrackNearbySearchRequest
+                {
+                    Latitude = contextOptions!.Latitude!.Value,
+                    Longitude = contextOptions.Longitude!.Value,
+                    RadiusKm = 25,
+                    Category = plan.Category,
+                    EntityTypes = plan.EntityTypes.ToList(),
+                    Limit = limit
+                },
+                cancellationToken);
+
+            context.Searches.Add(new GeoTrackToolSearchTraceDto
+            {
+                Tool = "geotrack_find_nearby_public_content",
+                SearchType = "nearby",
+                Filters = BuildFilterList(plan),
+                ResultCount = nearby.Count
+            });
+            context.ToolsUsed = ["geotrack_find_nearby_public_content"];
+            context.Places = nearby.Results.Where(item => item.EntityType == "place").ToList();
+            context.Stays = nearby.Results.Where(item => item.EntityType == "stay").ToList();
+            context.Events = nearby.Results.Where(item => item.EntityType == "event").ToList();
+            context.SearchAttempted = true;
+            context.ResultCount = nearby.Count;
+            context.NoResults = nearby.Count == 0;
             return context;
         }
 
@@ -1167,7 +1437,8 @@ public class GeoTrackToolService : IGeoTrackToolService
 
     private static IQueryable<Geotrack.Domain.Entities.Core.Place> ApplyPlaceTextFilter(
         IQueryable<Geotrack.Domain.Entities.Core.Place> query,
-        string? rawQuery)
+        string? rawQuery,
+        AgentDatabaseCapabilitiesDto capabilities)
     {
         if (string.IsNullOrWhiteSpace(rawQuery))
         {
@@ -1175,7 +1446,45 @@ public class GeoTrackToolService : IGeoTrackToolService
         }
 
         var pattern = LikePattern(rawQuery);
+        var normalized = AgentTextNormalizer.Normalize(rawQuery);
+        var normalizedPattern = LikePattern(normalized);
+        if (capabilities.SupportsPgTrgm && !string.IsNullOrWhiteSpace(normalized))
+        {
+            return capabilities.SupportsUnaccent
+                ? query.Where(place =>
+                    EF.Functions.TrigramsSimilarity(place.SearchText, normalized) >= 0.12d ||
+                    EF.Functions.TrigramsWordSimilarity(place.SearchText, normalized) >= 0.45d ||
+                    EF.Functions.ILike(place.SearchText, normalizedPattern) ||
+                    EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(place.Name), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                    (place.Subtitle != null && EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(place.Subtitle), AgentPostgresDbFunctions.Unaccent(pattern))) ||
+                    EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(place.Description), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                    (place.Address != null && EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(place.Address), AgentPostgresDbFunctions.Unaccent(pattern))) ||
+                    EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(place.Location.Name), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                    EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(place.Location.Destination.Name), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                    EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(place.PlaceType.Name), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                    place.PlaceTags.Any(tag =>
+                        EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(tag.Tag.Name), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                        EF.Functions.ILike(tag.Tag.Slug, normalizedPattern)) ||
+                    (place.Stay != null && EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(place.Stay.StayType.Name), AgentPostgresDbFunctions.Unaccent(pattern))))
+                : query.Where(place =>
+                    EF.Functions.TrigramsSimilarity(place.SearchText, normalized) >= 0.12d ||
+                    EF.Functions.TrigramsWordSimilarity(place.SearchText, normalized) >= 0.45d ||
+                    EF.Functions.ILike(place.SearchText, normalizedPattern) ||
+                    EF.Functions.ILike(place.Name, pattern) ||
+                    (place.Subtitle != null && EF.Functions.ILike(place.Subtitle, pattern)) ||
+                    EF.Functions.ILike(place.Description, pattern) ||
+                    (place.Address != null && EF.Functions.ILike(place.Address, pattern)) ||
+                    EF.Functions.ILike(place.Location.Name, pattern) ||
+                    EF.Functions.ILike(place.Location.Destination.Name, pattern) ||
+                    EF.Functions.ILike(place.PlaceType.Name, pattern) ||
+                    place.PlaceTags.Any(tag =>
+                        EF.Functions.ILike(tag.Tag.Name, pattern) ||
+                        EF.Functions.ILike(tag.Tag.Slug, normalizedPattern)) ||
+                    (place.Stay != null && EF.Functions.ILike(place.Stay.StayType.Name, pattern)));
+        }
+
         return query.Where(place =>
+            EF.Functions.ILike(place.SearchText, normalizedPattern) ||
             EF.Functions.ILike(place.Name, pattern) ||
             (place.Subtitle != null && EF.Functions.ILike(place.Subtitle, pattern)) ||
             EF.Functions.ILike(place.Description, pattern) ||
@@ -1189,9 +1498,56 @@ public class GeoTrackToolService : IGeoTrackToolService
             (place.Stay != null && EF.Functions.ILike(place.Stay.StayType.Name, pattern)));
     }
 
+    private static IQueryable<Geotrack.Domain.Entities.Core.Place> ApplyPlaceCategoryFilter(
+        IQueryable<Geotrack.Domain.Entities.Core.Place> query,
+        CategorySpec category,
+        bool includeStays)
+    {
+        if (!category.Strict)
+        {
+            return query;
+        }
+
+        var categories = category.Categories;
+        var tagTerms = BuildFilterTerms(category.Tags.Concat(categories));
+        var placeTypeTerms = BuildFilterTerms(category.PlaceTypes.Concat(categories));
+        var stayTypeTerms = BuildFilterTerms(category.StayTypes.Concat(categories));
+
+        if (includeStays)
+        {
+            if (stayTypeTerms.Count == 0 && tagTerms.Count == 0)
+            {
+                return query.Where(_ => false);
+            }
+
+            return query.Where(place =>
+                (place.Stay != null && stayTypeTerms.Contains(place.Stay.StayType.Name.ToLower())) ||
+                place.PlaceTags.Any(tag =>
+                    tagTerms.Contains(tag.Tag.Slug.ToLower()) ||
+                    tagTerms.Contains(tag.Tag.Name.ToLower())));
+        }
+
+        if (placeTypeTerms.Count == 0 && tagTerms.Count == 0)
+        {
+            return query.Where(_ => false);
+        }
+
+        if (category.Id == "beaches" && placeTypeTerms.Count > 0)
+        {
+            return query.Where(place => placeTypeTerms.Contains(place.PlaceType.Name.ToLower()));
+        }
+
+        return query.Where(place =>
+            placeTypeTerms.Contains(place.PlaceType.Name.ToLower()) ||
+            place.PlaceTags.Any(tag =>
+                tagTerms.Contains(tag.Tag.Slug.ToLower()) ||
+                tagTerms.Contains(tag.Tag.Name.ToLower())));
+    }
+
     private static IQueryable<Geotrack.Domain.Entities.Core.Event> ApplyEventTextFilter(
         IQueryable<Geotrack.Domain.Entities.Core.Event> query,
-        string? rawQuery)
+        string? rawQuery,
+        AgentDatabaseCapabilitiesDto capabilities)
     {
         if (string.IsNullOrWhiteSpace(rawQuery))
         {
@@ -1199,7 +1555,43 @@ public class GeoTrackToolService : IGeoTrackToolService
         }
 
         var pattern = LikePattern(rawQuery);
+        var normalized = AgentTextNormalizer.Normalize(rawQuery);
+        var normalizedPattern = LikePattern(normalized);
+        if (capabilities.SupportsPgTrgm && !string.IsNullOrWhiteSpace(normalized))
+        {
+            return capabilities.SupportsUnaccent
+                ? query.Where(evt =>
+                    EF.Functions.TrigramsSimilarity(evt.SearchText, normalized) >= 0.12d ||
+                    EF.Functions.TrigramsWordSimilarity(evt.SearchText, normalized) >= 0.45d ||
+                    EF.Functions.ILike(evt.SearchText, normalizedPattern) ||
+                    EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(evt.Name), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                    EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(evt.Description), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                    EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(evt.Destination.Name), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                    (evt.Location != null && EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(evt.Location.Name), AgentPostgresDbFunctions.Unaccent(pattern))) ||
+                    (evt.Place != null && EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(evt.Place.Name), AgentPostgresDbFunctions.Unaccent(pattern))) ||
+                    EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(evt.EventType.Name), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                    (evt.HostedBy != null && EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(evt.HostedBy), AgentPostgresDbFunctions.Unaccent(pattern))) ||
+                    evt.EventTags.Any(tag =>
+                        EF.Functions.ILike(AgentPostgresDbFunctions.Unaccent(tag.Tag.Name), AgentPostgresDbFunctions.Unaccent(pattern)) ||
+                        EF.Functions.ILike(tag.Tag.Slug, normalizedPattern)))
+                : query.Where(evt =>
+                    EF.Functions.TrigramsSimilarity(evt.SearchText, normalized) >= 0.12d ||
+                    EF.Functions.TrigramsWordSimilarity(evt.SearchText, normalized) >= 0.45d ||
+                    EF.Functions.ILike(evt.SearchText, normalizedPattern) ||
+                    EF.Functions.ILike(evt.Name, pattern) ||
+                    EF.Functions.ILike(evt.Description, pattern) ||
+                    EF.Functions.ILike(evt.Destination.Name, pattern) ||
+                    (evt.Location != null && EF.Functions.ILike(evt.Location.Name, pattern)) ||
+                    (evt.Place != null && EF.Functions.ILike(evt.Place.Name, pattern)) ||
+                    EF.Functions.ILike(evt.EventType.Name, pattern) ||
+                    (evt.HostedBy != null && EF.Functions.ILike(evt.HostedBy, pattern)) ||
+                    evt.EventTags.Any(tag =>
+                        EF.Functions.ILike(tag.Tag.Name, pattern) ||
+                        EF.Functions.ILike(tag.Tag.Slug, normalizedPattern)));
+        }
+
         return query.Where(evt =>
+            EF.Functions.ILike(evt.SearchText, normalizedPattern) ||
             EF.Functions.ILike(evt.Name, pattern) ||
             EF.Functions.ILike(evt.Description, pattern) ||
             EF.Functions.ILike(evt.Destination.Name, pattern) ||
@@ -1210,6 +1602,31 @@ public class GeoTrackToolService : IGeoTrackToolService
             evt.EventTags.Any(tag =>
                 EF.Functions.ILike(tag.Tag.Name, pattern) ||
                 EF.Functions.ILike(tag.Tag.Slug, pattern)));
+    }
+
+    private static IQueryable<Geotrack.Domain.Entities.Core.Event> ApplyEventCategoryFilter(
+        IQueryable<Geotrack.Domain.Entities.Core.Event> query,
+        CategorySpec category)
+    {
+        if (!category.Strict || category.Id == "events")
+        {
+            return query;
+        }
+
+        var categories = category.Categories;
+        var tagTerms = BuildFilterTerms(category.Tags.Concat(categories));
+        var eventCategoryTerms = BuildFilterTerms(category.EventCategories.Concat(categories));
+
+        if (eventCategoryTerms.Count == 0 && tagTerms.Count == 0)
+        {
+            return query.Where(_ => false);
+        }
+
+        return query.Where(evt =>
+            eventCategoryTerms.Contains(evt.EventType.Name.ToLower()) ||
+            evt.EventTags.Any(tag =>
+                tagTerms.Contains(tag.Tag.Slug.ToLower()) ||
+                tagTerms.Contains(tag.Tag.Name.ToLower())));
     }
 
     private static GeoTrackToolSearchRequest BuildRequestFromPlan(
@@ -1305,7 +1722,7 @@ public class GeoTrackToolService : IGeoTrackToolService
                 Strict: true,
                 EntityTypes: ["places"],
                 Categories: ["restaurant", "cafe"],
-                Tags: ["food-drink", "fine-dining", "nightlife", "beach-bars", "food-market"],
+                Tags: ["food-drink", "fine-dining", "nightlife", "food-market", "wine-bar"],
                 PlaceTypes: ["Restaurant", "Cafe", "Bar"],
                 StayTypes: [],
                 EventCategories: []),
@@ -1362,11 +1779,12 @@ public class GeoTrackToolService : IGeoTrackToolService
         var normalized = AgentTextNormalizer.Normalize(category);
         return normalized switch
         {
-            "restaurant" or "restaurants" or "restoran" or "restorani" or "food" or "hrana" or "dining" or "bar" or "bars" or "cafe" or "cafes" or "kafic" => "restaurants",
+            "food drink" or "restaurant" or "restaurants" or "restoran" or "restorani" or "restorana" or "food" or "hrana" or "dining" or "bar" or "bars" or "cafe" or "cafes" or "kafic" or "kafici" => "restaurants",
             "beach" or "beaches" or "plaza" or "plaze" or "more" or "kupanje" => "beaches",
             "stay" or "stays" or "hotel" or "hotels" or "hoteli" or "smestaj" or "smjestaj" or "accommodation" or "lodging" or "apartman" => "stays",
             "event" or "events" or "dogadaj" or "dogadjaj" or "manifestacija" or "koncert" or "festival" => "events",
-            "attraction" or "attractions" or "landmark" or "landmarks" or "znamenitost" or "znamenitosti" or "muzej" or "museum" or "nature" or "hiking" => "attractions",
+            "sights attractions" or "attraction" or "attractions" or "landmark" or "landmarks" or "znamenitost" or "znamenitosti" or "muzej" or "museum" or "nature" or "hiking" => "attractions",
+            "general discovery" or "activity" or "activities" or "aktivnost" or "aktivnosti" => "general",
             _ => "general"
         };
     }
@@ -1648,6 +2066,41 @@ public class GeoTrackToolService : IGeoTrackToolService
         return suggestions.Distinct(StringComparer.OrdinalIgnoreCase).Take(6).ToList();
     }
 
+    private async Task<List<GeoTrackCategoryGroupDto>> BuildCategoryGroupsAsync(CancellationToken cancellationToken)
+    {
+        if (_taxonomyProvider is null)
+        {
+            return BuildCategoryGroups();
+        }
+
+        var taxonomy = await _taxonomyProvider.GetTaxonomyAsync(cancellationToken);
+        var groups = taxonomy.Concepts
+            .Where(concept => concept.Id is not "NEARBY" and not "FOLLOW_UP_ACCEPTANCE")
+            .Where(concept => concept.Category is not "nearby" and not "follow_up_acceptance")
+            .Select(concept => new GeoTrackCategoryGroupDto
+            {
+                Id = concept.Category,
+                Label = concept.DisplayLabel,
+                EntityTypes = concept.TargetEntityTypes
+                    .Select(NormalizeEntityTypeForSearch)
+                    .Where(value => value is not null and not "all")
+                    .Select(value => value!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => value)
+                    .ToList(),
+                PlaceTypes = concept.PlaceTypes.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value).ToList(),
+                StayTypes = concept.StayTypes.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value).ToList(),
+                EventCategories = concept.EventCategories.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value).ToList(),
+                Tags = concept.Tags.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value).ToList()
+            })
+            .Where(group => !string.IsNullOrWhiteSpace(group.Id))
+            .GroupBy(group => group.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+
+        return groups.Count == 0 ? BuildCategoryGroups() : groups;
+    }
+
     private static List<GeoTrackCategoryGroupDto> BuildCategoryGroups() =>
     [
         new()
@@ -1656,7 +2109,7 @@ public class GeoTrackToolService : IGeoTrackToolService
             Label = "Restaurants, cafes and bars",
             EntityTypes = ["places"],
             PlaceTypes = ["Restaurant", "Cafe", "Bar"],
-            Tags = ["food-drink", "fine-dining", "nightlife", "beach-bars", "food-market"]
+            Tags = ["food-drink", "fine-dining", "nightlife", "food-market", "wine-bar"]
         },
         new()
         {
@@ -1735,30 +2188,65 @@ public class GeoTrackToolService : IGeoTrackToolService
         !string.IsNullOrWhiteSpace(request.Location);
 
     private static List<string> BuildFilterList(GeoTrackAgentQueryPlanDto plan) =>
-        (IsFilterCategory(plan.Category) ? new[] { plan.Category } : [])
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value!)
-            .Concat(plan.Tags)
-            .Concat(plan.Categories)
-            .Concat(plan.PlaceTypes)
-            .Concat(plan.StayTypes)
-            .Concat(plan.EventCategories)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(item => item)
-            .ToList();
+        BuildDisplayFilterList(
+            plan.Category,
+            plan.PlaceTypes
+                .Concat(plan.StayTypes)
+                .Concat(plan.EventCategories)
+                .Concat(plan.Categories));
 
     private static List<string> BuildFilterList(GeoTrackToolSearchRequest request) =>
-        (IsFilterCategory(request.Category) ? new[] { request.Category } : [])
+        BuildDisplayFilterList(
+            request.Category,
+            request.PlaceTypes
+                .Concat(request.StayTypes)
+                .Concat(request.EventCategories)
+                .Concat(request.Categories));
+
+    private static List<string> BuildDisplayFilterList(
+        string? category,
+        IEnumerable<string> labels)
+    {
+        var categoryLabel = DisplayCategoryLabel(category);
+        if (!string.IsNullOrWhiteSpace(categoryLabel))
+        {
+            return [categoryLabel];
+        }
+
+        return labels
+            .Select(DisplayFilterLabel)
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value!)
-            .Concat(request.Tags)
-            .Concat(request.Categories)
-            .Concat(request.PlaceTypes)
-            .Concat(request.StayTypes)
-            .Concat(request.EventCategories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(item => item)
+            .Take(4)
             .ToList();
+    }
+
+    private static string? DisplayCategoryLabel(string? category)
+    {
+        var normalized = NormalizeCategoryId(category);
+        return normalized switch
+        {
+            "restaurants" => "restaurants, cafes and bars",
+            "beaches" => "beaches",
+            "stays" => "stays",
+            "events" => "events",
+            "attractions" => "sights and attractions",
+            _ => null
+        };
+    }
+
+    private static string? DisplayFilterLabel(string? value)
+    {
+        var cleaned = DisplayTextSafety.CleanOptional(value);
+        if (string.IsNullOrWhiteSpace(cleaned) || cleaned.Contains('-', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return cleaned;
+    }
 
     private static List<string> BuildFilterTerms(IEnumerable<string> values) =>
         values
@@ -1805,6 +2293,17 @@ public class GeoTrackToolService : IGeoTrackToolService
 
     private static int NormalizeCatalogLimit(int? limit) =>
         Math.Clamp(limit ?? DefaultLimit, 1, MaxCatalogLimit);
+
+    private static double NormalizeRadiusKm(double? radiusKm)
+    {
+        var radius = radiusKm ?? 25d;
+        if (double.IsNaN(radius) || double.IsInfinity(radius) || radius <= 0d || radius > 100d)
+        {
+            throw new AgentException("invalid_tool_arguments", "radiusKm must be between 0 and 100.", 400);
+        }
+
+        return radius;
+    }
 
     private static string LikePattern(string value) =>
         $"%{value.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
