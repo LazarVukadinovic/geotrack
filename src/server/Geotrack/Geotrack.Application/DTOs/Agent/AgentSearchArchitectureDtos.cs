@@ -15,6 +15,7 @@ public class AgentTaxonomyDto
 {
     public string Version { get; set; } = string.Empty;
     public List<AgentTaxonomyConceptDto> Concepts { get; set; } = new();
+    public List<AgentKnowledgeDefinitionDto> KnowledgeDefinitions { get; set; } = new();
 }
 
 public class AgentTaxonomyConceptDto
@@ -42,6 +43,14 @@ public class AgentTaxonomyRankingWeightsDto
     public double TagBoost { get; set; } = 1;
     public double FreshnessBoost { get; set; } = 1;
     public double DistanceBoost { get; set; } = 1;
+}
+
+public class AgentKnowledgeDefinitionDto
+{
+    public string Id { get; set; } = string.Empty;
+    public List<string> Aliases { get; set; } = new();
+    public string AnswerSr { get; set; } = string.Empty;
+    public string AnswerEn { get; set; } = string.Empty;
 }
 
 public class AgentAreaResolutionDto

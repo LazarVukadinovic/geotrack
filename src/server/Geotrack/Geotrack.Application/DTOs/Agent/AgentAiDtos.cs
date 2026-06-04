@@ -41,6 +41,9 @@ public class AgentContextOptionsDto
     public string? ConversationAreaName { get; set; }
     public int? ConversationDestinationId { get; set; }
     public string? ConversationDestinationName { get; set; }
+    public List<int> ConversationDestinationIds { get; set; } = new();
+    public List<string> ConversationDestinationNames { get; set; } = new();
+    public List<string> LastResultEntityIds { get; set; } = new();
     public string? ConversationCategory { get; set; }
     public string? ConversationOfferedFallbackCategory { get; set; }
     public string? PendingCategoryGroup { get; set; }
@@ -81,6 +84,8 @@ public class AgentResultCardDto
     public string? StayType { get; set; }
     public string? PlaceType { get; set; }
     public string DetailRoute { get; set; } = string.Empty;
+    public bool IsFallback { get; set; }
+    public string? MatchLabel { get; set; }
 }
 
 public class AgentUsageMetadataDto

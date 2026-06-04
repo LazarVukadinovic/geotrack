@@ -1,10 +1,19 @@
 namespace Geotrack.Application.DTOs.GeoTrackTools;
 
+public static class GeoTrackMatchQualification
+{
+    public const string ExactCategoryMatch = "ExactCategoryMatch";
+    public const string RelatedCategoryMatch = "RelatedCategoryMatch";
+    public const string FallbackMatch = "FallbackMatch";
+    public const string Rejected = "Rejected";
+}
+
 public class GeoTrackToolSearchRequest
 {
     public string? Query { get; set; }
     public string? Location { get; set; }
     public int? DestinationId { get; set; }
+    public List<int> DestinationIds { get; set; } = new();
     public string? AreaType { get; set; }
     public int? AreaId { get; set; }
     public string? Category { get; set; }
@@ -36,6 +45,7 @@ public class GeoTrackToolItemDto
     public string? Description { get; set; }
     public string? Location { get; set; }
     public string? Destination { get; set; }
+    public int? DestinationId { get; set; }
     public string? Category { get; set; }
     public string? DetailRoute { get; set; }
     public string? ImageUrl { get; set; }
@@ -47,6 +57,10 @@ public class GeoTrackToolItemDto
     public DateTime? StartsAt { get; set; }
     public DateTime? EndsAt { get; set; }
     public List<string> Tags { get; set; } = new();
+    public string MatchQualification { get; set; } = GeoTrackMatchQualification.ExactCategoryMatch;
+    public double CategoryScore { get; set; }
+    public string? MatchReason { get; set; }
+    public bool IsFallback { get; set; }
 }
 
 public class GeoTrackNearbySearchRequest
@@ -56,7 +70,13 @@ public class GeoTrackNearbySearchRequest
     public double? RadiusKm { get; set; }
     public string? Category { get; set; }
     public List<string> EntityTypes { get; set; } = new();
+    public List<string> Tags { get; set; } = new();
+    public List<string> Categories { get; set; } = new();
+    public List<string> PlaceTypes { get; set; } = new();
+    public List<string> StayTypes { get; set; } = new();
+    public List<string> EventCategories { get; set; } = new();
     public int? Limit { get; set; }
+    public bool StrictCategory { get; set; }
 }
 
 public class GeoTrackNearbySearchResponseDto
@@ -231,6 +251,8 @@ public class GeoTrackAgentQueryPlanDto
     public string? LocationUsed { get; set; }
     public int? DestinationId { get; set; }
     public string? DestinationName { get; set; }
+    public List<int> ContextDestinationIds { get; set; } = new();
+    public List<string> ContextDestinationNames { get; set; } = new();
     public string? AreaType { get; set; }
     public int? AreaId { get; set; }
     public string? AreaName { get; set; }
@@ -252,6 +274,8 @@ public class GeoTrackAgentQueryPlanDto
     public List<string> EventCategories { get; set; } = new();
     public List<string> QueryTerms { get; set; } = new();
     public string? QueryText { get; set; }
+    public string? KnowledgeTopic { get; set; }
+    public string? KnowledgeAnswer { get; set; }
     public string RankingIntent { get; set; } = "all";
     public bool UsesCurrentContext { get; set; }
     public bool SearchCatalog { get; set; }
@@ -266,6 +290,7 @@ public class GeoTrackToolSearchTraceDto
     public string? Query { get; set; }
     public string? Location { get; set; }
     public int? DestinationId { get; set; }
+    public double? RadiusKm { get; set; }
     public List<string> Filters { get; set; } = new();
     public int ResultCount { get; set; }
 }
