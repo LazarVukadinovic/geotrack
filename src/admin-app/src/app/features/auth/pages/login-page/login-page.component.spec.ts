@@ -70,8 +70,8 @@ describe('LoginComponent', () => {
 
     const response = {
       accessToken: 'territory-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 42,
@@ -100,8 +100,8 @@ describe('LoginComponent', () => {
 
     const response = {
       accessToken: 'admin-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 46,
@@ -154,8 +154,8 @@ describe('LoginComponent', () => {
   function adminLoginResponse() {
     return {
       accessToken: 'access-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 7,

@@ -87,8 +87,8 @@ describe('AuthService', () => {
 
     const response = {
       accessToken: 'territory-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 42,
@@ -119,8 +119,8 @@ describe('AuthService', () => {
 
     const response = {
       accessToken: 'associate-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 43,
@@ -151,8 +151,8 @@ describe('AuthService', () => {
 
     const response = {
       accessToken: 'admin-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 46,
@@ -182,8 +182,8 @@ describe('AuthService', () => {
 
     const response = {
       accessToken: 'moderator-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 48,
@@ -213,8 +213,8 @@ describe('AuthService', () => {
 
     const response = {
       accessToken: 'admin-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 47,
@@ -241,8 +241,8 @@ describe('AuthService', () => {
 
     const response = {
       accessToken: 'multi-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 44,
@@ -272,8 +272,8 @@ describe('AuthService', () => {
 
     const response = {
       accessToken: 'nikola-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 52,
@@ -306,8 +306,8 @@ describe('AuthService', () => {
 
     const response = {
       accessToken: 'multi-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 44,
@@ -344,8 +344,8 @@ describe('AuthService', () => {
     expect(request.request.method).toBe('POST');
     request.flush({
       accessToken: 'associate-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 45,
@@ -372,6 +372,20 @@ describe('AuthService', () => {
 
     expect(sessionStorage.getItem('geotrack_admin_session')).toBe('session');
     expect(service.isLoggedIn()).toBe(true);
+  });
+
+  it('coalesces simultaneous admin session restore calls into one refresh request', () => {
+    const restoredEmails: Array<string | undefined> = [];
+
+    service.restoreSession({ forceRefresh: true }).subscribe(user => restoredEmails.push(user?.email));
+    service.restoreSession({ forceRefresh: true }).subscribe(user => restoredEmails.push(user?.email));
+
+    const request = http.expectOne('/api/admin/auth/refresh');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.withCredentials).toBe(true);
+    request.flush(adminLoginResponse());
+
+    expect(restoredEmails).toEqual(['regional@example.com', 'regional@example.com']);
   });
 
   it('marks admin access denied without treating the user as authenticated', () => {
@@ -425,8 +439,8 @@ describe('AuthService', () => {
   function adminLoginResponse() {
     return {
       accessToken: 'access-token',
-      expiresAt: new Date(Date.now() + 900_000).toISOString(),
-      expiresIn: 900,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      expiresIn: 3600,
       sessionPersistent: false,
       user: {
         id: 7,
