@@ -16,6 +16,7 @@ describe('AgentPageComponent', () => {
   let fixture: ComponentFixture<AgentPageComponent>;
   let messages: WritableSignal<ChatMessage[]>;
   let isLoadingAgentInfo: WritableSignal<boolean>;
+  let isLoggedIn: WritableSignal<boolean>;
   let agentService: {
     sendMessage: ReturnType<typeof vi.fn>;
   };
@@ -40,6 +41,7 @@ describe('AgentPageComponent', () => {
       },
     ]);
     isLoadingAgentInfo = signal(false);
+    isLoggedIn = signal(true);
     agentService = {
       sendMessage: vi.fn(),
     };
@@ -51,6 +53,8 @@ describe('AgentPageComponent', () => {
           { path: 'places/:id', component: RouteTargetComponent },
           { path: 'stays/:id', component: RouteTargetComponent },
           { path: 'events/:id', component: RouteTargetComponent },
+          { path: 'login', component: RouteTargetComponent },
+          { path: 'register', component: RouteTargetComponent },
         ]),
         { provide: AnalyticsService, useValue: { track: vi.fn() } },
         { provide: SaveToCollectionService, useValue: { open: vi.fn() } },
@@ -68,6 +72,7 @@ describe('AgentPageComponent', () => {
             }),
             statusMessage: signal<string | null>(null),
             isLoadingAgentInfo,
+            isLoggedIn,
             sendMessage: agentService.sendMessage,
           },
         },
@@ -153,6 +158,64 @@ describe('AgentPageComponent', () => {
     (nativeElement.querySelector('.agent__send-btn') as HTMLButtonElement).click();
 
     expect(agentService.sendMessage).toHaveBeenCalledWith('Find restaurants near Kotor');
+  });
+
+  it('opens the sign-in CTA and does not send when unauthenticated', () => {
+    isLoggedIn.set(false);
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    const input = nativeElement.querySelector('#agent-message-input') as HTMLInputElement;
+    expect(input.readOnly).toBe(true);
+    expect(input.placeholder).toBe('Sign in to use Ask Agent');
+
+    input.dispatchEvent(new FocusEvent('focus'));
+    fixture.detectChanges();
+
+    const dialog = nativeElement.querySelector('#agent-auth-dialog') as HTMLElement | null;
+    expect(dialog).toBeTruthy();
+    expect(dialog?.textContent).toContain('Sign in to use Ask Agent');
+    expect(dialog?.textContent).toContain('Ask Agent uses the GeoTrack catalog and your context to provide personalized recommendations. Sign in to continue.');
+    expect(dialog?.textContent).toContain('Create account');
+
+    input.value = 'sta je skijanje';
+    input.dispatchEvent(new Event('input'));
+    (nativeElement.querySelector('.agent__send-btn') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(agentService.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('routes to login from the unauthenticated Ask Agent CTA', async () => {
+    isLoggedIn.set(false);
+    fixture.detectChanges();
+
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const nativeElement = fixture.nativeElement as HTMLElement;
+
+    (nativeElement.querySelector('.agent__send-btn') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    findButton('Sign in').click();
+    await fixture.whenStable();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/login']);
+  });
+
+  it('routes to register from the unauthenticated Ask Agent CTA', async () => {
+    isLoggedIn.set(false);
+    fixture.detectChanges();
+
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const nativeElement = fixture.nativeElement as HTMLElement;
+
+    (nativeElement.querySelector('.agent__send-btn') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    findButton('Create account').click();
+    await fixture.whenStable();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/register']);
   });
 
   it('renders assistant text without an empty card area', () => {

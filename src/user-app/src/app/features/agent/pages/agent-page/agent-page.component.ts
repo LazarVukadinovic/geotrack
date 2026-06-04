@@ -1,4 +1,5 @@
 import { Component, computed, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
+import { Router } from '@angular/router';
 import { AgentService } from '../../services/agent.service';
 import { AgentMessageBubbleComponent } from '../../components/agent-message-bubble/agent-message-bubble.component';
 import { AgentSuggestionPillsComponent } from '../../components/agent-suggestion-pills/agent-suggestion-pills.component';
@@ -18,8 +19,14 @@ import type { SuggestionPill } from '../../models/agent.model';
 })
 export class AgentPageComponent {
   protected readonly agentService = inject(AgentService);
+  private readonly router = inject(Router);
   protected readonly inputValue = signal('');
   protected readonly settingsOpen = signal(false);
+  protected readonly authPromptOpen = signal(false);
+  protected readonly isAuthenticated = computed(() => this.agentService.isLoggedIn());
+  protected readonly inputPlaceholder = computed(() => this.isAuthenticated()
+    ? 'Search the GeoTrack catalog...'
+    : 'Sign in to use Ask Agent');
   protected readonly headerStatus = computed(() => {
     return this.agentService.isLoadingAgentInfo()
       ? 'Connecting to GeoTrack AI'
@@ -32,6 +39,8 @@ export class AgentPageComponent {
     viewChild<ElementRef<HTMLButtonElement>>('settingsButton');
   private readonly settingsDialog =
     viewChild<ElementRef<HTMLElement>>('settingsDialog');
+  private readonly authDialog =
+    viewChild<ElementRef<HTMLElement>>('authDialog');
 
   constructor() {
     // Scroll to bottom whenever messages or typing state changes.
@@ -54,6 +63,11 @@ export class AgentPageComponent {
   }
 
   protected onSend(): void {
+    if (!this.isAuthenticated()) {
+      this.openAuthPrompt();
+      return;
+    }
+
     const text = this.inputValue().trim();
     if (!text) return;
     this.inputValue.set('');
@@ -71,8 +85,35 @@ export class AgentPageComponent {
     requestAnimationFrame(() => this.settingsButton()?.nativeElement.focus());
   }
 
+  protected openAuthPrompt(): void {
+    if (this.authPromptOpen()) return;
+    this.authPromptOpen.set(true);
+    requestAnimationFrame(() => this.authDialog()?.nativeElement.focus());
+  }
+
+  protected closeAuthPrompt(): void {
+    if (!this.authPromptOpen()) return;
+    this.authPromptOpen.set(false);
+  }
+
+  protected goToLogin(): void {
+    this.closeAuthPrompt();
+    void this.router.navigate(['/login']);
+  }
+
+  protected goToRegister(): void {
+    this.closeAuthPrompt();
+    void this.router.navigate(['/register']);
+  }
+
   @HostListener('document:keydown.escape', ['$event'])
   protected onDocumentEscape(event: Event): void {
+    if (this.authPromptOpen()) {
+      event.preventDefault();
+      this.closeAuthPrompt();
+      return;
+    }
+
     if (!this.settingsOpen()) return;
     event.preventDefault();
     this.closeSettings();
@@ -80,10 +121,12 @@ export class AgentPageComponent {
 
   @HostListener('document:keydown.tab', ['$event'])
   protected onDocumentTab(event: Event): void {
-    if (!this.settingsOpen()) return;
+    if (!this.settingsOpen() && !this.authPromptOpen()) return;
 
     const keyboardEvent = event as KeyboardEvent;
-    const dialog = this.settingsDialog()?.nativeElement;
+    const dialog = this.authPromptOpen()
+      ? this.authDialog()?.nativeElement
+      : this.settingsDialog()?.nativeElement;
     if (!dialog) return;
 
     const focusable = this.getFocusableElements(dialog);
@@ -110,10 +153,22 @@ export class AgentPageComponent {
   }
 
   protected onPillSelected(pill: SuggestionPill): void {
+    if (!this.isAuthenticated()) {
+      this.openAuthPrompt();
+      return;
+    }
+
     this.agentService.sendMessage(pill.prompt);
   }
 
   protected onInputKeydown(event: KeyboardEvent): void {
+    if (!this.isAuthenticated()) {
+      event.preventDefault();
+      this.inputValue.set('');
+      this.openAuthPrompt();
+      return;
+    }
+
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       this.onSend();
@@ -121,7 +176,20 @@ export class AgentPageComponent {
   }
 
   protected onInputChange(event: Event): void {
+    if (!this.isAuthenticated()) {
+      (event.target as HTMLInputElement).value = '';
+      this.inputValue.set('');
+      this.openAuthPrompt();
+      return;
+    }
+
     this.inputValue.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onComposerClick(): void {
+    if (!this.isAuthenticated()) {
+      this.openAuthPrompt();
+    }
   }
 
   private scrollToBottom(): void {

@@ -102,7 +102,6 @@ export class AgentService {
     if (!trimmed) return;
 
     if (!this.auth.isLoggedIn()) {
-      this.appendAssistantMessage('Please sign in before using Ask Agent.');
       return;
     }
 

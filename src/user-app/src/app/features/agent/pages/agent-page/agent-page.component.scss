@@ -49,7 +49,8 @@
 }
 
 .agent__settings-button,
-.agent__settings-close {
+.agent__settings-close,
+.agent__auth-close {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -76,6 +77,90 @@
   inset: 0;
   z-index: 9000;
   background: rgba(0, 0, 0, 0.5);
+}
+
+.agent__auth-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.48);
+}
+
+.agent__auth-dialog {
+  position: fixed;
+  right: var(--page-gutter);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 86px);
+  left: var(--page-gutter);
+  z-index: 9001;
+  box-sizing: border-box;
+  padding: var(--space-5);
+  border-radius: 18px;
+  outline: none;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(26, 43, 76, 0.24);
+}
+
+.agent__auth-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.agent__auth-title {
+  margin: 0;
+  color: var(--color-primary-navy);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.agent__auth-close {
+  width: 36px;
+  height: 36px;
+  background: #edeef2;
+  color: var(--color-primary-navy);
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.agent__auth-text {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.agent__auth-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.agent__auth-primary,
+.agent__auth-secondary {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.agent__auth-primary {
+  background: var(--color-primary-navy);
+  color: #ffffff;
+}
+
+.agent__auth-secondary {
+  background: #f1f5f9;
+  color: var(--color-primary-navy);
 }
 
 .agent__settings-sheet {
@@ -152,6 +237,9 @@
 
 .agent__settings-button:focus-visible,
 .agent__settings-close:focus-visible,
+.agent__auth-close:focus-visible,
+.agent__auth-primary:focus-visible,
+.agent__auth-secondary:focus-visible,
 .agent__send-btn:focus-visible {
   outline: 2px solid #e8570a;
   outline-offset: 2px;
@@ -325,6 +413,11 @@
   box-shadow: var(--shadow-subtle);
 }
 
+.agent__input-row--locked {
+  cursor: pointer;
+  background: #f8fafc;
+}
+
 .agent__input {
   flex: 1;
   min-width: 0;
@@ -338,6 +431,10 @@
 
   &::placeholder {
     color: var(--color-muted);
+  }
+
+  &[readonly] {
+    cursor: pointer;
   }
 }
 
@@ -412,6 +509,10 @@
     left: var(--desktop-sidebar-width);
   }
 
+  .agent__auth-backdrop {
+    left: var(--desktop-sidebar-width);
+  }
+
   .agent__settings-sheet {
     top: 50%;
     right: var(--space-6);
@@ -424,6 +525,20 @@
     transform: translateY(-50%);
     border-radius: 24px;
     box-shadow: 0 24px 60px rgba(26, 43, 76, 0.24);
+  }
+
+  .agent__auth-dialog {
+    top: 50%;
+    right: var(--space-6);
+    bottom: auto;
+    left: calc(var(--desktop-sidebar-width) + var(--space-6));
+    width: min(440px, calc(100vw - var(--desktop-sidebar-width) - (var(--space-6) * 2)));
+    margin-inline: auto;
+    transform: translateY(-50%);
+  }
+
+  .agent__auth-actions {
+    grid-template-columns: 1fr 1fr;
   }
 
   .agent__settings-handle {

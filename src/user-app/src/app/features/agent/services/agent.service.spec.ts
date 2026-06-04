@@ -123,6 +123,20 @@ describe('AgentService', () => {
     req.flush(chatResponse());
   });
 
+  it('does not send chat requests or render backend auth errors when logged out', () => {
+    flushAgentInfo();
+    isLoggedIn.set(false);
+
+    service.sendMessage('sta je skijanje');
+
+    httpMock.expectNone('/api/agent/chat');
+    expect(analytics.track).not.toHaveBeenCalledWith(
+      'agent_prompt_sent',
+      expect.anything(),
+    );
+    expect(service.messages().map(message => message.text)).not.toContain('Please sign in before using Ask Agent.');
+  });
+
   it('includes available location coordinates in chat context', () => {
     flushAgentInfo();
 
