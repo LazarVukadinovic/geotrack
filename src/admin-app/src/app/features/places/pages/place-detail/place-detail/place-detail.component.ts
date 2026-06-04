@@ -307,6 +307,16 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
+  readonly galleryLimit = 6;
+
+  galleryPreview(images: { url: string; name: string }[]): { url: string; name: string }[] {
+    return images.slice(0, this.galleryLimit);
+  }
+
+  galleryOverflow(images: { url: string; name: string }[]): number {
+    return Math.max(0, images.length - this.galleryLimit);
+  }
+
   openLightbox(images: { url: string; name: string }[], index: number): void {
     this.lightboxService.open(images, index);
   }
