@@ -105,6 +105,29 @@ public class GeminiKeyPoolAndAskAgentServiceTests
     }
 
     [Fact]
+    public async Task Persistent_provider_config_error_puts_key_on_cooldown_and_skips_next_request()
+    {
+        using var handler = new SequenceHandler(
+            GeminiError(HttpStatusCode.BadRequest, "FAILED_PRECONDITION", "Gemini API free tier is not available for this request."),
+            GeminiError(HttpStatusCode.BadRequest, "FAILED_PRECONDITION", "Gemini API free tier is not available for this request."));
+        var service = CreateService(handler, new GeminiOptions
+        {
+            BaseUrl = "https://gemini.test",
+            Model = "gemini-3.1-flash-lite",
+            FallbackModels = ["gemini-3.5-flash"],
+            ApiKeys = ["first-key-1111"],
+            KeyCooldownSeconds = 300
+        });
+
+        var first = await Assert.ThrowsAsync<AgentException>(() => service.GenerateAsync(Request()));
+        var second = await Assert.ThrowsAsync<AgentException>(() => service.GenerateAsync(Request()));
+
+        Assert.Equal("agent_unavailable", first.Code);
+        Assert.Equal("agent_unavailable", second.Code);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
     public void Rate_limited_key_is_put_on_cooldown_and_skipped()
     {
         var pool = CreatePool(new GeminiOptions

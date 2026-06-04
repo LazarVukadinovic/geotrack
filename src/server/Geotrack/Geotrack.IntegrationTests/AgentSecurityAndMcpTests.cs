@@ -105,7 +105,7 @@ public class AgentSecurityAndMcpTests
     }
 
     [Fact]
-    public async Task Chat_without_gemini_keys_returns_safe_unavailable_response()
+    public async Task Chat_without_gemini_keys_returns_safe_local_response()
     {
         await using var app = await GeotrackApiFactory.CreateAsync(
             configurationOverrides: NoGeminiKeysOverrides());
@@ -118,11 +118,13 @@ public class AgentSecurityAndMcpTests
                 Message = "Find restaurants"
             });
 
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        var error = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
-        Assert.NotNull(error);
-        Assert.Equal("agent_unavailable", error!["code"]);
-        Assert.Equal("Ask Agent is currently unavailable. Please try again later.", error["message"]);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<AgentChatResponseDto>();
+        Assert.NotNull(body);
+        Assert.False(string.IsNullOrWhiteSpace(body!.Text));
+        Assert.DoesNotContain("api key", body.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("gemini", body.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("provider", body.Text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
