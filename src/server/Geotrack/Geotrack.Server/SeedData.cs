@@ -870,6 +870,47 @@ public static class SeedData
 
         await db.SaveChangesAsync();
 
+        async Task UpdatePlaceHoursAsync(Place place, string? openingHours, string? operatingHoursJson)
+        {
+            var changed = false;
+            if (place.OpeningHours != openingHours) { place.OpeningHours = openingHours; changed = true; }
+            var shouldBeEnabled = operatingHoursJson != null;
+            if (place.OperatingHoursJson != operatingHoursJson) { place.OperatingHoursJson = operatingHoursJson; changed = true; }
+            if (place.OperatingHoursEnabled != shouldBeEnabled) { place.OperatingHoursEnabled = shouldBeEnabled; changed = true; }
+            if (changed) await db.SaveChangesAsync();
+        }
+
+        static string BuildHoursJson(params (string days, string hours)[] schedule)
+        {
+            var entries = schedule.Select(s =>
+            {
+                var h = s.hours.Trim();
+                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
+                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
+                var norm = h.Replace("–", " - ");
+                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
+                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
+                if (parts.Length >= 2)
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
+                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
+            });
+            return "[" + string.Join(",", entries) + "]";
+        }
+
+        static string BuildDailyHoursJson(string hours)
+            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
+
+        await UpdatePlaceHoursAsync(banjeBeach, "06:00 - 22:00", BuildDailyHoursJson("06:00 - 22:00"));
+        await UpdatePlaceHoursAsync(nautika, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
+        await UpdatePlaceHoursAsync(konobaPupo, "11:00 - 23:00", BuildDailyHoursJson("11:00 - 23:00"));
+        await UpdatePlaceHoursAsync(cogito, "07:30 - 21:00", BuildDailyHoursJson("07:30 - 21:00"));
+        await UpdatePlaceHoursAsync(cityWalls, "08:00 - 18:30", BuildDailyHoursJson("08:00 - 18:30"));
+        await UpdatePlaceHoursAsync(lokrumIsland, "09:00 - 18:00", BuildDailyHoursJson("09:00 - 18:00"));
+        await UpdatePlaceHoursAsync(gruzFishingPier, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(lapadBay, "Open 24h", BuildDailyHoursJson("Open 24h"));
+
         db.UserTags.AddRange(
             new UserTag { UserId = marko.Id, TagId = T("fishing").Id },
             new UserTag { UserId = marko.Id, TagId = T("seafood").Id },
@@ -1701,6 +1742,57 @@ public static class SeedData
         {
             destination.UpdatedAt = now;
             await db.SaveChangesAsync();
+        }
+
+        await EnsureInitialDubrovnikPlaceHoursAsync(db);
+    }
+
+    private static async Task EnsureInitialDubrovnikPlaceHoursAsync(AppDbContext db)
+    {
+        static string BuildHoursJson(params (string day, string hours)[] schedule)
+        {
+            var entries = schedule.Select(s =>
+            {
+                var h = s.hours.Trim();
+                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
+                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
+                var norm = h.Replace("–", " - ");
+                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
+                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
+                if (parts.Length >= 2)
+                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
+                return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
+            });
+            return "[" + string.Join(",", entries) + "]";
+        }
+
+        static string BuildDailyHoursJson(string hours)
+            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
+
+        var placeHours = new[]
+        {
+            ("Banje Beach",                "06:00 - 22:00",  BuildDailyHoursJson("06:00 - 22:00")),
+            ("Nautika Restaurant",         "12:00 - 23:00",  BuildDailyHoursJson("12:00 - 23:00")),
+            ("Konoba Pupo",                "11:00 - 23:00",  BuildDailyHoursJson("11:00 - 23:00")),
+            ("Cogito Coffee",              "07:30 - 21:00",  BuildDailyHoursJson("07:30 - 21:00")),
+            ("Dubrovnik City Walls",       "08:00 - 18:30",  BuildDailyHoursJson("08:00 - 18:30")),
+            ("Lokrum Island",              "09:00 - 18:00",  BuildDailyHoursJson("09:00 - 18:00")),
+            ("Gruz Fishing Pier",          "Open 24h",       BuildDailyHoursJson("Open 24h")),
+            ("Lapad Bay Promenade",        "Open 24h",       BuildDailyHoursJson("Open 24h")),
+        };
+
+        foreach (var (name, openingHours, operatingHoursJson) in placeHours)
+        {
+            var place = await db.Places.FirstOrDefaultAsync(p => p.Name == name);
+            if (place is null) continue;
+
+            var changed = false;
+            if (place.OpeningHours != openingHours) { place.OpeningHours = openingHours; changed = true; }
+            if (place.OperatingHoursJson != operatingHoursJson) { place.OperatingHoursJson = operatingHoursJson; changed = true; }
+            if (!place.OperatingHoursEnabled) { place.OperatingHoursEnabled = true; changed = true; }
+            if (changed) await db.SaveChangesAsync();
         }
     }
 
@@ -4474,12 +4566,25 @@ public static class SeedData
 
         static string BuildHoursJson(params (string days, string hours)[] schedule)
         {
-            var entries = schedule.Select(s => $"{{\"day\":\"{s.days}\",\"hours\":\"{s.hours}\"}}");
+            var entries = schedule.Select(s =>
+            {
+                var h = s.hours.Trim();
+                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
+                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
+                var norm = h.Replace("–", " - ");
+                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
+                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
+                if (parts.Length >= 2)
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
+                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
+            });
             return "[" + string.Join(",", entries) + "]";
         }
 
         static string BuildDailyHoursJson(string hours)
-            => BuildHoursJson(("Mon", hours), ("Tue", hours), ("Wed", hours), ("Thu", hours), ("Fri", hours), ("Sat", hours), ("Sun", hours));
+            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
 
         async Task AddEntityImagesIfMissingAsync(EntityImageTargetType targetType, string title, int? destinationId = null, int? placeId = null, int? eventId = null, params string[] urls)
         {
@@ -4640,6 +4745,11 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(hotelMoskva, "boutique-stay", "old-town-nearby", "premium", "history");
         await ForceSetPlaceImageAsync(kalemegdan, SeedWebp("kalemegdan"));
         await ForceSetPlaceImageAsync(adaLake, SeedWebp("ada-ciganlija"));
+        await UpdatePlaceHoursAsync(kalemegdan, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(skadarlija, "11:00 - 00:00", BuildDailyHoursJson("11:00 - 00:00"));
+        await UpdatePlaceHoursAsync(kafeterija, "08:00 - 22:00", BuildDailyHoursJson("08:00 - 22:00"));
+        await UpdatePlaceHoursAsync(adaLake, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(hotelMoskva, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var noviSad = await EnsureDestinationAsync("Novi Sad", "Danube-side city known for Petrovaradin Fortress, relaxed streets, cafes and festival culture.", cityType, noviSadRegion, 45.2671, 19.8335);
         await AddDestinationTagsIfMissingAsync(noviSad,
@@ -4676,6 +4786,9 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(fortress, "history", "culture", "fortress", "panoramic-view", "walking-route");
         await AddPlaceTagsIfMissingAsync(strand, "waterfront", "swimming", "family-friendly");
         await AddPlaceTagsIfMissingAsync(fishZelenish, "local-favorite", "casual", "traditional", "vegetarian-friendly", "local-food", "food-market");
+        await UpdatePlaceHoursAsync(fortress, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(strand, "08:00 - 23:00", BuildDailyHoursJson("08:00 - 23:00"));
+        await UpdatePlaceHoursAsync(fishZelenish, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
 
         var zlatibor = await EnsureDestinationAsync("Zlatibor", "Mountain destination with viewpoints, lakes, pine landscapes, family stays and outdoor activities.", mountainType, zlatiborRegion, 43.7297, 19.7003);
         await AddDestinationTagsIfMissingAsync(zlatibor,
@@ -4710,6 +4823,8 @@ public static class SeedData
         await RemovePlaceIfExistsAsync("Zlatibor Mountain Lodge");
         await AddPlaceTagsIfMissingAsync(goldGondola, "cable-car", "panoramic-view", "family-friendly", "nature");
         await AddPlaceTagsIfMissingAsync(tornikViewpoint, "hiking", "panoramic-view", "nature", "walking-route");
+        await UpdatePlaceHoursAsync(goldGondola, "09:00 - 17:00", BuildDailyHoursJson("09:00 - 17:00"));
+        await UpdatePlaceHoursAsync(tornikViewpoint, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var kopaonik = await EnsureDestinationAsync("Kopaonik", "Mountain and ski destination with trails, viewpoints, hotels and winter activities.", mountainType, kopaonikRegion, 43.2856, 20.8095);
         await AddDestinationTagsIfMissingAsync(kopaonik,
@@ -4743,6 +4858,8 @@ public static class SeedData
         await AddStayAmenitiesIfMissingAsync(grandStay, wifi, breakfast, parking, spa, airConditioning);
         await AddPlaceTagsIfMissingAsync(skiCenterPlace, "hiking", "panoramic-view", "family-friendly");
         await AddPlaceTagsIfMissingAsync(hotelGrand, "luxury-stay", "premium", "wellness");
+        await UpdatePlaceHoursAsync(skiCenterPlace, "08:00 - 17:00", BuildDailyHoursJson("08:00 - 17:00"));
+        await UpdatePlaceHoursAsync(hotelGrand, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var tara = await EnsureDestinationAsync("Tara", "National park destination with viewpoints, lakes, forest roads and quiet nature stays.", nationalParkType, taraRegion, 43.9450, 19.4340);
         await AddDestinationTagsIfMissingAsync(tara,
@@ -4775,6 +4892,8 @@ public static class SeedData
         var zaovineLake = await EnsurePlaceAsync("Zaovine Lake", "Mountain lake and quiet nature area", "Zaovine, Tara", ptNature, zaovine, "A quiet lake area for scenic drives, short walks and nature-focused stays.", 43.8768, 19.3956, "Open 24h", 4.8, 330);
         await AddPlaceTagsIfMissingAsync(banjskaStena, "panoramic-view", "hiking", "nature", "walking-route");
         await AddPlaceTagsIfMissingAsync(zaovineLake, "waterfront", "quiet-area", "nature", "family-friendly");
+        await UpdatePlaceHoursAsync(banjskaStena, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(zaovineLake, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var kragujevac = await EnsureDestinationAsync(SerbiaRegionalManagerAnchorDestinationName, "Serbia's former royal capital and cultural heart of Šumadija, known for its first Serbian theatre, Šumarice Memorial Park and Bubanj lake.", cityType, kragujevacRegion, 44.010590360886276, 20.915278268657637);
         await AddDestinationTagsIfMissingAsync(kragujevac,
@@ -4842,15 +4961,19 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(knjazTeatar, "history", "culture", "local-favorite", "architecture");
         await AddPlaceTagsIfMissingAsync(hotelSumariceKg, "family-stay", "budget");
         await AddPlaceTagsIfMissingAsync(hotelZelengora, "family-stay", "budget");
+        await UpdatePlaceHoursAsync(spomenPark, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(jezeroBubanj, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(hotelSumariceKg, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(hotelZelengora, "Open 24h", BuildDailyHoursJson("Open 24h"));
         await UpdatePlaceHoursAsync(muzej21, "09:00–18:00",
-            BuildHoursJson(("Mon", "09:00–18:00"), ("Tue", "08:00–18:00"), ("Wed", "08:00–18:00"), ("Thu", "08:00–18:00"), ("Fri", "09:00–18:00"), ("Sat", "09:00–16:00"), ("Sun", "09:00–16:00")));
+            BuildHoursJson(("Monday", "09:00–18:00"), ("Tuesday", "08:00–18:00"), ("Wednesday", "08:00–18:00"), ("Thursday", "08:00–18:00"), ("Friday", "09:00–18:00"), ("Saturday", "09:00–16:00"), ("Sunday", "09:00–16:00")));
         await UpdatePlaceHoursAsync(ambasadorRestoran, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
         await UpdatePlaceHoursAsync(kafanaBalkan, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
         await UpdatePlaceHoursAsync(toroRestoran, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
         await UpdatePlaceHoursAsync(prvaGimnazija, "Mon–Fri 07:00–20:00",
-            BuildHoursJson(("Mon", "07:00–20:00"), ("Tue", "07:00–20:00"), ("Wed", "07:00–20:00"), ("Thu", "07:00–20:00"), ("Fri", "07:00–20:00"), ("Sat", "Closed"), ("Sun", "Closed")));
+            BuildHoursJson(("Monday", "07:00–20:00"), ("Tuesday", "07:00–20:00"), ("Wednesday", "07:00–20:00"), ("Thursday", "07:00–20:00"), ("Friday", "07:00–20:00"), ("Saturday", "Closed"), ("Sunday", "Closed")));
         await UpdatePlaceHoursAsync(knjazTeatar, "Mon–Sat 10:00–14:00, 18:00–20:00",
-            BuildHoursJson(("Mon", "10:00–14:00, 18:00–20:00"), ("Tue", "10:00–14:00, 18:00–20:00"), ("Wed", "10:00–14:00, 18:00–20:00"), ("Thu", "10:00–14:00, 18:00–20:00"), ("Fri", "10:00–14:00, 18:00–20:00"), ("Sat", "10:00–14:00, 18:00–20:00"), ("Sun", "Closed")));
+            BuildHoursJson(("Monday", "10:00–14:00, 18:00–20:00"), ("Tuesday", "10:00–14:00, 18:00–20:00"), ("Wednesday", "10:00–14:00, 18:00–20:00"), ("Thursday", "10:00–14:00, 18:00–20:00"), ("Friday", "10:00–14:00, 18:00–20:00"), ("Saturday", "10:00–14:00, 18:00–20:00"), ("Sunday", "Closed")));
         await ForceSetDestinationImageAsync(kragujevac, SeedWebp("kg"));
         await ForceSetDestinationImageAsync(beograd, SeedWebp("bg"));
         await ForceSetDestinationImageAsync(noviSad, SeedWebp("ns"));
@@ -4990,6 +5113,7 @@ public static class SeedData
         await AddStayAmenitiesIfMissingAsync(hotelPresidentStay, wifi, airConditioning, parking);
         await AddBookingPartnerIfMissingAsync(hotelPresidentDeL, kgBpBooking, "https://www.booking.com/hotel/rs/president-de-luxe-doo.html");
         await AddPlaceTagsIfMissingAsync(hotelPresidentDeL, "family-stay", "budget");
+        await UpdatePlaceHoursAsync(hotelPresidentDeL, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var hotelIndustrial = await EnsurePlaceAsync(
             "Industrial 1853",
@@ -5007,6 +5131,7 @@ public static class SeedData
         await AddStayAmenitiesIfMissingAsync(hotelIndustrialStay, wifi, airConditioning, breakfast);
         await AddBookingPartnerIfMissingAsync(hotelIndustrial, kgBpBooking, "https://www.booking.com/hotel/rs/industrial-1853.html");
         await AddPlaceTagsIfMissingAsync(hotelIndustrial, "family-stay", "premium");
+        await UpdatePlaceHoursAsync(hotelIndustrial, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var hotelKragujevac = await EnsurePlaceAsync(
             "Hotel Kragujevac",
@@ -5024,6 +5149,7 @@ public static class SeedData
         await AddStayAmenitiesIfMissingAsync(hotelKragujevacStay, wifi, parking, airConditioning);
         await AddBookingPartnerIfMissingAsync(hotelKragujevac, kgBpBooking, "https://www.booking.com/hotel/rs/kragujevac.html");
         await AddPlaceTagsIfMissingAsync(hotelKragujevac, "family-stay", "budget");
+        await UpdatePlaceHoursAsync(hotelKragujevac, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         // New restaurants / cafes / pastry shops
         var peron = await EnsurePlaceAsync(
@@ -5041,7 +5167,7 @@ public static class SeedData
         await EnsureRestaurantAsync(peron);
         await AddPlaceTagsIfMissingAsync(peron, "local-food", "casual", "local-favorite", "dessert");
         await UpdatePlaceHoursAsync(peron, "Mon–Sat 08:00–00:00",
-            BuildHoursJson(("Mon", "08:00–00:00"), ("Tue", "08:00–00:00"), ("Wed", "08:00–00:00"), ("Thu", "08:00–00:00"), ("Fri", "08:00–00:00"), ("Sat", "08:00–00:00"), ("Sun", "10:00–00:00")));
+            BuildHoursJson(("Monday", "08:00–00:00"), ("Tuesday", "08:00–00:00"), ("Wednesday", "08:00–00:00"), ("Thursday", "08:00–00:00"), ("Friday", "08:00–00:00"), ("Saturday", "08:00–00:00"), ("Sunday", "10:00–00:00")));
 
         var velikPark = await EnsurePlaceAsync(
             "Veliki Park",
@@ -5056,6 +5182,7 @@ public static class SeedData
             4.7,
             298);
         await AddPlaceTagsIfMissingAsync(velikPark, "nature", "walking-route", "family-friendly", "quiet-area");
+        await UpdatePlaceHoursAsync(velikPark, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var sumarickoJezero = await EnsurePlaceAsync(
             "Šumaričko jezero",
@@ -5070,6 +5197,7 @@ public static class SeedData
             4.8,
             211);
         await AddPlaceTagsIfMissingAsync(sumarickoJezero, "waterfront", "nature", "quiet-area", "walking-route", "family-friendly");
+        await UpdatePlaceHoursAsync(sumarickoJezero, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var srce = await EnsurePlaceAsync(
             "Poslastičarnica Srce",
@@ -5085,7 +5213,7 @@ public static class SeedData
             134);
         await AddPlaceTagsIfMissingAsync(srce, "dessert", "casual", "local-favorite", "local-food");
         await UpdatePlaceHoursAsync(srce, "Mon–Thu 08:00–00:00",
-            BuildHoursJson(("Mon", "08:00–00:00"), ("Tue", "08:00–00:00"), ("Wed", "08:00–00:00"), ("Thu", "08:00–00:00"), ("Fri", "08:00–01:00"), ("Sat", "08:00–01:00"), ("Sun", "11:00–00:00")));
+            BuildHoursJson(("Monday", "08:00–00:00"), ("Tuesday", "08:00–00:00"), ("Wednesday", "08:00–00:00"), ("Thursday", "08:00–00:00"), ("Friday", "08:00–01:00"), ("Saturday", "08:00–01:00"), ("Sunday", "11:00–00:00")));
 
         var nocciola = await EnsurePlaceAsync(
             "Nocciola",
@@ -5116,7 +5244,7 @@ public static class SeedData
             156);
         await AddPlaceTagsIfMissingAsync(mademoiselle, "dessert", "specialty-coffee", "casual", "local-favorite", "local-food");
         await UpdatePlaceHoursAsync(mademoiselle, "Mon–Sat 08:00–00:00",
-            BuildHoursJson(("Mon", "08:00–00:00"), ("Tue", "08:00–00:00"), ("Wed", "08:00–00:00"), ("Thu", "08:00–00:00"), ("Fri", "08:00–00:00"), ("Sat", "08:00–00:00"), ("Sun", "Closed")));
+            BuildHoursJson(("Monday", "08:00–00:00"), ("Tuesday", "08:00–00:00"), ("Wednesday", "08:00–00:00"), ("Thursday", "08:00–00:00"), ("Friday", "08:00–00:00"), ("Saturday", "08:00–00:00"), ("Sunday", "Closed")));
 
         var kafemat27 = await EnsurePlaceAsync(
             "Kafemat 27",
@@ -5132,7 +5260,7 @@ public static class SeedData
             118);
         await AddPlaceTagsIfMissingAsync(kafemat27, "specialty-coffee", "casual", "local-favorite");
         await UpdatePlaceHoursAsync(kafemat27, "Mon–Thu 07:00–00:00",
-            BuildHoursJson(("Mon", "07:00–00:00"), ("Tue", "07:00–00:00"), ("Wed", "07:00–00:00"), ("Thu", "07:00–00:00"), ("Fri", "07:00–01:00"), ("Sat", "07:00–01:00"), ("Sun", "08:00–00:00")));
+            BuildHoursJson(("Monday", "07:00–00:00"), ("Tuesday", "07:00–00:00"), ("Wednesday", "07:00–00:00"), ("Thursday", "07:00–00:00"), ("Friday", "07:00–01:00"), ("Saturday", "07:00–01:00"), ("Sunday", "08:00–00:00")));
 
         var cafeteria = await EnsurePlaceAsync(
             "Cafeteria",
@@ -5148,7 +5276,7 @@ public static class SeedData
             102);
         await AddPlaceTagsIfMissingAsync(cafeteria, "specialty-coffee", "casual", "local-area");
         await UpdatePlaceHoursAsync(cafeteria, "Mon–Thu 07:30–00:00",
-            BuildHoursJson(("Mon", "07:30–00:00"), ("Tue", "07:30–00:00"), ("Wed", "07:30–00:00"), ("Thu", "07:30–00:00"), ("Fri", "07:30–01:00"), ("Sat", "07:30–01:00"), ("Sun", "07:30–00:00")));
+            BuildHoursJson(("Monday", "07:30–00:00"), ("Tuesday", "07:30–00:00"), ("Wednesday", "07:30–00:00"), ("Thursday", "07:30–00:00"), ("Friday", "07:30–01:00"), ("Saturday", "07:30–01:00"), ("Sunday", "07:30–00:00")));
 
         var bigFashion = await EnsurePlaceAsync(
             "Big Fashion Kragujevac",
@@ -5163,6 +5291,7 @@ public static class SeedData
             4.2,
             324);
         await AddPlaceTagsIfMissingAsync(bigFashion, "family-friendly", "local-area");
+        await UpdatePlaceHoursAsync(bigFashion, "09:00 - 22:00", BuildDailyHoursJson("09:00 - 22:00"));
 
         // New Kragujevac events (both at Knežev Arsenal)
         var arsenalFest = await EnsureEventAsync(
@@ -5765,6 +5894,38 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
+        async Task UpdatePlaceHoursAsync(Place place, string? openingHours, string? operatingHoursJson)
+        {
+            var changed = false;
+            if (place.OpeningHours != openingHours) { place.OpeningHours = openingHours; changed = true; }
+            var shouldBeEnabled = operatingHoursJson != null;
+            if (place.OperatingHoursJson != operatingHoursJson) { place.OperatingHoursJson = operatingHoursJson; changed = true; }
+            if (place.OperatingHoursEnabled != shouldBeEnabled) { place.OperatingHoursEnabled = shouldBeEnabled; changed = true; }
+            if (changed) await db.SaveChangesAsync();
+        }
+
+        static string BuildHoursJson(params (string days, string hours)[] schedule)
+        {
+            var entries = schedule.Select(s =>
+            {
+                var h = s.hours.Trim();
+                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
+                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
+                var norm = h.Replace("–", " - ");
+                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
+                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
+                if (parts.Length >= 2)
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
+                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
+            });
+            return "[" + string.Join(",", entries) + "]";
+        }
+
+        static string BuildDailyHoursJson(string hours)
+            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
+
         var neighborhoodType = await EnsureLocationTypeAsync("Neighborhood", "City neighborhood");
         var districtType = await EnsureLocationTypeAsync("District", "City district");
         var viewpointType = await EnsureLocationTypeAsync("Viewpoint Area", "Hill, viewpoint or scenic surrounding area");
@@ -6285,6 +6446,34 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(lapadSunset, "apartment-stay", "sea-view", "sunset-view", "family-stay");
         await AddPlaceTagsIfMissingAsync(harborGuesthouse, "guesthouse-stay", "harbor-stay", "budget", "local-area");
         await AddPlaceTagsIfMissingAsync(familyBeachHotel, "family-stay", "beach-district", "breakfast", "family-friendly");
+
+        await UpdatePlaceHoursAsync(proto, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
+        await UpdatePlaceHoursAsync(tajMahal, "11:00 - 23:30", BuildDailyHoursJson("11:00 - 23:30"));
+        await UpdatePlaceHoursAsync(arsenal, "07:00 - 00:00", BuildDailyHoursJson("07:00 - 00:00"));
+        await UpdatePlaceHoursAsync(dvino, "16:00 - 00:00", BuildDailyHoursJson("16:00 - 00:00"));
+        await UpdatePlaceHoursAsync(peppino, "10:00 - 23:00", BuildDailyHoursJson("10:00 - 23:00"));
+        await UpdatePlaceHoursAsync(orsan, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
+        await UpdatePlaceHoursAsync(pantarul, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
+        await UpdatePlaceHoursAsync(rectorsPalace, "09:00 - 18:00", BuildDailyHoursJson("09:00 - 18:00"));
+        await UpdatePlaceHoursAsync(sponzaPalace, "09:00 - 18:00", BuildDailyHoursJson("09:00 - 18:00"));
+        await UpdatePlaceHoursAsync(franciscan, "09:00 - 18:00", BuildDailyHoursJson("09:00 - 18:00"));
+        await UpdatePlaceHoursAsync(warPhoto, "10:00 - 22:00", BuildDailyHoursJson("10:00 - 22:00"));
+        await UpdatePlaceHoursAsync(lovrijenac, "08:00 - 19:00", BuildDailyHoursJson("08:00 - 19:00"));
+        await UpdatePlaceHoursAsync(mountSrd, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(trstenoArboretum, "08:00 - 19:00", BuildDailyHoursJson("08:00 - 19:00"));
+        await UpdatePlaceHoursAsync(betina, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(copacabana, "08:00 - 22:00", BuildDailyHoursJson("08:00 - 22:00"));
+        await UpdatePlaceHoursAsync(bellevueBeach, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(cableCar, "09:00 - 21:00", BuildDailyHoursJson("09:00 - 21:00"));
+        await UpdatePlaceHoursAsync(blueCaveTour, "09:00 - 18:00", BuildDailyHoursJson("09:00 - 18:00"));
+        await UpdatePlaceHoursAsync(elaphitiTrip, "08:30 - 18:00", BuildDailyHoursJson("08:30 - 18:00"));
+        await UpdatePlaceHoursAsync(lokrumKayak, "09:00 - 17:00", BuildDailyHoursJson("09:00 - 17:00"));
+        await UpdatePlaceHoursAsync(photoWalk, "08:00 - 20:00", BuildDailyHoursJson("08:00 - 20:00"));
+        await UpdatePlaceHoursAsync(fishingCharter, "06:00 - 13:00", BuildDailyHoursJson("06:00 - 13:00"));
+        await UpdatePlaceHoursAsync(stariGrad, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(lapadSunset, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(harborGuesthouse, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(familyBeachHotel, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var imageA = "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=900&q=80";
         var imageB = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80";

@@ -107,7 +107,10 @@ export class PlaceDetailPageComponent {
   protected readonly is24Hours = computed(() => {
     const p = this.place();
     if (!p) return false;
-    if (p.openingHoursSchedule && p.openingHoursSchedule.length > 0) return false;
+    const schedule = p.openingHoursSchedule;
+    if (schedule && schedule.length > 0) {
+      return schedule.every(day => day.hours === '00:00 - 00:00');
+    }
     const hours = (p.openingHours ?? '').toLowerCase().trim();
     return hours.includes('24');
   });
