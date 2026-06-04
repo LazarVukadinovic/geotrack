@@ -9,6 +9,7 @@ using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure.Search;
+using Geotrack.Infrastructure.Services.Agent;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using Geometry = NetTopologySuite.Geometries.Geometry;
@@ -127,6 +128,10 @@ public class AppDbContext : DbContext
 
         modelBuilder.HasPostgresExtension("postgis");
         modelBuilder.HasPostgresExtension("pg_trgm");
+        modelBuilder
+            .HasDbFunction(typeof(AgentPostgresDbFunctions).GetMethod(nameof(AgentPostgresDbFunctions.Unaccent))!)
+            .HasName("unaccent")
+            .IsBuiltIn();
 
         ConfigureTerritories(modelBuilder);
         ConfigureAdministrativeBoundaryCandidates(modelBuilder);

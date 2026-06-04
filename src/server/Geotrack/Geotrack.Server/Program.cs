@@ -210,6 +210,10 @@ builder.Services.AddScoped<IContentHtmlSanitizer, ContentHtmlSanitizer>();
 
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IInterestTopicService, InterestTopicService>();
+builder.Services.AddSingleton<IAgentTaxonomyProvider, JsonAgentTaxonomyProvider>();
+builder.Services.AddScoped<IAgentDatabaseCapabilityService, AgentDatabaseCapabilityService>();
+builder.Services.AddScoped<IAgentAreaResolver, AgentAreaResolver>();
+builder.Services.AddSingleton<IAgentSemanticSearchService, NoOpAgentSemanticSearchService>();
 builder.Services.AddScoped<IAgentQueryPlanner, AgentQueryPlanner>();
 builder.Services.AddScoped<IGeoTrackToolService, GeoTrackToolService>();
 builder.Services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
