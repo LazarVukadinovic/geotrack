@@ -55,6 +55,7 @@ export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
   accessibilityNotes?: string | null;
   operatingHoursEnabled: boolean;
   operatingHours: RegionalPlaceOperatingHourDto[];
+  amenities?: RegionalPlaceAmenityDto[];
 }
 
 
@@ -90,6 +91,10 @@ export interface RegionalPlaceTagDto {
   id: number;
   name: string;
   slug: string;
+}
+
+export interface RegionalPlaceAmenityDto {
+  name: string;
 }
 
 export interface RegionalPlaceParentLocationDto {

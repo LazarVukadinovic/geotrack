@@ -5,13 +5,15 @@ import { HttpClient } from '@angular/common/http';
 import { ContributionDetail, ContributionsService, contributionCanEdit, contributionCanRequestOwnership } from '../../services/contributions.service';
 import { BackgroundImageFallbackDirective } from '../../../../shared/directives/background-image-fallback.directive';
 import { getContributionAmenityLabel } from '../../services/contribution-amenities';
+import { PhotoGalleryComponent } from '../../../../shared/components/photo-gallery/photo-gallery.component';
+import type { EntityImage } from '../../../../core/models/entity-image.model';
 
 const MAX_PROOF_BYTES = 10 * 1024 * 1024;
 
 @Component({
   selector: 'app-contribution-detail',
   standalone: true,
-  imports: [CommonModule, BackgroundImageFallbackDirective],
+  imports: [CommonModule, BackgroundImageFallbackDirective, PhotoGalleryComponent],
   templateUrl: './contribution-detail.component.html',
   styleUrl: './contribution-detail.component.css',
 })
@@ -31,6 +33,8 @@ export class ContributionDetailPageComponent implements OnInit {
   protected readonly ownershipProofFileName = signal('');
   protected readonly ownershipClaimError = signal('');
   protected readonly ownershipClaimSubmitting = signal(false);
+  protected readonly mediaLightboxIndex = signal<number | null>(null);
+  protected readonly mediaLightboxImages = signal<EntityImage[]>([]);
 
   protected readonly amenityMap: Record<string, string> = {
     pool: 'Swimming Pool',
@@ -70,6 +74,18 @@ export class ContributionDetailPageComponent implements OnInit {
     return d ? contributionCanRequestOwnership(d) : false;
   });
 
+  protected readonly visibleGalleryImages = computed(() => (this.detail()?.galleryImageUrls ?? []).slice(0, 4));
+
+  protected readonly hiddenGalleryCount = computed(() => {
+    const total = this.detail()?.galleryImageUrls.length ?? 0;
+    return Math.max(0, total - this.visibleGalleryImages().length);
+  });
+
+  protected readonly hasMedia = computed(() => {
+    const d = this.detail();
+    return !!d?.cardImageUrl || !!d?.coverImageUrl || !!d?.galleryImageUrls.length;
+  });
+
   ngOnInit(): void {
     this.fetchDetail();
   }
@@ -103,6 +119,23 @@ export class ContributionDetailPageComponent implements OnInit {
 
   protected getPartnerLabel(id: string): string {
     return this.partnerMap[id] ?? id;
+  }
+
+  protected openSingleImage(url: string, caption: string): void {
+    this.mediaLightboxImages.set([this.toGalleryImage(url, 0, caption)]);
+    this.mediaLightboxIndex.set(0);
+  }
+
+  protected openGallery(index: number): void {
+    const urls = this.detail()?.galleryImageUrls ?? [];
+    this.mediaLightboxImages.set(urls.map((url, imageIndex) =>
+      this.toGalleryImage(url, imageIndex, ''),
+    ));
+    this.mediaLightboxIndex.set(index);
+  }
+
+  protected closeMediaLightbox(): void {
+    this.mediaLightboxIndex.set(null);
   }
 
   protected onEdit(): void {
@@ -223,5 +256,21 @@ export class ContributionDetailPageComponent implements OnInit {
 
   protected goBack(): void {
     this.router.navigate(['/contributions']);
+  }
+
+  private toGalleryImage(url: string, index: number, caption: string): EntityImage {
+    const label = caption || `Photo ${index + 1}`;
+
+    return {
+      id: `${label.toLowerCase().replace(/\s+/g, '-')}-${index}`,
+      url,
+      altText: label,
+      caption,
+      isMain: index === 0,
+      imageRole: 'gallery',
+      sortOrder: index,
+      imagePosition: '50% 50%',
+      imageSize: 'cover',
+    };
   }
 }

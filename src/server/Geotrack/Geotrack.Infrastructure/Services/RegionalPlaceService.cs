@@ -262,6 +262,22 @@ public class RegionalPlaceService : IRegionalPlaceService
                         Name = placeTag.Tag.Name,
                         Slug = placeTag.Tag.Slug
                     })
+                    .ToList(),
+                PlaceAmenities = place.PlaceAmenities
+                    .OrderBy(placeAmenity => placeAmenity.Amenity.Name)
+                    .Select(placeAmenity => new RegionalPlaceAmenityDto
+                    {
+                        Name = placeAmenity.Amenity.Name
+                    })
+                    .ToList(),
+                StayAmenities = place.Stay == null
+                    ? new List<RegionalPlaceAmenityDto>()
+                    : place.Stay.StayAmenities
+                        .OrderBy(stayAmenity => stayAmenity.StayAmenity.Name)
+                        .Select(stayAmenity => new RegionalPlaceAmenityDto
+                        {
+                            Name = stayAmenity.StayAmenity.Name
+                        })
                     .ToList()
             })
             .SingleOrDefaultAsync()
@@ -1264,7 +1280,11 @@ public class RegionalPlaceService : IRegionalPlaceService
             AccessNotes = row.AccessNotes,
             AccessibilityNotes = row.AccessibilityNotes,
             OperatingHoursEnabled = row.OperatingHoursEnabled,
-            OperatingHours = DeserializeOperatingHours(row.OperatingHoursJson)
+            OperatingHours = DeserializeOperatingHours(row.OperatingHoursJson),
+            Amenities = row.PlaceAmenities
+                .Concat(row.StayAmenities)
+                .DistinctBy(amenity => amenity.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList()
         };
     }
 
@@ -1474,5 +1494,7 @@ public class RegionalPlaceService : IRegionalPlaceService
         public string? CoverImageUrl { get; set; }
         public List<string> GalleryImageUrls { get; set; } = new();
         public List<RegionalPlaceTagDto> Tags { get; set; } = new();
+        public List<RegionalPlaceAmenityDto> PlaceAmenities { get; set; } = new();
+        public List<RegionalPlaceAmenityDto> StayAmenities { get; set; } = new();
     }
 }

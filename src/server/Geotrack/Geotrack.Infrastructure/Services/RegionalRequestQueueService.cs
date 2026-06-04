@@ -377,6 +377,7 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             DetailRoute = baseItem.DetailRoute,
             Description = contribution.Description,
             Address = contribution.Address,
+            OpeningHours = contribution.OpeningHours,
             LocationName = contribution.Location?.Name,
             DestinationName = contribution.Location?.Destination?.Name,
             Country = contribution.Location?.Destination?.Region?.Territory?.Name,

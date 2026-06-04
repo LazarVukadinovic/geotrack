@@ -2,30 +2,65 @@
   <p class="text-xs text-slate-500 mb-6 text-center">Review how your contribution will appear to other travelers.</p>
 
   <div class="bg-white rounded-2xl overflow-hidden shadow-sm">
-    <div class="h-52 overflow-hidden">
-      <div *ngIf="draft().basics?.imageUrl"
-        class="w-full h-full"
-        [appBackgroundImageFallback]="draft().basics!.imageUrl"
-        [backgroundImageFallbackSize]="draft().basics!.imgBgSize || 'cover'"
-        [backgroundImageFallbackPosition]="draft().basics!.imgBgPosition || '50% 50%'">
-      </div>
-      <div *ngIf="!draft().basics?.imageUrl" class="w-full h-full bg-slate-100 flex items-center justify-center">
-        <svg class="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-        </svg>
+    <div *ngIf="cardImageUrl || coverImageUrl" class="p-3 bg-slate-50">
+      <p class="text-xs font-bold text-slate-400 uppercase mb-2">Photos</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button *ngIf="cardImageUrl" type="button" (click)="openSingleImage(cardImageUrl, 'Card')"
+          class="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 text-left">
+          <div
+            class="w-full h-full"
+            [appBackgroundImageFallback]="cardImageUrl"
+            [backgroundImageFallbackSize]="draft().basics!.cardImgBgSize || 'cover'"
+            [backgroundImageFallbackPosition]="draft().basics!.cardImgBgPosition || '50% 50%'">
+          </div>
+          <span class="absolute left-2 bottom-2 rounded-full bg-white/90 px-2 py-1 text-[10px] font-bold text-slate-700 shadow-sm">Card</span>
+        </button>
+
+        <button *ngIf="coverImageUrl" type="button" (click)="openSingleImage(coverImageUrl, 'Cover')"
+          class="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 text-left">
+          <div
+            class="w-full h-full"
+            [appBackgroundImageFallback]="coverImageUrl"
+            [backgroundImageFallbackSize]="draft().basics!.imgBgSize || 'cover'"
+            [backgroundImageFallbackPosition]="draft().basics!.imgBgPosition || '50% 50%'">
+          </div>
+          <span class="absolute left-2 bottom-2 rounded-full bg-white/90 px-2 py-1 text-[10px] font-bold text-slate-700 shadow-sm">Cover</span>
+        </button>
       </div>
     </div>
 
     <div class="p-5">
+      <div *ngIf="galleryImageUrls.length" class="mb-5">
+          <p class="text-sm font-bold text-slate-800 mb-3">Gallery photos</p>
+          <div class="grid grid-cols-4 gap-2">
+            <button *ngFor="let url of visibleGalleryImageUrls; let i = index" type="button" (click)="openGallery(i)"
+              class="relative aspect-square rounded-xl overflow-hidden bg-slate-100">
+              <div class="w-full h-full" [appBackgroundImageFallback]="url"></div>
+              <div *ngIf="hiddenGalleryCount && i === visibleGalleryImageUrls.length - 1"
+                class="absolute inset-0 bg-black/45 flex items-center justify-center text-white text-lg font-bold">
+                +{{ hiddenGalleryCount }}
+              </div>
+            </button>
+          </div>
+      </div>
+
       <h2 class="text-xl font-bold text-slate-800 mb-1">{{ draft().basics?.name }}</h2>
       <p class="text-xs font-bold text-[#e8722a] mb-2">{{ draft().basics?.placeType }}</p>
 
       <!-- Pin -->
-      <div class="flex items-center gap-1 mb-4">
-        <svg class="w-3.5 h-3.5 text-[#e8722a] flex-none" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-        </svg>
-        <span class="text-sm text-slate-500">{{ draft().basics?.city }}, {{ draft().basics?.country }}</span>
+      <div class="flex flex-col gap-1 mb-4">
+        <div class="flex items-center gap-1">
+          <svg class="w-3.5 h-3.5 text-[#e8722a] flex-none" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+          <span class="text-sm text-slate-500">{{ draft().basics?.city }}, {{ draft().basics?.country }}</span>
+        </div>
+        <div *ngIf="draft().basics?.address" class="flex items-center gap-1 text-sm text-slate-500">
+          <svg class="w-3.5 h-3.5 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+          </svg>
+          <span>{{ draft().basics?.address }}</span>
+        </div>
       </div>
 
       <!-- Tags -->
@@ -39,7 +74,12 @@
       <!-- Description -->
       <div *ngIf="draft().details?.description" class="mb-5">
         <p class="text-sm font-bold text-slate-800 mb-2">About this place</p>
-        <p class="text-sm text-slate-600 leading-relaxed">{{ draft().details?.description }}</p>
+        <p class="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{{ draft().details?.description }}</p>
+      </div>
+
+      <div *ngIf="hasOpeningHours" class="mb-5">
+        <p class="text-sm font-bold text-slate-800 mb-2">Opening Hours</p>
+        <p class="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{{ draft().details?.openingHours }}</p>
       </div>
 
       @if (draft().details?.contactEmail || draft().details?.phone || draft().details?.website) {
@@ -169,3 +209,11 @@
     <button (click)="confirmed.emit()" class="flex-1 py-4 bg-[#e8722a] rounded-3xl text-white font-bold text-base active:scale-[0.98] transition-all">{{ confirmLabel() }}</button>
   </div>
 </div>
+
+<app-photo-gallery
+  *ngIf="galleryLightboxIndex() !== null"
+  [images]="galleryLightboxImages()"
+  [title]="draft().basics?.name || 'Photos'"
+  [startIndex]="galleryLightboxIndex() ?? 0"
+  (closed)="closeGallery()"
+/>

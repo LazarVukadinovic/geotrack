@@ -289,6 +289,8 @@ function makePlaceDraft(): ContributionDraftData {
     features: { tags: ['Coffee'], amenities: ['wifi'] },
     details: {
       description: 'A place contribution.',
+      openingHoursEnabled: true,
+      openingHours: 'Mon-Fri 09:00-17:00',
       phone: '+385111222',
       contactEmail: 'hello@example.com',
       website: 'https://example.com',
@@ -338,6 +340,7 @@ function makeApiContribution(overrides: Partial<Record<string, unknown>> = {}): 
     imagePosition: '50% 50%',
     imageSize: 'cover',
     description: 'A place contribution.',
+    openingHours: 'Mon-Fri 09:00-17:00',
     phone: '+385111222',
     contactEmail: 'hello@example.com',
     website: 'https://example.com',

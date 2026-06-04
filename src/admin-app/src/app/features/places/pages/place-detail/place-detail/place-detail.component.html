@@ -210,14 +210,31 @@
             </div>
           </ng-container>
 
+          <!-- Amenities -->
+          <ng-container *ngIf="(item)['amenities']?.length">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="text-sm font-bold text-gray-800">Amenities</h3>
+              </div>
+              <div class="px-6 py-5">
+                <div class="flex flex-wrap gap-2">
+                  <span *ngFor="let amenity of (item)['amenities']"
+                        class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                    {{ amenity }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+
           <!-- Operating Hours -->
-          <ng-container *ngIf="(item)['hours']?.length">
+          <ng-container *ngIf="(item)['hours']?.length || (item)['openingHours']">
             <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
               <div class="px-6 py-4 border-b border-gray-100">
                 <h3 class="text-sm font-bold text-gray-800">Operating Hours</h3>
               </div>
               <div class="px-6 py-5">
-                <div class="flex flex-col gap-2">
+                <div *ngIf="(item)['hours']?.length; else openingHoursText" class="flex flex-col gap-2">
                   <div *ngFor="let day of (item)['hours']"
                        class="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
                     <span class="text-sm font-medium text-gray-700 w-28">{{ day.name }}</span>
@@ -225,6 +242,9 @@
                     <span *ngIf="!day.open" class="text-xs font-semibold text-red-500">Closed</span>
                   </div>
                 </div>
+                <ng-template #openingHoursText>
+                  <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ (item)['openingHours'] }}</p>
+                </ng-template>
               </div>
             </div>
           </ng-container>

@@ -53,6 +53,7 @@ public class RegionalPlaceDetailDto : RegionalPlaceListItemDto
     public string? AccessibilityNotes { get; set; }
     public bool OperatingHoursEnabled { get; set; }
     public List<RegionalPlaceOperatingHourDto> OperatingHours { get; set; } = new();
+    public List<RegionalPlaceAmenityDto> Amenities { get; set; } = new();
 }
 
 
@@ -160,6 +161,11 @@ public class RegionalPlaceTagDto
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
+}
+
+public class RegionalPlaceAmenityDto
+{
+    public string Name { get; set; } = string.Empty;
 }
 
 public class RegionalPlaceTypeDto

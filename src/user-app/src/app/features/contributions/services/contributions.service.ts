@@ -73,6 +73,7 @@ export interface ContributionDetail extends ContributionListItem {
   cardImagePosition: string;
   cardImageSize: string;
   description: string;
+  openingHours: string;
   phone: string;
   contactEmail: string;
   website: string;
@@ -138,6 +139,7 @@ interface ApiContributionDetail extends ApiContributionListItem {
   cardImagePosition?: string | null;
   cardImageSize?: string | null;
   description: string;
+  openingHours?: string | null;
   phone: string;
   contactEmail: string;
   website: string;
@@ -182,6 +184,7 @@ interface UpsertPlaceContributionPayload {
   ownershipProofDocumentUrl?: string | null;
   ownershipProofOriginalFileName?: string | null;
   description: string;
+  openingHours?: string;
   phone: string;
   contactEmail: string;
   website: string;
@@ -270,6 +273,7 @@ export class ContributionsService {
     const payload = {
       name: basics.name,
       description: details.description,
+      openingHours: details.openingHoursEnabled ? details.openingHours : '',
       website: isAccommodation ? '' : details.website,
       contactEmail: details.contactEmail,
       phoneNumber: details.phone,
@@ -357,6 +361,8 @@ export class ContributionsService {
       },
       details: {
         description: detail.description ?? '',
+        openingHoursEnabled: !!detail.openingHours?.trim(),
+        openingHours: detail.openingHours ?? '',
         phone: detail.phone ?? '',
         contactEmail: detail.contactEmail ?? '',
         website: isAccommodation ? '' : detail.website ?? '',
@@ -392,6 +398,7 @@ export class ContributionsService {
       ownershipProofDocumentUrl: basics.ownershipProofDocumentUrl ?? null,
       ownershipProofOriginalFileName: basics.ownershipProofOriginalFileName ?? null,
       description: details.description,
+      openingHours: details.openingHoursEnabled ? details.openingHours : '',
       phone: details.phone,
       contactEmail: details.contactEmail,
       website: isAccommodation ? '' : details.website,
@@ -476,6 +483,8 @@ function normalizeFeatures(features: FeaturesData | null): FeaturesData {
 
 interface NormalizedDetailsData {
   description: string;
+  openingHoursEnabled: boolean;
+  openingHours: string;
   phone: string;
   contactEmail: string;
   website: string;
@@ -494,6 +503,8 @@ function normalizeDetails(details: DetailsData | null, isAccommodation = false):
 
   return {
     description: details?.description ?? '',
+    openingHoursEnabled: details?.openingHoursEnabled ?? false,
+    openingHours: details?.openingHours?.trim() ?? '',
     phone: details?.phone ?? '',
     contactEmail: details?.contactEmail?.trim() ?? '',
     website: isAccommodation ? '' : website,
@@ -609,6 +620,7 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     cardImagePosition: cardImage?.imagePosition || item.cardImagePosition || '50% 50%',
     cardImageSize: cardImage?.imageSize || item.cardImageSize || 'cover',
     description: item.description ?? '',
+    openingHours: item.openingHours ?? '',
     phone: item.phone ?? '',
     contactEmail: item.contactEmail ?? '',
     website: item.website ?? '',

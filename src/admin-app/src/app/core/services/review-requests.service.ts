@@ -180,6 +180,7 @@ export class ReviewRequestsService {
     return {
       ...detail,
       ...this.normalizeQueueItem(detail),
+      openingHours: detail.openingHours ?? null,
       tags: Array.isArray(detail.tags) ? detail.tags : [],
       amenities: Array.isArray(detail.amenities) ? detail.amenities : [],
       stayAmenities: Array.isArray(detail.stayAmenities) ? detail.stayAmenities : [],

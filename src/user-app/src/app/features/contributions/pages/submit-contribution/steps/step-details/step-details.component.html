@@ -8,9 +8,9 @@
     <div class="mb-4">
       <div class="flex items-center justify-between mb-2">
         <label class="text-sm font-semibold text-slate-700">Description</label>
-        <span class="text-xs text-slate-400">{{ form.description.length }}/500</span>
+        <span class="text-xs text-slate-400">{{ form.description.length }}/2000</span>
       </div>
-      <textarea [(ngModel)]="form.description" (ngModelChange)="changed.emit({...form})" maxlength="500" rows="5"
+      <textarea [(ngModel)]="form.description" (ngModelChange)="changed.emit({...form})" maxlength="2000" rows="7"
         placeholder="Describe the atmosphere, surroundings, and unique features..."
         class="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-700 placeholder-slate-300 outline-none resize-none focus:border-[#e8722a] transition-colors">
       </textarea>
@@ -52,6 +52,86 @@
       <p *ngIf="submitted && websiteError()" class="mt-2 text-xs font-semibold text-red-500">{{ websiteError() }}</p>
     </div>
     }
+  </div>
+
+  <div class="bg-white rounded-2xl p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h3 class="text-base font-bold text-slate-800 mb-1">Opening Hours</h3>
+        <p class="text-xs text-slate-500">Add public opening hours only when they should appear on the place page.</p>
+      </div>
+      <button
+        type="button"
+        class="relative flex-none border-none bg-transparent cursor-pointer"
+        style="width: 46px; height: 26px;"
+        (click)="form.openingHoursEnabled = !form.openingHoursEnabled; onOpeningHoursChanged()"
+        [title]="form.openingHoursEnabled ? 'Disable opening hours' : 'Enable opening hours'"
+      >
+        <span
+          class="absolute inset-0 rounded-full transition-colors duration-200"
+          [class.bg-[#e8722a]]="form.openingHoursEnabled"
+          [class.bg-slate-300]="!form.openingHoursEnabled"
+        ></span>
+        <span
+          class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200"
+          style="width: 22px; height: 22px;"
+          [style.left]="form.openingHoursEnabled ? '22px' : '2px'"
+        ></span>
+      </button>
+    </div>
+
+    <div
+      class="border border-slate-200 rounded-xl overflow-hidden transition-all duration-200"
+      [class.opacity-40]="!form.openingHoursEnabled"
+      [class.pointer-events-none]="!form.openingHoursEnabled"
+      [class.select-none]="!form.openingHoursEnabled"
+    >
+      @for (day of days; track day.name; let last = $last) {
+        <div
+          class="flex items-center gap-2 px-3 py-2.5"
+          [class.border-b]="!last"
+          [class.border-slate-100]="!last"
+        >
+          <span class="text-xs font-semibold text-slate-600 w-20 flex-none">{{ day.name }}</span>
+
+          @if (day.open) {
+            <select
+              class="flex-1 min-w-0 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-700 bg-white outline-none"
+              [(ngModel)]="day.openTime"
+              (ngModelChange)="onOpeningHoursChanged()"
+            >
+              @for (time of allHours; track time) {
+                <option>{{ time }}</option>
+              }
+            </select>
+            <span class="text-xs text-slate-400 flex-none">to</span>
+            <select
+              class="flex-1 min-w-0 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-700 bg-white outline-none"
+              [(ngModel)]="day.closeTime"
+              (ngModelChange)="onOpeningHoursChanged()"
+            >
+              @for (time of allHours; track time) {
+                <option>{{ time }}</option>
+              }
+            </select>
+            <button
+              type="button"
+              class="flex-none w-6 h-6 flex items-center justify-center text-slate-400 hover:text-red-500 text-base border-none bg-transparent cursor-pointer"
+              (click)="day.open = false; onOpeningHoursChanged()"
+            >x</button>
+          } @else {
+            <span class="flex-1 text-xs text-slate-400 italic">Closed</span>
+            <button
+              type="button"
+              class="flex-none text-xs text-[#e8722a] border border-orange-200 rounded-lg px-3 py-1 bg-orange-50 cursor-pointer"
+              (click)="day.open = true; onOpeningHoursChanged()"
+            >Set Hours</button>
+          }
+        </div>
+      }
+    </div>
+    <p *ngIf="!form.openingHoursEnabled" class="text-xs text-slate-400 mt-2 text-center">Enable the toggle above to include opening hours.</p>
+    <p *ngIf="submitted && openingHoursError" class="mt-2 text-xs font-semibold text-red-500">{{ openingHoursError }}</p>
   </div>
 
   @if (isAccommodation()) {

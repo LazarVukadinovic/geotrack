@@ -79,7 +79,7 @@ export class SubmitContributionComponent implements OnInit {
   protected readonly draft = signal<ContributionDraft>({
     basics: null,
     features: { tags: [], amenities: [] },
-    details: { description: '', phone: '', contactEmail: '', website: '', bookingPartners: [] },
+    details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, openingHours: '', bookingPartners: [] },
   });
 
   ngOnInit(): void {
@@ -165,6 +165,7 @@ export class SubmitContributionComponent implements OnInit {
       locationId?: number | null;
       locationName?: string | null;
       website?: string | null;
+      openingHours?: string | null;
       contactEmail?: string | null;
       phoneNumber?: string | null;
       category?: string | null;
@@ -218,6 +219,8 @@ export class SubmitContributionComponent implements OnInit {
           },
           details: {
             description: place.about ?? (typeof navState['placeAbout'] === 'string' ? navState['placeAbout'] : ''),
+            openingHoursEnabled: !!place.openingHours?.trim(),
+            openingHours: place.openingHours ?? '',
             phone: place.phoneNumber ?? '',
             contactEmail: place.contactEmail ?? '',
             website: place.website ?? '',
@@ -354,7 +357,7 @@ export class SubmitContributionComponent implements OnInit {
     this.draft.set({
       basics: null,
       features: { tags: [], amenities: [] },
-      details: { description: '', phone: '', contactEmail: '', website: '', bookingPartners: [] },
+      details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, openingHours: '', bookingPartners: [] },
     });
     this.editId.set(null);
     this.entityType.set('Place');

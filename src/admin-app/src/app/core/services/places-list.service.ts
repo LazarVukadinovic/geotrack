@@ -60,6 +60,7 @@ export interface PlaceListItem {
   coverImageName?: string;
   galleryImages?: { url: string; name: string }[];
   hours?: { name: string; open: boolean; openTime: string; closeTime: string }[];
+  amenities?: string[];
   internalRefId?: string;
   parentLocation?: string;
   bestTimeToVisit?: string;
@@ -274,6 +275,13 @@ export class PlacesListService {
       lat: typeof detail.latitude === 'number' ? detail.latitude : undefined,
       lng: typeof detail.longitude === 'number' ? detail.longitude : undefined,
       openingHours: detail.openingHours ?? undefined,
+      hours: (detail.operatingHours ?? []).map(hour => ({
+        name: hour.dayOfWeek,
+        open: hour.isOpen,
+        openTime: hour.openTime ?? '',
+        closeTime: hour.closeTime ?? '',
+      })),
+      amenities: (detail.amenities ?? []).map(amenity => amenity.name).filter(Boolean),
       contactEmail: detail.contactEmail ?? undefined,
       phoneNumber: detail.phoneNumber ?? undefined,
       contactPhone: detail.contactPhone ?? detail.phoneNumber ?? undefined,

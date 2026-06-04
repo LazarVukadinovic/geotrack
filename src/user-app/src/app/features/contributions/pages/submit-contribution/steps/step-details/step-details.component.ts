@@ -6,11 +6,21 @@ export interface BookingPartner {
   id: string;
   url: string;
 }
+
+interface DayHours {
+  name: string;
+  open: boolean;
+  openTime: string;
+  closeTime: string;
+}
+
 export interface DetailsData {
   description: string;
   phone: string;
   contactEmail: string;
   website: string;
+  openingHoursEnabled: boolean;
+  openingHours: string;
   bookingPartners: BookingPartner[];
 }
 @Component({
@@ -26,17 +36,29 @@ export class StepDetailsComponent {
   back = output<void>();
   changed = output<DetailsData>();
   submitted = false;
+  openingHoursError = '';
 
   bookingPartners = [
     { id: 'booking', label: 'Booking.com' },
     { id: 'airbnb', label: 'Airbnb' },
     { id: 'hotel', label: 'Official Website' },
   ];
+  allHours = Array.from({ length: 24 }, (_, hour) => `${hour.toString().padStart(2, '0')}:00`);
+  days: DayHours[] = [
+    { name: 'Monday', open: true, openTime: '09:00', closeTime: '17:00' },
+    { name: 'Tuesday', open: true, openTime: '09:00', closeTime: '17:00' },
+    { name: 'Wednesday', open: true, openTime: '09:00', closeTime: '17:00' },
+    { name: 'Thursday', open: true, openTime: '09:00', closeTime: '17:00' },
+    { name: 'Friday', open: true, openTime: '09:00', closeTime: '17:00' },
+    { name: 'Saturday', open: true, openTime: '10:00', closeTime: '20:00' },
+    { name: 'Sunday', open: false, openTime: '09:00', closeTime: '17:00' },
+  ];
     constructor() {
     effect(() => {
       const d = this.data();
       if (d) {
         Object.assign(this.form, d);
+        this.applyOpeningHoursText(d.openingHours);
         this.moveAccommodationWebsiteToBookingPartner();
       }
     });
@@ -46,18 +68,23 @@ export class StepDetailsComponent {
     phone: '',
     contactEmail: '',
     website: '',
+    openingHoursEnabled: false,
+    openingHours: '',
     bookingPartners: [],
   };
 
   onContinue(): void {
     this.submitted = true;
+    this.openingHoursError = '';
     if (!this.isValid()) return;
 
     this.saved.emit(this.normalizedForm());
   }
 
   isValid(): boolean {
-    return (this.isAccommodation() || !this.websiteError()) &&
+    this.openingHoursError = this.validateOpeningHours();
+    return !this.openingHoursError &&
+      (this.isAccommodation() || !this.websiteError()) &&
       (!this.isAccommodation() || this.form.bookingPartners.every(partner => !this.partnerUrlError(partner.id)));
   }
 
@@ -95,17 +122,66 @@ export class StepDetailsComponent {
     this.changed.emit({ ...this.form });
   }
 
+  onOpeningHoursChanged(): void {
+    this.openingHoursError = '';
+    this.changed.emit(this.normalizedForm());
+  }
+
   private normalizedForm(): DetailsData {
+    const openingHours = this.form.openingHoursEnabled ? this.buildOpeningHoursText() : '';
     return {
       description: this.form.description.trim(),
       phone: this.form.phone.trim(),
       contactEmail: this.form.contactEmail.trim(),
       website: this.isAccommodation() ? '' : this.form.website.trim(),
+      openingHoursEnabled: this.form.openingHoursEnabled,
+      openingHours,
       bookingPartners: this.isAccommodation() ? this.form.bookingPartners.map(partner => ({
         id: partner.id,
         url: partner.url.trim(),
       })) : [],
     };
+  }
+
+  private buildOpeningHoursText(): string {
+    return this.days
+      .map(day => day.open ? `${day.name}: ${day.openTime} - ${day.closeTime}` : `${day.name}: Closed`)
+      .join('\n');
+  }
+
+  private validateOpeningHours(): string {
+    if (!this.form.openingHoursEnabled) return '';
+
+    for (const day of this.days) {
+      if (day.open && this.toMinutes(day.openTime) >= this.toMinutes(day.closeTime)) {
+        return `${day.name} opening time must be before closing time.`;
+      }
+    }
+
+    return '';
+  }
+
+  private applyOpeningHoursText(value: string): void {
+    if (!value.trim()) return;
+
+    const byDay = new Map<string, Partial<DayHours>>();
+    for (const line of value.split(/\r?\n/)) {
+      const match = line.match(/^\s*([^:]+):\s*(closed|(\d{2}:\d{2})\s*[-–]\s*(\d{2}:\d{2}))\s*$/i);
+      if (!match) continue;
+
+      byDay.set(match[1].trim().toLowerCase(), match[2].toLowerCase() === 'closed'
+        ? { open: false }
+        : { open: true, openTime: match[3], closeTime: match[4] });
+    }
+
+    if (byDay.size === 0) return;
+
+    this.days = this.days.map(day => ({ ...day, ...(byDay.get(day.name.toLowerCase()) ?? {}) }));
+  }
+
+  private toMinutes(value: string): number {
+    const [hours, minutes] = value.split(':').map(part => Number(part));
+    return hours * 60 + minutes;
   }
 
   private moveAccommodationWebsiteToBookingPartner(): void {

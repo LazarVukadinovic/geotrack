@@ -10,8 +10,9 @@ import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ReviewRequestsService } from '../../../../core/services/review-requests.service';
 import { RegionalManagerSidebarStateService } from '../../../../core/services/regional-manager-sidebar-state.service';
+import { LightboxService } from '../../../../core/services/lightbox.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
-import { ReviewRequestDetail } from '../../../../core/models/review-request.model';
+import { PlaceContributionImage, ReviewRequestDetail } from '../../../../core/models/review-request.model';
 
 interface DetailLoadOptions {
   allowRegionFallback: boolean;
@@ -52,6 +53,7 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     private readonly dashboardService: DashboardService,
     private readonly requestsService: ReviewRequestsService,
     private readonly sidebarState: RegionalManagerSidebarStateService,
+    private readonly lightboxService: LightboxService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
@@ -63,6 +65,7 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     this.detailRequestSequence++;
     this.regionSubscription?.unsubscribe();
     this.detailSubscription?.unsubscribe();
+    this.lightboxService.close();
   }
 
   get userName(): string {
@@ -103,11 +106,27 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
 
   get primaryImageUrl(): string | null {
     return (
+      this.request?.images?.find(image => this.normalizeImageRole(image.imageRole) === 'cover')?.url ??
       this.request?.images?.find(image => image.isMain)?.url ??
       this.request?.thumbnailImageUrl ??
       this.request?.images?.[0]?.url ??
       null
     );
+  }
+
+  get submittedMediaImages(): PlaceContributionImage[] {
+    return (this.request?.images ?? [])
+      .filter(image => !!image.url)
+      .filter(image => this.normalizeImageRole(image.imageRole) !== 'cover')
+      .sort((a, b) => this.imageRoleSort(a.imageRole) - this.imageRoleSort(b.imageRole) || a.sortOrder - b.sortOrder || a.id - b.id);
+  }
+
+  get submittedMediaPreviewImages(): PlaceContributionImage[] {
+    return this.submittedMediaImages.slice(0, 4);
+  }
+
+  get submittedMediaOverflowCount(): number {
+    return Math.max(0, this.submittedMediaImages.length - this.submittedMediaPreviewImages.length);
   }
 
   get allAmenities(): string[] {
@@ -242,6 +261,30 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
         return 'bg-yellow-50 text-yellow-700 border border-yellow-100';
       default:
         return 'bg-blue-50 text-blue-700 border border-blue-100';
+    }
+  }
+
+  openSubmittedMedia(index: number): void {
+    const images = this.submittedMediaImages.map((image, imageIndex) => ({
+      url: image.url,
+      name: image.caption || image.altText || `Submitted photo ${imageIndex + 1}`,
+    }));
+
+    if (images.length === 0) return;
+
+    this.lightboxService.open(images, Math.min(index, images.length - 1));
+  }
+
+  private normalizeImageRole(role: string | null | undefined): string {
+    return (role ?? '').trim().toLowerCase();
+  }
+
+  private imageRoleSort(role: string | null | undefined): number {
+    switch (this.normalizeImageRole(role)) {
+      case 'card': return 0;
+      case 'cover': return 1;
+      case 'gallery': return 2;
+      default: return 3;
     }
   }
 

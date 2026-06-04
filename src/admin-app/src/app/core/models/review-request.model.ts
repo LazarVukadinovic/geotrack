@@ -75,6 +75,7 @@ export interface PlaceContributionImage {
 export interface ReviewRequestDetail extends ReviewRequest {
   description?: string | null;
   address?: string | null;
+  openingHours?: string | null;
   locationName?: string | null;
   destinationName?: string | null;
   city?: string | null;

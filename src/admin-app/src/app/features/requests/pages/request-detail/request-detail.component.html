@@ -80,10 +80,33 @@
               </div>
 
               <div class="p-6">
-                <h2 class="text-sm font-bold text-gray-800 mb-2">Summary</h2>
+                <h2 class="text-sm font-bold text-gray-800 mb-2">Description</h2>
                 <p class="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
                   {{ request.description || request.previewText || 'No description was provided.' }}
                 </p>
+              </div>
+            </section>
+
+            <section *ngIf="submittedMediaImages.length" class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <h2 class="text-sm font-bold text-gray-800 mb-4">Submitted Media</h2>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <button
+                  *ngFor="let image of submittedMediaPreviewImages; let i = index"
+                  type="button"
+                  class="relative aspect-square rounded-lg overflow-hidden border border-gray-100 bg-gray-50 cursor-pointer group p-0"
+                  (click)="openSubmittedMedia(i)"
+                >
+                  <img [src]="image.url" [alt]="image.altText || request.title + ' submitted photo ' + (i + 1)" class="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                  <span class="absolute left-2 bottom-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
+                    {{ image.imageRole || 'photo' }}
+                  </span>
+                  <span
+                    *ngIf="i === submittedMediaPreviewImages.length - 1 && submittedMediaOverflowCount > 0"
+                    class="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-bold text-white"
+                  >
+                    +{{ submittedMediaOverflowCount }}
+                  </span>
+                </button>
               </div>
             </section>
 
@@ -120,6 +143,10 @@
                 <div class="detail-field">
                   <span>Website</span>
                   <strong>{{ request.website || 'Not specified' }}</strong>
+                </div>
+                <div class="detail-field">
+                  <span>Opening Hours</span>
+                  <strong class="whitespace-pre-line">{{ request.openingHours || 'Not specified' }}</strong>
                 </div>
                 <div class="detail-field">
                   <span>Phone</span>
