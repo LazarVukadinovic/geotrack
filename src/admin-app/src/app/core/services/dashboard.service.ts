@@ -55,11 +55,16 @@ export class DashboardService {
       },
       {
         label: 'Add New Location',
-        desc: 'Add a specific POI...',
+        desc: 'Create a city, area, or local hub...',
         icon: 'pin',
         route: '/locations/new',
       },
-      { label: 'Add New Place', desc: 'Add a specific POI...', icon: 'home', route: '/places/new' },
+      {
+        label: 'Add New Place',
+        desc: 'Add an attraction, restaurant, stay, or point of interest...',
+        icon: 'home',
+        route: '/places/new',
+      },
       {
         label: 'Schedule Event',
         desc: 'Publish a time-bound activity...',

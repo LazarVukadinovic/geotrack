@@ -172,6 +172,37 @@ describe('DashboardPageComponent', () => {
     expect(navigateSpy).toHaveBeenCalledWith('/places?regionId=10');
   });
 
+  it('renders distinct quick action descriptions and preserves location/place routes', () => {
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    fixture.detectChanges();
+    flushRegions([
+      { id: 10, name: 'Dalmatia', displayName: 'Dalmatia, Croatia', territoryName: 'Croatia' },
+    ]);
+    flushDashboard(10, dashboardResponse(10));
+    fixture.changeDetectorRef.detectChanges();
+
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
+    const locationButton = buttons.find((button) =>
+      button.textContent?.includes('Add New Location'),
+    );
+    const placeButton = buttons.find((button) => button.textContent?.includes('Add New Place'));
+
+    expect(locationButton?.textContent).toContain('Create a city, area, or local hub...');
+    expect(placeButton?.textContent).toContain(
+      'Add an attraction, restaurant, stay, or point of interest...',
+    );
+
+    locationButton?.click();
+    placeButton?.click();
+
+    expect(navigateSpy).toHaveBeenCalledWith('/locations/new?regionId=10');
+    expect(navigateSpy).toHaveBeenCalledWith('/places/new?regionId=10');
+  });
+
   it('renders empty states for activity and request preview lists', () => {
     fixture.detectChanges();
     flushRegions([
