@@ -63,8 +63,10 @@ interface MonthlyVisitChart {
 interface TrendChart {
   linePath: string;
   areaPath: string;
-  yLabels: { y: number; text: string }[];
+  yLabels: { y: number; text: string; value: number }[];
   xLabels: { x: number; text: string }[];
+  xAxisLabel: string;
+  yAxisLabel: string;
   subtitle: string;
   points: TrendChartPoint[];
   isEmpty: boolean;
@@ -164,12 +166,11 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
   private static readonly searchDebounceMs = 300;
   private static readonly initialTake = 25;
-  private static readonly trendPlotLeft = 24;
+  private static readonly trendPlotLeft = 46;
   private static readonly trendPlotRight = 316;
   private static readonly trendPlotTop = 14;
   private static readonly trendPlotBottom = 148;
-  private static readonly trendValueAxisStartY = 134;
-  private static readonly trendValuePlotHeight = 120;
+  private static readonly trendPlotHeight = 134;
 
   private readonly analyticsService = inject(RegionalAnalyticsService);
   private readonly dashboardService = inject(DashboardService);
@@ -1975,17 +1976,22 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   }
 
   private buildTrendChart(raw: RegionalAnalyticsTrendPoint[], period: string): TrendChart {
-    const { points, xLabels, subtitle } = this.getPeriodSlice(raw, period);
+    const { points, xLabels, xAxisLabel, subtitle } = this.getPeriodSlice(raw, period);
+    const maxVal = Math.max(0, ...points.map(point => point.pageViews));
+    const yAxis = this.countAxisScale(maxVal);
+    const toY = (value: number) => this.trendY(value, yAxis.max);
+    const yLabels = yAxis.ticks.map(value => ({
+      y: toY(value),
+      text: this.formatCountAxisLabel(value),
+      value,
+    }));
     const fallback = {
       linePath: '',
       areaPath: '',
-      yLabels: [
-        { y: 18, text: '8K' },
-        { y: 58, text: '6K' },
-        { y: 98, text: '4K' },
-        { y: 138, text: '2K' },
-      ],
+      yLabels,
       xLabels,
+      xAxisLabel,
+      yAxisLabel: 'Page views',
       subtitle,
       points: [] as TrendChartPoint[],
       isEmpty: true,
@@ -1995,20 +2001,10 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       return fallback;
     }
 
-    const maxVal = Math.max(...points.map(point => point.pageViews));
-    const step = this.niceStep(maxVal);
     const count = points.length;
     const plotWidth = AnalyticsPageComponent.trendPlotRight - AnalyticsPageComponent.trendPlotLeft;
     const toX = (index: number) =>
       AnalyticsPageComponent.trendPlotLeft + (count > 1 ? index / (count - 1) : 0) * plotWidth;
-    const toY = (value: number) => Math.max(
-      AnalyticsPageComponent.trendPlotTop,
-      Math.min(
-        AnalyticsPageComponent.trendPlotBottom,
-        AnalyticsPageComponent.trendValueAxisStartY -
-          ((value - step) / (step * 3)) * AnalyticsPageComponent.trendValuePlotHeight,
-      ),
-    );
     const plotLeft = AnalyticsPageComponent.trendPlotLeft;
     const plotRight = AnalyticsPageComponent.trendPlotRight;
     const ptsWithoutHover = points.map((point, index) => ({
@@ -2040,13 +2036,10 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     return {
       linePath,
       areaPath,
-      yLabels: [
-        { y: 18, text: this.fmtK(step * 4) },
-        { y: 58, text: this.fmtK(step * 3) },
-        { y: 98, text: this.fmtK(step * 2) },
-        { y: 138, text: this.fmtK(step) },
-      ],
+      yLabels,
       xLabels,
+      xAxisLabel,
+      yAxisLabel: 'Page views',
       subtitle,
       points: pts,
       isEmpty: false,
@@ -2056,9 +2049,14 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   private getPeriodSlice(raw: RegionalAnalyticsTrendPoint[], period: string): {
     points: TrendSlicePoint[];
     xLabels: { x: number; text: string }[];
+    xAxisLabel: string;
     subtitle: string;
   } {
-    const px = (index: number, count: number) => +(24 + (count > 1 ? index / (count - 1) : 0) * 292).toFixed(1);
+    const px = (index: number, count: number) => +(
+      AnalyticsPageComponent.trendPlotLeft +
+      (count > 1 ? index / (count - 1) : 0) *
+      (AnalyticsPageComponent.trendPlotRight - AnalyticsPageComponent.trendPlotLeft)
+    ).toFixed(1);
     const source = (raw ?? []).map(point => this.normalizeTrendPoint(point));
 
     if (period === 'Last 7 Days') {
@@ -2066,6 +2064,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       return {
         points,
         xLabels: points.map((_, index) => ({ x: px(index, points.length), text: String(index + 1) })),
+        xAxisLabel: 'Day in last 7 days',
         subtitle: 'Rolling 7-day view engagement',
       };
     }
@@ -2079,6 +2078,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       return {
         points,
         xLabels: points.map((_, index) => ({ x: px(index, points.length), text: String(index + 1) })),
+        xAxisLabel: 'Grouped period in last 90 days',
         subtitle: 'Grouped view engagement - last 90 days',
       };
     }
@@ -2092,6 +2092,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       return {
         points,
         xLabels: points.map((_, index) => ({ x: px(index, points.length), text: String(index + 1) })),
+        xAxisLabel: 'Grouped period',
         subtitle: 'View engagement across available analytics history',
       };
     }
@@ -2100,9 +2101,9 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     const count = points.length;
     return {
       points,
-      xLabels: ([[0, '1'], [4, '5'], [9, '10'], [14, '15'], [19, '20'], [count - 1, '30']] as [number, string][])
-        .filter(([index]) => index >= 0 && index < count)
-        .map(([index, text]) => ({ x: px(index, count), text })),
+      xLabels: this.last30DayTickIndexes(count)
+        .map(index => ({ x: px(index, count), text: String(index + 1) })),
+      xAxisLabel: 'Day in last 30 days',
       subtitle: 'Rolling 30-day view engagement',
     };
   }
@@ -2116,6 +2117,81 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       pageViews: Number.isFinite(pageViews) ? Math.max(0, pageViews) : 0,
       uniqueVisitors: Number.isFinite(uniqueVisitors) ? Math.max(0, uniqueVisitors) : null,
     };
+  }
+
+  private countAxisScale(maxValue: number): { max: number; ticks: number[] } {
+    const safeMax = Number.isFinite(maxValue) ? Math.max(0, Math.ceil(maxValue)) : 0;
+
+    if (safeMax <= 1) {
+      return { max: 1, ticks: [0, 1] };
+    }
+
+    if (safeMax <= 5) {
+      return {
+        max: safeMax,
+        ticks: Array.from({ length: safeMax + 1 }, (_, index) => index),
+      };
+    }
+
+    const step = this.niceIntegerStep(safeMax, 4);
+    const axisMax = Math.max(step, Math.ceil(safeMax / step) * step);
+    return {
+      max: axisMax,
+      ticks: this.integerTicks(axisMax, step),
+    };
+  }
+
+  private niceIntegerStep(maxValue: number, intervals: number): number {
+    const rawStep = Math.max(1, maxValue / Math.max(1, intervals));
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const candidates = [1, 2, 2.5, 5, 10]
+      .map(multiplier => multiplier * magnitude)
+      .filter(step => Number.isInteger(step) && step >= 1);
+
+    return candidates.find(step => step >= rawStep) ?? Math.ceil(rawStep);
+  }
+
+  private integerTicks(maxValue: number, step: number): number[] {
+    const ticks: number[] = [];
+    for (let value = 0; value <= maxValue; value += step) {
+      ticks.push(value);
+    }
+
+    if (ticks[ticks.length - 1] !== maxValue) {
+      ticks.push(maxValue);
+    }
+
+    return ticks;
+  }
+
+  private trendY(value: number, maxValue: number): number {
+    const safeMax = Math.max(1, maxValue);
+    const ratio = Math.max(0, value) / safeMax;
+    return +Math.max(
+      AnalyticsPageComponent.trendPlotTop,
+      Math.min(
+        AnalyticsPageComponent.trendPlotBottom,
+        AnalyticsPageComponent.trendPlotBottom - ratio * AnalyticsPageComponent.trendPlotHeight,
+      ),
+    ).toFixed(1);
+  }
+
+  private formatCountAxisLabel(value: number): string {
+    return this.fmtK(Math.round(value));
+  }
+
+  private last30DayTickIndexes(count: number): number[] {
+    if (count <= 0) return [];
+
+    const indexes = new Set<number>();
+    [0, 4, 9, 14, 19, 29].forEach(index => {
+      if (index < count) {
+        indexes.add(index);
+      }
+    });
+    indexes.add(count - 1);
+
+    return [...indexes].sort((a, b) => a - b);
   }
 
   private buildTrendBucket(points: TrendSlicePoint[], index: number): TrendSlicePoint {

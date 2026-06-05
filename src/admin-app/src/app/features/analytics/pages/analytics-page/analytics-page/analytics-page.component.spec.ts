@@ -96,6 +96,7 @@ describe('AnalyticsPageComponent', () => {
             isTerritoryManager: () => false,
             canAccessTerritoryAdmin: () => false,
             isRegionalManager: () => true,
+            isContentModerator: () => false,
           },
         },
         { provide: RegionalAnalyticsService, useValue: analyticsService },
@@ -186,7 +187,7 @@ describe('AnalyticsPageComponent', () => {
     expect(tooltipText()).toContain('18');
     let active = activeTrendPoint();
     expect(active).not.toBeNull();
-    expect(active?.getAttribute('cx')).toBe('170');
+    expect(active?.getAttribute('cx')).toBe('181');
 
     points[1].dispatchEvent(new MouseEvent('mouseleave'));
     fixture.detectChanges();
@@ -219,6 +220,18 @@ describe('AnalyticsPageComponent', () => {
     expect(activeTrendPoint()).toBeNull();
   });
 
+  it('renders page views trend axis labels and accessible SVG metadata', () => {
+    fixture.detectChanges();
+
+    const chart = pageViewsTrendChart();
+
+    expect(pageViewsTrendXAxisLabel()).toBe('Day in last 30 days');
+    expect(pageViewsTrendYAxisLabel()).toBe('Page views');
+    expect(chart.querySelector('title')?.textContent).toBe('Page Views Trend');
+    expect(chart.querySelector('desc')?.textContent).toContain('X axis: Day in last 30 days');
+    expect(chart.querySelector('desc')?.textContent).toContain('Y axis: Page views');
+  });
+
   it('generates a non-overshooting page views trend line within the zero baseline', () => {
     const overview = overviewResponse();
     overview.pageViewsTrend = trendPoints([0, 14, 0, 52, 0]);
@@ -237,11 +250,7 @@ describe('AnalyticsPageComponent', () => {
   });
 
   it('renders zero-only page views trend data as a flat baseline', () => {
-    const overview = overviewResponse();
-    overview.pageViewsTrend = trendPoints([0, 0, 0, 0]);
-    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
-
-    fixture.detectChanges();
+    renderTrendValues([0, 0, 0, 0]);
 
     const path = pageViewsTrendLinePath();
     const yValues = pathYCoordinates(path);
@@ -250,6 +259,30 @@ describe('AnalyticsPageComponent', () => {
     expect(yValues.length).toBe(4);
     expect(yValues.every(y => y === 148)).toBe(true);
     expect(pageViewsTrendPoints().length).toBe(4);
+  });
+
+  it('uses unique zero-to-one Y ticks when page views trend max is zero', () => {
+    renderTrendValues([0, 0, 0]);
+
+    expect(pageViewsTrendYLabels()).toEqual(['0', '1']);
+  });
+
+  it('uses unique zero-to-one Y ticks when page views trend max is one', () => {
+    renderTrendValues([0, 1, 0]);
+
+    expect(pageViewsTrendYLabels()).toEqual(['0', '1']);
+  });
+
+  it('uses integer Y ticks for small page views trend counts', () => {
+    renderTrendValues([0, 2, 5]);
+
+    expect(pageViewsTrendYLabels()).toEqual(['0', '1', '2', '3', '4', '5']);
+  });
+
+  it('uses readable nice integer Y ticks for larger page views trend counts', () => {
+    renderTrendValues([0, 50, 100]);
+
+    expect(pageViewsTrendYLabels()).toEqual(['0', '25', '50', '75', '100']);
   });
 
   it('renders sparse page views trend data without invalid SVG', () => {
@@ -262,7 +295,7 @@ describe('AnalyticsPageComponent', () => {
     const path = pageViewsTrendLinePath();
     const yValues = pathYCoordinates(path);
 
-    expect(path).toMatch(/^M24\.0,/);
+    expect(path).toMatch(/^M46\.0,/);
     expect(path).not.toContain('NaN');
     expect(yValues.length).toBe(1);
     expect(yValues[0]).toBeGreaterThanOrEqual(14);
@@ -687,6 +720,37 @@ describe('AnalyticsPageComponent', () => {
     return pageViewsTrendChart()
       .querySelector('[data-testid="page-views-trend-line"]')
       ?.getAttribute('d') ?? '';
+  }
+
+  function pageViewsTrendXAxisLabel(): string {
+    return pageViewsTrendChart()
+      .querySelector('[data-testid="page-views-trend-x-axis-label"]')
+      ?.textContent
+      ?.trim() ?? '';
+  }
+
+  function pageViewsTrendYAxisLabel(): string {
+    return pageViewsTrendChart()
+      .querySelector('[data-testid="page-views-trend-y-axis-label"]')
+      ?.textContent
+      ?.trim() ?? '';
+  }
+
+  function pageViewsTrendYLabels(): string[] {
+    const labels = Array.from(
+      pageViewsTrendChart().querySelectorAll('[data-testid="page-views-trend-y-label"]'),
+    );
+    const texts = labels.map(label => label.textContent?.trim() ?? '');
+
+    expect(new Set(texts).size).toBe(texts.length);
+    return texts;
+  }
+
+  function renderTrendValues(values: number[]): void {
+    const overview = overviewResponse();
+    overview.pageViewsTrend = trendPoints(values);
+    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
+    fixture.detectChanges();
   }
 
   function pathYCoordinates(path: string): number[] {

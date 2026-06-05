@@ -146,25 +146,27 @@
               <ng-container *ngIf="trendChart() as chart">
                 <div class="text-xs text-gray-400 mb-4">{{ chart.subtitle }}</div>
                 <svg
-                  viewBox="0 0 320 160"
+                  viewBox="0 0 320 180"
                   class="w-full"
-                  style="height: 160px;"
+                  style="height: 180px;"
                   role="img"
-                  aria-label="Page views trend line chart"
+                  aria-labelledby="pageViewsTrendTitle pageViewsTrendDescription"
                   data-testid="page-views-trend-chart"
                   (mouseleave)="clearActiveTrendPoint()"
                 >
+                  <title id="pageViewsTrendTitle">Page Views Trend</title>
+                  <desc id="pageViewsTrendDescription">{{ chart.subtitle }}. X axis: {{ chart.xAxisLabel }}. Y axis: {{ chart.yAxisLabel }}.</desc>
                   <defs>
                     <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stop-color="#185FA5" stop-opacity="0.15"/>
                       <stop offset="100%" stop-color="#185FA5" stop-opacity="0"/>
                     </linearGradient>
                   </defs>
-                  <text *ngFor="let lbl of chart.yLabels" x="4" [attr.y]="lbl.y" font-size="9" fill="#9ca3af">{{ lbl.text }}</text>
-                  <line x1="24" y1="14"  x2="316" y2="14"  stroke="#f3f4f6" stroke-width="1"/>
-                  <line x1="24" y1="54"  x2="316" y2="54"  stroke="#f3f4f6" stroke-width="1"/>
-                  <line x1="24" y1="94"  x2="316" y2="94"  stroke="#f3f4f6" stroke-width="1"/>
-                  <line x1="24" y1="134" x2="316" y2="134" stroke="#f3f4f6" stroke-width="1"/>
+                  <text x="9" y="81" transform="rotate(-90 9 81)" text-anchor="middle" font-size="9" font-weight="600" fill="#6b7280" data-testid="page-views-trend-y-axis-label">{{ chart.yAxisLabel }}</text>
+                  <g *ngFor="let lbl of chart.yLabels">
+                    <line x1="46" [attr.y1]="lbl.y" x2="316" [attr.y2]="lbl.y" stroke="#f3f4f6" stroke-width="1"/>
+                    <text x="38" [attr.y]="lbl.y" text-anchor="end" dominant-baseline="middle" font-size="9" fill="#9ca3af" data-testid="page-views-trend-y-label">{{ lbl.text }}</text>
+                  </g>
                   <path [attr.d]="chart.areaPath" fill="url(#areaGrad)"/>
                   <path [attr.d]="chart.linePath" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-testid="page-views-trend-line"/>
                   <g
@@ -214,6 +216,7 @@
                     ></circle>
                   </ng-container>
                   <text *ngFor="let lbl of chart.xLabels" [attr.x]="lbl.x" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">{{ lbl.text }}</text>
+                  <text x="181" y="176" text-anchor="middle" font-size="9" font-weight="600" fill="#6b7280" data-testid="page-views-trend-x-axis-label">{{ chart.xAxisLabel }}</text>
                 </svg>
               </ng-container>
             </div>
