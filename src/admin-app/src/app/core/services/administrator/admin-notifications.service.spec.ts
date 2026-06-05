@@ -61,6 +61,60 @@ describe('AdminNotificationsService', () => {
     expect(service.unreadCount()).toBe(3);
   });
 
+  it('normalizes alternate notification response wrappers without creating fake rows', () => {
+    service.getNotifications$({ includeRead: true, skip: 0, take: 25 }).subscribe(page => {
+      expect(page.items.length).toBe(1);
+      expect(page.items[0].id).toBe(12);
+      expect(page.items[0].title).toBe('Pascal case notification');
+      expect(page.items[0].isRead).toBe(false);
+      expect(page.items[0].targetRoute).toBe('/admin-dashboard');
+      expect(page.unreadCount).toBe(1);
+      expect(page.totalCount).toBe(1);
+      expect(page.hasMore).toBe(false);
+    });
+
+    const request = http.expectOne('/api/admin/notifications?includeRead=true&skip=0&take=25');
+    expect(request.request.method).toBe('GET');
+    request.flush({
+      Data: {
+        Results: [
+          {
+            Id: '12',
+            Type: 'System',
+            Title: 'Pascal case notification',
+            Message: 'The response shape is normalized.',
+            Severity: 'Info',
+            IsRead: 'false',
+            CreatedAt: '2026-05-26T20:00:00Z',
+            TargetType: 'System',
+            TargetId: '99',
+            TargetRoute: '/admin-dashboard',
+          },
+        ],
+      },
+      UnreadCount: '1',
+      Total: '1',
+      Skip: '0',
+      Take: '25',
+      NextSkip: null,
+      HasMore: 'false',
+    });
+
+    expect(service.unreadCount()).toBe(1);
+  });
+
+  it('normalizes unread-count response casing', () => {
+    service.getUnreadCount$().subscribe(response => {
+      expect(response.unreadCount).toBe(4);
+    });
+
+    const request = http.expectOne('/api/admin/notifications/unread-count');
+    expect(request.request.method).toBe('GET');
+    request.flush({ UnreadCount: '4' });
+
+    expect(service.unreadCount()).toBe(4);
+  });
+
   it('marks one notification as read and stores the backend unread count', () => {
     service.markRead$(11).subscribe(result => {
       expect(result.unreadCount).toBe(2);
