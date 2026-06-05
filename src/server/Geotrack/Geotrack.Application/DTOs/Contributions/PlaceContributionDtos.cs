@@ -9,6 +9,13 @@ public class ContributionPlaceTypeDto
     public bool IsOwnable { get; set; }
 }
 
+public class ContributionStayTypeDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+}
+
 public class ContributionFeatureOptionDto
 {
     public string Id { get; set; } = string.Empty;

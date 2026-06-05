@@ -26,7 +26,7 @@ public class AdminRegionalController : ControllerBase
     private readonly IRegionalAnalyticsService _analytics;
     private readonly IRegionalMediaService _media;
     private readonly ILogger<AdminRegionalController> _logger;
-    private readonly IContributionMediaStorageService _mediaStorage;
+    private readonly IRegionalEntityImageStorageService _imageStorage;
 
     public AdminRegionalController(
         IRegionalDashboardService regionalDashboard,
@@ -39,7 +39,7 @@ public class AdminRegionalController : ControllerBase
         IRegionalScopeValidationService scopeValidation,
         IRegionalAnalyticsService analytics,
         IRegionalMediaService media,
-        IContributionMediaStorageService mediaStorage,
+        IRegionalEntityImageStorageService imageStorage,
         ILogger<AdminRegionalController> logger)
     {
         _regionalDashboard = regionalDashboard;
@@ -53,7 +53,7 @@ public class AdminRegionalController : ControllerBase
         _analytics = analytics;
         _media = media;
         _logger = logger;
-        _mediaStorage = mediaStorage;
+        _imageStorage = imageStorage;
     }
 
     [HttpGet("regions")]
@@ -898,6 +898,19 @@ public class AdminRegionalController : ControllerBase
         }
     }
 
+    [HttpGet("stay-types")]
+    public async Task<ActionResult<List<RegionalStayTypeDto>>> GetStayTypes()
+    {
+        try
+        {
+            return Ok(await _places.GetStayTypesAsync(GetCurrentUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpDelete("places/{id:int}")]
     public async Task<IActionResult> DeletePlace(
         [FromRoute] int id,
@@ -1313,7 +1326,7 @@ public class AdminRegionalController : ControllerBase
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory);
 
-        var stored = await _mediaStorage.StoreAsync(GetCurrentUserId(), memory.ToArray());
+        var stored = await _imageStorage.StoreImageAsync(GetCurrentUserId(), memory.ToArray(), file.FileName, file.ContentType);
         return stored.MediaUrl;
     }
 

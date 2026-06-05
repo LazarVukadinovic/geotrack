@@ -31,6 +31,7 @@ import {
   RegionalPlaceParentLocationDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
+  RegionalStayTypeDto,
   RegionalPlaceUpdateRequest,
 } from '../../../../core/models/place.model';
 import {
@@ -100,6 +101,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   regionLoading = false;
   parentLocationsLoading = false;
   placeTypesLoading = false;
+  hasLinkedContribution = false;
   tagsLoading = false;
   tagSearchLoading = false;
   isSaving = false;
@@ -118,6 +120,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   summary = '';
   parentLocationId: number | null = null;
   placeTypeId: number | null = null;
+  stayTypeId: number | null = null;
   bestTimeToVisit = '';
   visitorTips = '';
   accessNotes = '';
@@ -131,6 +134,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   parentLocations: RegionalPlaceParentLocationDto[] = [];
   placeTypes: RegionalPlaceTypeDto[] = [];
+  stayTypes: RegionalStayTypeDto[] = [];
   placeTags: RegionalPlaceTagDto[] = [];
   classItems: ClassItem[] = [];
   additionalTagResults: RegionalPlaceTagDto[] = [];
@@ -217,6 +221,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.loadAssignedRegions();
     this.applyInitialCoordinatesFromRoute();
     this.loadPlaceTypes();
+    this.loadStayTypes();
     this.loadPlaceTags();
   }
 
@@ -278,6 +283,16 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   get selectedPlaceTypeName(): string {
     return this.placeTypes.find(type => type.id === this.placeTypeId)?.name ?? '';
+  }
+
+  get isStayType(): boolean {
+    const name = (this.selectedPlaceTypeName ?? '').toLowerCase().trim();
+    return name === 'stay' || name === 'stays' || name === 'hotel' || name === 'hotels' ||
+      name === 'accommodation' || name === 'accommodations';
+  }
+
+  get selectedStayTypeName(): string {
+    return this.stayTypes.find(t => t.id === this.stayTypeId)?.name ?? '';
   }
 
   get selectedAdditionalTags(): RegionalPlaceTagDto[] {
@@ -494,6 +509,22 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
+  loadStayTypes(): void {
+    this.placesService.getStayTypes().subscribe({
+      next: types => {
+        this.stayTypes = Array.isArray(types) ? types : [];
+        if (this.stayTypeId && !this.stayTypes.some(t => t.id === this.stayTypeId)) {
+          this.stayTypeId = this.stayTypes[0]?.id ?? null;
+        }
+        this.notifyStateChanged();
+      },
+      error: () => {
+        this.stayTypes = [];
+        this.notifyStateChanged();
+      },
+    });
+  }
+
   loadPlaceTags(): void {
     this.tagsLoading = true;
     this.notifyStateChanged();
@@ -526,10 +557,16 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.placesService.getPlace(this.activeRegionId, this.editPlaceId).subscribe({
       next: dto => {
+        const wasLinked = this.hasLinkedContribution;
+        this.hasLinkedContribution = dto.hasLinkedContribution ?? false;
+        if (this.hasLinkedContribution !== wasLinked) {
+          this.loadPlaceTypes();
+        }
         this.placeName = dto.name ?? '';
         this.summary = dto.summary ?? dto.subtitle ?? '';
         this.parentLocationId = dto.locationId ?? null;
         this.placeTypeId = dto.placeTypeId ?? null;
+        this.stayTypeId = dto.stayTypeId ?? null;
         this.bestTimeToVisit = dto.bestTimeToVisit ?? '';
         this.visitorTips = dto.visitorTips ?? '';
         this.accessNotes = dto.accessNotes ?? '';
@@ -1141,6 +1178,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       regionId,
       locationId,
       placeTypeId,
+      stayTypeId: this.isStayType ? (this.stayTypeId ?? null) : null,
       name,
       summary: normalizedSummary,
       description: descriptionHtml || null,
@@ -1224,6 +1262,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     return {
       locationId,
       placeTypeId,
+      stayTypeId: this.isStayType ? (this.stayTypeId ?? null) : null,
       name,
       subtitle: normalizedSummary,
       description: descriptionHtml || null,
@@ -1514,12 +1553,18 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
+  private static readonly CONTRIBUTION_INELIGIBLE_PLACE_TYPES = new Set(['beach', 'nature', 'shopping']);
+
   private normalizePlaceTypes(types: RegionalPlaceTypeDto[] | null | undefined): RegionalPlaceTypeDto[] {
     const seen = new Set<number>();
     return (types ?? [])
       .filter(type => {
         if (!type || seen.has(type.id)) return false;
         seen.add(type.id);
+        if (this.hasLinkedContribution &&
+            NewPlaceComponent.CONTRIBUTION_INELIGIBLE_PLACE_TYPES.has(type.name.toLowerCase().trim())) {
+          return false;
+        }
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));

@@ -77,6 +77,12 @@ public class ContributionsController : ControllerBase
         return Ok(await _contributions.GetPlaceTypesAsync());
     }
 
+    [HttpGet("stay-types")]
+    public async Task<ActionResult<List<ContributionStayTypeDto>>> GetStayTypes()
+    {
+        return Ok(await _contributions.GetStayTypesAsync());
+    }
+
     [HttpGet("feature-options")]
     public async Task<ActionResult<ContributionFeatureOptionsDto>> GetFeatureOptions()
     {

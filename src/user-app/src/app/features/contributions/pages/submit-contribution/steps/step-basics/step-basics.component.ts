@@ -68,7 +68,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   saved = output<BasicsData>();
 
   placeTypes = signal<ContributionPlaceTypeOption[]>(defaultPlaceTypes());
-  stayTypes = ['Hotel', 'Villa', 'Apartment', 'Resort', 'Cabin', 'Glamping', 'Hostel'];
+  stayTypes = signal<{ id: number; name: string }[]>(defaultStayTypes());
   coverPreviewUrl = signal('');
   cardPreviewUrl = signal('');
   galleryPreviewUrls = signal<string[]>([]);
@@ -100,6 +100,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadPlaceTypes();
+    this.loadStayTypes();
   }
 
   selectPlaceType(type: ContributionPlaceTypeOption): void {
@@ -524,6 +525,15 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
       normalizePlaceType(type.name) === selectedName);
   }
 
+  private loadStayTypes(): void {
+    this.http.get<{ id: number; name: string; slug: string }[]>('/api/contributions/stay-types').subscribe({
+      next: (types) => {
+        const normalized = (types ?? []).filter(t => !!t?.name?.trim()).map(t => ({ id: t.id, name: t.name.trim() }));
+        if (normalized.length > 0) this.stayTypes.set(normalized);
+      },
+    });
+  }
+
   private loadPlaceTypes(): void {
     this.http.get<ContributionPlaceTypeOption[]>('/api/contributions/place-types').subscribe({
       next: (types) => {
@@ -865,6 +875,18 @@ function defaultPlaceTypes(): ContributionPlaceTypeOption[] {
     { id: 0, name: 'Cafe', description: null, isOwnable: true },
     { id: 0, name: 'Bar', description: null, isOwnable: true },
     { id: 0, name: 'Stay', description: null, isOwnable: true },
+  ];
+}
+
+function defaultStayTypes(): { id: number; name: string }[] {
+  return [
+    { id: 0, name: 'Hotel' },
+    { id: 0, name: 'Villa' },
+    { id: 0, name: 'Apartment' },
+    { id: 0, name: 'Resort' },
+    { id: 0, name: 'Cabin' },
+    { id: 0, name: 'Glamping' },
+    { id: 0, name: 'Hostel' },
   ];
 }
 

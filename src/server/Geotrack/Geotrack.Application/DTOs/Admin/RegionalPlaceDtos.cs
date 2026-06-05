@@ -37,6 +37,7 @@ public class RegionalPlaceDetailDto : RegionalPlaceListItemDto
 {
     public bool IsOwnable { get; set; }
     public bool HasOwner => Owners.Count > 0;
+    public bool HasLinkedContribution { get; set; }
     public List<RegionalPlaceOwnerDto> Owners { get; set; } = new();
 
     public double Latitude { get; set; }
@@ -99,6 +100,7 @@ public class RegionalPlaceUpdateRequestDto
     public List<RegionalPlaceOperatingHourDto>? OperatingHours { get; set; }
     public int? PlaceTypeId { get; set; }
     public int? StayTypeId { get; set; }
+    public string? StayTypeName { get; set; }
     public int? LocationId { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
@@ -111,6 +113,7 @@ public class RegionalPlaceCreateRequestDto
     public int LocationId { get; set; }
     public int? PlaceTypeId { get; set; }
     public int? StayTypeId { get; set; }
+    public string? StayTypeName { get; set; }
     public string? Name { get; set; }
     public string? Summary { get; set; }
     public string? Description { get; set; }
@@ -174,4 +177,11 @@ public class RegionalPlaceTypeDto
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public bool IsOwnable { get; set; }
+}
+
+public class RegionalStayTypeDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
 }

@@ -9,6 +9,7 @@ public interface IPlaceContributionService
     Task<GetPlaceContributionsResponseDto> GetPendingReviewAsync(int? reviewerUserId = null);
     Task<PlaceContributionDetailDto?> GetPendingReviewByIdAsync(int contributionId, int? reviewerUserId = null);
     Task<List<ContributionPlaceTypeDto>> GetPlaceTypesAsync();
+    Task<List<ContributionStayTypeDto>> GetStayTypesAsync();
     Task<ContributionFeatureOptionsDto> GetFeatureOptionsAsync();
 
     Task<PlaceContributionDetailDto> CreateAsync(

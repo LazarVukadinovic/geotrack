@@ -190,6 +190,7 @@ public static class SeedData
     {
         await db.Database.MigrateAsync();
 
+        await EnsureStandardStayTypesAsync(db);
         var tagLookup = await EnsureSmartTagTaxonomyAsync(db);
         await EnsureInterestTopicsAsync(db, tagLookup);
         await EnsureExploreDemoPlaceTagsAsync(db, tagLookup);
@@ -203,9 +204,42 @@ public static class SeedData
         await EnsureDefaultModerationTermsAsync(db);
     }
 
+    private static readonly (string Name, string Slug, string Description)[] StandardStayTypes =
+    [
+        ("Hotel",     "hotel",     "Hotel accommodation"),
+        ("Villa",     "villa",     "Private villa accommodation"),
+        ("Apartment", "apartment", "Private apartment accommodation"),
+        ("Resort",    "resort",    "Resort accommodation"),
+        ("Cabin",     "cabin",     "Cabin accommodation"),
+        ("Glamping",  "glamping",  "Glamping accommodation"),
+        ("Hostel",    "hostel",    "Hostel accommodation"),
+    ];
+
+    private static async Task EnsureStandardStayTypesAsync(AppDbContext db)
+    {
+        var now = DateTime.UtcNow;
+        foreach (var (name, slug, description) in StandardStayTypes)
+        {
+            var exists = await db.StayTypes.AnyAsync(st => st.Slug == slug);
+            if (!exists)
+            {
+                db.StayTypes.Add(new StayType
+                {
+                    Name = name,
+                    Slug = slug,
+                    Description = description,
+                    CreatedAt = now,
+                });
+            }
+        }
+        await db.SaveChangesAsync();
+    }
+
     private static async Task InitializeCoreAsync(AppDbContext db)
     {
         await db.Database.MigrateAsync();
+
+        await EnsureStandardStayTypesAsync(db);
 
         if (await db.Destinations.AnyAsync())
         {

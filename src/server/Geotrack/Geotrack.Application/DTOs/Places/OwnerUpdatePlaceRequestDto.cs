@@ -3,6 +3,7 @@ namespace Geotrack.Application.DTOs.Places;
 public class OwnerUpdatePlaceRequestDto
 {
     public string? Name { get; set; }
+    public int? PlaceTypeId { get; set; }
     public string? Description { get; set; }
     public string? OpeningHours { get; set; }
     public bool? OperatingHoursEnabled { get; set; }

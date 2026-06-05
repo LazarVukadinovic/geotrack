@@ -13,6 +13,7 @@ import {
   RegionalPlaceOwnerDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
+  RegionalStayTypeDto,
   RegionalPlaceUpdateRequest,
 } from '../models/place.model';
 
@@ -201,6 +202,10 @@ export class PlacesListService {
 
   getPlaceTypes(): Observable<RegionalPlaceTypeDto[]> {
     return this.http.get<RegionalPlaceTypeDto[]>('/api/admin/regional/place-types');
+  }
+
+  getStayTypes(): Observable<RegionalStayTypeDto[]> {
+    return this.http.get<RegionalStayTypeDto[]>('/api/admin/regional/stay-types');
   }
 
   deletePlace(regionId: number, placeId: string | number): Observable<void> {

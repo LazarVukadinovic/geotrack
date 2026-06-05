@@ -31,6 +31,12 @@ public class PlaceContributionService : IPlaceContributionService
         "cafe",
         "bar"
     };
+    private static readonly HashSet<string> ContributionIneligiblePlaceTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "beach",
+        "nature",
+        "shopping"
+    };
     private static readonly Regex ManagedContributionMediaFileNameRegex = new(
         @"^[a-z0-9][a-z0-9._-]{0,199}\.(png|jpe?g|gif|webp)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -135,6 +141,7 @@ public class PlaceContributionService : IPlaceContributionService
     {
         return await _db.PlaceTypes
             .AsNoTracking()
+            .Where(type => !ContributionIneligiblePlaceTypes.Contains(type.Name))
             .OrderBy(type => type.Name)
             .ThenBy(type => type.Id)
             .Select(type => new ContributionPlaceTypeDto
@@ -143,6 +150,21 @@ public class PlaceContributionService : IPlaceContributionService
                 Name = type.Name,
                 Description = type.Description,
                 IsOwnable = type.IsOwnable
+            })
+            .ToListAsync();
+    }
+
+    public async Task<List<ContributionStayTypeDto>> GetStayTypesAsync()
+    {
+        return await _db.StayTypes
+            .AsNoTracking()
+            .OrderBy(st => st.Name == "Hotel" ? 0 : 1)
+            .ThenBy(st => st.Name)
+            .Select(st => new ContributionStayTypeDto
+            {
+                Id = st.Id,
+                Name = st.Name,
+                Slug = st.Slug
             })
             .ToListAsync();
     }
@@ -1190,6 +1212,18 @@ public class PlaceContributionService : IPlaceContributionService
 
         if (!placeTypeId.HasValue)
             placeTypeId = await ResolvePlaceTypeIdAsync("Place");
+
+        if (placeTypeId.HasValue)
+        {
+            var resolvedTypeName = await _db.PlaceTypes
+                .AsNoTracking()
+                .Where(pt => pt.Id == placeTypeId.Value)
+                .Select(pt => pt.Name)
+                .FirstOrDefaultAsync();
+
+            if (resolvedTypeName != null && ContributionIneligiblePlaceTypes.Contains(resolvedTypeName))
+                throw new InvalidOperationException($"Place type '{resolvedTypeName}' is not available for contributions.");
+        }
 
         var location = await ResolveContributionLocationAsync(request);
         var requestedPlaceAmenities = NormalizeStringList(request.Amenities, 80, 30);

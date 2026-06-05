@@ -278,6 +278,7 @@ export class ContributionsService {
 
     const payload = {
       name: basics.name,
+      placeTypeId: basics.placeTypeId ?? null,
       description: details.description,
       operatingHoursEnabled: details.openingHoursEnabled,
       operatingHours: details.openingHoursEnabled ? details.operatingHours : [],

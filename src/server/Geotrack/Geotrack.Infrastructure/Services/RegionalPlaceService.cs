@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
@@ -147,6 +147,7 @@ public class RegionalPlaceService : IRegionalPlaceService
                     .Select(image => image.Url)
                     .ToList(),
                 Tags = place.PlaceTags
+                    .Where(placeTag => placeTag.Tag.ForPlace)
                     .OrderBy(placeTag => placeTag.Tag.Name)
                     .Select(placeTag => new RegionalPlaceTagDto
                     {
@@ -199,6 +200,7 @@ public class RegionalPlaceService : IRegionalPlaceService
                 PlaceTypeId = place.PlaceTypeId,
                 PlaceTypeName = place.PlaceType.Name,
                 IsOwnable = place.PlaceType.IsOwnable,
+                HasLinkedContribution = place.PlaceContributions.Any(),
                 Owners = place.UserPlaces
                     .OrderBy(userPlace => userPlace.User.DisplayName ?? userPlace.User.Username)
                     .ThenBy(userPlace => userPlace.User.Id)
@@ -255,6 +257,7 @@ public class RegionalPlaceService : IRegionalPlaceService
                     .Select(image => image.Url)
                     .ToList(),
                 Tags = place.PlaceTags
+                    .Where(placeTag => placeTag.Tag.ForPlace)
                     .OrderBy(placeTag => placeTag.Tag.Name)
                     .Select(placeTag => new RegionalPlaceTagDto
                     {
@@ -313,12 +316,19 @@ public class RegionalPlaceService : IRegionalPlaceService
         var placeType = await ResolvePlaceTypeAsync(request.PlaceTypeId);
         var isStayPlace = IsStayPlaceType(placeType.Name);
 
-        if (request.StayTypeId.HasValue && !isStayPlace)
+        if ((request.StayTypeId.HasValue || !string.IsNullOrWhiteSpace(request.StayTypeName)) && !isStayPlace)
             throw new InvalidOperationException("Stay type can only be set for accommodation places.");
 
-        var stayTypeId = isStayPlace
-            ? await ResolveStayTypeIdAsync(request.StayTypeId)
-            : (int?)null;
+        int? stayTypeId = null;
+        if (isStayPlace)
+        {
+            if (request.StayTypeId.HasValue && request.StayTypeId.Value > 0)
+                stayTypeId = await ResolveStayTypeIdAsync(request.StayTypeId);
+            else if (!string.IsNullOrWhiteSpace(request.StayTypeName))
+                stayTypeId = await ResolveStayTypeByNameAsync(request.StayTypeName);
+            else
+                stayTypeId = await ResolveStayTypeIdAsync(null);
+        }
 
         var name = NormalizeRequiredText(request.Name, "Place name is required.", 200, "Place name is too long.");
         var summary = NormalizeRequiredText(request.Summary, "Summary is required.", 160, "Summary is too long.");
@@ -423,15 +433,53 @@ public class RegionalPlaceService : IRegionalPlaceService
             throw new InvalidOperationException("Place type is invalid.");
         }
 
-        if (request.StayTypeId.HasValue)
+        string? effectivePlaceTypeName = null;
+        if (request.PlaceTypeId.HasValue && request.PlaceTypeId.Value > 0)
         {
-            if (place.Stay is null)
-                throw new InvalidOperationException("Stay type can only be updated for accommodation places.");
+            effectivePlaceTypeName = await _db.PlaceTypes
+                .AsNoTracking()
+                .Where(pt => pt.Id == request.PlaceTypeId.Value)
+                .Select(pt => pt.Name)
+                .FirstOrDefaultAsync();
+        }
+        else
+        {
+            effectivePlaceTypeName = await _db.PlaceTypes
+                .AsNoTracking()
+                .Where(pt => pt.Id == place.PlaceTypeId)
+                .Select(pt => pt.Name)
+                .FirstOrDefaultAsync();
+        }
 
-            if (!await _db.StayTypes.AnyAsync(item => item.Id == request.StayTypeId.Value))
-                throw new InvalidOperationException("Stay type is invalid.");
+        var becomingStay = IsStayPlaceType(effectivePlaceTypeName);
 
-            place.Stay.StayTypeId = request.StayTypeId.Value;
+        int? resolvedStayTypeId = null;
+        if (becomingStay)
+        {
+            if (request.StayTypeId.HasValue && request.StayTypeId.Value > 0)
+            {
+                if (!await _db.StayTypes.AnyAsync(item => item.Id == request.StayTypeId.Value))
+                    throw new InvalidOperationException("Stay type is invalid.");
+
+                resolvedStayTypeId = request.StayTypeId.Value;
+            }
+            else if (!string.IsNullOrWhiteSpace(request.StayTypeName))
+            {
+                resolvedStayTypeId = await ResolveStayTypeByNameAsync(request.StayTypeName);
+            }
+        }
+        else if (request.StayTypeId.HasValue || !string.IsNullOrWhiteSpace(request.StayTypeName))
+        {
+            throw new InvalidOperationException("Stay type can only be set for accommodation places.");
+        }
+
+        if (resolvedStayTypeId.HasValue && place.Stay is not null)
+            place.Stay.StayTypeId = resolvedStayTypeId.Value;
+
+        if (becomingStay && place.Stay is null)
+        {
+            var stayTypeId = resolvedStayTypeId ?? await ResolveStayTypeIdAsync(null);
+            place.Stay = new Stay { StayTypeId = stayTypeId };
         }
 
         ApplyUpdate(place, request);
@@ -471,6 +519,16 @@ public class RegionalPlaceService : IRegionalPlaceService
         }
 
         place.UpdatedAt = DateTime.UtcNow;
+
+        if (request.PlaceTypeId.HasValue && request.PlaceTypeId.Value > 0)
+        {
+            var linkedContribution = await _db.PlaceContributions
+                .Where(c => c.PlaceId == place.Id && c.Status == PlaceContributionStatus.Approved)
+                .FirstOrDefaultAsync();
+
+            if (linkedContribution != null)
+                linkedContribution.PlaceTypeId = request.PlaceTypeId.Value;
+        }
 
         await _db.SaveChangesAsync();
         return await GetPlaceAsync(userId, regionId, placeId);
@@ -621,6 +679,23 @@ public class RegionalPlaceService : IRegionalPlaceService
                 Name = type.Name,
                 Description = type.Description,
                 IsOwnable = type.IsOwnable
+            })
+            .ToListAsync();
+    }
+
+    public async Task<List<RegionalStayTypeDto>> GetStayTypesAsync(int userId)
+    {
+        await EnsureRegionalManagerRoleAsync(userId);
+
+        return await _db.StayTypes
+            .AsNoTracking()
+            .OrderBy(type => type.Name == "Hotel" ? 0 : 1)
+            .ThenBy(type => type.Name)
+            .Select(type => new RegionalStayTypeDto
+            {
+                Id = type.Id,
+                Name = type.Name,
+                Description = type.Description
             })
             .ToListAsync();
     }
@@ -935,6 +1010,32 @@ public class RegionalPlaceService : IRegionalPlaceService
         return defaultStayTypeId;
     }
 
+    private async Task<int> ResolveStayTypeByNameAsync(string name)
+    {
+        var normalized = name.Trim();
+        if (string.IsNullOrEmpty(normalized))
+            return await ResolveStayTypeIdAsync(null);
+
+        var existing = await _db.StayTypes
+            .Where(st => st.Name.ToLower() == normalized.ToLower())
+            .Select(st => st.Id)
+            .FirstOrDefaultAsync();
+
+        if (existing > 0)
+            return existing;
+
+        var newType = new StayType
+        {
+            Name = normalized,
+            Slug = normalized.ToLowerInvariant().Replace(" ", "-"),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        await _db.StayTypes.AddAsync(newType);
+        await _db.SaveChangesAsync();
+        return newType.Id;
+    }
+
     private async Task<List<int>> ValidatePlaceTagIdsAsync(IEnumerable<int>? requestedTagIds)
     {
         var tagIds = (requestedTagIds ?? Array.Empty<int>())
@@ -945,16 +1046,11 @@ public class RegionalPlaceService : IRegionalPlaceService
         if (tagIds.Count == 0)
             return tagIds;
 
-        var compatibleTagIds = await _db.Tags
+        return await _db.Tags
             .AsNoTracking()
             .Where(tag => tagIds.Contains(tag.Id) && tag.ForPlace)
             .Select(tag => tag.Id)
             .ToListAsync();
-
-        if (compatibleTagIds.Count != tagIds.Count)
-            throw new InvalidOperationException("All selected tags must be place-compatible.");
-
-        return tagIds;
     }
 
     private static PlaceCoordinates ResolveRequiredCoordinates(double? latitude, double? longitude)
@@ -1246,6 +1342,7 @@ public class RegionalPlaceService : IRegionalPlaceService
             PlaceType = item.PlaceType,
             PlaceTypeId = item.PlaceTypeId,
             IsOwnable = row.IsOwnable,
+            HasLinkedContribution = row.HasLinkedContribution,
             Owners = row.Owners,
             StayType = item.StayType,
             StayTypeId = item.StayTypeId,
@@ -1473,6 +1570,7 @@ public class RegionalPlaceService : IRegionalPlaceService
         public int PlaceTypeId { get; set; }
         public string? PlaceTypeName { get; set; }
         public bool IsOwnable { get; set; }
+        public bool HasLinkedContribution { get; set; }
         public List<RegionalPlaceOwnerDto> Owners { get; set; } = new();
         public int? StayTypeId { get; set; }
         public string? StayTypeName { get; set; }

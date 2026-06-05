@@ -1450,6 +1450,22 @@ public class PlaceService : IPlaceService
         if (request.AccessibilityNotes != null)
             place.AccessibilityNotes = string.IsNullOrWhiteSpace(request.AccessibilityNotes) ? null : request.AccessibilityNotes.Trim();
 
+        if (request.PlaceTypeId.HasValue && request.PlaceTypeId.Value > 0)
+        {
+            var placeTypeExists = await _db.PlaceTypes.AnyAsync(pt => pt.Id == request.PlaceTypeId.Value);
+            if (!placeTypeExists)
+                throw new InvalidOperationException("Place type is invalid.");
+
+            place.PlaceTypeId = request.PlaceTypeId.Value;
+
+            var linkedContribution = await _db.PlaceContributions
+                .Where(c => c.PlaceId == place.Id && c.Status == PlaceContributionStatus.Approved)
+                .FirstOrDefaultAsync();
+
+            if (linkedContribution != null)
+                linkedContribution.PlaceTypeId = request.PlaceTypeId.Value;
+        }
+
         if (request.Tags is not null)
             await SyncOwnerUpdateTagsAsync(place.Id, request.Tags, now: DateTime.UtcNow);
 
