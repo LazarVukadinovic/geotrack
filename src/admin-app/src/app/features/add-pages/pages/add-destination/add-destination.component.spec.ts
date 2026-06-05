@@ -26,6 +26,7 @@ describe('AddDestinationComponent', () => {
   let destinationsService: {
     getDestinationTags: ReturnType<typeof vi.fn>;
     searchDestinationTags: ReturnType<typeof vi.fn>;
+    createDestinationTag: ReturnType<typeof vi.fn>;
     createDestination: ReturnType<typeof vi.fn>;
   };
 
@@ -55,10 +56,12 @@ describe('AddDestinationComponent', () => {
     destinationsService = {
       getDestinationTags: vi.fn(),
       searchDestinationTags: vi.fn(),
+      createDestinationTag: vi.fn(),
       createDestination: vi.fn(),
     };
     destinationsService.getDestinationTags.mockReturnValue(of(tags));
     destinationsService.searchDestinationTags.mockReturnValue(of([searchedTag]));
+    destinationsService.createDestinationTag.mockReturnValue(of(searchedTag));
     destinationsService.createDestination.mockReturnValue(of({
       id: 44,
       name: 'Created',
@@ -89,6 +92,8 @@ describe('AddDestinationComponent', () => {
             getUser: () => ({ email: 'manager@example.com', role: 'RegionalManager' }),
             isAdministrator: () => false,
             isTerritoryManager: () => false,
+            isContentModerator: () => false,
+            getActiveAdminView: () => 'RegionalManager',
             canAccessTerritoryAdmin: () => false,
             logout: vi.fn(),
           },
@@ -153,59 +158,51 @@ describe('AddDestinationComponent', () => {
     expect(readonlyInputs.some(input => input.value === 'Generated automatically after publish')).toBe(true);
   });
 
-  it('loads destination tags and supports additional tag search', async () => {
-    vi.useFakeTimers();
+  it('loads destination tags and creates new tags from the new tag input', async () => {
     expect(component.classItems.map(item => item.tag.name)).toEqual([
       'Backend Coast',
       'Culture & Heritage',
       'Historic',
     ]);
 
-    component.tagInput = 'hist';
-    component.onTagInputChange();
-    vi.advanceTimersByTime(300);
+    component.tagInput = 'Search Result Tag';
+    component.addTag(new KeyboardEvent('keydown'));
     await Promise.resolve();
 
-    expect(destinationsService.searchDestinationTags).toHaveBeenCalledWith('hist');
-    expect(component.additionalTagResults[0].id).toBe(4);
-    vi.useRealTimers();
+    expect(destinationsService.createDestinationTag).toHaveBeenCalledWith('Search Result Tag');
+    expect(component.selectedTagIds.has(4)).toBe(true);
+    expect(component.classItems.find(item => item.tag.id === 4)?.checked).toBe(true);
   });
 
-  it('initially renders only five classification tags when more are available', () => {
+  it('renders many backend tags in a compact filterable list', () => {
     const manyTags = buildTags(12);
     component.classItems = manyTags.map(tag => ({ tag, checked: false }));
     fixture.detectChanges();
 
     const pageText = fixture.nativeElement.textContent as string;
-    expect(component.visibleClassItems.map(item => item.tag.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(component.visibleClassItems.map(item => item.tag.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     expect(pageText).toContain('Backend Tag 01');
-    expect(pageText).toContain('Backend Tag 05');
-    expect(pageText).not.toContain('Backend Tag 06');
-    expect(pageText).toContain('Show more tags');
-    expect(pageText).toContain('Showing 5 of 12 tags');
+    expect(pageText).toContain('Backend Tag 12');
+    expect(pageText).not.toContain('Show 7 more tags');
+    expect(pageText).not.toContain('Showing 5 of 12 tags');
+
+    component.tagFilter = '12';
+    fixture.detectChanges();
+
+    expect(component.visibleClassItems.map(item => item.tag.id)).toEqual([12]);
   });
 
-  it('expands classification tags up to ten and collapses back to five', () => {
+  it('keeps the old show-more control removed', () => {
     const manyTags = buildTags(12);
     component.classItems = manyTags.map(tag => ({ tag, checked: false }));
-
-    component.toggleClassificationExpanded();
     fixture.detectChanges();
 
-    let pageText = fixture.nativeElement.textContent as string;
-    expect(component.visibleClassItems.map(item => item.tag.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(pageText).toContain('Backend Tag 10');
-    expect(pageText).not.toContain('Backend Tag 11');
-    expect(pageText).toContain('Show less');
-    expect(pageText).toContain('Showing 10 of 12 tags');
-
-    component.toggleClassificationExpanded();
-    fixture.detectChanges();
-
-    pageText = fixture.nativeElement.textContent as string;
-    expect(component.visibleClassItems.map(item => item.tag.id)).toEqual([1, 2, 3, 4, 5]);
-    expect(pageText).not.toContain('Backend Tag 06');
-    expect(pageText).toContain('Show more tags');
+    const pageText = fixture.nativeElement.textContent as string;
+    expect(component.showClassificationToggle).toBe(false);
+    expect(component.visibleClassItems.length).toBe(12);
+    expect(pageText).toContain('Backend Tag 12');
+    expect(pageText).not.toContain('Show fewer tags');
+    expect(pageText).not.toContain('Showing 10 of 12 tags');
   });
 
   it('does not show a classification expand control when five or fewer tags exist', () => {
@@ -215,7 +212,7 @@ describe('AddDestinationComponent', () => {
 
     const pageText = fixture.nativeElement.textContent as string;
     expect(component.showClassificationToggle).toBe(false);
-    expect(pageText).not.toContain('Show more tags');
+    expect(pageText).not.toContain('Show 0 more tags');
     expect(pageText).not.toContain('Showing 5 of 5 tags');
   });
 
@@ -253,6 +250,7 @@ describe('AddDestinationComponent', () => {
     component.selectAdditionalTag(searchedTag);
     expect(component.classItems.find(item => item.tag.id === searchedTag.id)?.checked).toBe(true);
     component.zoneConfirmed = true;
+    setPublishReadyMediaAndCenter();
     (component as any).confirmedLayer = {};
     (component as any).confirmedShapeType = 'Polygon';
     component.editorRef.nativeElement.innerHTML = '<p>Description</p>';
@@ -276,6 +274,7 @@ describe('AddDestinationComponent', () => {
 
     component.destinationName = 'Created destination';
     component.zoneConfirmed = true;
+    setPublishReadyMediaAndCenter();
     (component as any).confirmedLayer = {};
     (component as any).confirmedShapeType = 'Polygon';
 
@@ -284,4 +283,12 @@ describe('AddDestinationComponent', () => {
     expect(component.isSaving).toBe(false);
     expect(component.errorMessage).toBe('Validation failed.');
   });
+
+  function setPublishReadyMediaAndCenter(): void {
+    (component as any).cardImageFile = new File(['card'], 'card.webp', { type: 'image/webp' });
+    (component as any).coverImageFile = new File(['cover'], 'cover.webp', { type: 'image/webp' });
+    component.centerLat = 43;
+    component.centerLng = 19;
+    (component as any).scopeValidationResult = { isAllowed: true };
+  }
 });

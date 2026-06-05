@@ -760,74 +760,45 @@
           </div>
 
           <div class="bg-white border border-gray-200 rounded-xl p-4 mb-3 shadow-sm">
-            <h4 class="text-sm font-bold text-gray-900 mb-3">Classification</h4>
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Tags</h4>
 
             @if (tagsLoading) {
               <p class="text-xs text-gray-500">Loading tags...</p>
             } @else if (classItems.length === 0) {
               <p class="text-xs text-amber-600">No place-compatible tags are available.</p>
             } @else {
-              @for (item of visibleClassItems; track item.tag.id) {
-                <label class="flex items-center gap-2 text-sm text-gray-700 mb-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    [ngModel]="item.checked"
-                    (ngModelChange)="item.checked = $event; onClassItemChange(item)"
-                    class="w-4 h-4 accent-blue-700"
-                  />
-                  {{ item.tag.name }}
-                </label>
-              }
-              @if (showClassificationToggle) {
-                <button
-                  type="button"
-                  class="text-xs font-semibold text-blue-700 border-none bg-transparent cursor-pointer px-0"
-                  (click)="toggleClassificationExpanded()"
-                >
-                  {{ classificationExpanded ? 'Show fewer' : 'Show more' }}
-                </button>
-              }
+              <input
+                class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500 mb-2"
+                placeholder="Filter existing tags..."
+                [(ngModel)]="tagFilter"
+              />
+              <div class="max-h-44 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 gap-2" style="scrollbar-width: thin;">
+                @for (item of visibleClassItems; track item.tag.id) {
+                  <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer rounded-lg border border-gray-200 px-2.5 py-2 hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      [ngModel]="item.checked"
+                      (ngModelChange)="item.checked = $event; onClassItemChange(item)"
+                      class="w-4 h-4 accent-blue-700 flex-shrink-0"
+                    />
+                    <span class="min-w-0 leading-snug whitespace-normal break-words">{{ item.tag.name }}</span>
+                  </label>
+                }
+              </div>
             }
 
             <div class="mt-3">
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Additional Tags</label>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">New tag</label>
               <input
                 class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 outline-none focus:border-blue-500"
-                placeholder="Search place tags..."
+                placeholder="Type a new tag and press Enter..."
                 [(ngModel)]="tagInput"
                 (input)="onTagInputChange()"
                 (keydown.enter)="addTag($event)"
               />
 
               @if (tagSearchLoading) {
-                <p class="text-[11px] text-gray-400 mt-1">Searching...</p>
-              }
-
-              @if (additionalTagResults.length > 0) {
-                <div class="mt-2 rounded-lg border border-gray-200 overflow-hidden bg-white">
-                  @for (tag of additionalTagResults; track tag.id) {
-                    <button
-                      type="button"
-                      class="w-full text-left text-xs text-gray-700 px-2.5 py-2 bg-white hover:bg-blue-50 border-none border-b border-gray-100 cursor-pointer"
-                      (click)="selectAdditionalTag(tag)"
-                    >{{ tag.name }}</button>
-                  }
-                </div>
-              }
-
-              @if (selectedAdditionalTags.length > 0) {
-                <div class="flex gap-1.5 mt-2 overflow-x-auto pb-1" style="scrollbar-width: thin;">
-                  @for (tag of selectedAdditionalTags; track tag.id) {
-                    <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5 whitespace-nowrap flex-shrink-0">
-                      {{ tag.name }}
-                      <button
-                        type="button"
-                        (click)="removeTag(tag)"
-                        class="border-none bg-transparent text-blue-500 hover:text-blue-800 cursor-pointer p-0 leading-none text-sm"
-                      >x</button>
-                    </span>
-                  }
-                </div>
+                <p class="text-[11px] text-gray-400 mt-1">Saving tag...</p>
               }
             </div>
           </div>

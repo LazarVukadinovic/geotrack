@@ -200,6 +200,10 @@ export class PlacesListService {
     return this.http.get<RegionalPlaceTagDto[]>('/api/admin/regional/place-tags', { params });
   }
 
+  createPlaceTag(name: string): Observable<RegionalPlaceTagDto> {
+    return this.http.post<RegionalPlaceTagDto>('/api/admin/regional/place-tags', { name });
+  }
+
   getPlaceTypes(): Observable<RegionalPlaceTypeDto[]> {
     return this.http.get<RegionalPlaceTypeDto[]>('/api/admin/regional/place-types');
   }

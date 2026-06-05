@@ -42,6 +42,8 @@ public interface IRegionalPlaceService
 
     Task<List<RegionalPlaceTagDto>> GetPlaceTagsAsync(int userId, string? search);
 
+    Task<RegionalPlaceTagDto> CreatePlaceTagAsync(int userId, RegionalTagCreateRequestDto request);
+
     Task<List<RegionalPlaceTypeDto>> GetPlaceTypesAsync(int userId);
 
     Task<List<RegionalStayTypeDto>> GetStayTypesAsync(int userId);

@@ -158,6 +158,10 @@ export class LocationsListService {
     return this.http.get<RegionalLocationTagDto[]>('/api/admin/regional/location-tags', { params });
   }
 
+  createLocationTag(name: string): Observable<RegionalLocationTagDto> {
+    return this.http.post<RegionalLocationTagDto>('/api/admin/regional/location-tags', { name });
+  }
+
   getLocationTypes(): Observable<RegionalLocationTypeDto[]> {
     return this.http.get<RegionalLocationTypeDto[]>('/api/admin/regional/location-types');
   }

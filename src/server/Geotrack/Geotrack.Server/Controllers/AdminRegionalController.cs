@@ -550,6 +550,23 @@ public class AdminRegionalController : ControllerBase
         }
     }
 
+    [HttpPost("destination-tags")]
+    public async Task<ActionResult<RegionalDestinationTagDto>> CreateDestinationTag(
+        [FromBody] RegionalTagCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _destinations.CreateDestinationTagAsync(GetCurrentUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpDelete("destinations/{id:int}")]
     public async Task<IActionResult> DeleteDestination(
         [FromRoute] int id,
@@ -692,6 +709,23 @@ public class AdminRegionalController : ControllerBase
         try
         {
             return Ok(await _locations.GetLocationTagsAsync(GetCurrentUserId(), search));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("location-tags")]
+    public async Task<ActionResult<RegionalLocationTagDto>> CreateLocationTag(
+        [FromBody] RegionalTagCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _locations.CreateLocationTagAsync(GetCurrentUserId(), request));
         }
         catch (Exception ex)
         {
@@ -878,6 +912,23 @@ public class AdminRegionalController : ControllerBase
         try
         {
             return Ok(await _places.GetPlaceTagsAsync(GetCurrentUserId(), search));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("place-tags")]
+    public async Task<ActionResult<RegionalPlaceTagDto>> CreatePlaceTag(
+        [FromBody] RegionalTagCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _places.CreatePlaceTagAsync(GetCurrentUserId(), request));
         }
         catch (Exception ex)
         {
@@ -1120,6 +1171,23 @@ public class AdminRegionalController : ControllerBase
         try
         {
             return Ok(await _events.GetEventTagsAsync(GetCurrentUserId(), search));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("event-tags")]
+    public async Task<ActionResult<RegionalEventTagDto>> CreateEventTag(
+        [FromBody] RegionalTagCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _events.CreateEventTagAsync(GetCurrentUserId(), request));
         }
         catch (Exception ex)
         {

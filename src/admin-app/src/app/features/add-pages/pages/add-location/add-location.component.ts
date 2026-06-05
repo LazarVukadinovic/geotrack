@@ -74,7 +74,6 @@ interface ClassItem {
 export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
   private static readonly initialVisibleClassificationTags = 5;
-  private static readonly expandedVisibleClassificationTags = 10;
   private readonly mapTileLayer = inject(MapTileLayerService);
 
   @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
@@ -102,6 +101,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   locationTypeId: number | null = null;
   boundaryNote = '';
   tagInput = '';
+  tagFilter = '';
 
   parentDestinations: RegionalLocationParentDestinationDto[] = [];
   locationTypes: RegionalLocationTypeDto[] = [];
@@ -240,24 +240,33 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get selectedAdditionalTags(): RegionalLocationTagDto[] {
-    const primaryIds = new Set(this.classItems.map(item => item.tag.id));
     return this.locationTags
-      .filter(tag => this.selectedTagIds.has(tag.id) && !primaryIds.has(tag.id))
+      .filter(tag => this.selectedTagIds.has(tag.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   get visibleClassItems(): ClassItem[] {
-    return this.classItems.slice(0, this.visibleClassificationLimit);
+    const query = this.tagFilter.trim().toLocaleLowerCase();
+    if (!query) return this.classItems;
+
+    return this.classItems.filter(item =>
+      item.tag.name.toLocaleLowerCase().includes(query) ||
+      item.tag.slug.toLocaleLowerCase().includes(query),
+    );
   }
 
   get showClassificationToggle(): boolean {
-    return this.classItems.length > NewLocationComponent.initialVisibleClassificationTags;
+    return false;
   }
 
   get visibleClassificationLimit(): number {
     return this.classificationExpanded
-      ? NewLocationComponent.expandedVisibleClassificationTags
+      ? this.classItems.length
       : NewLocationComponent.initialVisibleClassificationTags;
+  }
+
+  get remainingClassificationCount(): number {
+    return Math.max(0, this.classItems.length - this.visibleClassItems.length);
   }
 
   get createdDateDisplay(): string {
@@ -497,23 +506,45 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       clearTimeout(this.tagSearchHandle);
     }
 
-    const query = this.tagInput.trim();
-    if (!query) {
-      this.additionalTagResults = [];
-      this.tagSearchLoading = false;
-      this.notifyStateChanged();
-      return;
-    }
-
-    this.tagSearchHandle = setTimeout(() => this.searchTags(query), 250);
+    this.additionalTagResults = [];
+    this.tagSearchLoading = false;
+    this.notifyStateChanged();
   }
 
   addTag(event: Event): void {
     event.preventDefault();
-    const firstAvailable = this.additionalTagResults.find(tag => !this.selectedTagIds.has(tag.id));
-    if (firstAvailable) {
-      this.selectAdditionalTag(firstAvailable);
+    const name = this.tagInput.trim();
+    if (name.length < 2 || this.tagSearchLoading) return;
+
+    const existingSelectedTag = this.locationTags.find(
+      tag => tag.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase() && this.selectedTagIds.has(tag.id),
+    );
+    if (existingSelectedTag) {
+      this.tagInput = '';
+      this.notifyStateChanged();
+      return;
     }
+
+    const tag = this.findTagToAdd();
+    if (tag) {
+      this.selectAdditionalTag(tag);
+      return;
+    }
+
+    this.tagSearchLoading = true;
+    this.tagSearchSubscription?.unsubscribe();
+    this.tagSearchSubscription = this.locationsService
+      .createLocationTag(name)
+      .pipe(
+        finalize(() => {
+          this.tagSearchLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: tag => this.selectAdditionalTag(tag),
+        error: error => this.handleLoadError(error, 'Unable to create location tag.'),
+      });
   }
 
   selectAdditionalTag(tag: RegionalLocationTagDto): void {
@@ -842,7 +873,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       locationTypeId: this.locationTypeId,
       latitude: centerLat,
       longitude: centerLng,
-      tagIds: [...this.selectedTagIds],
+      tagIds: this.selectedTagIdList(),
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
       galleryImageFiles: this.galleryImages.map(image => image.file),
@@ -890,7 +921,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       locationTypeId: this.locationTypeId,
       latitude: this.centerLat,
       longitude: this.centerLng,
-      tagIds: [...this.selectedTagIds],
+      tagIds: this.selectedTagIdList(),
     };
   }
 
@@ -1237,6 +1268,14 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
+  private findTagToAdd(): RegionalLocationTagDto | null {
+    const query = this.tagInput.trim().toLocaleLowerCase();
+    const exactMatch = this.locationTags.find(
+      tag => tag.name.trim().toLocaleLowerCase() === query && !this.selectedTagIds.has(tag.id),
+    );
+    return exactMatch ?? null;
+  }
+
   private normalizeParentDestinations(
     destinations: RegionalLocationParentDestinationDto[] | null | undefined,
   ): RegionalLocationParentDestinationDto[] {
@@ -1286,6 +1325,10 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.classItems = [...this.classItems, { tag, checked }]
       .sort((a, b) => a.tag.name.localeCompare(b.tag.name));
+  }
+
+  private selectedTagIdList(): number[] {
+    return [...new Set(this.selectedTagIds)].sort((a, b) => a - b);
   }
 
   private setActiveRegion(regionId: number, updateUrl: boolean): void {

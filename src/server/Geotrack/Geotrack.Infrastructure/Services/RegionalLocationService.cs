@@ -458,6 +458,25 @@ public class RegionalLocationService : IRegionalLocationService
             .ToListAsync();
     }
 
+    public async Task<RegionalLocationTagDto> CreateLocationTagAsync(
+        int userId,
+        RegionalTagCreateRequestDto request)
+    {
+        await EnsureRegionalManagerRoleAsync(userId);
+
+        var tag = await RegionalTagWriter.CreateScopedTagAsync(
+            _db,
+            request.Name,
+            RegionalTagScope.Location);
+
+        return new RegionalLocationTagDto
+        {
+            Id = tag.Id,
+            Name = tag.Name,
+            Slug = tag.Slug
+        };
+    }
+
     public async Task<List<RegionalLocationTypeDto>> GetLocationTypesAsync(int userId)
     {
         await EnsureRegionalManagerRoleAsync(userId);

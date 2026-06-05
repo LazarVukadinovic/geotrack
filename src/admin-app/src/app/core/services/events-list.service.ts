@@ -206,6 +206,10 @@ export class EventsListService {
     return this.http.get<RegionalEventTagDto[]>('/api/admin/regional/event-tags', { params });
   }
 
+  createEventTag(name: string): Observable<RegionalEventTagDto> {
+    return this.http.post<RegionalEventTagDto>('/api/admin/regional/event-tags', { name });
+  }
+
   getEventTypes(): Observable<RegionalEventTypeDto[]> {
     return this.http.get<RegionalEventTypeDto[]>('/api/admin/regional/event-types');
   }

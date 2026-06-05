@@ -83,7 +83,6 @@ interface GalleryImageItem {
 export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
   private static readonly initialVisibleClassificationTags = 5;
-  private static readonly expandedVisibleClassificationTags = 10;
   private readonly mapTileLayer = inject(MapTileLayerService);
 
   @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
@@ -155,6 +154,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   selectedTagIds = new Set<number>();
   additionalTagResults: RegionalEventTagDto[] = [];
   tagInput = '';
+  tagFilter = '';
   classificationExpanded = false;
 
   private miniMap: any = null;
@@ -286,20 +286,34 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get visibleClassItems(): ClassItem[] {
-    const limit = this.classificationExpanded
-      ? NewEventComponent.expandedVisibleClassificationTags
-      : NewEventComponent.initialVisibleClassificationTags;
-    return this.classItems.slice(0, limit);
+    const query = this.tagFilter.trim().toLocaleLowerCase();
+    if (!query) return this.classItems;
+
+    return this.classItems.filter(item =>
+      item.tag.name.toLocaleLowerCase().includes(query) ||
+      item.tag.slug.toLocaleLowerCase().includes(query),
+    );
   }
 
   get canToggleClassification(): boolean {
-    return this.classItems.length > NewEventComponent.initialVisibleClassificationTags;
+    return false;
   }
 
   get selectedTags(): RegionalEventTagDto[] {
     return [...this.selectedTagIds]
       .map(tagId => this.knownTags.get(tagId))
-      .filter((tag): tag is RegionalEventTagDto => Boolean(tag));
+      .filter((tag): tag is RegionalEventTagDto => Boolean(tag))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  get visibleClassificationLimit(): number {
+    return this.classificationExpanded
+      ? this.classItems.length
+      : NewEventComponent.initialVisibleClassificationTags;
+  }
+
+  get remainingClassificationCount(): number {
+    return Math.max(0, this.classItems.length - this.visibleClassItems.length);
   }
 
   get canPublish(): boolean {
@@ -476,10 +490,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onClassItemChange(item: ClassItem): void {
     if (item.checked) {
+      this.knownTags.set(item.tag.id, item.tag);
       this.selectedTagIds.add(item.tag.id);
     } else {
       this.selectedTagIds.delete(item.tag.id);
     }
+    this.cdr.markForCheck();
   }
 
   removeSelectedTag(tagId: number): void {
@@ -490,6 +506,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   toggleAdditionalTag(tag: RegionalEventTagDto): void {
+    this.upsertEventTag(tag);
     this.knownTags.set(tag.id, tag);
     if (this.selectedTagIds.has(tag.id)) {
       this.selectedTagIds.delete(tag.id);
@@ -498,23 +515,64 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     this.classItems = this.classItems.map(item =>
       item.tag.id === tag.id ? { ...item, checked: this.selectedTagIds.has(tag.id) } : item);
+    this.tagInput = '';
+    this.additionalTagResults = [];
     this.cdr.markForCheck();
   }
 
-  onTagSearchInput(): void {
-    if (this.tagSearchHandle) clearTimeout(this.tagSearchHandle);
-    const query = this.tagInput.trim();
-    if (query.length < 2) {
+  addTag(event: Event): void {
+    event.preventDefault();
+    const name = this.tagInput.trim();
+    if (name.length < 2 || this.tagSearchLoading) return;
+
+    const existingSelectedTag = this.eventTags.find(
+      tag => tag.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase() && this.selectedTagIds.has(tag.id),
+    );
+    if (existingSelectedTag) {
+      this.tagInput = '';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const tag = this.findTagToAdd();
+    if (tag) {
+      this.toggleAdditionalTag(tag);
+      this.tagInput = '';
       this.additionalTagResults = [];
       this.cdr.markForCheck();
       return;
     }
 
-    this.tagSearchHandle = setTimeout(() => this.searchTags(query), 250);
+    this.tagSearchLoading = true;
+    this.tagSearchSubscription?.unsubscribe();
+    this.tagSearchSubscription = this.eventsService.createEventTag(name)
+      .pipe(finalize(() => {
+        this.tagSearchLoading = false;
+        this.cdr.markForCheck();
+      }))
+      .subscribe({
+        next: createdTag => {
+          this.toggleAdditionalTag(createdTag);
+          this.tagInput = '';
+          this.additionalTagResults = [];
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.errorMessage = this.extractErrorMessage(error, 'Event tag could not be created.');
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  onTagSearchInput(): void {
+    if (this.tagSearchHandle) clearTimeout(this.tagSearchHandle);
+    this.additionalTagResults = [];
+    this.cdr.markForCheck();
   }
 
   toggleClassificationExpanded(): void {
     this.classificationExpanded = !this.classificationExpanded;
+    this.cdr.markForCheck();
   }
 
   publish(): void {
@@ -892,7 +950,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       }))
       .subscribe({
         next: tags => {
-          this.eventTags = Array.isArray(tags) ? tags : [];
+          this.eventTags = this.normalizeTags(tags);
           this.eventTags.forEach(tag => this.knownTags.set(tag.id, tag));
           this.classItems = this.eventTags.map(tag => ({
             tag,
@@ -973,8 +1031,8 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       }))
       .subscribe({
         next: tags => {
-          this.additionalTagResults = (Array.isArray(tags) ? tags : [])
-            .filter(tag => !this.eventTags.some(existing => existing.id === tag.id));
+          this.additionalTagResults = this.normalizeTags(tags)
+            .filter(tag => !this.selectedTagIds.has(tag.id));
           this.additionalTagResults.forEach(tag => this.knownTags.set(tag.id, tag));
           this.cdr.markForCheck();
         },
@@ -984,6 +1042,44 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
           this.cdr.markForCheck();
         },
       });
+  }
+
+  private findTagToAdd(): RegionalEventTagDto | null {
+    const query = this.tagInput.trim().toLocaleLowerCase();
+    const exactMatch = this.eventTags.find(
+      tag => tag.name.trim().toLocaleLowerCase() === query && !this.selectedTagIds.has(tag.id),
+    );
+    return exactMatch ?? null;
+  }
+
+  private upsertEventTag(tag: RegionalEventTagDto): void {
+    if (!this.eventTags.some(existing => existing.id === tag.id)) {
+      this.eventTags = [...this.eventTags, tag].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    const existingItem = this.classItems.find(item => item.tag.id === tag.id);
+    if (existingItem) {
+      existingItem.checked = true;
+      return;
+    }
+
+    this.classItems = [...this.classItems, { tag, checked: true }]
+      .sort((a, b) => a.tag.name.localeCompare(b.tag.name));
+  }
+
+  private normalizeTags(tags: RegionalEventTagDto[] | null | undefined): RegionalEventTagDto[] {
+    const seen = new Set<number>();
+    return (tags ?? [])
+      .filter(tag => {
+        if (!tag || seen.has(tag.id)) return false;
+        seen.add(tag.id);
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private selectedTagIdList(): number[] {
+    return [...new Set(this.selectedTagIds)].sort((a, b) => a - b);
   }
 
   private buildPayload(): RegionalEventCreateRequest | null {
@@ -1114,7 +1210,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       contactEmail: contactEmail || null,
       attendanceLimit,
       ageRestriction: this.ageRestriction.trim() || null,
-      tagIds: [...this.selectedTagIds],
+      tagIds: this.selectedTagIdList(),
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
       galleryImageFiles: this.galleryImages
@@ -1494,7 +1590,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       attendanceLimit,
       clearAttendanceLimit: attendanceLimit === null,
       ageRestriction: this.ageRestriction.trim(),
-      tagIds: [...this.selectedTagIds],
+      tagIds: this.selectedTagIdList(),
     };
   }
 

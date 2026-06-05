@@ -375,6 +375,25 @@ public class RegionalDestinationService : IRegionalDestinationService
             .ToListAsync();
     }
 
+    public async Task<RegionalDestinationTagDto> CreateDestinationTagAsync(
+        int userId,
+        RegionalTagCreateRequestDto request)
+    {
+        await EnsureRegionalManagerRoleAsync(userId);
+
+        var tag = await RegionalTagWriter.CreateScopedTagAsync(
+            _db,
+            request.Name,
+            RegionalTagScope.Destination);
+
+        return new RegionalDestinationTagDto
+        {
+            Id = tag.Id,
+            Name = tag.Name,
+            Slug = tag.Slug
+        };
+    }
+
     private async Task EnsureAssignedRegionAsync(int userId, int regionId)
     {
         if (regionId <= 0)

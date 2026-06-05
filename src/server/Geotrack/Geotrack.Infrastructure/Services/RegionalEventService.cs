@@ -567,6 +567,25 @@ public class RegionalEventService : IRegionalEventService
             .ToListAsync();
     }
 
+    public async Task<RegionalEventTagDto> CreateEventTagAsync(
+        int userId,
+        RegionalTagCreateRequestDto request)
+    {
+        await EnsureRegionalManagerRoleAsync(userId);
+
+        var tag = await RegionalTagWriter.CreateScopedTagAsync(
+            _db,
+            request.Name,
+            RegionalTagScope.Event);
+
+        return new RegionalEventTagDto
+        {
+            Id = tag.Id,
+            Name = tag.Name,
+            Slug = tag.Slug
+        };
+    }
+
     public async Task<List<RegionalEventTypeDto>> GetEventTypesAsync(int userId)
     {
         await EnsureRegionalManagerRoleAsync(userId);
