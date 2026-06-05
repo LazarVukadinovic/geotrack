@@ -370,6 +370,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onSearchInput(value: string): void {
+    this.isSearchFocused = true;
     clearTimeout(this.searchTimeout);
     if (value.trim().length < 2) {
       this.searchResults = [];
