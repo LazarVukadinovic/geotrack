@@ -7,6 +7,40 @@
   outline-offset: 3px;
 }
 
+.gt-detail-parent-link {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+  color: #2563eb;
+  cursor: pointer;
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  text-decoration: none;
+  text-underline-offset: 3px;
+  transition: color 150ms ease, outline-color 150ms ease;
+}
+
+.gt-detail-parent-link:hover {
+  background: transparent;
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.gt-detail-parent-link:focus-visible {
+  background: transparent;
+  color: #1d4ed8;
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+  text-decoration: underline;
+}
+
+.gt-detail-parent-link:active {
+  background: transparent;
+  color: #1e40af;
+}
+
 .gt-admin-marker {
   width: 100%;
   height: 100%;

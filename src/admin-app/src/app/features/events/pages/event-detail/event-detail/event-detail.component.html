@@ -61,10 +61,10 @@
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
                 </svg>
                 <span class="inline-flex items-center gap-1.5 flex-wrap">
-                  <button *ngIf="parentLocationName" type="button" (click)="goToParentLocation($event)" class="text-sm font-semibold text-blue-200 hover:text-white hover:underline bg-transparent border-0 p-0 cursor-pointer">{{ parentLocationName }}</button>
+                  <button *ngIf="parentLocationName" type="button" (click)="goToParentLocation($event)" class="gt-detail-parent-link text-sm font-semibold">{{ parentLocationName }}</button>
                   <span *ngIf="parentLocationName && parentPlaceName" class="text-gray-400">•</span>
-                  <button *ngIf="parentPlaceName" type="button" (click)="goToParentPlace($event)" class="text-sm font-semibold text-blue-200 hover:text-white hover:underline bg-transparent border-0 p-0 cursor-pointer">{{ parentPlaceName }}</button>
-                  <button *ngIf="!parentLocationName && !parentPlaceName && parentDestinationName" type="button" (click)="goToParentDestination($event)" class="text-sm font-semibold text-blue-200 hover:text-white hover:underline bg-transparent border-0 p-0 cursor-pointer">{{ parentDestinationName }}</button>
+                  <button *ngIf="parentPlaceName" type="button" (click)="goToParentPlace($event)" class="gt-detail-parent-link text-sm font-semibold">{{ parentPlaceName }}</button>
+                  <button *ngIf="!parentLocationName && !parentPlaceName && parentDestinationName" type="button" (click)="goToParentDestination($event)" class="gt-detail-parent-link text-sm font-semibold">{{ parentDestinationName }}</button>
                 </span>
               </div>
             </div>
@@ -89,9 +89,9 @@
                 </div>
                 <div class="flex flex-col gap-1">
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parent Location</span>
-                  <button *ngIf="parentLocationName; else eventDestinationParent" type="button" (click)="goToParentLocation($event)" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentLocationName }}</button>
+                  <button *ngIf="parentLocationName; else eventDestinationParent" type="button" (click)="goToParentLocation($event)" class="gt-detail-parent-link text-sm font-semibold text-left">{{ parentLocationName }}</button>
                   <ng-template #eventDestinationParent>
-                    <button type="button" (click)="goToParentDestination($event)" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentDestinationName }}</button>
+                    <button type="button" (click)="goToParentDestination($event)" class="gt-detail-parent-link text-sm font-semibold text-left">{{ parentDestinationName }}</button>
                   </ng-template>
                 </div>
                 <div class="flex flex-col gap-1">
@@ -106,7 +106,7 @@
                 <ng-container *ngIf="parentPlaceName">
                   <div class="flex flex-col gap-1 col-span-2">
                     <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parent Place</span>
-                    <button type="button" (click)="goToParentPlace($event)" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentPlaceName }}</button>
+                    <button type="button" (click)="goToParentPlace($event)" class="gt-detail-parent-link text-sm font-semibold text-left">{{ parentPlaceName }}</button>
                   </div>
                 </ng-container>
                 <ng-container *ngIf="(item)['dateRange']">
@@ -356,9 +356,9 @@
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-xs text-gray-400">Parent</span>
-                <button *ngIf="parentLocationName; else sidebarEventDestinationParent" type="button" (click)="goToParentLocation($event)" class="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentLocationName }}</button>
+                <button *ngIf="parentLocationName; else sidebarEventDestinationParent" type="button" (click)="goToParentLocation($event)" class="gt-detail-parent-link text-xs font-semibold text-left">{{ parentLocationName }}</button>
                 <ng-template #sidebarEventDestinationParent>
-                  <button type="button" (click)="goToParentDestination($event)" class="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentDestinationName }}</button>
+                  <button type="button" (click)="goToParentDestination($event)" class="gt-detail-parent-link text-xs font-semibold text-left">{{ parentDestinationName }}</button>
                 </ng-template>
               </div>
               <div class="flex items-center justify-between">

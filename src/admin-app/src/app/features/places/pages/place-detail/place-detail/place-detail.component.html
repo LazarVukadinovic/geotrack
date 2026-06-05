@@ -58,7 +58,7 @@
                   <circle cx="12" cy="10" r="3"/>
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
                 </svg>
-                <button type="button" (click)="goToParentLocation($event)" class="text-sm font-semibold text-blue-200 hover:text-white hover:underline bg-transparent border-0 p-0 cursor-pointer">{{ parentLocationName }}</button>
+                <button type="button" (click)="goToParentLocation($event)" class="gt-detail-parent-link text-sm font-semibold">{{ parentLocationName }}</button>
               </div>
             </div>
 
@@ -82,7 +82,7 @@
                 </div>
                 <div class="flex flex-col gap-1">
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parent Location</span>
-                  <button type="button" (click)="goToParentLocation($event)" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentLocationName }}</button>
+                  <button type="button" (click)="goToParentLocation($event)" class="gt-detail-parent-link text-sm font-semibold text-left">{{ parentLocationName }}</button>
                 </div>
                 <div *ngIf="isOwnable" class="flex flex-col gap-1">
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Owner</span>
@@ -381,7 +381,7 @@
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-xs text-gray-400">Parent Location</span>
-                <button type="button" (click)="goToParentLocation($event)" class="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentLocationName }}</button>
+                <button type="button" (click)="goToParentLocation($event)" class="gt-detail-parent-link text-xs font-semibold text-left">{{ parentLocationName }}</button>
               </div>
               <div *ngIf="isOwnable" class="flex items-start justify-between gap-3">
                 <span class="text-xs text-gray-400">Owner</span>
