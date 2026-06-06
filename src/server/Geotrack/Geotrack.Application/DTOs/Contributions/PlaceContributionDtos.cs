@@ -129,6 +129,10 @@ public class PlaceContributionDetailDto : PlaceContributionListItemDto
     public string? OwnershipProofContentType { get; set; }
     public DateTime? OwnershipProofUploadedAt { get; set; }
     public bool HasPendingOwnershipClaim { get; set; }
+    public string? SubmittedByDisplayName { get; set; }
+    public string? SubmittedByInitials { get; set; }
+    public int? CreatedDestinationId { get; set; }
+    public int? CreatedLocationId { get; set; }
 }
 
 public class UpsertPlaceContributionDto

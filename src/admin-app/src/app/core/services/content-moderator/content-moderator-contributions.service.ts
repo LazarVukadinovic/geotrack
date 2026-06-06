@@ -36,6 +36,13 @@ export interface CmContributionListItem {
   updatedAt: string | null;
 }
 
+export interface CmOperatingHour {
+  dayOfWeek: string;
+  isOpen: boolean;
+  openTime: string | null;
+  closeTime: string | null;
+}
+
 export interface CmContributionDetail extends CmContributionListItem {
   placeTypeId: number | null;
   locationId: number | null;
@@ -55,14 +62,24 @@ export interface CmContributionDetail extends CmContributionListItem {
   website: string | null;
   openingHours: string | null;
   operatingHoursEnabled: boolean;
+  operatingHours: CmOperatingHour[];
+  galleryImageUrls: string[];
   tags: string[];
   amenities: string[];
+  bookingPartners: { id: string; url: string }[];
   imagePosition: string;
   imageSize: string;
   cardImagePosition: string | null;
   cardImageSize: string | null;
   reviewNote: string | null;
   reviewedAt: string | null;
+  ownershipProofDocumentUrl: string | null;
+  ownershipProofOriginalFileName: string | null;
+  ownershipProofContentType: string | null;
+  submittedByDisplayName: string | null;
+  submittedByInitials: string | null;
+  createdDestinationId: number | null;
+  createdLocationId: number | null;
 }
 
 interface ApiListResponse {
@@ -71,6 +88,13 @@ interface ApiListResponse {
 
 interface ApiDetailResponse {
   contribution: ApiContributionItem;
+}
+
+interface ApiOperatingHour {
+  dayOfWeek?: string | null;
+  isOpen?: boolean | null;
+  openTime?: string | null;
+  closeTime?: string | null;
 }
 
 interface ApiContributionItem {
@@ -82,6 +106,7 @@ interface ApiContributionItem {
   location?: string | null;
   cardImageUrl?: string | null;
   coverImageUrl?: string | null;
+  galleryImageUrls?: string[] | null;
   status: string;
   submittedAt: string;
   updatedAt?: string | null;
@@ -103,14 +128,24 @@ interface ApiContributionItem {
   website?: string | null;
   openingHours?: string | null;
   operatingHoursEnabled?: boolean | null;
+  operatingHours?: ApiOperatingHour[] | null;
   tags?: string[] | null;
   amenities?: string[] | null;
+  stayAmenities?: string[] | null;
+  bookingPartners?: { id: string; url: string }[] | null;
   imagePosition?: string | null;
   imageSize?: string | null;
   cardImagePosition?: string | null;
   cardImageSize?: string | null;
   reviewNote?: string | null;
   reviewedAt?: string | null;
+  ownershipProofDocumentUrl?: string | null;
+  ownershipProofOriginalFileName?: string | null;
+  ownershipProofContentType?: string | null;
+  submittedByDisplayName?: string | null;
+  submittedByInitials?: string | null;
+  createdDestinationId?: number | null;
+  createdLocationId?: number | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -186,6 +221,24 @@ export class ContentModeratorContributionsService {
         isSuggested: region.isSuggested ?? false,
       }))));
   }
+
+  uploadDestinationCardImage(destinationId: number, imageFile: File): Observable<void> {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    return this.http.post<void>(
+      `/api/contributions/content-manager/destinations/${destinationId}/card-image`,
+      formData,
+    );
+  }
+
+  uploadLocationCardImage(locationId: number, imageFile: File): Observable<void> {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    return this.http.post<void>(
+      `/api/contributions/content-manager/locations/${locationId}/card-image`,
+      formData,
+    );
+  }
 }
 
 function mapListItem(item: ApiContributionItem): CmContributionListItem {
@@ -225,13 +278,28 @@ function mapDetail(item: ApiContributionItem): CmContributionDetail {
     website: item.website ?? null,
     openingHours: item.openingHours ?? null,
     operatingHoursEnabled: item.operatingHoursEnabled ?? false,
+    operatingHours: (item.operatingHours ?? []).map(h => ({
+      dayOfWeek: h.dayOfWeek ?? '',
+      isOpen: h.isOpen ?? false,
+      openTime: h.openTime ?? null,
+      closeTime: h.closeTime ?? null,
+    })),
+    galleryImageUrls: item.galleryImageUrls ?? [],
     tags: item.tags ?? [],
-    amenities: item.amenities ?? [],
+    amenities: [...(item.amenities ?? []), ...(item.stayAmenities ?? [])],
+    bookingPartners: (item.bookingPartners ?? []).map(bp => ({ id: bp.id, url: bp.url })),
     imagePosition: item.imagePosition || '50% 50%',
     imageSize: item.imageSize || 'cover',
     cardImagePosition: item.cardImagePosition ?? null,
     cardImageSize: item.cardImageSize ?? null,
     reviewNote: item.reviewNote ?? null,
     reviewedAt: item.reviewedAt ?? null,
+    ownershipProofDocumentUrl: item.ownershipProofDocumentUrl ?? null,
+    ownershipProofOriginalFileName: item.ownershipProofOriginalFileName ?? null,
+    ownershipProofContentType: item.ownershipProofContentType ?? null,
+    submittedByDisplayName: item.submittedByDisplayName ?? null,
+    submittedByInitials: item.submittedByInitials ?? null,
+    createdDestinationId: item.createdDestinationId ?? null,
+    createdLocationId: item.createdLocationId ?? null,
   };
 }

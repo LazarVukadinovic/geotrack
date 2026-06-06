@@ -140,6 +140,46 @@ public class ContributionsController : ControllerBase
         }
     }
 
+    [HttpPost("content-manager/destinations/{destinationId:int}/card-image")]
+    [Authorize(Roles = "Admin,ContentModerator")]
+    public async Task<IActionResult> UploadDestinationCardImage(int destinationId, IFormFile image)
+    {
+        try
+        {
+            if (image is null || image.Length == 0)
+                return BadRequest(new { message = "Image file is required." });
+
+            await using var ms = new System.IO.MemoryStream();
+            await image.CopyToAsync(ms);
+            await _contributions.AddDestinationCardImageAsync(destinationId, ms.ToArray());
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("content-manager/locations/{locationId:int}/card-image")]
+    [Authorize(Roles = "Admin,ContentModerator")]
+    public async Task<IActionResult> UploadLocationCardImage(int locationId, IFormFile image)
+    {
+        try
+        {
+            if (image is null || image.Length == 0)
+                return BadRequest(new { message = "Image file is required." });
+
+            await using var ms = new System.IO.MemoryStream();
+            await image.CopyToAsync(ms);
+            await _contributions.AddLocationCardImageAsync(locationId, ms.ToArray());
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("resolve-location")]
     public async Task<ActionResult<ResolveContributionLocationDto?>> ResolveLocation(
         [FromQuery] double latitude,

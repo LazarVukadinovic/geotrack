@@ -42,4 +42,6 @@ public interface IPlaceContributionService
     Task<PlaceContributionDetailDto> RejectAsync(int contributionId, int reviewerUserId, string? note);
     Task<ContributionRegionOptionsDto> GetRegionOptionsAsync();
     Task<ContributionLocationOptionsDto> GetDestinationLocationOptionsAsync(int destinationId);
+    Task AddDestinationCardImageAsync(int destinationId, byte[] imageBytes);
+    Task AddLocationCardImageAsync(int locationId, byte[] imageBytes);
 }

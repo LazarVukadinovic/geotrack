@@ -2,10 +2,11 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnIni
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subject, finalize, takeUntil } from 'rxjs';
+import { Subject, finalize, forkJoin, takeUntil } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
+import { LightboxService } from '../../../../core/services/lightbox.service';
 import {
   ContentModeratorContributionsService,
   CmContributionDetail,
@@ -29,6 +30,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly lightbox = inject(LightboxService);
   private readonly destroy$ = new Subject<void>();
 
   contribution: CmContributionDetail | null = null;
@@ -53,7 +55,20 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   locations: CmLocationOption[] = [];
   locationsLoading = false;
   newLocationName = '';
-  overrideLocation = false;
+
+  // Destination card image (for new destinations)
+  destinationImageFile: File | null = null;
+  destinationImagePreview: string | null = null;
+  destinationImageError = '';
+
+  // Location card image (for new locations)
+  locationImageFile: File | null = null;
+  locationImagePreview: string | null = null;
+  locationImageError = '';
+
+  readonly galleryLimit = 8;
+  readonly descriptionLimit = 300;
+  showFullDescription = false;
 
   get userName(): string { return this.auth.fullName || 'Content Moderator'; }
   get userRole(): string { return this.auth.getUser()?.role || 'Content Moderator'; }
@@ -63,9 +78,9 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     return !!this.contribution && !this.contribution.locationId;
   }
 
-  /** True when we will use the CM approve-with-region endpoint. */
+  /** Use CM approve endpoint whenever the assignment form has a region selected. */
   get usesCmApprove(): boolean {
-    return this.requiresLocationAssignment || this.overrideLocation;
+    return !!this.selectedRegionId;
   }
 
   get canApprove(): boolean {
@@ -99,7 +114,6 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
       const suggestion = this.suggestedRegion;
       return suggestion ? [suggestion] : [];
     }
-
     return this.regions
       .filter(region => this.regionDisplayName(region).toLowerCase().includes(term))
       .slice(0, 8);
@@ -108,9 +122,8 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   get filteredLocations(): CmLocationOption[] {
     const term = this.newLocationName.trim().toLowerCase();
     const locations = term
-      ? this.locations.filter(location => location.name.toLowerCase().includes(term))
+      ? this.locations.filter(l => l.name.toLowerCase().includes(term) && l.name.toLowerCase() !== term)
       : this.locations;
-
     return locations.slice(0, 8);
   }
 
@@ -118,6 +131,22 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     const suggestion = this.contribution?.suggestedLocationName?.trim();
     if (!suggestion) return false;
     return suggestion.toLowerCase() !== this.newLocationName.trim().toLowerCase();
+  }
+
+  get allPhotos(): { url: string; name: string }[] {
+    if (!this.contribution) return [];
+    const result: { url: string; name: string }[] = [];
+    if (this.contribution.cardImageUrl) result.push({ url: this.contribution.cardImageUrl, name: 'card' });
+    for (const url of this.contribution.galleryImageUrls) result.push({ url, name: 'gallery' });
+    return result;
+  }
+
+  get photosPreview(): { url: string; name: string }[] {
+    return this.allPhotos.slice(0, this.galleryLimit);
+  }
+
+  get photosOverflow(): number {
+    return Math.max(0, this.allPhotos.length - this.galleryLimit);
   }
 
   ngOnInit(): void {
@@ -193,7 +222,6 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
       .subscribe({
         next: destinations => {
           this.destinations = destinations;
-          // Default: if destinations exist, let CM choose; pre-select 'new' either way
           this.destinationChoice = 'new';
           this.cdr.markForCheck();
         },
@@ -221,17 +249,18 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     this.destinationChoice = choice;
     this.selectedDestinationId = null;
     this.locations = [];
-
+    if (choice === 'existing') {
+      this.destinationImageFile = null;
+      this.destinationImagePreview = null;
+    }
+    this.locationImageFile = null;
+    this.locationImagePreview = null;
     this.cdr.markForCheck();
   }
 
   onDestinationSelected(): void {
     this.locations = [];
-
-    if (!this.selectedDestinationId) {
-      this.cdr.markForCheck();
-      return;
-    }
+    if (!this.selectedDestinationId) { this.cdr.markForCheck(); return; }
 
     this.locationsLoading = true;
     this.cdr.markForCheck();
@@ -239,10 +268,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     this.service.getLocationsForDestination(this.selectedDestinationId)
       .pipe(takeUntil(this.destroy$), finalize(() => { this.locationsLoading = false; this.cdr.markForCheck(); }))
       .subscribe({
-        next: locations => {
-          this.locations = locations;
-          this.cdr.markForCheck();
-        },
+        next: locations => { this.locations = locations; this.cdr.markForCheck(); },
         error: () => { this.cdr.markForCheck(); },
       });
   }
@@ -256,6 +282,46 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     const suggestion = this.contribution?.suggestedLocationName?.trim();
     if (!suggestion) return;
     this.newLocationName = suggestion;
+    this.cdr.markForCheck();
+  }
+
+  openLightbox(index: number): void {
+    this.lightbox.open(this.allPhotos, index);
+  }
+
+  onDestinationImageSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    (event.target as HTMLInputElement).value = '';
+    if (!file) return;
+    this.destinationImageError = '';
+    this.destinationImageFile = file;
+    const reader = new FileReader();
+    reader.onload = () => { this.destinationImagePreview = reader.result as string; this.cdr.markForCheck(); };
+    reader.readAsDataURL(file);
+  }
+
+  clearDestinationImage(): void {
+    this.destinationImageFile = null;
+    this.destinationImagePreview = null;
+    this.destinationImageError = '';
+    this.cdr.markForCheck();
+  }
+
+  onLocationImageSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    (event.target as HTMLInputElement).value = '';
+    if (!file) return;
+    this.locationImageError = '';
+    this.locationImageFile = file;
+    const reader = new FileReader();
+    reader.onload = () => { this.locationImagePreview = reader.result as string; this.cdr.markForCheck(); };
+    reader.readAsDataURL(file);
+  }
+
+  clearLocationImage(): void {
+    this.locationImageFile = null;
+    this.locationImagePreview = null;
+    this.locationImageError = '';
     this.cdr.markForCheck();
   }
 
@@ -278,9 +344,32 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
 
     obs.pipe(finalize(() => { this.processing = false; this.cdr.markForCheck(); }))
       .subscribe({
-        next: () => this.router.navigate(['/content-moderator/contributions'], {
-          state: { feedbackMessage: 'Contribution approved.' }
-        }),
+        next: (result) => {
+          const destId = result?.createdDestinationId;
+          const locId = result?.createdLocationId;
+          const destImage = this.destinationImageFile;
+          const locImage = this.locationImageFile;
+
+          const uploads: ReturnType<typeof this.service.uploadDestinationCardImage>[] = [];
+          if (destId && destImage) uploads.push(this.service.uploadDestinationCardImage(destId, destImage));
+          if (locId && locImage) uploads.push(this.service.uploadLocationCardImage(locId, locImage));
+
+          if (uploads.length === 0) {
+            this.router.navigate(['/content-moderator/contributions'], {
+              state: { feedbackMessage: 'Contribution approved.' }
+            });
+            return;
+          }
+
+          forkJoin(uploads).subscribe({
+            next: () => this.router.navigate(['/content-moderator/contributions'], {
+              state: { feedbackMessage: 'Contribution approved.' }
+            }),
+            error: () => this.router.navigate(['/content-moderator/contributions'], {
+              state: { feedbackMessage: 'Contribution approved. One or more image uploads failed.' }
+            }),
+          });
+        },
         error: err => {
           this.errorMessage = err?.error?.message || 'Unable to approve contribution.';
           this.cdr.markForCheck();

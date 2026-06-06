@@ -54,6 +54,7 @@ namespace Geotrack.Application.Services
                     })
                     .ToList(),
                 Destinations = region.Destinations
+                    .Where(d => d.Status != "Archived")
                     .OrderBy(d => d.Name)
                     .Select(d => new DestinationSummaryDto
                     {

@@ -72,7 +72,12 @@ public class PlaceContributionService : IPlaceContributionService
 
         return new GetPlaceContributionsResponseDto
         {
-            Contributions = contributions.Select(MapListItem).ToList()
+            Contributions = contributions
+                .Where(c => !(c.Status == PlaceContributionStatus.Approved &&
+                              c.Place != null &&
+                              c.Place.Status == "Archived"))
+                .Select(MapListItem)
+                .ToList()
         };
     }
 
@@ -925,7 +930,8 @@ public class PlaceContributionService : IPlaceContributionService
             .OrderBy(l => l.Id)
             .FirstOrDefaultAsync();
 
-        if (location is null)
+        bool locationIsNew = location is null;
+        if (locationIsNew)
         {
             var locationType = await ResolveLocationTypeAsync();
             location = new Location
@@ -970,7 +976,82 @@ public class PlaceContributionService : IPlaceContributionService
         await _db.SaveChangesAsync();
 
         var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
-        return MapDetail(saved, includeReviewNote: true);
+        var result = MapDetail(saved, includeReviewNote: true);
+        if (!existingDestinationId.HasValue)
+            result.CreatedDestinationId = destination.Id;
+        if (locationIsNew)
+            result.CreatedLocationId = location.Id;
+        return result;
+    }
+
+    public async Task AddDestinationCardImageAsync(int destinationId, byte[] imageBytes)
+    {
+        var destination = await _db.Destinations.FindAsync(destinationId)
+            ?? throw new KeyNotFoundException("Destination not found.");
+
+        var stored = await _mediaStorage.StoreAsync(0, imageBytes);
+        var now = DateTime.UtcNow;
+
+        var existing = await _db.EntityImages.FirstOrDefaultAsync(i =>
+            i.DestinationId == destinationId && i.ImageRole == EntityImageRole.Card);
+
+        if (existing is not null)
+        {
+            existing.Url = stored.MediaUrl;
+            existing.UpdatedAt = now;
+        }
+        else
+        {
+            _db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = destinationId,
+                Url = stored.MediaUrl,
+                AltText = destination.Name,
+                IsMain = true,
+                ImageRole = EntityImageRole.Card,
+                SortOrder = 0,
+                CreatedAt = now
+            });
+        }
+
+        destination.UpdatedAt = now;
+        await _db.SaveChangesAsync();
+    }
+
+    public async Task AddLocationCardImageAsync(int locationId, byte[] imageBytes)
+    {
+        var location = await _db.Locations.FindAsync(locationId)
+            ?? throw new KeyNotFoundException("Location not found.");
+
+        var stored = await _mediaStorage.StoreAsync(0, imageBytes);
+        var now = DateTime.UtcNow;
+
+        var existing = await _db.EntityImages.FirstOrDefaultAsync(i =>
+            i.LocationId == locationId && i.ImageRole == EntityImageRole.Card);
+
+        if (existing is not null)
+        {
+            existing.Url = stored.MediaUrl;
+            existing.UpdatedAt = now;
+        }
+        else
+        {
+            _db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Location,
+                LocationId = locationId,
+                Url = stored.MediaUrl,
+                AltText = location.Name,
+                IsMain = true,
+                ImageRole = EntityImageRole.Card,
+                SortOrder = 0,
+                CreatedAt = now
+            });
+        }
+
+        location.UpdatedAt = now;
+        await _db.SaveChangesAsync();
     }
 
     public async Task<PlaceContributionDetailDto> RejectAsync(int contributionId, int reviewerUserId, string? note)
@@ -1012,6 +1093,7 @@ public class PlaceContributionService : IPlaceContributionService
                     .ThenInclude(d => d.Region)
             .Include(c => c.StayType)
             .Include(c => c.Images)
+            .Include(c => c.User)
             .Include(c => c.Place)
                 .ThenInclude(p => p!.Location)
                     .ThenInclude(l => l.Destination)
@@ -2608,8 +2690,26 @@ public class PlaceContributionService : IPlaceContributionService
             OwnershipProofOriginalFileName = contribution.OwnershipProofOriginalFileName,
             OwnershipProofContentType = contribution.OwnershipProofContentType,
             OwnershipProofUploadedAt = contribution.OwnershipProofUploadedAt,
-            HasPendingOwnershipClaim = hasPendingOwnershipClaim
+            HasPendingOwnershipClaim = hasPendingOwnershipClaim,
+            SubmittedByDisplayName = BuildUserDisplayName(contribution.User),
+            SubmittedByInitials = BuildUserInitials(contribution.User),
         };
+    }
+
+    private static string? BuildUserDisplayName(User? user)
+    {
+        if (user is null) return null;
+        if (!string.IsNullOrWhiteSpace(user.DisplayName)) return user.DisplayName;
+        var fullName = $"{user.FirstName} {user.LastName}".Trim();
+        return string.IsNullOrWhiteSpace(fullName) ? user.Username : fullName;
+    }
+
+    private static string? BuildUserInitials(User? user)
+    {
+        if (user is null) return null;
+        if (!string.IsNullOrWhiteSpace(user.FirstName) || !string.IsNullOrWhiteSpace(user.LastName))
+            return $"{(user.FirstName?.Length > 0 ? user.FirstName[0] : ' ')}{(user.LastName?.Length > 0 ? user.LastName[0] : ' ')}".Trim();
+        return user.Username.Length > 0 ? user.Username[0].ToString().ToUpper() : "U";
     }
 
     private async Task<PlaceContributionDetailDto> MapOwnershipDetailWithPlaceFallbacksAsync(
