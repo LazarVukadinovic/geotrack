@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { Subject, finalize, takeUntil } from 'rxjs';
+import { Subject, forkJoin, finalize, takeUntil } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -45,7 +45,6 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadDashboard();
-    this.loadContributionsCount();
   }
 
   ngOnDestroy(): void {
@@ -58,7 +57,10 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
     this.errorMessage = null;
     this.cdr.markForCheck();
 
-    this.dashboardService.loadDashboard()
+    forkJoin({
+      dashboard: this.dashboardService.loadDashboard(),
+      contributions: this.contributionsService.getAll(),
+    })
       .pipe(
         takeUntil(this.destroy$),
         finalize(() => {
@@ -67,31 +69,21 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: dashboard => {
+        next: ({ dashboard, contributions }) => {
           this.dashboard = dashboard;
           this.pendingReviewReportsCount = dashboard.badges.pendingReviewReportsCount;
+          this.pendingContributionsCount = contributions.filter(i => i.status === 'PendingReview').length;
           this.buildStats(dashboard.stats);
           this.cdr.markForCheck();
         },
         error: () => {
           this.dashboard = null;
           this.pendingReviewReportsCount = 0;
+          this.pendingContributionsCount = 0;
           this.stats = [];
           this.errorMessage = 'Unable to load content moderator dashboard data.';
           this.cdr.markForCheck();
         },
-      });
-  }
-
-  private loadContributionsCount(): void {
-    this.contributionsService.getAll()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: items => {
-          this.pendingContributionsCount = items.filter(i => i.status === 'PendingReview').length;
-          this.cdr.markForCheck();
-        },
-        error: () => { /* non-critical, ignore */ },
       });
   }
 
@@ -106,14 +98,6 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
   private buildStats(stats: ContentModeratorDashboardStats): void {
     const quickLinks = this.dashboard?.quickLinks;
     this.stats = [
-      {
-        label: 'Contributions',
-        value: this.pendingContributionsCount,
-        sub: 'Pending review',
-        color: '#7c3aed',
-        icon: 'inbox',
-        route: '/content-moderator/contributions',
-      },
       {
         label: 'Review Destinations',
         value: stats.destinationsCount,
