@@ -5,6 +5,7 @@ import { HttpClient } from '@angular/common/http';
 import maplibregl, { Map as MapLibreMap, MapStyleImageMissingEvent } from 'maplibre-gl';
 import { firstValueFrom } from 'rxjs';
 import { MapApiService } from '../../../../../../core/services/map-api.service';
+import { ContributionsService } from '../../../../services/contributions.service';
 import { BackgroundImageFallbackDirective } from '../../../../../../shared/directives/background-image-fallback.directive';
 import { PhotoGalleryComponent } from '../../../../../../shared/components/photo-gallery/photo-gallery.component';
 import type { EntityImage } from '../../../../../../core/models/entity-image.model';
@@ -61,6 +62,7 @@ export interface BasicsData {
 })
 export class StepBasicsComponent implements OnInit, OnDestroy {
   private readonly mapApi = inject(MapApiService);
+  private readonly contributions = inject(ContributionsService);
   private readonly http = inject(HttpClient);
   data = input<BasicsData | null>(null);
   locationLocked = input<boolean>(false);
@@ -78,8 +80,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   pickerLat = signal<number | null>(null);
   pickerLng = signal<number | null>(null);
   isGeocoding = signal(false);
-  isAddressGeocoding = signal(false);
-  addressGeocodeStatus = signal('');
+  locationStatus = signal('');
   submitAttempted = signal(false);
   private pickerMap?: MapLibreMap;
   private pickerResizeObserver?: ResizeObserver;
@@ -407,7 +408,6 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
       window.clearTimeout(this.addressGeocodeTimeout);
     }
 
-    this.addressGeocodeStatus.set('');
     this.addressGeocodeTimeout = window.setTimeout(() => {
       this.addressGeocodeTimeout = null;
       void this.geocodeAddressFromFields(addressKey);
@@ -418,8 +418,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     if (this.locationLocked() || addressKey.length < 4) return;
 
     const requestId = ++this.addressGeocodeRequestId;
-    this.isAddressGeocoding.set(true);
-    this.addressGeocodeStatus.set('Looking up coordinates...');
+    this.locationStatus.set('Looking up location...');
 
     try {
       const results = await firstValueFrom(this.mapApi.geocode(addressKey));
@@ -427,32 +426,59 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
       const result = results.find(item => this.hasUsableCoordinates(item.latitude, item.longitude));
       if (!result) {
-        this.addressGeocodeStatus.set('Could not find coordinates for this address.');
+        this.locationStatus.set('Could not find coordinates for this address.');
         return;
       }
 
-      this.form.lat = result.latitude;
-      this.form.lng = result.longitude;
-      this.pickerLat.set(result.latitude);
-      this.pickerLng.set(result.longitude);
+      await this.resolveAndFillFromCoordinates(result.latitude, result.longitude, { fillAddress: false });
       this.lastGeocodedAddressKey = addressKey;
-      this.addressGeocodeStatus.set('Coordinates found from address.');
     } catch {
       if (requestId === this.addressGeocodeRequestId) {
-        this.addressGeocodeStatus.set('Could not look up coordinates right now.');
-      }
-    } finally {
-      if (requestId === this.addressGeocodeRequestId) {
-        this.isAddressGeocoding.set(false);
+        this.locationStatus.set('Could not look up location right now.');
       }
     }
   }
 
   private addressLookupKey(): string {
-    return [this.form.address, this.form.city, this.form.region, this.form.country]
+    return [this.form.address, this.form.city, this.form.country]
       .map(part => (part ?? '').trim())
       .filter(Boolean)
       .join(', ');
+  }
+
+  private async resolveAndFillFromCoordinates(
+    lat: number,
+    lng: number,
+    options: { fillAddress: boolean } = { fillAddress: true },
+  ): Promise<void> {
+    this.form.lat = lat;
+    this.form.lng = lng;
+    this.pickerLat.set(lat);
+    this.pickerLng.set(lng);
+
+    this.suppressAddressGeocode = true;
+    try {
+      const [geocode, resolved] = await Promise.all([
+        firstValueFrom(this.mapApi.reverseGeocode(lat, lng)),
+        firstValueFrom(this.contributions.resolveLocation(lat, lng)).catch(() => null),
+      ]);
+
+      if (options.fillAddress && geocode.address) this.form.address = geocode.address;
+
+      // Geographic names always come from reverse geocoding — never from the hierarchy lookup,
+      // which would wrongly show a nearby city (e.g. Kragujevac for a pin in Čačak).
+      if (geocode.city) this.form.city = geocode.city;
+      if (geocode.region) this.form.region = geocode.region;
+      if (geocode.country) this.form.country = geocode.country;
+
+      // locationId is used only for regional-manager routing — null is valid and handled by backend.
+      this.form.locationId = resolved?.locationId ?? null;
+
+      this.lastGeocodedAddressKey = this.addressLookupKey();
+      this.locationStatus.set('Location set.');
+    } finally {
+      this.suppressAddressGeocode = false;
+    }
   }
 
   async confirmCoordinates(): Promise<void> {
@@ -468,17 +494,9 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     this.isGeocoding.set(true);
 
     try {
-      this.suppressAddressGeocode = true;
-      const data = await firstValueFrom(this.mapApi.reverseGeocode(confirmedLat, confirmedLng));
-      if (data.address) this.form.address = data.address;
-      if (data.city) this.form.city = data.city;
-      if (data.region) this.form.region = data.region;
-      if (data.country) this.form.country = data.country;
-      this.lastGeocodedAddressKey = this.addressLookupKey();
-      this.addressGeocodeStatus.set('Coordinates set.');
+      await this.resolveAndFillFromCoordinates(confirmedLat, confirmedLng, { fillAddress: true });
     } catch {
     } finally {
-      this.suppressAddressGeocode = false;
       this.isGeocoding.set(false);
       this.closeMapPicker();
     }

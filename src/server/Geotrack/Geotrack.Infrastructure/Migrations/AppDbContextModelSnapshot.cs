@@ -2456,7 +2456,15 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<string>("City")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("ContactEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Country")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
@@ -2506,6 +2514,10 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.Property<string>("OwnershipProofOriginalFileName")
                         .HasColumnType("text");
+
+                    b.Property<string>("Region")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime?>("OwnershipProofUploadedAt")
                         .HasColumnType("timestamp with time zone");

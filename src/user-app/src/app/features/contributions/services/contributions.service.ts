@@ -10,6 +10,13 @@ import {
   toContributionAmenityApiValues,
 } from './contribution-amenities';
 
+export interface ResolveLocationResult {
+  locationId: number | null;
+  locationName: string | null;
+  destinationName: string | null;
+  regionName: string | null;
+}
+
 export type ContributionStatus = 'PendingReview' | 'Approved' | 'Rejected';
 export type ContributionEntityType = 'Place';
 export type ContributionType = 'CreatePlace' | 'UpdatePlace' | 'ClaimOwnership';
@@ -226,6 +233,12 @@ export class ContributionsService {
         this._loadError.set("We couldn't load your contributions. Please try again.");
         this._isLoading.set(false);
       },
+    });
+  }
+
+  resolveLocation(latitude: number, longitude: number): Observable<ResolveLocationResult | null> {
+    return this.http.get<ResolveLocationResult | null>('/api/contributions/resolve-location', {
+      params: { latitude: String(latitude), longitude: String(longitude) },
     });
   }
 

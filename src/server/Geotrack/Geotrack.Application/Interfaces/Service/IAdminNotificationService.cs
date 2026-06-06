@@ -47,6 +47,10 @@ public interface IAdminNotificationService
         PlaceContribution contribution,
         CancellationToken cancellationToken = default);
 
+    Task CreateContentManagerContributionPendingReviewNotificationAsync(
+        PlaceContribution contribution,
+        CancellationToken cancellationToken = default);
+
     Task CreateTerritoryRegionCreatedNotificationAsync(
         int territoryId,
         int regionId,

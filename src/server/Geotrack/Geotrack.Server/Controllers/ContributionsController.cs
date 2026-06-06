@@ -71,6 +71,83 @@ public class ContributionsController : ControllerBase
         });
     }
 
+    [HttpGet("content-manager")]
+    [Authorize(Roles = "Admin,ContentModerator")]
+    public async Task<ActionResult<GetPlaceContributionsResponseDto>> GetPendingForContentManager()
+    {
+        var response = await _contributions.GetPendingForContentManagerAsync();
+        return Ok(response);
+    }
+
+    [HttpGet("content-manager/{id:int}")]
+    [Authorize(Roles = "Admin,ContentModerator")]
+    public async Task<ActionResult<PlaceContributionResponseDto>> GetPendingForContentManagerById(int id)
+    {
+        var contribution = await _contributions.GetPendingForContentManagerByIdAsync(id);
+
+        if (contribution is null)
+            return NotFound();
+
+        return Ok(new PlaceContributionResponseDto
+        {
+            Contribution = contribution
+        });
+    }
+
+    [HttpGet("region-options")]
+    [Authorize(Roles = "Admin,ContentModerator")]
+    public async Task<ActionResult<ContributionRegionOptionsDto>> GetRegionOptions()
+    {
+        return Ok(await _contributions.GetRegionOptionsAsync());
+    }
+
+    [HttpGet("content-manager/destinations/{destinationId:int}/locations")]
+    [Authorize(Roles = "Admin,ContentModerator")]
+    public async Task<ActionResult<ContributionLocationOptionsDto>> GetDestinationLocationOptions(int destinationId)
+    {
+        try
+        {
+            return Ok(await _contributions.GetDestinationLocationOptionsAsync(destinationId));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("content-manager/{id:int}/approve")]
+    [Authorize(Roles = "Admin,ContentModerator")]
+    public async Task<ActionResult<PlaceContributionResponseDto>> ContentManagerApprove(
+        int id,
+        [FromBody] ContentManagerApproveContributionDto request)
+    {
+        try
+        {
+            var contribution = await _contributions.ApproveForContentManagerAsync(
+                id,
+                GetCurrentUserId(),
+                request.RegionId,
+                request.ExistingDestinationId,
+                request.NewDestinationName,
+                request.NewLocationName,
+                request.Note);
+
+            return Ok(new PlaceContributionResponseDto { Contribution = contribution });
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("resolve-location")]
+    public async Task<ActionResult<ResolveContributionLocationDto?>> ResolveLocation(
+        [FromQuery] double latitude,
+        [FromQuery] double longitude)
+    {
+        return Ok(await _contributions.ResolveNearestLocationAsync(latitude, longitude));
+    }
+
     [HttpGet("place-types")]
     public async Task<ActionResult<List<ContributionPlaceTypeDto>>> GetPlaceTypes()
     {
@@ -228,7 +305,7 @@ public class ContributionsController : ControllerBase
 
     [HttpPost("{id:int}/approve")]
     [HttpPost("places/{id:int}/approve")]
-    [Authorize(Roles = "Admin,RegionalManager")]
+    [Authorize(Roles = "Admin,RegionalManager,ContentModerator")]
     public async Task<ActionResult<PlaceContributionResponseDto>> ApprovePlaceContribution(
         int id,
         [FromBody] ReviewPlaceContributionRequestDto? request)
@@ -253,7 +330,7 @@ public class ContributionsController : ControllerBase
 
     [HttpPost("{id:int}/reject")]
     [HttpPost("places/{id:int}/reject")]
-    [Authorize(Roles = "Admin,RegionalManager")]
+    [Authorize(Roles = "Admin,RegionalManager,ContentModerator")]
     public async Task<ActionResult<PlaceContributionResponseDto>> RejectPlaceContribution(
         int id,
         [FromBody] ReviewPlaceContributionRequestDto? request)

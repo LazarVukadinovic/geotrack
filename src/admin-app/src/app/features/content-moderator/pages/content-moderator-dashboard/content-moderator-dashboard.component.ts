@@ -6,6 +6,7 @@ import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ContentModeratorDashboardService } from '../../../../core/services/content-moderator/content-moderator-dashboard.service';
+import { ContentModeratorContributionsService } from '../../../../core/services/content-moderator/content-moderator-contributions.service';
 import {
   ContentModeratorDashboard,
   ContentModeratorDashboardStats,
@@ -21,6 +22,7 @@ import {
 export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly dashboardService = inject(ContentModeratorDashboardService);
+  private readonly contributionsService = inject(ContentModeratorContributionsService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly router = inject(Router);
   private readonly destroy$ = new Subject<void>();
@@ -29,6 +31,7 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
   isLoading = false;
   errorMessage: string | null = null;
   pendingReviewReportsCount = 0;
+  pendingContributionsCount = 0;
 
   stats: { label: string; value: number; sub: string; color: string; icon: string; route: string }[] = [];
 
@@ -42,6 +45,7 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadDashboard();
+    this.loadContributionsCount();
   }
 
   ngOnDestroy(): void {
@@ -79,6 +83,18 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
       });
   }
 
+  private loadContributionsCount(): void {
+    this.contributionsService.getAll()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: items => {
+          this.pendingContributionsCount = items.filter(i => i.status === 'PendingReview').length;
+          this.cdr.markForCheck();
+        },
+        error: () => { /* non-critical, ignore */ },
+      });
+  }
+
   openPendingReports(): void {
     this.navigateTo(this.dashboard?.quickLinks.pendingReportsRoute ?? '/content-moderator/review-management?status=reported');
   }
@@ -90,6 +106,14 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
   private buildStats(stats: ContentModeratorDashboardStats): void {
     const quickLinks = this.dashboard?.quickLinks;
     this.stats = [
+      {
+        label: 'Contributions',
+        value: this.pendingContributionsCount,
+        sub: 'Pending review',
+        color: '#7c3aed',
+        icon: 'inbox',
+        route: '/content-moderator/contributions',
+      },
       {
         label: 'Review Destinations',
         value: stats.destinationsCount,
