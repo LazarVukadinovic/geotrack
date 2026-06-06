@@ -131,7 +131,7 @@ public class AnalyticsService : IAnalyticsService
 
         foreach (var dto in batch.Events.Take(MaxBatchSize))
         {
-            var enriched = TryEnrich(dto, context, now);
+            var enriched = await TryEnrichAsync(dto, context, now, cancellationToken);
             if (enriched is null)
             {
                 continue;
@@ -220,7 +220,11 @@ public class AnalyticsService : IAnalyticsService
             .SingleOrDefaultAsync(ct) ?? false;
     }
 
-    private AnalyticsEvent? TryEnrich(AnalyticsEventDto dto, AnalyticsContext context, DateTime now)
+    private async Task<AnalyticsEvent?> TryEnrichAsync(
+        AnalyticsEventDto dto,
+        AnalyticsContext context,
+        DateTime now,
+        CancellationToken cancellationToken)
     {
         var eventType = NormalizeToken(dto.EventType);
         if (!AnalyticsEventTypes.IsAllowed(eventType))
@@ -275,6 +279,8 @@ public class AnalyticsService : IAnalyticsService
             return null;
         }
 
+        var destinationId = await ResolveDestinationIdAsync(entityType, dto.EntityId, dto.DestinationId, cancellationToken);
+
         return new AnalyticsEvent
         {
             UserId = context.UserId,
@@ -282,13 +288,52 @@ public class AnalyticsService : IAnalyticsService
             EventType = eventType!,
             EntityType = string.IsNullOrWhiteSpace(entityType) ? null : entityType,
             EntityId = dto.EntityId,
-            DestinationId = dto.DestinationId,
+            DestinationId = destinationId,
             Route = NormalizeRoute(dto.Route),
             DurationMs = durationMs,
             MetadataJson = metadataJson,
             OccurredAt = now,
             ClientOccurredAt = NormalizeClientOccurredAt(dto.ClientOccurredAt, now),
         };
+    }
+
+    private async Task<int?> ResolveDestinationIdAsync(
+        string? entityType,
+        int? entityId,
+        int? suppliedDestinationId,
+        CancellationToken cancellationToken)
+    {
+        if (!entityId.HasValue || entityId.Value <= 0)
+        {
+            return suppliedDestinationId is > 0 ? suppliedDestinationId : null;
+        }
+
+        var derivedDestinationId = entityType switch
+        {
+            AnalyticsEntityTypes.Destination => await _db.Destinations
+                .AsNoTracking()
+                .Where(destination => destination.Id == entityId.Value)
+                .Select(destination => (int?)destination.Id)
+                .SingleOrDefaultAsync(cancellationToken),
+            AnalyticsEntityTypes.Location => await _db.Locations
+                .AsNoTracking()
+                .Where(location => location.Id == entityId.Value)
+                .Select(location => (int?)location.DestinationId)
+                .SingleOrDefaultAsync(cancellationToken),
+            AnalyticsEntityTypes.Place or AnalyticsEntityTypes.Hotel => await _db.Places
+                .AsNoTracking()
+                .Where(place => place.Id == entityId.Value)
+                .Select(place => (int?)place.Location.DestinationId)
+                .SingleOrDefaultAsync(cancellationToken),
+            AnalyticsEntityTypes.Event => await _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => eventEntity.Id == entityId.Value)
+                .Select(eventEntity => (int?)eventEntity.DestinationId)
+                .SingleOrDefaultAsync(cancellationToken),
+            _ => null
+        };
+
+        return derivedDestinationId ?? (suppliedDestinationId is > 0 ? suppliedDestinationId : null);
     }
 
     private async Task<List<RecentDedupeEvent>> LoadRecentDedupeEventsAsync(

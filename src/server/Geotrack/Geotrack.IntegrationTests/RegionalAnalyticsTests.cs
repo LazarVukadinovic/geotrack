@@ -72,6 +72,62 @@ public sealed class RegionalAnalyticsTests
     }
 
     [Fact]
+    public async Task Destination_and_location_filters_roll_up_child_analytics()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreateAnalyticsFixtureAsync(app);
+
+        using var client = await LoginAsync(app, "elena@example.com", "password123");
+
+        var destinationOverview = await client.GetFromJsonAsync<RegionalAnalyticsOverviewDto>(
+            $"/api/admin/regional/analytics/overview?regionId={fixture.AssignedRegionId}&period=30d&entityType=destination&sort=views_desc");
+        var locationOverview = await client.GetFromJsonAsync<RegionalAnalyticsOverviewDto>(
+            $"/api/admin/regional/analytics/overview?regionId={fixture.AssignedRegionId}&period=30d&entityType=location&sort=views_desc");
+
+        Assert.NotNull(destinationOverview);
+        Assert.Equal(5, destinationOverview!.Totals.PageViews);
+        Assert.Equal(2, destinationOverview.Totals.UniqueVisitors);
+        Assert.Equal(2, destinationOverview.Totals.Saves);
+        Assert.Equal(2, destinationOverview.Totals.ExternalClicks);
+        Assert.Equal(2, destinationOverview.Totals.TotalReviews);
+        Assert.Equal(4.5, destinationOverview.Totals.AverageRating);
+
+        var destinationRow = Assert.Single(destinationOverview.EntityRows);
+        Assert.Equal(AnalyticsEntityTypes.Destination, destinationRow.EntityType);
+        Assert.Equal(fixture.DestinationId, destinationRow.EntityId);
+        Assert.Equal(5, destinationRow.PageViews);
+        Assert.Equal(2, destinationRow.UniqueVisitors);
+        Assert.Equal(2, destinationRow.Saves);
+        Assert.Equal(2, destinationRow.ExternalClicks);
+        Assert.Equal(2, destinationRow.ReviewCount);
+        Assert.Equal(4.5, destinationRow.AverageRating);
+        var rankedDestination = Assert.Single(destinationOverview.DestinationRanking);
+        Assert.Equal(fixture.DestinationId, rankedDestination.DestinationId);
+        Assert.Equal(5, rankedDestination.Visits);
+        Assert.DoesNotContain(destinationOverview.EntityRows, row => row.Name.StartsWith("Out Region", StringComparison.Ordinal));
+
+        Assert.NotNull(locationOverview);
+        Assert.Equal(4, locationOverview!.Totals.PageViews);
+        Assert.Equal(2, locationOverview.Totals.UniqueVisitors);
+        Assert.Equal(2, locationOverview.Totals.Saves);
+        Assert.Equal(2, locationOverview.Totals.ExternalClicks);
+        Assert.Equal(2, locationOverview.Totals.TotalReviews);
+        Assert.Equal(4.5, locationOverview.Totals.AverageRating);
+
+        var locationRow = Assert.Single(locationOverview.EntityRows);
+        Assert.Equal(AnalyticsEntityTypes.Location, locationRow.EntityType);
+        Assert.Equal(fixture.LocationId, locationRow.EntityId);
+        Assert.Equal(4, locationRow.PageViews);
+        Assert.Equal(2, locationRow.UniqueVisitors);
+        Assert.Equal(2, locationRow.Saves);
+        Assert.Equal(2, locationRow.ExternalClicks);
+        Assert.Equal(2, locationRow.ReviewCount);
+        Assert.Equal(4.5, locationRow.AverageRating);
+        Assert.Equal(fixture.LocationId, locationOverview.TopPerformingEntities[0].EntityId);
+        Assert.DoesNotContain(locationOverview.EntityRows, row => row.Name.StartsWith("Out Region", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Analytics_filters_search_sort_and_export_are_scoped_to_region()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -121,9 +177,10 @@ public sealed class RegionalAnalyticsTests
         Assert.NotNull(destination);
         Assert.Equal(AnalyticsEntityTypes.Destination, destination!.EntityType);
         Assert.Equal(fixture.AssignedRegionId, destination.RegionId);
-        Assert.Equal(1, destination.Analytics.Views);
-        Assert.Equal(1, destination.Analytics.Saves);
-        Assert.Equal(1, destination.Analytics.Reviews);
+        Assert.Equal(7, destination.Analytics.Views);
+        Assert.Equal(4, destination.Analytics.Saves);
+        Assert.Equal(4, destination.Analytics.Reviews);
+        Assert.Equal(4.5, destination.Analytics.AverageRating);
         Assert.Equal(1, destination.TypeSpecific.LocationsCount);
         Assert.True(destination.GalleryImages.Count > 0);
 
@@ -131,8 +188,10 @@ public sealed class RegionalAnalyticsTests
         Assert.Equal(AnalyticsEntityTypes.Location, location!.EntityType);
         Assert.Equal(fixture.DestinationId, location.DestinationId);
         Assert.Equal("Detail Destination", location.TypeSpecific.ParentDestination);
-        Assert.Equal(2, location.Analytics.Views);
-        Assert.Equal(1, location.Analytics.Reviews);
+        Assert.Equal(6, location.Analytics.Views);
+        Assert.Equal(3, location.Analytics.Saves);
+        Assert.Equal(3, location.Analytics.Reviews);
+        Assert.Equal(Math.Round(13d / 3d, 2, MidpointRounding.AwayFromZero), location.Analytics.AverageRating);
         Assert.True(location.TypeSpecific.PlacesCount >= 2);
 
         Assert.NotNull(place);

@@ -9,6 +9,7 @@ using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Analytics;
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Interests;
 using Geotrack.Infrastructure;
 using Geotrack.IntegrationTests.Infrastructure;
@@ -107,6 +108,185 @@ public sealed class AnalyticsTests
         Assert.NotEqual(999_999, rows[0].UserId);
         Assert.Equal(AnalyticsEventTypes.PageView, rows[0].EventType);
         Assert.Equal(AnalyticsEventTypes.DetailView, rows[1].EventType);
+    }
+
+    [Fact]
+    public async Task Detail_events_without_destination_id_are_enriched_from_entity_hierarchy()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        int destinationId;
+        int locationId;
+        int placeId;
+        int stayPlaceId;
+        int eventId;
+
+        await using (var setup = app.Services.CreateAsyncScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<AppDbContext>();
+            var now = DateTime.UtcNow;
+            var territory = await db.Territories.OrderBy(item => item.Id).FirstAsync();
+            var destinationType = await db.DestinationTypes.OrderBy(item => item.Id).FirstAsync();
+            var locationType = await db.LocationTypes.OrderBy(item => item.Id).FirstAsync();
+            var placeType = await db.PlaceTypes.OrderBy(item => item.Id).FirstAsync();
+            var eventType = await db.EventTypes.OrderBy(item => item.Id).FirstAsync();
+
+            var stayType = await db.StayTypes.FirstOrDefaultAsync(item => item.Name == "Analytics Hotel");
+            if (stayType is null)
+            {
+                stayType = new StayType
+                {
+                    Name = "Analytics Hotel",
+                    Slug = "analytics-hotel-" + Guid.NewGuid().ToString("N"),
+                    Description = "Analytics test stay type.",
+                    CreatedAt = now
+                };
+                db.StayTypes.Add(stayType);
+                await db.SaveChangesAsync();
+            }
+
+            var region = new Region
+            {
+                Name = $"Analytics Destination Enrichment {Guid.NewGuid():N}",
+                TerritoryId = territory.Id,
+                CreatedAt = now
+            };
+            db.Regions.Add(region);
+            await db.SaveChangesAsync();
+
+            var destination = new Destination
+            {
+                Name = $"Analytics Enrichment Destination {Guid.NewGuid():N}",
+                DestinationTypeId = destinationType.Id,
+                RegionId = region.Id,
+                Description = "Destination enrichment test.",
+                Latitude = 42.1,
+                Longitude = 18.1,
+                CreatedAt = now
+            };
+            db.Destinations.Add(destination);
+            await db.SaveChangesAsync();
+            destinationId = destination.Id;
+
+            var location = new Location
+            {
+                Name = $"Analytics Enrichment Location {Guid.NewGuid():N}",
+                DestinationId = destination.Id,
+                LocationTypeId = locationType.Id,
+                Description = "Location enrichment test.",
+                Latitude = 42.2,
+                Longitude = 18.2,
+                CreatedAt = now
+            };
+            db.Locations.Add(location);
+            await db.SaveChangesAsync();
+            locationId = location.Id;
+
+            var place = new Place
+            {
+                Name = $"Analytics Enrichment Place {Guid.NewGuid():N}",
+                PlaceTypeId = placeType.Id,
+                LocationId = location.Id,
+                Description = "Place enrichment test.",
+                Latitude = 42.3,
+                Longitude = 18.3,
+                CreatedAt = now
+            };
+            var stayPlace = new Place
+            {
+                Name = $"Analytics Enrichment Stay {Guid.NewGuid():N}",
+                PlaceTypeId = placeType.Id,
+                LocationId = location.Id,
+                Description = "Stay enrichment test.",
+                Latitude = 42.4,
+                Longitude = 18.4,
+                CreatedAt = now
+            };
+            db.Places.AddRange(place, stayPlace);
+            await db.SaveChangesAsync();
+            placeId = place.Id;
+            stayPlaceId = stayPlace.Id;
+
+            db.Stays.Add(new Stay
+            {
+                PlaceId = stayPlace.Id,
+                StayTypeId = stayType.Id,
+                CheckInTime = "14:00",
+                CheckOutTime = "11:00"
+            });
+
+            var eventEntity = new Event
+            {
+                Name = $"Analytics Enrichment Event {Guid.NewGuid():N}",
+                EventTypeId = eventType.Id,
+                DestinationId = destination.Id,
+                LocationId = location.Id,
+                Description = "Event enrichment test.",
+                StartDate = now.AddDays(1),
+                EndDate = now.AddDays(1).AddHours(2),
+                CreatedAt = now
+            };
+            db.Events.Add(eventEntity);
+            await db.SaveChangesAsync();
+            eventId = eventEntity.Id;
+        }
+
+        var sessionId = Guid.NewGuid();
+        var batch = new
+        {
+            anonymousSessionId = sessionId,
+            events = new object[]
+            {
+                new
+                {
+                    eventType = AnalyticsEventTypes.DetailView,
+                    entityType = AnalyticsEntityTypes.Destination,
+                    entityId = destinationId,
+                },
+                new
+                {
+                    eventType = AnalyticsEventTypes.DetailView,
+                    entityType = AnalyticsEntityTypes.Location,
+                    entityId = locationId,
+                },
+                new
+                {
+                    eventType = AnalyticsEventTypes.DetailView,
+                    entityType = AnalyticsEntityTypes.Place,
+                    entityId = placeId,
+                },
+                new
+                {
+                    eventType = AnalyticsEventTypes.DetailView,
+                    entityType = AnalyticsEntityTypes.Hotel,
+                    entityId = stayPlaceId,
+                },
+                new
+                {
+                    eventType = AnalyticsEventTypes.DetailView,
+                    entityType = AnalyticsEntityTypes.Event,
+                    entityId = eventId,
+                },
+            },
+        };
+
+        var response = await client.PostAsJsonAsync("/api/interests/events", batch);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await using var verify = app.Services.CreateAsyncScope();
+        var verifyDb = verify.ServiceProvider.GetRequiredService<AppDbContext>();
+        var rows = await verifyDb.AnalyticsEvents
+            .Where(row => row.AnonymousSessionId == sessionId)
+            .ToListAsync();
+
+        Assert.Equal(5, rows.Count);
+        Assert.All(rows, row => Assert.Equal(destinationId, row.DestinationId));
+        Assert.Contains(rows, row => row.EntityType == AnalyticsEntityTypes.Destination && row.EntityId == destinationId);
+        Assert.Contains(rows, row => row.EntityType == AnalyticsEntityTypes.Location && row.EntityId == locationId);
+        Assert.Contains(rows, row => row.EntityType == AnalyticsEntityTypes.Place && row.EntityId == placeId);
+        Assert.Contains(rows, row => row.EntityType == AnalyticsEntityTypes.Hotel && row.EntityId == stayPlaceId);
+        Assert.Contains(rows, row => row.EntityType == AnalyticsEntityTypes.Event && row.EntityId == eventId);
     }
 
     [Fact]

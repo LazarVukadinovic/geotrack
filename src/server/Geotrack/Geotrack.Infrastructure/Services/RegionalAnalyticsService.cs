@@ -63,6 +63,7 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         var activeRegion = await GetAssignedRegionAsync(userId, query.RegionId);
         var period = ResolvePeriod(query.Period);
         var entityType = NormalizeEntityTypeFilter(query.EntityType);
+        var aggregationMode = ResolveAggregationMode(entityType);
         var sort = NormalizeSort(query.Sort);
         var skip = Math.Max(0, query.Skip);
         var take = Math.Clamp(query.Take <= 0 ? DefaultTake : query.Take, 1, MaxTake);
@@ -74,8 +75,8 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
             query.Search,
             cancellationToken);
 
-        var current = await BuildMetricSetAsync(entities, period.StartDate, period.EndDate, cancellationToken);
-        var previousTotals = await BuildPreviousTotalsAsync(entities, period, cancellationToken);
+        var current = await BuildMetricSetAsync(entities, period.StartDate, period.EndDate, cancellationToken, aggregationMode);
+        var previousTotals = await BuildPreviousTotalsAsync(entities, period, cancellationToken, aggregationMode);
         var rows = SortRows(current.Rows.Where(HasEngagement).ToList(), sort);
         var pageRows = rows.Skip(skip).Take(take).ToList();
         var destinationRanking = entityType is "all" or AnalyticsEntityTypes.Destination
@@ -144,6 +145,7 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
 
         var activeRegion = await GetAssignedRegionAsync(userId, query.RegionId);
         var entityType = NormalizeEntityTypeFilter(query.EntityType);
+        var aggregationMode = ResolveAggregationMode(entityType);
         var entities = await LoadEntitiesAsync(
             query.RegionId,
             activeRegion.DisplayName,
@@ -163,7 +165,7 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
 
         var visitsByMonth = entities.Count == 0
             ? new Dictionary<(int Year, int Month), int>()
-            : await LoadMonthlyVisitCountsAsync(entities, earliestWindowStart, rangeEndExclusive, cancellationToken);
+            : await LoadMonthlyVisitCountsAsync(entities, earliestWindowStart, rangeEndExclusive, aggregationMode, cancellationToken);
 
         var series = new List<RegionalMonthlyVisitsSeriesDto>();
         for (var seriesIndex = 0; seriesIndex < query.SelectedYearsBack; seriesIndex++)
@@ -281,7 +283,8 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         {
             AnalyticsEntityTypes.Destination => await LoadDestinationDetailAsync(query.RegionId, query.EntityId, activeRegion.DisplayName, cancellationToken),
             AnalyticsEntityTypes.Location => await LoadLocationDetailAsync(query.RegionId, query.EntityId, activeRegion.DisplayName, cancellationToken),
-            AnalyticsEntityTypes.Place => await LoadPlaceDetailAsync(query.RegionId, query.EntityId, activeRegion.DisplayName, cancellationToken),
+            AnalyticsEntityTypes.Place => await LoadPlaceDetailAsync(query.RegionId, query.EntityId, activeRegion.DisplayName, AnalyticsEntityTypes.Place, cancellationToken),
+            AnalyticsEntityTypes.Hotel => await LoadPlaceDetailAsync(query.RegionId, query.EntityId, activeRegion.DisplayName, AnalyticsEntityTypes.Hotel, cancellationToken),
             AnalyticsEntityTypes.Event => await LoadEventDetailAsync(query.RegionId, query.EntityId, activeRegion.DisplayName, cancellationToken),
             _ => throw new InvalidOperationException("Invalid entity type.")
         };
@@ -298,7 +301,8 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
             DetailRoute = DetailRoute(detail.EntityType, detail.EntityId)
         };
 
-        var current = await BuildMetricSetAsync(new[] { projection }, period.StartDate, period.EndDate, cancellationToken);
+        var detailAggregationMode = ResolveAggregationMode(detail.EntityType);
+        var current = await BuildMetricSetAsync(new[] { projection }, period.StartDate, period.EndDate, cancellationToken, detailAggregationMode);
         var currentMetric = current.Rows.Single();
         RegionalAnalyticsEntityMetricDto? previousMetric = null;
 
@@ -306,7 +310,7 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         {
             var previousEnd = period.StartDate.Value;
             var previousStart = previousEnd - period.Duration.Value;
-            var previous = await BuildMetricSetAsync(new[] { projection }, previousStart, previousEnd, cancellationToken);
+            var previous = await BuildMetricSetAsync(new[] { projection }, previousStart, previousEnd, cancellationToken, detailAggregationMode);
             previousMetric = previous.Rows.Single();
         }
 
@@ -588,6 +592,7 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         int regionId,
         int entityId,
         string regionDisplayName,
+        string analyticsEntityType,
         CancellationToken cancellationToken)
     {
         var row = await _db.Places
@@ -673,7 +678,7 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         var gallery = NormalizeGallery(row.GalleryImages);
         return new RegionalAnalyticsEntityDetailDto
         {
-            EntityType = AnalyticsEntityTypes.Place,
+            EntityType = analyticsEntityType,
             EntityId = row.Id,
             Name = row.Name,
             Title = row.Name,
@@ -1152,6 +1157,11 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
 
     private static bool IsStayDetail(RegionalAnalyticsEntityDetailDto detail)
     {
+        if (detail.EntityType == AnalyticsEntityTypes.Hotel)
+        {
+            return true;
+        }
+
         if (detail.EntityType != AnalyticsEntityTypes.Place)
         {
             return false;
@@ -1282,6 +1292,42 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
                 .ToListAsync(cancellationToken));
         }
 
+        if (entityType == AnalyticsEntityTypes.Hotel)
+        {
+            var query = _db.Places
+                .AsNoTracking()
+                .Where(place => place.Location.Destination.RegionId == regionId && place.Stay != null);
+
+            if (like is not null)
+            {
+                query = query.Where(place =>
+                    EF.Functions.ILike(place.Name, like) ||
+                    EF.Functions.ILike(place.Status, like) ||
+                    EF.Functions.ILike(place.PlaceType.Name, like) ||
+                    EF.Functions.ILike(place.Stay!.StayType.Name, like));
+            }
+
+            entities.AddRange(await query
+                .Select(place => new EntityProjection
+                {
+                    EntityType = AnalyticsEntityTypes.Hotel,
+                    EntityId = place.Id,
+                    Name = place.Name,
+                    RegionDisplayName = regionDisplayName,
+                    ImageUrl = place.Images
+                        .OrderByDescending(image => image.IsMain)
+                        .ThenBy(image => image.SortOrder)
+                        .ThenBy(image => image.CreatedAt)
+                        .ThenBy(image => image.Id)
+                        .Select(image => image.Url)
+                        .FirstOrDefault(),
+                    CategoryLabel = place.Stay != null ? place.Stay.StayType.Name : place.PlaceType.Name,
+                    Status = place.Status,
+                    DetailRoute = "/stays/" + place.Id
+                })
+                .ToListAsync(cancellationToken));
+        }
+
         if (entityType is "all" or AnalyticsEntityTypes.Event)
         {
             var query = _db.Events
@@ -1328,25 +1374,16 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         IReadOnlyList<EntityProjection> entities,
         DateTime fromUtc,
         DateTime toUtc,
+        MetricAggregationMode aggregationMode,
         CancellationToken cancellationToken)
     {
-        var destinationIds = EntityIds(entities, AnalyticsEntityTypes.Destination);
-        var locationIds = EntityIds(entities, AnalyticsEntityTypes.Location);
-        var placeIds = EntityIds(entities, AnalyticsEntityTypes.Place);
-        var eventIds = EntityIds(entities, AnalyticsEntityTypes.Event);
-
-        var monthlyRows = await _db.AnalyticsEvents
-            .AsNoTracking()
-            .Where(evt =>
-                evt.OccurredAt >= fromUtc &&
-                evt.OccurredAt < toUtc &&
-                evt.EntityId.HasValue &&
-                evt.EntityType != null &&
-                ViewEventTypes.Contains(evt.EventType) &&
-                ((evt.EntityType == AnalyticsEntityTypes.Destination && destinationIds.Contains(evt.EntityId.Value)) ||
-                 (evt.EntityType == AnalyticsEntityTypes.Location && locationIds.Contains(evt.EntityId.Value)) ||
-                 ((evt.EntityType == AnalyticsEntityTypes.Place || evt.EntityType == AnalyticsEntityTypes.Hotel) && placeIds.Contains(evt.EntityId.Value)) ||
-                 (evt.EntityType == AnalyticsEntityTypes.Event && eventIds.Contains(evt.EntityId.Value))))
+        var monthlyRows = (await LoadAnalyticsMetricEventsAsync(
+                entities,
+                fromUtc,
+                toUtc,
+                aggregationMode,
+                cancellationToken))
+            .Where(evt => ViewEventTypes.Contains(evt.EventType))
             .GroupBy(evt => new { evt.OccurredAt.Year, evt.OccurredAt.Month })
             .Select(group => new MonthlyVisitAggregate
             {
@@ -1354,16 +1391,221 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
                 Month = group.Key.Month,
                 Count = group.Count()
             })
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         return monthlyRows.ToDictionary(row => (row.Year, row.Month), row => row.Count);
     }
+
+    private async Task<List<AnalyticsMetricEventRow>> LoadAnalyticsMetricEventsAsync(
+        IReadOnlyList<EntityProjection> entities,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        MetricAggregationMode aggregationMode,
+        CancellationToken cancellationToken)
+    {
+        return aggregationMode switch
+        {
+            MetricAggregationMode.DestinationRollup => await LoadDestinationRollupMetricEventsAsync(
+                EntityIds(entities, AnalyticsEntityTypes.Destination),
+                fromUtc,
+                toUtc,
+                cancellationToken),
+            MetricAggregationMode.LocationRollup => await LoadLocationRollupMetricEventsAsync(
+                EntityIds(entities, AnalyticsEntityTypes.Location),
+                fromUtc,
+                toUtc,
+                cancellationToken),
+            _ => await LoadDirectMetricEventsAsync(entities, fromUtc, toUtc, cancellationToken)
+        };
+    }
+
+    private async Task<List<AnalyticsMetricEventRow>> LoadDirectMetricEventsAsync(
+        IReadOnlyList<EntityProjection> entities,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var keys = entities.Select(entity => new EntityKey(entity.EntityType, entity.EntityId)).ToHashSet();
+        var destinationIds = EntityIds(entities, AnalyticsEntityTypes.Destination);
+        var locationIds = EntityIds(entities, AnalyticsEntityTypes.Location);
+        var placeIds = EntityIds(entities, AnalyticsEntityTypes.Place);
+        var hotelIds = EntityIds(entities, AnalyticsEntityTypes.Hotel);
+        var eventIds = EntityIds(entities, AnalyticsEntityTypes.Event);
+
+        var analyticsEvents = await MetricEventBaseQuery(fromUtc, toUtc)
+            .Where(evt =>
+                (evt.EntityType == AnalyticsEntityTypes.Destination && destinationIds.Contains(evt.EntityId!.Value)) ||
+                (evt.EntityType == AnalyticsEntityTypes.Location && locationIds.Contains(evt.EntityId!.Value)) ||
+                (evt.EntityType == AnalyticsEntityTypes.Place && placeIds.Contains(evt.EntityId!.Value)) ||
+                (evt.EntityType == AnalyticsEntityTypes.Hotel && (placeIds.Contains(evt.EntityId!.Value) || hotelIds.Contains(evt.EntityId!.Value))) ||
+                (evt.EntityType == AnalyticsEntityTypes.Event && eventIds.Contains(evt.EntityId!.Value)))
+            .Select(evt => new AnalyticsMetricEventRow
+            {
+                EntityType = evt.EntityType!,
+                EntityId = evt.EntityId!.Value,
+                EventType = evt.EventType,
+                UserId = evt.UserId,
+                AnonymousSessionId = evt.AnonymousSessionId,
+                OccurredAt = evt.OccurredAt,
+                Route = evt.Route,
+                DurationMs = evt.DurationMs
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var row in analyticsEvents)
+        {
+            if (row.EntityType == AnalyticsEntityTypes.Hotel &&
+                !keys.Contains(new EntityKey(AnalyticsEntityTypes.Hotel, row.EntityId)) &&
+                keys.Contains(new EntityKey(AnalyticsEntityTypes.Place, row.EntityId)))
+            {
+                row.EntityType = AnalyticsEntityTypes.Place;
+            }
+        }
+
+        return analyticsEvents
+            .Where(evt => keys.Contains(new EntityKey(evt.EntityType, evt.EntityId)))
+            .ToList();
+    }
+
+    private async Task<List<AnalyticsMetricEventRow>> LoadDestinationRollupMetricEventsAsync(
+        IReadOnlyCollection<int> destinationIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        if (destinationIds.Count == 0)
+        {
+            return new List<AnalyticsMetricEventRow>();
+        }
+
+        var rows = new List<AnalyticsMetricEventRow>();
+        var baseEvents = MetricEventBaseQuery(fromUtc, toUtc);
+
+        rows.AddRange(await baseEvents
+            .Where(evt => evt.EntityType == AnalyticsEntityTypes.Destination && destinationIds.Contains(evt.EntityId!.Value))
+            .Select(evt => ToMetricEventRow(evt, AnalyticsEntityTypes.Destination, evt.EntityId!.Value))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from evt in baseEvents
+            join location in _db.Locations
+                .AsNoTracking()
+                .Where(location => destinationIds.Contains(location.DestinationId))
+                on evt.EntityId!.Value equals location.Id
+            where evt.EntityType == AnalyticsEntityTypes.Location
+            select ToMetricEventRow(evt, AnalyticsEntityTypes.Destination, location.DestinationId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from evt in baseEvents
+            join place in _db.Places
+                .AsNoTracking()
+                .Where(place => destinationIds.Contains(place.Location.DestinationId))
+                on evt.EntityId!.Value equals place.Id
+            where evt.EntityType == AnalyticsEntityTypes.Place || evt.EntityType == AnalyticsEntityTypes.Hotel
+            select ToMetricEventRow(evt, AnalyticsEntityTypes.Destination, place.Location.DestinationId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from evt in baseEvents
+            join eventEntity in _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => destinationIds.Contains(eventEntity.DestinationId))
+                on evt.EntityId!.Value equals eventEntity.Id
+            where evt.EntityType == AnalyticsEntityTypes.Event
+            select ToMetricEventRow(evt, AnalyticsEntityTypes.Destination, eventEntity.DestinationId))
+            .ToListAsync(cancellationToken));
+
+        return rows;
+    }
+
+    private async Task<List<AnalyticsMetricEventRow>> LoadLocationRollupMetricEventsAsync(
+        IReadOnlyCollection<int> locationIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        if (locationIds.Count == 0)
+        {
+            return new List<AnalyticsMetricEventRow>();
+        }
+
+        var rows = new List<AnalyticsMetricEventRow>();
+        var baseEvents = MetricEventBaseQuery(fromUtc, toUtc);
+
+        rows.AddRange(await baseEvents
+            .Where(evt => evt.EntityType == AnalyticsEntityTypes.Location && locationIds.Contains(evt.EntityId!.Value))
+            .Select(evt => ToMetricEventRow(evt, AnalyticsEntityTypes.Location, evt.EntityId!.Value))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from evt in baseEvents
+            join place in _db.Places
+                .AsNoTracking()
+                .Where(place => locationIds.Contains(place.LocationId))
+                on evt.EntityId!.Value equals place.Id
+            where evt.EntityType == AnalyticsEntityTypes.Place || evt.EntityType == AnalyticsEntityTypes.Hotel
+            select ToMetricEventRow(evt, AnalyticsEntityTypes.Location, place.LocationId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from evt in baseEvents
+            join eventEntity in _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => eventEntity.LocationId.HasValue && locationIds.Contains(eventEntity.LocationId.Value))
+                on evt.EntityId!.Value equals eventEntity.Id
+            where evt.EntityType == AnalyticsEntityTypes.Event
+            select ToMetricEventRow(evt, AnalyticsEntityTypes.Location, eventEntity.LocationId!.Value))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from evt in baseEvents
+            join eventEntity in _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => !eventEntity.LocationId.HasValue && eventEntity.PlaceId.HasValue)
+                on evt.EntityId!.Value equals eventEntity.Id
+            join place in _db.Places
+                .AsNoTracking()
+                .Where(place => locationIds.Contains(place.LocationId))
+                on eventEntity.PlaceId!.Value equals place.Id
+            where evt.EntityType == AnalyticsEntityTypes.Event
+            select ToMetricEventRow(evt, AnalyticsEntityTypes.Location, place.LocationId))
+            .ToListAsync(cancellationToken));
+
+        return rows;
+    }
+
+    private IQueryable<AnalyticsEvent> MetricEventBaseQuery(DateTime? fromUtc, DateTime toUtc) =>
+        ApplyAnalyticsPeriod(_db.AnalyticsEvents.AsNoTracking(), fromUtc, toUtc)
+            .Where(evt =>
+                evt.EntityId.HasValue &&
+                evt.EntityType != null &&
+                (ViewEventTypes.Contains(evt.EventType) ||
+                 ExternalClickEventTypes.Contains(evt.EventType) ||
+                 evt.EventType == AnalyticsEventTypes.PageDuration));
+
+    private static AnalyticsMetricEventRow ToMetricEventRow(
+        AnalyticsEvent evt,
+        string entityType,
+        int entityId) =>
+        new()
+        {
+            EntityType = entityType,
+            EntityId = entityId,
+            EventType = evt.EventType,
+            UserId = evt.UserId,
+            AnonymousSessionId = evt.AnonymousSessionId,
+            OccurredAt = evt.OccurredAt,
+            Route = evt.Route,
+            DurationMs = evt.DurationMs
+        };
 
     private async Task<MetricSet> BuildMetricSetAsync(
         IReadOnlyList<EntityProjection> entities,
         DateTime? fromUtc,
         DateTime toUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        MetricAggregationMode aggregationMode = MetricAggregationMode.Direct)
     {
         var rows = entities.Select(entity => new RegionalAnalyticsEntityMetricDto
         {
@@ -1386,43 +1628,22 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
                 new List<AnalyticsMetricEventRow>());
         }
 
-        var keys = entities.Select(entity => new EntityKey(entity.EntityType, entity.EntityId)).ToHashSet();
         var destinationIds = EntityIds(entities, AnalyticsEntityTypes.Destination);
         var locationIds = EntityIds(entities, AnalyticsEntityTypes.Location);
         var placeIds = EntityIds(entities, AnalyticsEntityTypes.Place);
+        var hotelIds = EntityIds(entities, AnalyticsEntityTypes.Hotel);
         var eventIds = EntityIds(entities, AnalyticsEntityTypes.Event);
 
-        var eventQuery = ApplyAnalyticsPeriod(_db.AnalyticsEvents.AsNoTracking(), fromUtc, toUtc)
-            .Where(evt =>
-                evt.EntityId.HasValue &&
-                evt.EntityType != null &&
-                (ViewEventTypes.Contains(evt.EventType) ||
-                 ExternalClickEventTypes.Contains(evt.EventType) ||
-                 evt.EventType == AnalyticsEventTypes.PageDuration) &&
-                ((evt.EntityType == AnalyticsEntityTypes.Destination && destinationIds.Contains(evt.EntityId.Value)) ||
-                 (evt.EntityType == AnalyticsEntityTypes.Location && locationIds.Contains(evt.EntityId.Value)) ||
-                 ((evt.EntityType == AnalyticsEntityTypes.Place || evt.EntityType == AnalyticsEntityTypes.Hotel) && placeIds.Contains(evt.EntityId.Value)) ||
-                 (evt.EntityType == AnalyticsEntityTypes.Event && eventIds.Contains(evt.EntityId.Value))));
-
-        var analyticsEvents = (await eventQuery
-                .Select(evt => new AnalyticsMetricEventRow
-                {
-                    EntityType = evt.EntityType == AnalyticsEntityTypes.Hotel ? AnalyticsEntityTypes.Place : evt.EntityType!,
-                    EntityId = evt.EntityId!.Value,
-                    EventType = evt.EventType,
-                    UserId = evt.UserId,
-                    AnonymousSessionId = evt.AnonymousSessionId,
-                    OccurredAt = evt.OccurredAt,
-                    Route = evt.Route,
-                    DurationMs = evt.DurationMs
-                })
-                .ToListAsync(cancellationToken))
-            .Where(evt => keys.Contains(new EntityKey(evt.EntityType, evt.EntityId)))
-            .ToList();
+        var analyticsEvents = await LoadAnalyticsMetricEventsAsync(
+            entities,
+            fromUtc,
+            toUtc,
+            aggregationMode,
+            cancellationToken);
 
         ApplyAnalyticsEventMetrics(rows, analyticsEvents);
-        await ApplySaveMetricsAsync(rows, destinationIds, locationIds, placeIds, eventIds, fromUtc, toUtc, cancellationToken);
-        await ApplyReviewMetricsAsync(rows, destinationIds, locationIds, placeIds, eventIds, fromUtc, toUtc, cancellationToken);
+        await ApplySaveMetricsAsync(rows, destinationIds, locationIds, placeIds, hotelIds, eventIds, aggregationMode, fromUtc, toUtc, cancellationToken);
+        await ApplyReviewMetricsAsync(rows, destinationIds, locationIds, placeIds, hotelIds, eventIds, aggregationMode, fromUtc, toUtc, cancellationToken);
 
         var viewEvents = analyticsEvents.Where(evt => ViewEventTypes.Contains(evt.EventType)).ToList();
         var durationEvents = analyticsEvents
@@ -1456,14 +1677,15 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
     private async Task<RegionalAnalyticsTotalsDto?> BuildPreviousTotalsAsync(
         IReadOnlyList<EntityProjection> entities,
         PeriodWindow period,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        MetricAggregationMode aggregationMode)
     {
         if (!period.StartDate.HasValue || !period.Duration.HasValue)
             return null;
 
         var previousEnd = period.StartDate.Value;
         var previousStart = previousEnd - period.Duration.Value;
-        var previous = await BuildMetricSetAsync(entities, previousStart, previousEnd, cancellationToken);
+        var previous = await BuildMetricSetAsync(entities, previousStart, previousEnd, cancellationToken, aggregationMode);
         return previous.Totals;
     }
 
@@ -1485,7 +1707,8 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
             destinations,
             period.StartDate,
             period.EndDate,
-            cancellationToken);
+            cancellationToken,
+            MetricAggregationMode.DestinationRollup);
 
         return BuildDestinationRanking(destinationMetrics.Rows, regionId);
     }
@@ -1829,16 +2052,34 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         IReadOnlyCollection<int> destinationIds,
         IReadOnlyCollection<int> locationIds,
         IReadOnlyCollection<int> placeIds,
+        IReadOnlyCollection<int> hotelIds,
         IReadOnlyCollection<int> eventIds,
+        MetricAggregationMode aggregationMode,
         DateTime? fromUtc,
         DateTime toUtc,
         CancellationToken cancellationToken)
     {
         var byKey = rows.ToDictionary(row => new EntityKey(row.EntityType, row.EntityId));
 
+        if (aggregationMode == MetricAggregationMode.DestinationRollup)
+        {
+            ApplySaveRollupRows(
+                byKey,
+                await LoadDestinationRollupSaveRowsAsync(destinationIds, fromUtc, toUtc, cancellationToken));
+            return;
+        }
+
+        if (aggregationMode == MetricAggregationMode.LocationRollup)
+        {
+            ApplySaveRollupRows(
+                byKey,
+                await LoadLocationRollupSaveRowsAsync(locationIds, fromUtc, toUtc, cancellationToken));
+            return;
+        }
+
         var favoriteQuery = ApplyCreatedPeriod(_db.Favorites.AsNoTracking(), fromUtc, toUtc)
             .Where(favorite =>
-                (favorite.EntityType == AnalyticsEntityTypes.Place && placeIds.Contains(favorite.EntityId)) ||
+                (favorite.EntityType == AnalyticsEntityTypes.Place && (placeIds.Contains(favorite.EntityId) || hotelIds.Contains(favorite.EntityId))) ||
                 (favorite.EntityType == AnalyticsEntityTypes.Event && eventIds.Contains(favorite.EntityId)));
 
         var favoriteRows = await favoriteQuery
@@ -1852,6 +2093,16 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
             .ToListAsync(cancellationToken);
 
         foreach (var group in favoriteRows.GroupBy(row => new EntityKey(row.EntityType, row.EntityId)))
+        {
+            if (byKey.TryGetValue(group.Key, out var metric))
+            {
+                metric.Saves = group.Count();
+            }
+        }
+
+        foreach (var group in favoriteRows
+                     .Where(row => row.EntityType == AnalyticsEntityTypes.Place && hotelIds.Contains(row.EntityId))
+                     .GroupBy(row => new EntityKey(AnalyticsEntityTypes.Hotel, row.EntityId)))
         {
             if (byKey.TryGetValue(group.Key, out var metric))
             {
@@ -1886,6 +2137,245 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
                 metric.Saves = group.Count();
             }
         }
+
+        var hotelCollectionSaves = await ApplyCreatedPeriod(_db.CollectionItems.AsNoTracking(), fromUtc, toUtc)
+            .Where(item => item.PlaceId.HasValue && hotelIds.Contains(item.PlaceId.Value))
+            .Select(item => new { EntityId = item.PlaceId!.Value, item.Collection.UserId })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in hotelCollectionSaves.GroupBy(row => new EntityKey(AnalyticsEntityTypes.Hotel, row.EntityId)))
+        {
+            if (byKey.TryGetValue(group.Key, out var metric))
+            {
+                metric.Saves = group.Count();
+            }
+        }
+    }
+
+    private async Task<List<SaveMetricRow>> LoadDestinationRollupSaveRowsAsync(
+        IReadOnlyCollection<int> destinationIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var rows = new List<SaveMetricRow>();
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.CollectionItems.AsNoTracking(), fromUtc, toUtc)
+            .Where(item => item.DestinationId.HasValue && destinationIds.Contains(item.DestinationId.Value))
+            .Select(item => new SaveMetricRow(
+                AnalyticsEntityTypes.Destination,
+                item.DestinationId!.Value,
+                AnalyticsEntityTypes.Destination,
+                item.DestinationId!.Value,
+                item.Collection.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.CollectionItems.AsNoTracking(), fromUtc, toUtc)
+            .Where(item => item.LocationId.HasValue && destinationIds.Contains(item.Location!.DestinationId))
+            .Select(item => new SaveMetricRow(
+                AnalyticsEntityTypes.Destination,
+                item.Location!.DestinationId,
+                AnalyticsEntityTypes.Location,
+                item.LocationId!.Value,
+                item.Collection.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from favorite in ApplyCreatedPeriod(_db.Favorites.AsNoTracking(), fromUtc, toUtc)
+            join place in _db.Places
+                .AsNoTracking()
+                .Where(place => destinationIds.Contains(place.Location.DestinationId))
+                on favorite.EntityId equals place.Id
+            where favorite.EntityType == AnalyticsEntityTypes.Place
+            select new SaveMetricRow(
+                AnalyticsEntityTypes.Destination,
+                place.Location.DestinationId,
+                AnalyticsEntityTypes.Place,
+                place.Id,
+                favorite.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from item in ApplyCreatedPeriod(_db.CollectionItems.AsNoTracking(), fromUtc, toUtc)
+            join place in _db.Places
+                .AsNoTracking()
+                .Where(place => destinationIds.Contains(place.Location.DestinationId))
+                on item.PlaceId!.Value equals place.Id
+            where item.PlaceId.HasValue
+            select new SaveMetricRow(
+                AnalyticsEntityTypes.Destination,
+                place.Location.DestinationId,
+                AnalyticsEntityTypes.Place,
+                place.Id,
+                item.Collection.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from favorite in ApplyCreatedPeriod(_db.Favorites.AsNoTracking(), fromUtc, toUtc)
+            join eventEntity in _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => destinationIds.Contains(eventEntity.DestinationId))
+                on favorite.EntityId equals eventEntity.Id
+            where favorite.EntityType == AnalyticsEntityTypes.Event
+            select new SaveMetricRow(
+                AnalyticsEntityTypes.Destination,
+                eventEntity.DestinationId,
+                AnalyticsEntityTypes.Event,
+                eventEntity.Id,
+                favorite.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from item in ApplyCreatedPeriod(_db.CollectionItems.AsNoTracking(), fromUtc, toUtc)
+            join eventEntity in _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => destinationIds.Contains(eventEntity.DestinationId))
+                on item.EventId!.Value equals eventEntity.Id
+            where item.EventId.HasValue
+            select new SaveMetricRow(
+                AnalyticsEntityTypes.Destination,
+                eventEntity.DestinationId,
+                AnalyticsEntityTypes.Event,
+                eventEntity.Id,
+                item.Collection.UserId))
+            .ToListAsync(cancellationToken));
+
+        return rows.Distinct().ToList();
+    }
+
+    private async Task<List<SaveMetricRow>> LoadLocationRollupSaveRowsAsync(
+        IReadOnlyCollection<int> locationIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var rows = new List<SaveMetricRow>();
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.CollectionItems.AsNoTracking(), fromUtc, toUtc)
+            .Where(item => item.LocationId.HasValue && locationIds.Contains(item.LocationId.Value))
+            .Select(item => new SaveMetricRow(
+                AnalyticsEntityTypes.Location,
+                item.LocationId!.Value,
+                AnalyticsEntityTypes.Location,
+                item.LocationId!.Value,
+                item.Collection.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from favorite in ApplyCreatedPeriod(_db.Favorites.AsNoTracking(), fromUtc, toUtc)
+            join place in _db.Places
+                .AsNoTracking()
+                .Where(place => locationIds.Contains(place.LocationId))
+                on favorite.EntityId equals place.Id
+            where favorite.EntityType == AnalyticsEntityTypes.Place
+            select new SaveMetricRow(
+                AnalyticsEntityTypes.Location,
+                place.LocationId,
+                AnalyticsEntityTypes.Place,
+                place.Id,
+                favorite.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from item in ApplyCreatedPeriod(_db.CollectionItems.AsNoTracking(), fromUtc, toUtc)
+            join place in _db.Places
+                .AsNoTracking()
+                .Where(place => locationIds.Contains(place.LocationId))
+                on item.PlaceId!.Value equals place.Id
+            where item.PlaceId.HasValue
+            select new SaveMetricRow(
+                AnalyticsEntityTypes.Location,
+                place.LocationId,
+                AnalyticsEntityTypes.Place,
+                place.Id,
+                item.Collection.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from favorite in ApplyCreatedPeriod(_db.Favorites.AsNoTracking(), fromUtc, toUtc)
+            join eventEntity in _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => eventEntity.LocationId.HasValue && locationIds.Contains(eventEntity.LocationId.Value))
+                on favorite.EntityId equals eventEntity.Id
+            where favorite.EntityType == AnalyticsEntityTypes.Event
+            select new SaveMetricRow(
+                AnalyticsEntityTypes.Location,
+                eventEntity.LocationId!.Value,
+                AnalyticsEntityTypes.Event,
+                eventEntity.Id,
+                favorite.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from item in ApplyCreatedPeriod(_db.CollectionItems.AsNoTracking(), fromUtc, toUtc)
+            join eventEntity in _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => eventEntity.LocationId.HasValue && locationIds.Contains(eventEntity.LocationId.Value))
+                on item.EventId!.Value equals eventEntity.Id
+            where item.EventId.HasValue
+            select new SaveMetricRow(
+                AnalyticsEntityTypes.Location,
+                eventEntity.LocationId!.Value,
+                AnalyticsEntityTypes.Event,
+                eventEntity.Id,
+                item.Collection.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from favorite in ApplyCreatedPeriod(_db.Favorites.AsNoTracking(), fromUtc, toUtc)
+            join eventEntity in _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => !eventEntity.LocationId.HasValue && eventEntity.PlaceId.HasValue)
+                on favorite.EntityId equals eventEntity.Id
+            join place in _db.Places
+                .AsNoTracking()
+                .Where(place => locationIds.Contains(place.LocationId))
+                on eventEntity.PlaceId!.Value equals place.Id
+            where favorite.EntityType == AnalyticsEntityTypes.Event
+            select new SaveMetricRow(
+                AnalyticsEntityTypes.Location,
+                place.LocationId,
+                AnalyticsEntityTypes.Event,
+                eventEntity.Id,
+                favorite.UserId))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await (
+            from item in ApplyCreatedPeriod(_db.CollectionItems.AsNoTracking(), fromUtc, toUtc)
+            join eventEntity in _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => !eventEntity.LocationId.HasValue && eventEntity.PlaceId.HasValue)
+                on item.EventId!.Value equals eventEntity.Id
+            join place in _db.Places
+                .AsNoTracking()
+                .Where(place => locationIds.Contains(place.LocationId))
+                on eventEntity.PlaceId!.Value equals place.Id
+            where item.EventId.HasValue
+            select new SaveMetricRow(
+                AnalyticsEntityTypes.Location,
+                place.LocationId,
+                AnalyticsEntityTypes.Event,
+                eventEntity.Id,
+                item.Collection.UserId))
+            .ToListAsync(cancellationToken));
+
+        return rows.Distinct().ToList();
+    }
+
+    private static void ApplySaveRollupRows(
+        IReadOnlyDictionary<EntityKey, RegionalAnalyticsEntityMetricDto> rows,
+        IEnumerable<SaveMetricRow> saveRows)
+    {
+        foreach (var group in saveRows
+                     .Distinct()
+                     .GroupBy(row => new EntityKey(row.ParentEntityType, row.ParentEntityId)))
+        {
+            if (rows.TryGetValue(group.Key, out var metric))
+            {
+                metric.Saves = group.Count();
+            }
+        }
     }
 
     private async Task ApplyReviewMetricsAsync(
@@ -1893,12 +2383,30 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         IReadOnlyCollection<int> destinationIds,
         IReadOnlyCollection<int> locationIds,
         IReadOnlyCollection<int> placeIds,
+        IReadOnlyCollection<int> hotelIds,
         IReadOnlyCollection<int> eventIds,
+        MetricAggregationMode aggregationMode,
         DateTime? fromUtc,
         DateTime toUtc,
         CancellationToken cancellationToken)
     {
         var byKey = rows.ToDictionary(row => new EntityKey(row.EntityType, row.EntityId));
+
+        if (aggregationMode == MetricAggregationMode.DestinationRollup)
+        {
+            ApplyReviewRollupRows(
+                byKey,
+                await LoadDestinationRollupReviewRowsAsync(destinationIds, fromUtc, toUtc, cancellationToken));
+            return;
+        }
+
+        if (aggregationMode == MetricAggregationMode.LocationRollup)
+        {
+            ApplyReviewRollupRows(
+                byKey,
+                await LoadLocationRollupReviewRowsAsync(locationIds, fromUtc, toUtc, cancellationToken));
+            return;
+        }
 
         var destinationReviews = await ApplyCreatedPeriod(_db.DestinationReviews.AsNoTracking(), fromUtc, toUtc)
             .Where(review => destinationIds.Contains(review.DestinationId))
@@ -1933,6 +2441,17 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
             ApplyReviewAggregate(byKey, AnalyticsEntityTypes.Place, row.EntityId, row.Count, row.Average);
         }
 
+        var hotelReviews = await ApplyCreatedPeriod(_db.PlaceReviews.AsNoTracking(), fromUtc, toUtc)
+            .Where(review => hotelIds.Contains(review.PlaceId))
+            .GroupBy(review => review.PlaceId)
+            .Select(group => new { EntityId = group.Key, Count = group.Count(), Average = group.Average(review => review.Rating) })
+            .ToListAsync(cancellationToken);
+
+        foreach (var row in hotelReviews)
+        {
+            ApplyReviewAggregate(byKey, AnalyticsEntityTypes.Hotel, row.EntityId, row.Count, row.Average);
+        }
+
         var eventReviews = await ApplyCreatedPeriod(_db.EventReviews.AsNoTracking(), fromUtc, toUtc)
             .Where(review => eventIds.Contains(review.EventId))
             .GroupBy(review => review.EventId)
@@ -1942,6 +2461,129 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         foreach (var row in eventReviews)
         {
             ApplyReviewAggregate(byKey, AnalyticsEntityTypes.Event, row.EntityId, row.Count, row.Average);
+        }
+    }
+
+    private async Task<List<ReviewMetricRow>> LoadDestinationRollupReviewRowsAsync(
+        IReadOnlyCollection<int> destinationIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var rows = new List<ReviewMetricRow>();
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.DestinationReviews.AsNoTracking(), fromUtc, toUtc)
+            .Where(review => destinationIds.Contains(review.DestinationId))
+            .GroupBy(review => review.DestinationId)
+            .Select(group => new ReviewMetricRow(
+                AnalyticsEntityTypes.Destination,
+                group.Key,
+                group.Count(),
+                group.Average(review => review.Rating)))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.LocationReviews.AsNoTracking(), fromUtc, toUtc)
+            .Where(review => destinationIds.Contains(review.Location.DestinationId))
+            .GroupBy(review => review.Location.DestinationId)
+            .Select(group => new ReviewMetricRow(
+                AnalyticsEntityTypes.Destination,
+                group.Key,
+                group.Count(),
+                group.Average(review => review.Rating)))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.PlaceReviews.AsNoTracking(), fromUtc, toUtc)
+            .Where(review => destinationIds.Contains(review.Place.Location.DestinationId))
+            .GroupBy(review => review.Place.Location.DestinationId)
+            .Select(group => new ReviewMetricRow(
+                AnalyticsEntityTypes.Destination,
+                group.Key,
+                group.Count(),
+                group.Average(review => review.Rating)))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.EventReviews.AsNoTracking(), fromUtc, toUtc)
+            .Where(review => destinationIds.Contains(review.Event.DestinationId))
+            .GroupBy(review => review.Event.DestinationId)
+            .Select(group => new ReviewMetricRow(
+                AnalyticsEntityTypes.Destination,
+                group.Key,
+                group.Count(),
+                group.Average(review => review.Rating)))
+            .ToListAsync(cancellationToken));
+
+        return rows;
+    }
+
+    private async Task<List<ReviewMetricRow>> LoadLocationRollupReviewRowsAsync(
+        IReadOnlyCollection<int> locationIds,
+        DateTime? fromUtc,
+        DateTime toUtc,
+        CancellationToken cancellationToken)
+    {
+        var rows = new List<ReviewMetricRow>();
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.LocationReviews.AsNoTracking(), fromUtc, toUtc)
+            .Where(review => locationIds.Contains(review.LocationId))
+            .GroupBy(review => review.LocationId)
+            .Select(group => new ReviewMetricRow(
+                AnalyticsEntityTypes.Location,
+                group.Key,
+                group.Count(),
+                group.Average(review => review.Rating)))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.PlaceReviews.AsNoTracking(), fromUtc, toUtc)
+            .Where(review => locationIds.Contains(review.Place.LocationId))
+            .GroupBy(review => review.Place.LocationId)
+            .Select(group => new ReviewMetricRow(
+                AnalyticsEntityTypes.Location,
+                group.Key,
+                group.Count(),
+                group.Average(review => review.Rating)))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.EventReviews.AsNoTracking(), fromUtc, toUtc)
+            .Where(review => review.Event.LocationId.HasValue && locationIds.Contains(review.Event.LocationId.Value))
+            .GroupBy(review => review.Event.LocationId!.Value)
+            .Select(group => new ReviewMetricRow(
+                AnalyticsEntityTypes.Location,
+                group.Key,
+                group.Count(),
+                group.Average(review => review.Rating)))
+            .ToListAsync(cancellationToken));
+
+        rows.AddRange(await ApplyCreatedPeriod(_db.EventReviews.AsNoTracking(), fromUtc, toUtc)
+            .Where(review =>
+                !review.Event.LocationId.HasValue &&
+                review.Event.PlaceId.HasValue &&
+                locationIds.Contains(review.Event.Place!.LocationId))
+            .GroupBy(review => review.Event.Place!.LocationId)
+            .Select(group => new ReviewMetricRow(
+                AnalyticsEntityTypes.Location,
+                group.Key,
+                group.Count(),
+                group.Average(review => review.Rating)))
+            .ToListAsync(cancellationToken));
+
+        return rows;
+    }
+
+    private static void ApplyReviewRollupRows(
+        IReadOnlyDictionary<EntityKey, RegionalAnalyticsEntityMetricDto> rows,
+        IEnumerable<ReviewMetricRow> reviewRows)
+    {
+        foreach (var group in reviewRows.GroupBy(row => new EntityKey(row.ParentEntityType, row.ParentEntityId)))
+        {
+            var count = group.Sum(row => row.Count);
+            if (count <= 0 || !rows.TryGetValue(group.Key, out var metric))
+            {
+                continue;
+            }
+
+            var totalRating = group.Sum(row => row.Average * row.Count);
+            metric.ReviewCount = count;
+            metric.AverageRating = Math.Round(totalRating / count, 2, MidpointRounding.AwayFromZero);
         }
     }
 
@@ -2363,7 +3005,8 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
             "" or "all" or "allentities" => "all",
             "destination" or "destinations" => AnalyticsEntityTypes.Destination,
             "location" or "locations" => AnalyticsEntityTypes.Location,
-            "place" or "places" or "hotel" or "hotels" or "stay" or "stays" => AnalyticsEntityTypes.Place,
+            "place" or "places" => AnalyticsEntityTypes.Place,
+            "hotel" or "hotels" or "stay" or "stays" => AnalyticsEntityTypes.Hotel,
             "event" or "events" => AnalyticsEntityTypes.Event,
             _ => throw new InvalidOperationException("Invalid entity type filter.")
         };
@@ -2376,17 +3019,27 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         {
             "destination" or "destinations" => AnalyticsEntityTypes.Destination,
             "location" or "locations" => AnalyticsEntityTypes.Location,
-            "place" or "places" or "hotel" or "hotels" or "stay" or "stays" => AnalyticsEntityTypes.Place,
+            "place" or "places" => AnalyticsEntityTypes.Place,
+            "hotel" or "hotels" or "stay" or "stays" => AnalyticsEntityTypes.Hotel,
             "event" or "events" => AnalyticsEntityTypes.Event,
             _ => throw new InvalidOperationException("Invalid entity type.")
         };
     }
+
+    private static MetricAggregationMode ResolveAggregationMode(string entityType) =>
+        entityType switch
+        {
+            AnalyticsEntityTypes.Destination => MetricAggregationMode.DestinationRollup,
+            AnalyticsEntityTypes.Location => MetricAggregationMode.LocationRollup,
+            _ => MetricAggregationMode.Direct
+        };
 
     private static string? DetailCategoryLabel(RegionalAnalyticsEntityDetailDto detail) =>
         detail.EntityType switch
         {
             AnalyticsEntityTypes.Destination => detail.TypeSpecific.DestinationType,
             AnalyticsEntityTypes.Location => detail.TypeSpecific.LocationType,
+            AnalyticsEntityTypes.Hotel => detail.TypeSpecific.StayType ?? detail.TypeSpecific.PlaceType,
             AnalyticsEntityTypes.Place => detail.TypeSpecific.PlaceType,
             AnalyticsEntityTypes.Event => detail.TypeSpecific.EventType,
             _ => null
@@ -2397,6 +3050,7 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         {
             AnalyticsEntityTypes.Destination => "/destinations/detail/" + entityId,
             AnalyticsEntityTypes.Location => "/locations/detail/" + entityId,
+            AnalyticsEntityTypes.Hotel => "/stays/detail/" + entityId,
             AnalyticsEntityTypes.Place => "/places/detail/" + entityId,
             AnalyticsEntityTypes.Event => "/events/detail/" + entityId,
             _ => null
@@ -2513,8 +3167,9 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
             AnalyticsEntityTypes.Destination => 0,
             AnalyticsEntityTypes.Location => 1,
             AnalyticsEntityTypes.Place => 2,
-            AnalyticsEntityTypes.Event => 3,
-            _ => 4
+            AnalyticsEntityTypes.Hotel => 3,
+            AnalyticsEntityTypes.Event => 4,
+            _ => 5
         };
 
     private static IQueryable<T> ApplyCreatedPeriod<T>(
@@ -2585,6 +3240,7 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         {
             AnalyticsEntityTypes.Destination => "Destinations",
             AnalyticsEntityTypes.Location => "Locations",
+            AnalyticsEntityTypes.Hotel => "Stays",
             AnalyticsEntityTypes.Place => "Places",
             AnalyticsEntityTypes.Event => "Events",
             _ => entityType
@@ -2601,6 +3257,13 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
     private sealed record PeriodWindow(string Key, DateTime? StartDate, DateTime EndDate, TimeSpan? Duration);
 
     private sealed record EntityKey(string EntityType, int EntityId);
+
+    private enum MetricAggregationMode
+    {
+        Direct,
+        DestinationRollup,
+        LocationRollup
+    }
 
     private sealed class EntityProjection
     {
@@ -2646,6 +3309,19 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         int SortOrder);
 
     private sealed record PartnerClickMetadata(string? Provider, string? PartnerKey, string? Host);
+
+    private sealed record SaveMetricRow(
+        string ParentEntityType,
+        int ParentEntityId,
+        string SavedEntityType,
+        int SavedEntityId,
+        int UserId);
+
+    private sealed record ReviewMetricRow(
+        string ParentEntityType,
+        int ParentEntityId,
+        int Count,
+        double Average);
 
     private sealed class ExternalPartnerClickEventRow
     {

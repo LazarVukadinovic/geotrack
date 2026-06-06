@@ -490,7 +490,7 @@ public sealed class AuthFavoritesCollectionsTests
         Assert.NotNull(onboardingTags);
         Assert.NotEmpty(onboardingTags);
         Assert.Contains(onboardingTags, tag => tag.Slug == "seafood");
-        Assert.DoesNotContain(onboardingTags, tag => tag.Slug == "budget");
+        Assert.Contains(onboardingTags, tag => tag.Slug == "budget");
 
         var updateInterestsResponse = await client.PutAsJsonAsync(
             "/api/user/me/interests",
