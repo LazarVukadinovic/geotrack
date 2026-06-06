@@ -14,6 +14,7 @@ import type { DetailLoadState } from '../../place-detail/services/place-detail.s
 interface ApiEventDetail {
   id: number;
   title: string;
+  destinationId?: number | null;
   location?: string;
   locationId?: number | null;
   locationName?: string | null;
@@ -121,7 +122,11 @@ export class EventDetailService {
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');
         this.lastRequestKeyById.delete(id);
-        this.analytics.track('detail_view', { entityType: 'event', entityId: dto.id });
+        this.analytics.track('detail_view', {
+          entityType: 'event',
+          entityId: dto.id,
+          destinationId: dto.destinationId ?? this.destinationSvc.id() ?? undefined,
+        });
       },
       error: (err) => {
         if (this.lastRequestKeyById.get(id) === requestKey) {
