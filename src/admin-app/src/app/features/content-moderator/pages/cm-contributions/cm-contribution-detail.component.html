@@ -46,7 +46,13 @@
               }
               <div class="p-5">
                 <div class="flex items-center gap-2 mb-3 flex-wrap">
-                  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">PENDING REVIEW</span>
+                  @if (contribution.status === 'PendingReview') {
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">PENDING REVIEW</span>
+                  } @else if (contribution.status === 'Approved') {
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-100">APPROVED</span>
+                  } @else if (contribution.status === 'Rejected') {
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-100">REJECTED</span>
+                  }
                   <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">{{ typeLabel(contribution.type) }}</span>
                   @if (contribution.placeType) {
                     <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
@@ -240,53 +246,84 @@
           <!-- Sidebar -->
           <div class="space-y-4">
 
-            <!-- Destination assignment — always open -->
-            <div class="bg-white rounded-2xl shadow-sm p-5"
-              [class]="requiresLocationAssignment ? 'border border-amber-200' : 'border border-gray-100'">
-              @if (requiresLocationAssignment) {
-                <div class="flex items-center gap-2 mb-1">
-                  <svg class="w-4 h-4 text-amber-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                  <h3 class="text-xs font-semibold text-amber-800 uppercase tracking-wider">Assignment required</h3>
-                </div>
-                <p class="text-xs text-gray-500 mb-4">This contribution is outside all mapped regions. Assign it to a region and destination before approving.</p>
-              } @else {
-                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Destination Assignment</h3>
-              }
-              <ng-container *ngTemplateOutlet="locationForm" />
-            </div>
-
-            <!-- Review decision -->
-            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Review Decision</h3>
-              <label class="block text-xs font-medium text-gray-600 mb-1.5">Reviewer note (optional)</label>
-              <textarea [(ngModel)]="reviewerNote" rows="3" placeholder="Add a note for the contributor..."
-                class="w-full rounded-xl border border-gray-200 text-sm px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-300 mb-3"></textarea>
-              <div class="flex gap-2">
-                <button type="button" (click)="approve()" [disabled]="processing || !canApprove"
-                  class="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                  @if (processing) { Processing... } @else { Approve }
-                </button>
-                <button type="button" (click)="openReject()" [disabled]="processing"
-                  class="flex-1 rounded-xl py-2.5 text-sm font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 disabled:opacity-50 transition-colors">
-                  Reject
-                </button>
+            @if (contribution.status === 'PendingReview') {
+              <!-- Destination assignment — only for pending -->
+              <div class="bg-white rounded-2xl shadow-sm p-5"
+                [class]="requiresLocationAssignment ? 'border border-amber-200' : 'border border-gray-100'">
+                @if (requiresLocationAssignment) {
+                  <div class="flex items-center gap-2 mb-1">
+                    <svg class="w-4 h-4 text-amber-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <h3 class="text-xs font-semibold text-amber-800 uppercase tracking-wider">Assignment required</h3>
+                  </div>
+                  <p class="text-xs text-gray-500 mb-4">This contribution is outside all mapped regions. Assign it to a region and destination before approving.</p>
+                } @else {
+                  <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Destination Assignment</h3>
+                }
+                <ng-container *ngTemplateOutlet="locationForm" />
               </div>
-              @if (requiresLocationAssignment && !canApprove) {
-                <p class="text-xs text-amber-600 mt-2 text-center">Select a region and destination to enable approval.</p>
-              }
-            </div>
+
+              <!-- Review decision — only for pending -->
+              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Review Decision</h3>
+                <label class="block text-xs font-medium text-gray-600 mb-1.5">Reviewer note (optional)</label>
+                <textarea [(ngModel)]="reviewerNote" rows="3" placeholder="Add a note for the contributor..."
+                  class="w-full rounded-xl border border-gray-200 text-sm px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-300 mb-3"></textarea>
+                <div class="flex gap-2">
+                  <button type="button" (click)="approve()" [disabled]="processing || !canApprove"
+                    class="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                    @if (processing) { Processing... } @else { Approve }
+                  </button>
+                  <button type="button" (click)="openReject()" [disabled]="processing"
+                    class="flex-1 rounded-xl py-2.5 text-sm font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 disabled:opacity-50 transition-colors">
+                    Reject
+                  </button>
+                </div>
+                @if (requiresLocationAssignment && !canApprove) {
+                  <p class="text-xs text-amber-600 mt-2 text-center">Select a region and destination to enable approval.</p>
+                }
+              </div>
+            } @else {
+              <!-- Decision result — for approved/rejected -->
+              <div class="bg-white rounded-2xl shadow-sm p-5"
+                [class]="contribution.status === 'Approved' ? 'border border-green-200' : 'border border-red-200'">
+                <div class="flex items-center gap-2 mb-3">
+                  @if (contribution.status === 'Approved') {
+                    <svg class="w-4 h-4 text-green-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    <h3 class="text-xs font-semibold text-green-700 uppercase tracking-wider">Approved</h3>
+                  } @else {
+                    <svg class="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                    <h3 class="text-xs font-semibold text-red-600 uppercase tracking-wider">Rejected</h3>
+                  }
+                </div>
+                @if (contribution.reviewedAt) {
+                  <p class="text-xs text-gray-400 mb-3">{{ contribution.reviewedAt | date:'medium' }}</p>
+                }
+                @if (contribution.reviewNote) {
+                  <div class="rounded-xl px-3 py-2.5 text-sm text-gray-700 leading-relaxed"
+                    [class]="contribution.status === 'Approved' ? 'bg-green-50' : 'bg-red-50'">
+                    {{ contribution.reviewNote }}
+                  </div>
+                } @else {
+                  <p class="text-xs text-gray-400 italic">No note was added.</p>
+                }
+              </div>
+            }
 
             <!-- Submitted By -->
             <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Submitted By</h3>
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
-                  {{ contribution.submittedByInitials || 'U' }}
+                  {{ contribution.submittedByInitials || '?' }}
                 </div>
                 <div class="min-w-0">
-                  <p class="text-sm font-semibold text-gray-800 truncate">{{ contribution.submittedByDisplayName || 'User' }}</p>
+                  <p class="text-sm font-semibold text-gray-800 truncate">{{ contribution.submittedByDisplayName || '—' }}</p>
                   <p class="text-xs text-gray-400">{{ contribution.submittedAt | date:'medium' }}</p>
                 </div>
               </div>

@@ -154,7 +154,9 @@ public class PlaceContributionService : IPlaceContributionService
             .ToListAsync();
 
         var contributions = await BaseContributionQuery()
-            .Where(c => c.Status == PlaceContributionStatus.PendingReview &&
+            .Where(c => !(c.Status == PlaceContributionStatus.Approved &&
+                          c.Place != null &&
+                          c.Place.Status == "Archived") &&
                         (!c.LocationId.HasValue ||
                          c.Location == null ||
                          !regionsWithManagers.Contains(c.Location.Destination.RegionId)))
@@ -179,7 +181,6 @@ public class PlaceContributionService : IPlaceContributionService
         var contribution = await BaseContributionQuery()
             .SingleOrDefaultAsync(c =>
                 c.Id == contributionId &&
-                c.Status == PlaceContributionStatus.PendingReview &&
                 (!c.LocationId.HasValue ||
                  c.Location == null ||
                  !regionsWithManagers.Contains(c.Location.Destination.RegionId)));
@@ -2592,7 +2593,9 @@ public class PlaceContributionService : IPlaceContributionService
             UpdatedAt = usesPublishedPlace ? contribution.Place!.UpdatedAt : contribution.UpdatedAt,
             PlaceId = contribution.PlaceId,
             PublishedPlaceId = contribution.PlaceId,
-            HasOwnershipProofDocument = !string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl)
+            HasOwnershipProofDocument = !string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl),
+            SubmittedByDisplayName = BuildUserDisplayName(contribution.User),
+            SubmittedByInitials = BuildUserInitials(contribution.User)
         };
     }
 

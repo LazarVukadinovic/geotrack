@@ -34,6 +34,8 @@ export interface CmContributionListItem {
   status: string;
   submittedAt: string;
   updatedAt: string | null;
+  submittedByDisplayName: string | null;
+  submittedByInitials: string | null;
 }
 
 export interface CmOperatingHour {
@@ -254,6 +256,8 @@ function mapListItem(item: ApiContributionItem): CmContributionListItem {
     status: item.status,
     submittedAt: item.submittedAt,
     updatedAt: item.updatedAt ?? null,
+    submittedByDisplayName: item.submittedByDisplayName ?? null,
+    submittedByInitials: item.submittedByInitials ?? null,
   };
 }
 

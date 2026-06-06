@@ -84,6 +84,8 @@ public class PlaceContributionListItemDto
     public int? PlaceId { get; set; }
     public int? PublishedPlaceId { get; set; }
     public bool HasOwnershipProofDocument { get; set; }
+    public string? SubmittedByDisplayName { get; set; }
+    public string? SubmittedByInitials { get; set; }
 }
 
 public class PlaceContributionDetailDto : PlaceContributionListItemDto
