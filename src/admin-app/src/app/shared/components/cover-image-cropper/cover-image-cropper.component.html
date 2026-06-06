@@ -1,0 +1,141 @@
+<div class="crop-modal" role="presentation">
+  <button
+    type="button"
+    class="crop-modal__backdrop"
+    aria-label="Cancel cover crop"
+    [disabled]="isProcessing"
+    (click)="cancel()"
+  ></button>
+
+  <section
+    #dialogPanel
+    class="crop-modal__panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="cover-crop-title"
+    aria-describedby="cover-crop-description"
+    tabindex="-1"
+    (keydown)="onDialogKeydown($event)"
+  >
+    <header class="crop-modal__header">
+      <div>
+        <h2 id="cover-crop-title">Adjust cover image</h2>
+        <p id="cover-crop-description">{{ previewLabel }} - {{ ratioLabel }}</p>
+      </div>
+      <button
+        type="button"
+        class="crop-modal__icon-button"
+        aria-label="Cancel cover crop"
+        [disabled]="isProcessing"
+        (click)="cancel()"
+      >
+        &times;
+      </button>
+    </header>
+
+    <div
+      #cropFrame
+      class="crop-frame"
+      tabindex="0"
+      role="application"
+      aria-label="Cover crop area. Drag or use arrow keys to move the image. Use plus and minus keys to zoom."
+      [style.aspect-ratio]="aspectRatioCss"
+      (pointerdown)="onPointerDown($event)"
+      (keydown)="onFrameKeydown($event)"
+    >
+      @if (imageUrl) {
+        <div
+          class="crop-frame__image-layer"
+          [style.width.px]="baseWidth"
+          [style.height.px]="baseHeight"
+          [style.margin-left.px]="-baseWidth / 2"
+          [style.margin-top.px]="-baseHeight / 2"
+          [style.transform]="imageLayerTransform"
+        >
+          <img
+            #sourceImage
+            class="crop-frame__image"
+            [src]="imageUrl"
+            alt=""
+            draggable="false"
+            [style.transform]="imageTransform"
+            (load)="onImageLoaded()"
+            (error)="onImageError()"
+          />
+        </div>
+      }
+
+      @if (!imageLoaded && !errorMessage) {
+        <div class="crop-frame__state">Loading image...</div>
+      }
+    </div>
+
+    @if (errorMessage) {
+      <p class="crop-modal__error" role="alert">{{ errorMessage }}</p>
+    }
+
+    <div class="crop-controls" aria-label="Cover crop controls">
+      <button
+        type="button"
+        class="crop-controls__button"
+        aria-label="Zoom out"
+        [disabled]="!imageLoaded || isProcessing || zoom <= minZoom"
+        (click)="zoomBy(-0.1)"
+      >
+        -
+      </button>
+
+      <label class="crop-controls__slider">
+        <span>Zoom {{ zoomPercent }}%</span>
+        <input
+          type="range"
+          [min]="minZoom"
+          [max]="maxZoom"
+          step="0.01"
+          [value]="zoom"
+          [disabled]="!imageLoaded || isProcessing"
+          aria-label="Cover image zoom"
+          (input)="onZoomInput($event)"
+        />
+      </label>
+
+      <button
+        type="button"
+        class="crop-controls__button"
+        aria-label="Zoom in"
+        [disabled]="!imageLoaded || isProcessing || zoom >= maxZoom"
+        (click)="zoomBy(0.1)"
+      >
+        +
+      </button>
+
+      <button
+        type="button"
+        class="crop-controls__reset"
+        [disabled]="!imageLoaded || isProcessing"
+        (click)="resetCrop()"
+      >
+        Reset
+      </button>
+    </div>
+
+    <footer class="crop-modal__footer">
+      <button
+        type="button"
+        class="crop-modal__secondary"
+        [disabled]="isProcessing"
+        (click)="cancel()"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="crop-modal__primary"
+        [disabled]="!imageLoaded || isProcessing"
+        (click)="confirmCrop()"
+      >
+        {{ isProcessing ? 'Cropping...' : 'Use cover crop' }}
+      </button>
+    </footer>
+  </section>
+</div>
