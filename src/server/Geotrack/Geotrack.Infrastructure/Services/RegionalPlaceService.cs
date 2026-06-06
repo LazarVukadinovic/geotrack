@@ -17,6 +17,7 @@ public class RegionalPlaceService : IRegionalPlaceService
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
+    private const string ManagedRegionalImagePrefix = "/media/uploads/regional/";
     private static string ExistingEditRoute(int placeId) => $"/places/edit/{placeId}";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
 
@@ -389,6 +390,7 @@ public class RegionalPlaceService : IRegionalPlaceService
                 .ThenInclude(location => location.Destination)
             .Include(item => item.Stay)
             .Include(item => item.PlaceTags)
+            .Include(item => item.Images)
             .SingleOrDefaultAsync(item => item.Id == placeId && item.Location.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Place not found.");
 
@@ -457,7 +459,9 @@ public class RegionalPlaceService : IRegionalPlaceService
                 place.PlaceTags.Add(new PlaceTag { PlaceId = place.Id, TagId = tagId });
         }
 
-        place.UpdatedAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        ApplyImageUpdates(place, request, now);
+        place.UpdatedAt = now;
 
         await _db.SaveChangesAsync();
         return await GetPlaceAsync(userId, regionId, placeId);
@@ -1346,6 +1350,75 @@ public class RegionalPlaceService : IRegionalPlaceService
             .Replace("_", string.Empty, StringComparison.Ordinal)
             .ToLowerInvariant();
 
+    private static void ApplyImageUpdates(
+        Place place,
+        RegionalPlaceUpdateRequestDto request,
+        DateTime now)
+    {
+        if (!string.IsNullOrWhiteSpace(request.CardImageUrl))
+        {
+            UpsertImage(
+                place.Images,
+                place.Id,
+                EntityImageRole.Card,
+                NormalizeManagedImageUrl(request.CardImageUrl, "Card image must be uploaded before it can be assigned."),
+                place.Name,
+                isMain: true,
+                sortOrder: 0,
+                now);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.CoverImageUrl))
+        {
+            UpsertImage(
+                place.Images,
+                place.Id,
+                EntityImageRole.Cover,
+                NormalizeManagedImageUrl(request.CoverImageUrl, "Cover image must be uploaded before it can be assigned."),
+                place.Name,
+                isMain: false,
+                sortOrder: 1,
+                now);
+        }
+    }
+
+    private static void UpsertImage(
+        ICollection<EntityImage> images,
+        int placeId,
+        string role,
+        string url,
+        string altText,
+        bool isMain,
+        int sortOrder,
+        DateTime now)
+    {
+        var image = images.FirstOrDefault(item =>
+            item.TargetType == EntityImageTargetType.Place &&
+            item.PlaceId == placeId &&
+            item.ImageRole == role);
+
+        if (image is null)
+        {
+            images.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Place,
+                PlaceId = placeId,
+                Url = url,
+                AltText = altText,
+                IsMain = isMain,
+                ImageRole = role,
+                SortOrder = sortOrder,
+                CreatedAt = now
+            });
+            return;
+        }
+
+        image.Url = url;
+        image.AltText = altText;
+        image.IsMain = isMain;
+        image.SortOrder = sortOrder;
+        image.UpdatedAt = now;
+    }
 
     private static List<EntityImage> AddRequiredCreateImages(RegionalPlaceCreateRequestDto request, int entityId, string entityName, DateTime now)
     {
@@ -1418,6 +1491,15 @@ public class RegionalPlaceService : IRegionalPlaceService
         var normalized = value.Trim();
         if (normalized.Length > 1000)
             throw new InvalidOperationException("Image URL is too long.");
+
+        return normalized;
+    }
+
+    private static string NormalizeManagedImageUrl(string? value, string message)
+    {
+        var normalized = NormalizeRequiredImageUrl(value, message);
+        if (!normalized.StartsWith(ManagedRegionalImagePrefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Image must be uploaded before it can be assigned.");
 
         return normalized;
     }

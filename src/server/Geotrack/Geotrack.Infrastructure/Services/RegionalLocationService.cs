@@ -18,6 +18,7 @@ public class RegionalLocationService : IRegionalLocationService
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
+    private const string ManagedRegionalImagePrefix = "/media/uploads/regional/";
     private static string ExistingEditRoute(int locationId) => $"/locations/edit/{locationId}";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
@@ -325,6 +326,7 @@ public class RegionalLocationService : IRegionalLocationService
         var location = await _db.Locations
             .Include(item => item.Destination)
             .Include(item => item.LocationTags)
+            .Include(item => item.Images)
             .SingleOrDefaultAsync(item => item.Id == locationId && item.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Location not found.");
 
@@ -375,7 +377,9 @@ public class RegionalLocationService : IRegionalLocationService
                 location.LocationTags.Add(new LocationTag { LocationId = location.Id, TagId = tagId });
         }
 
-        location.UpdatedAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        ApplyImageUpdates(location, request, now);
+        location.UpdatedAt = now;
 
         await _db.SaveChangesAsync();
         return await GetLocationAsync(userId, regionId, locationId);
@@ -970,6 +974,75 @@ public class RegionalLocationService : IRegionalLocationService
             .Replace("_", string.Empty, StringComparison.Ordinal)
             .ToLowerInvariant();
 
+    private static void ApplyImageUpdates(
+        Location location,
+        RegionalLocationUpdateRequestDto request,
+        DateTime now)
+    {
+        if (!string.IsNullOrWhiteSpace(request.CardImageUrl))
+        {
+            UpsertImage(
+                location.Images,
+                location.Id,
+                EntityImageRole.Card,
+                NormalizeManagedImageUrl(request.CardImageUrl, "Card image must be uploaded before it can be assigned."),
+                location.Name,
+                isMain: true,
+                sortOrder: 0,
+                now);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.CoverImageUrl))
+        {
+            UpsertImage(
+                location.Images,
+                location.Id,
+                EntityImageRole.Cover,
+                NormalizeManagedImageUrl(request.CoverImageUrl, "Cover image must be uploaded before it can be assigned."),
+                location.Name,
+                isMain: false,
+                sortOrder: 1,
+                now);
+        }
+    }
+
+    private static void UpsertImage(
+        ICollection<EntityImage> images,
+        int locationId,
+        string role,
+        string url,
+        string altText,
+        bool isMain,
+        int sortOrder,
+        DateTime now)
+    {
+        var image = images.FirstOrDefault(item =>
+            item.TargetType == EntityImageTargetType.Location &&
+            item.LocationId == locationId &&
+            item.ImageRole == role);
+
+        if (image is null)
+        {
+            images.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Location,
+                LocationId = locationId,
+                Url = url,
+                AltText = altText,
+                IsMain = isMain,
+                ImageRole = role,
+                SortOrder = sortOrder,
+                CreatedAt = now
+            });
+            return;
+        }
+
+        image.Url = url;
+        image.AltText = altText;
+        image.IsMain = isMain;
+        image.SortOrder = sortOrder;
+        image.UpdatedAt = now;
+    }
 
     private static List<EntityImage> AddRequiredCreateImages(RegionalLocationCreateRequestDto request, int entityId, string entityName, DateTime now)
     {
@@ -1042,6 +1115,15 @@ public class RegionalLocationService : IRegionalLocationService
         var normalized = value.Trim();
         if (normalized.Length > 1000)
             throw new InvalidOperationException("Image URL is too long.");
+
+        return normalized;
+    }
+
+    private static string NormalizeManagedImageUrl(string? value, string message)
+    {
+        var normalized = NormalizeRequiredImageUrl(value, message);
+        if (!normalized.StartsWith(ManagedRegionalImagePrefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Image must be uploaded before it can be assigned.");
 
         return normalized;
     }
