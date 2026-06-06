@@ -14,16 +14,19 @@ import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, forkJoin, Subscription } from 'rxjs';
+import { finalize, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { CoverImageCropperComponent } from '../../../../shared/components/cover-image-cropper/cover-image-cropper.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { PlacesListService } from '../../../../core/services/places-list.service';
+import { RegionalMediaService } from '../../../../core/services/regional-media.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import { AdminFormDraftService } from '../../../../core/services/admin-form-draft.service';
+import { COVER_IMAGE_ASPECT_RATIO } from '../../../../core/constants/cover-image.constants';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
 import {
@@ -96,7 +99,7 @@ interface MapReverseGeocodeDto {
 @Component({
   selector: 'app-new-place',
   standalone: true,
-  imports: [CommonModule, FormsModule, DecimalPipe, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, DecimalPipe, SidebarComponent, TopbarComponent, CoverImageCropperComponent],
   templateUrl: './add-place.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
@@ -118,6 +121,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly initialVisibleClassificationTags = 5;
   private static readonly expandedVisibleClassificationTags = 10;
   private readonly mapTileLayer = inject(MapTileLayerService);
+  readonly coverImageAspectRatio = COVER_IMAGE_ASPECT_RATIO;
+  readonly coverImageAspectRatioCss = `${COVER_IMAGE_ASPECT_RATIO} / 1`;
 
   @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer') miniMapContainer!: ElementRef<HTMLDivElement>;
@@ -174,10 +179,12 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   cardImageName = '';
   coverImageUrl: string | null = null;
   coverImageName = '';
+  coverCropFile: File | null = null;
   galleryImages: { url: string; name: string; file: File }[] = [];
 
   private cardImageFile: File | null = null;
   private coverImageFile: File | null = null;
+  private coverPreviewObjectUrl: string | null = null;
 
   allHours = Array.from({ length: 24 }, (_, hour) => `${hour.toString().padStart(2, '0')}:00`);
   days: DayHours[] = [
@@ -228,6 +235,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly dashboardService: DashboardService,
     private readonly lightboxService: LightboxService,
     private readonly placesService: PlacesListService,
+    private readonly regionalMedia: RegionalMediaService,
     private readonly auth: AuthService,
     private readonly http: HttpClient,
     private readonly adminMapService: AdminMapService,
@@ -276,6 +284,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.destroyModalMap();
+    this.revokeCoverPreviewObjectUrl();
     this.lightboxService.close();
     if (this.miniMap) {
       this.miniMap.remove();
@@ -580,6 +589,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
         this.cardImageUrl = dto.cardImageUrl ?? dto.imageUrl ?? null;
         this.cardImageName = this.cardImageUrl ? 'Existing card image' : '';
+        this.revokeCoverPreviewObjectUrl();
         this.coverImageUrl = dto.coverImageUrl ?? dto.imageUrl ?? null;
         this.coverImageName = this.coverImageUrl ? 'Existing cover image' : '';
         this.galleryImages = (dto.galleryImageUrls ?? []).map((url, index) => ({
@@ -734,23 +744,33 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.zone.run(() => {
-        this.coverImageUrl = reader.result as string;
-        this.coverImageName = file.name;
-        this.coverImageFile = file;
-        this.notifyStateChanged();
-      });
-    };
-    reader.readAsDataURL(file);
+    this.coverCropFile = file;
     input.value = '';
+    this.notifyStateChanged();
+  }
+
+  onCoverCropConfirmed(file: File): void {
+    this.revokeCoverPreviewObjectUrl();
+    const previewUrl = URL.createObjectURL(file);
+    this.coverPreviewObjectUrl = previewUrl;
+    this.coverImageUrl = previewUrl;
+    this.coverImageName = file.name;
+    this.coverImageFile = file;
+    this.coverCropFile = null;
+    this.notifyStateChanged();
+  }
+
+  onCoverCropCancelled(): void {
+    this.coverCropFile = null;
+    this.notifyStateChanged();
   }
 
   removeCoverImage(): void {
+    this.revokeCoverPreviewObjectUrl();
     this.coverImageUrl = null;
     this.coverImageName = '';
     this.coverImageFile = null;
+    this.coverCropFile = null;
     this.notifyStateChanged();
   }
 
@@ -917,8 +937,23 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.notifyStateChanged();
 
     this.createSubscription?.unsubscribe();
-    this.createSubscription = this.placesService
-      .updatePlace(regionId, placeId, payload)
+    const payload$ = this.coverImageFile
+      ? this.regionalMedia.uploadImages(regionId, [this.coverImageFile]).pipe(
+          map(response => {
+            const uploadedCover = response.images[0]?.url;
+            if (!uploadedCover) {
+              throw new Error('Cover image upload did not return a URL.');
+            }
+
+            return { ...payload, coverImageUrl: uploadedCover };
+          }),
+        )
+      : of(payload);
+
+    this.createSubscription = payload$
+      .pipe(
+        switchMap(preparedPayload => this.placesService.updatePlace(regionId, placeId, preparedPayload)),
+      )
       .pipe(
         finalize(() => {
           this.isSaving = false;
@@ -1778,6 +1813,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.errorMessage = this.isEditMode ? 'Unable to update place.' : 'Unable to publish place.';
     this.notifyStateChanged();
+  }
+
+  private revokeCoverPreviewObjectUrl(): void {
+    if (!this.coverPreviewObjectUrl) return;
+
+    URL.revokeObjectURL(this.coverPreviewObjectUrl);
+    this.coverPreviewObjectUrl = null;
   }
 
   private notifyStateChanged(): void {

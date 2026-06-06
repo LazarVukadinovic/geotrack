@@ -10,6 +10,16 @@
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
     <app-topbar [title]="isEditMode ? 'Edit Event' : 'New Event'" [showBack]="true"></app-topbar>
 
+    @if (coverCropFile) {
+      <app-cover-image-cropper
+        [imageFile]="coverCropFile"
+        [aspectRatio]="coverImageAspectRatio"
+        previewLabel="Event cover preview"
+        (cropped)="onCoverCropConfirmed($event)"
+        (cancelled)="onCoverCropCancelled()"
+      ></app-cover-image-cropper>
+    }
+
     <div class="flex-1 overflow-y-auto px-8 py-6">
       @if (errorMessage) {
         <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -300,9 +310,12 @@
 
             @if (coverImageUrl) {
               <div class="mb-4">
-                <div class="relative rounded-xl overflow-hidden" style="height: 180px;">
+                <div class="relative rounded-xl overflow-hidden group" [style.aspect-ratio]="coverImageAspectRatioCss">
                   <img [src]="coverImageUrl" [alt]="coverImageName" class="w-full h-full object-cover" />
-                  <button type="button" (click)="removeCoverImage()" class="absolute top-3 right-3 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-700">Remove</button>
+                  <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 pointer-events-none">
+                    <label for="coverInput" class="bg-white text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 pointer-events-auto">Replace</label>
+                    <button type="button" (click)="removeCoverImage()" class="bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-700 pointer-events-auto">Remove</button>
+                  </div>
                 </div>
                 <p class="text-xs text-gray-400 mt-1">{{ coverImageName }}</p>
               </div>

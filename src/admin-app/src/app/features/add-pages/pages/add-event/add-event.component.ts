@@ -17,12 +17,14 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { finalize, forkJoin, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { CoverImageCropperComponent } from '../../../../shared/components/cover-image-cropper/cover-image-cropper.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import { AdminFormDraftService } from '../../../../core/services/admin-form-draft.service';
+import { COVER_IMAGE_ASPECT_RATIO } from '../../../../core/constants/cover-image.constants';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
 import {
@@ -84,7 +86,7 @@ interface EventFormDraft {
 @Component({
   selector: 'app-new-event',
   standalone: true,
-  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent, CoverImageCropperComponent],
   templateUrl: './add-event.component.html',
   styleUrl: './add-event.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -107,6 +109,8 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly initialVisibleClassificationTags = 5;
   private static readonly expandedVisibleClassificationTags = 10;
   private readonly mapTileLayer = inject(MapTileLayerService);
+  readonly coverImageAspectRatio = COVER_IMAGE_ASPECT_RATIO;
+  readonly coverImageAspectRatioCss = `${COVER_IMAGE_ASPECT_RATIO} / 1`;
 
   @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer') miniMapContainer!: ElementRef<HTMLDivElement>;
@@ -161,10 +165,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   cardImageName = '';
   coverImageUrl: string | null = null;
   coverImageName = '';
+  coverCropFile: File | null = null;
   galleryImages: { url: string; name: string; file: File }[] = [];
 
   private cardImageFile: File | null = null;
   private coverImageFile: File | null = null;
+  private coverPreviewObjectUrl: string | null = null;
 
   destinations: RegionalEventParentDestinationDto[] = [];
   locations: RegionalEventParentLocationDto[] = [];
@@ -227,6 +233,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.createSubscription?.unsubscribe();
     this.unregisterDraftSource?.();
     if (this.tagSearchHandle) clearTimeout(this.tagSearchHandle);
+    this.revokeCoverPreviewObjectUrl();
     this.lightboxService.close();
     if (this.miniMap) {
       this.miniMap.remove();
@@ -438,25 +445,38 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   onCoverImageSelected(event: Event): void {
     const input = event.target instanceof HTMLInputElement ? event.target : null;
     const file = input?.files?.[0];
-    if (!file || !this.validateImageFile(file)) return;
+    if (!file || !this.validateImageFile(file)) {
+      if (input) input.value = '';
+      return;
+    }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.zone.run(() => {
-        this.coverImageUrl = reader.result as string;
-        this.coverImageName = file.name;
-        this.coverImageFile = file;
-        this.cdr.markForCheck();
-      });
-    };
-    reader.readAsDataURL(file);
+    this.coverCropFile = file;
     if (input) input.value = '';
+    this.cdr.markForCheck();
+  }
+
+  onCoverCropConfirmed(file: File): void {
+    this.revokeCoverPreviewObjectUrl();
+    const previewUrl = URL.createObjectURL(file);
+    this.coverPreviewObjectUrl = previewUrl;
+    this.coverImageUrl = previewUrl;
+    this.coverImageName = file.name;
+    this.coverImageFile = file;
+    this.coverCropFile = null;
+    this.cdr.markForCheck();
+  }
+
+  onCoverCropCancelled(): void {
+    this.coverCropFile = null;
+    this.cdr.markForCheck();
   }
 
   removeCoverImage(): void {
+    this.revokeCoverPreviewObjectUrl();
     this.coverImageUrl = null;
     this.coverImageName = '';
     this.coverImageFile = null;
+    this.coverCropFile = null;
     this.cdr.markForCheck();
   }
 
@@ -948,6 +968,13 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     return true;
+  }
+
+  private revokeCoverPreviewObjectUrl(): void {
+    if (!this.coverPreviewObjectUrl) return;
+
+    URL.revokeObjectURL(this.coverPreviewObjectUrl);
+    this.coverPreviewObjectUrl = null;
   }
 
   private syncEmptyState(): void {
