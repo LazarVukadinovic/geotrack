@@ -676,55 +676,55 @@
         <!-- ── Right panel ─────────────────────────────────────────────── -->
         <div class="w-72 flex-shrink-0 flex flex-col gap-4">
 
-          <!-- Destination Ranking -->
+          <!-- Type Ranking -->
           <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);" data-testid="destination-ranking-card">
             <div class="flex items-center gap-2 mb-1">
               <svg class="w-4 h-4 text-gray-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 21s7-4.35 7-11a7 7 0 10-14 0c0 6.65 7 11 7 11z"/>
                 <circle cx="12" cy="10" r="2.5"/>
               </svg>
-              <span class="text-sm font-semibold text-gray-800">Destination Ranking</span>
+              <span class="text-sm font-semibold text-gray-800">{{ rankingTitle() }}</span>
             </div>
-            <p class="text-xs text-gray-400 mb-4">Most visited destinations by page views</p>
+            <p class="text-xs text-gray-400 mb-4">{{ rankingSubtitle() }}</p>
 
-            <ng-container *ngIf="analyticsLoading && destinationRanking().length === 0; else destinationRankingContent">
-              <p class="text-sm text-gray-400 py-3">Loading destination ranking...</p>
+            <ng-container *ngIf="analyticsLoading && topPerformers().length === 0; else rankingContent">
+              <p class="text-sm text-gray-400 py-3">{{ rankingLoadingText() }}</p>
             </ng-container>
 
-            <ng-template #destinationRankingContent>
-              <div *ngIf="destinationRanking().length > 0; else noDestinationRanking" class="flex flex-col gap-3">
+            <ng-template #rankingContent>
+              <div *ngIf="topPerformers().length > 0; else noRanking" class="flex flex-col gap-3">
                 <div
-                  *ngFor="let item of destinationRanking()"
+                  *ngFor="let item of topPerformers(); let itemIndex = index"
                   class="grid items-center gap-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
                   style="grid-template-columns: 1.5rem minmax(0, 1fr) 2.25rem;"
-                  [appAnalyticsTooltip]="destinationRankingTooltip(item)"
-                  [attr.aria-label]="destinationRankingAriaLabel(item)"
+                  [appAnalyticsTooltip]="rankingTooltip(item, itemIndex)"
+                  [attr.aria-label]="rankingAriaLabel(item, itemIndex)"
                   tabindex="0"
                   role="img"
                   data-testid="destination-ranking-row"
                 >
                   <span class="text-[11px] font-bold text-blue-600 bg-blue-50 rounded-full w-6 h-6 flex items-center justify-center">
-                    {{ item.rank }}
+                    {{ itemIndex + 1 }}
                   </span>
                   <div class="min-w-0">
-                    <div class="text-xs font-medium text-gray-700 truncate" [title]="item.destinationName">
-                      {{ item.destinationName }}
+                    <div class="text-xs font-medium text-gray-700 truncate" [title]="item.name">
+                      {{ item.name }}
                     </div>
                     <div class="h-2.5 bg-gray-100 rounded overflow-hidden mt-1.5">
                       <div
                         class="h-full rounded"
                         style="background: #185FA5;"
-                        [style.width]="destinationRankingBarPct(item) + '%'"
+                        [style.width]="rankingBarPct(item) + '%'"
                         data-testid="destination-ranking-bar-fill"
                       ></div>
                     </div>
                   </div>
-                  <span class="text-xs text-gray-500 text-right font-medium">{{ formatNum(item.visits) }}</span>
+                  <span class="text-xs text-gray-500 text-right font-medium">{{ formatNum(item.views) }}</span>
                 </div>
               </div>
 
-              <ng-template #noDestinationRanking>
-                <p class="text-sm text-gray-400 py-3">No destination visit data yet.</p>
+              <ng-template #noRanking>
+                <p class="text-sm text-gray-400 py-3">{{ rankingEmptyText() }}</p>
               </ng-template>
             </ng-template>
           </div>
@@ -736,7 +736,7 @@
               <span class="text-sm font-semibold text-gray-800">Actionable Insights</span>
             </div>
             <p class="text-xs text-gray-400 mb-4">
-              Automated analysis for {{ regionDisplayName || 'the active region' }}.
+              Automated analysis for {{ entityTypeWord() }} in {{ regionDisplayName || 'the active region' }}.
             </p>
 
             <div class="flex flex-col gap-3">

@@ -241,9 +241,10 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     { key: 'destinations', label: 'Destinations' },
     { key: 'events', label: 'Events' },
     { key: 'places', label: 'Places' },
+    { key: 'stays', label: 'Stays' },
   ];
 
-  readonly typeOptions = ['All Entities', 'Destination', 'Location', 'Place', 'Event'];
+  readonly typeOptions = ['All Entities', 'Destination', 'Location', 'Place', 'Stay', 'Event'];
 
   private readonly filterToTypeMap: Record<CategoryFilter, string> = {
     all: 'All Entities',
@@ -251,6 +252,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     destinations: 'Destination',
     events: 'Event',
     places: 'Place',
+    stays: 'Stay',
   };
 
   private readonly typeToFilterMap: Record<string, CategoryFilter> = {
@@ -259,6 +261,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     Destination: 'destinations',
     Event: 'events',
     Place: 'places',
+    Stay: 'stays',
   };
 
   get selectedType(): string {
@@ -296,6 +299,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     destinations: [],
     events: [],
     places: [],
+    stays: [],
   });
 
   readonly trendChart = computed(() => this.buildTrendChart(
@@ -318,6 +322,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     destinations: [],
     events: [],
     places: [],
+    stays: [],
   });
 
   private readonly entityRowsSig = signal<EntityRow[]>([]);
@@ -328,6 +333,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     destinations: [],
     events: [],
     places: [],
+    stays: [],
   });
   private readonly funnelSig = signal<RegionalAnalyticsEngagementFunnel>({
     pageViews: 0,
@@ -429,6 +435,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     const labels: Record<CategoryFilter, string> = {
       all: 'Entity Type Distribution',
       places: 'Place Type Distribution',
+      stays: 'Stay Type Distribution',
       destinations: 'Destination Type Distribution',
       events: 'Event Type Distribution',
       locations: 'Location Type Distribution',
@@ -440,6 +447,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     const labels: Record<CategoryFilter, string> = {
       all: 'Inventory breakdown',
       places: 'Distribution by place type',
+      stays: 'Distribution by stay type',
       destinations: 'Distribution by destination type',
       events: 'Distribution by event type',
       locations: 'Distribution by location type',
@@ -451,9 +459,58 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     const labels: Record<CategoryFilter, string> = {
       all: 'Top Performing Entities',
       places: 'Top Performing Places',
+      stays: 'Top Performing Stays',
       destinations: 'Top Performing Destinations',
       events: 'Top Performing Events',
       locations: 'Top Performing Locations',
+    };
+    return labels[this.activeFilter()];
+  });
+
+  readonly rankingTitle = computed(() => {
+    const labels: Record<CategoryFilter, string> = {
+      all: 'Entity Ranking',
+      places: 'Place Ranking',
+      stays: 'Stay Ranking',
+      destinations: 'Destination Ranking',
+      events: 'Event Ranking',
+      locations: 'Location Ranking',
+    };
+    return labels[this.activeFilter()];
+  });
+
+  readonly rankingSubtitle = computed(() => {
+    const labels: Record<CategoryFilter, string> = {
+      all: 'Most visited entities by page views',
+      places: 'Most visited places by page views',
+      stays: 'Most visited stays by page views',
+      destinations: 'Most visited destinations by page views',
+      events: 'Most visited events by page views',
+      locations: 'Most visited locations by page views',
+    };
+    return labels[this.activeFilter()];
+  });
+
+  readonly rankingEmptyText = computed(() => {
+    const labels: Record<CategoryFilter, string> = {
+      all: 'No entity visit data yet.',
+      places: 'No place visit data yet.',
+      stays: 'No stay visit data yet.',
+      destinations: 'No destination visit data yet.',
+      events: 'No event visit data yet.',
+      locations: 'No location visit data yet.',
+    };
+    return labels[this.activeFilter()];
+  });
+
+  readonly rankingLoadingText = computed(() => {
+    const labels: Record<CategoryFilter, string> = {
+      all: 'Loading entity ranking...',
+      places: 'Loading place ranking...',
+      stays: 'Loading stay ranking...',
+      destinations: 'Loading destination ranking...',
+      events: 'Loading event ranking...',
+      locations: 'Loading location ranking...',
     };
     return labels[this.activeFilter()];
   });
@@ -462,6 +519,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     const labels: Record<CategoryFilter, string> = {
       all: 'Entity Performance Details',
       places: 'Place Performance Details',
+      stays: 'Stay Performance Details',
       destinations: 'Destination Performance Details',
       events: 'Event Performance Details',
       locations: 'Location Performance Details',
@@ -473,6 +531,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     const labels: Record<CategoryFilter, string> = {
       all: 'entities',
       places: 'places',
+      stays: 'stays',
       destinations: 'destinations',
       events: 'events',
       locations: 'locations',
@@ -484,6 +543,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     const labels: Record<CategoryFilter, string> = {
       all: 'Search entities...',
       places: 'Search places...',
+      stays: 'Search stays...',
       destinations: 'Search destinations...',
       events: 'Search events...',
       locations: 'Search locations...',
@@ -961,6 +1021,27 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     return `${bar.tagName}: ${this.formatNum(bar.value)} views, ${this.formatPercent(bar.percentageOfTotal)} of total`;
   }
 
+  rankingTooltip(item: EntityRow, index: number): AnalyticsTooltipContent {
+    return {
+      title: item.name,
+      rows: [
+        { label: 'Rank', value: `#${index + 1}` },
+        { label: 'Type', value: this.typeLabel(item.type) },
+        { label: 'Visits', value: this.formatNum(item.views) },
+        { label: 'Visitors', value: this.formatNum(item.visitors) },
+      ],
+    };
+  }
+
+  rankingAriaLabel(item: EntityRow, index: number): string {
+    return `Rank ${index + 1}, ${item.name}: ${this.formatNum(item.views)} visits, ${this.formatNum(item.visitors)} visitors`;
+  }
+
+  rankingBarPct(item: EntityRow): number {
+    const topVisits = this.topPerformers().reduce((max, row) => Math.max(max, row.views), 0);
+    return topVisits > 0 ? Math.round((item.views / topVisits) * 100) : 0;
+  }
+
   destinationRankingTooltip(item: RegionalDestinationRankingItem): AnalyticsTooltipContent {
     return {
       title: item.destinationName,
@@ -1008,6 +1089,8 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
         return 'Location';
       case 'event':
         return 'Event';
+      case 'hotel':
+        return 'Stay';
       case 'place':
         return 'Place';
       default:
@@ -1252,6 +1335,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       DESTINATION: 'bg-blue-100 text-blue-700',
       EVENT: 'bg-emerald-100 text-emerald-700',
       LOCATION: 'bg-amber-100 text-amber-700',
+      STAY: 'bg-sky-100 text-sky-700',
     };
     return classes[type];
   }
@@ -1262,6 +1346,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       DESTINATION: 'Destination',
       EVENT: 'Event',
       LOCATION: 'Location',
+      STAY: 'Stay',
     };
     return labels[type];
   }
@@ -1470,14 +1555,17 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       .subscribe({
         next: overview => {
           const filter = this.activeFilter();
+          const entityRows = this.analyticsService.mapEntityRows(overview.entityRows);
+          const topPerformers = this.analyticsService.mapEntityRows(overview.topPerformingEntities);
+          const backendInsights = this.analyticsService.buildActionableInsights(overview.actionableInsights);
           this.upsertAssignedRegion(overview.activeRegion);
           this.setActiveRegion(overview.activeRegion.id, false);
           this.metricsByFilterSig.set(this.analyticsService.asBucket(filter, this.analyticsService.buildMetricCards(overview), [] as MetricCard[]));
-          this.entityRowsSig.set(this.analyticsService.mapEntityRows(overview.entityRows));
-          this.topPerformersSig.set(this.analyticsService.mapEntityRows(overview.topPerformingEntities));
+          this.entityRowsSig.set(entityRows);
+          this.topPerformersSig.set(topPerformers);
           this.distributionSig.set(this.analyticsService.asBucket(filter, this.analyticsService.mapDistribution(overview.entityTypeDistribution), [] as DistributionSlice[]));
           this.pageViewsTrendSig.set(this.analyticsService.asBucket(filter, this.analyticsService.mapTrend(overview.pageViewsTrend), [] as RegionalAnalyticsTrendPoint[]));
-          this.actionableInsightsSig.set(this.analyticsService.buildActionableInsights(overview.actionableInsights));
+          this.actionableInsightsSig.set(this.typeAwareActionableInsights(topPerformers, backendInsights));
           this.destinationRankingSig.set(overview.destinationRanking ?? []);
           this.insightsSig.set(this.analyticsService.buildAutoInsights(overview.actionableInsights.messages ?? []));
           this.visitorBehaviorSig.set(overview.visitorBehavior ?? this.emptyVisitorBehavior());
@@ -1524,6 +1612,25 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     };
   }
 
+  private typeAwareActionableInsights(topPerformers: EntityRow[], backendInsights: ActionableInsight[]): ActionableInsight[] {
+    if (backendInsights.length > 0) {
+      return backendInsights;
+    }
+
+    const top = topPerformers.find(row => row.views > 0);
+    if (!top) {
+      return [];
+    }
+
+    return [{
+      icon: 'trend',
+      label: `TOP VIEWED ${this.typeLabel(top.type).toUpperCase()}`,
+      title: top.name,
+      subtitle: `${this.formatNum(top.views)} Views`,
+      highlightClass: 'text-blue-600',
+    }];
+  }
+
   private periodKey(): string {
     switch (this.selectedPeriod) {
       case 'Last 7 Days':
@@ -1546,6 +1653,8 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
         return 'location';
       case 'places':
         return 'place';
+      case 'stays':
+        return 'hotel';
       case 'events':
         return 'event';
       case 'all':
@@ -1689,6 +1798,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
       destinations: [] as T,
       events: [] as T,
       places: [] as T,
+      stays: [] as T,
     };
   }
 

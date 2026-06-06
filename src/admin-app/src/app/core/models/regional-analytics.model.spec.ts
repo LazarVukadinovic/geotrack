@@ -9,6 +9,7 @@ describe('RegionalAnalyticsData', () => {
         destinations: [],
         events: [],
         places: [],
+        stays: [],
       },
       categories: [],
       entityRows: [],
@@ -20,6 +21,7 @@ describe('RegionalAnalyticsData', () => {
         destinations: [],
         events: [],
         places: [],
+        stays: [],
       },
       pageViewsTrend: {
         all: [],
@@ -27,6 +29,7 @@ describe('RegionalAnalyticsData', () => {
         destinations: [],
         events: [],
         places: [],
+        stays: [],
       },
     };
 

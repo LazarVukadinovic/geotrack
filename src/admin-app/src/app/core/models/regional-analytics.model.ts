@@ -20,7 +20,7 @@ export interface EntityRow {
   entityType: RegionalAnalyticsEntityType;
   entityId: number;
   name: string;
-  type: 'PLACE' | 'DESTINATION' | 'EVENT' | 'LOCATION';
+  type: 'PLACE' | 'DESTINATION' | 'EVENT' | 'LOCATION' | 'STAY';
   location: string;
   views: number;
   visitors: number;
@@ -50,11 +50,11 @@ export interface ActionableInsight {
   highlightClass?: string;
 }
 
-export type CategoryFilter = 'all' | 'locations' | 'destinations' | 'events' | 'places';
+export type CategoryFilter = 'all' | 'locations' | 'destinations' | 'events' | 'places' | 'stays';
 
 export type EntitySortField = 'views' | 'visitors' | 'saves' | 'reviewAvg' | 'name';
 
-export type RegionalAnalyticsEntityType = 'destination' | 'location' | 'place' | 'event';
+export type RegionalAnalyticsEntityType = 'destination' | 'location' | 'place' | 'hotel' | 'event';
 
 export interface DistributionSlice {
   label: string;

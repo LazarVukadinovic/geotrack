@@ -201,6 +201,7 @@ export class RegionalAnalyticsService {
       destinations: filter === 'destinations' ? value : empty,
       events: filter === 'events' ? value : empty,
       places: filter === 'places' ? value : empty,
+      stays: filter === 'stays' ? value : empty,
     };
   }
 
@@ -286,6 +287,8 @@ export class RegionalAnalyticsService {
         return 'LOCATION';
       case 'event':
         return 'EVENT';
+      case 'hotel':
+        return 'STAY';
       case 'place':
       default:
         return 'PLACE';
