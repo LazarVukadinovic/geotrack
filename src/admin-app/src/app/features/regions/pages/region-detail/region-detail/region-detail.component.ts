@@ -23,6 +23,7 @@ import {
   TerritoryRegionDetail,
   TerritoryRegionManager,
 } from '../../../../../core/models/dashboard.model';
+import { buildAvatarDisplayUrl } from '../../../../../core/utils/avatar-url';
 
 const CONTENT_PAGE_SIZE = 25;
 
@@ -277,7 +278,7 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   }
 
   managerAvatarUrl(manager: TerritoryRegionManager): string {
-    const avatarUrl = manager.avatarUrl?.trim() ?? '';
+    const avatarUrl = buildAvatarDisplayUrl(manager.avatarUrl, null);
     return avatarUrl && !this.failedManagerAvatarKeys.has(this.managerAvatarKey(manager, avatarUrl))
       ? avatarUrl
       : '';
@@ -296,7 +297,7 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   }
 
   onManagerAvatarError(manager: TerritoryRegionManager): void {
-    const avatarUrl = manager.avatarUrl?.trim() ?? '';
+    const avatarUrl = buildAvatarDisplayUrl(manager.avatarUrl, null);
     if (avatarUrl) {
       this.failedManagerAvatarKeys.add(this.managerAvatarKey(manager, avatarUrl));
       this.notifyStateChanged();

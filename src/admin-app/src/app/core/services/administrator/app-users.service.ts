@@ -16,6 +16,7 @@ import {
   AppUsersPageRequest,
   AssignTerritoryManagerRequest,
 } from '../../models/administrator/app-user.model';
+import { buildAvatarDisplayUrl } from '../../utils/avatar-url';
 
 const AVATAR_COLORS = ['#2563eb', '#059669', '#7c3aed', '#d97706', '#dc2626', '#0891b2', '#be185d', '#0f766e'];
 
@@ -218,7 +219,7 @@ export class AppUsersService {
       firstName: value.firstName ?? '',
       lastName: value.lastName ?? '',
       email: value.email ?? '',
-      avatarUrl: value.avatarUrl ?? null,
+      avatarUrl: buildAvatarDisplayUrl(value.avatarUrl, null) || null,
       initials,
       avatarInitials: value.avatarInitials || initials,
       avatarColor: value.avatarColor || this.avatarColorFor(String(userId || value.email)),

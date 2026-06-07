@@ -15,6 +15,7 @@ import {
   AdminSupportTicketStatusUpdateRequest,
   AdminSupportTicketsPage,
 } from '../../models/administrator/admin-support-ticket.model';
+import { buildAvatarDisplayUrl } from '../../utils/avatar-url';
 
 const AVATAR_COLORS = ['#2563eb', '#059669', '#7c3aed', '#d97706', '#dc2626', '#0891b2', '#be185d', '#0f766e'];
 
@@ -201,7 +202,7 @@ export class AdminSupportTicketsService {
       userId: this.toNullableNumber(safe.userId),
       displayName,
       email: safe.email ?? '',
-      avatarUrl: safe.avatarUrl ?? null,
+      avatarUrl: buildAvatarDisplayUrl(safe.avatarUrl, null) || null,
       initials,
       isAnonymous: !!safe.isAnonymous,
       avatarColor: safe.avatarColor || this.avatarColorFor(String(safe.userId || safe.email || displayName)),
