@@ -32,13 +32,12 @@
         <!-- Avatar + Name -->
         <div class="profile-card flex flex-col items-center mt-4 px-5">
           <div class="profile-card__avatar w-24 h-24 rounded-full bg-slate-300 border-4 border-white shadow-lg flex items-center justify-center overflow-hidden">
-            @if (avatarUrl()) {
-              <img appImageFallback [src]="avatarUrl()" alt="" class="w-full h-full object-cover"/>
-            } @else {
-              <svg class="w-14 h-14 text-white/70" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
-              </svg>
-            }
+            <app-user-avatar
+              class="w-full h-full"
+              [imageUrl]="avatarUrl()"
+              [displayName]="fullName()"
+              [email]="email()"
+            />
           </div>
           <div class="profile-card__details">
             <h2 class="profile-card__name mt-3 text-base font-bold text-slate-800">{{ fullName() }}</h2>

@@ -3,10 +3,11 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/services/auth.service';
 import { UserService } from '../../../../core/services/user.service';
+import { UserAvatarComponent } from '../../../../shared/components/user-avatar/user-avatar.component';
 
 @Component({
   selector: 'app-settings',
-  imports: [CommonModule],
+  imports: [CommonModule, UserAvatarComponent],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.css',
 })

@@ -28,13 +28,13 @@
         <!-- Profile row -->
         <button (click)="goToProfile()" class="settings-row settings-row--profile w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors border-b border-slate-100">
           <div class="settings-row__avatar w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-none">
-            @if (avatarUrl()) {
-              <img [src]="avatarUrl()" alt="" class="w-full h-full object-cover"/>
-            } @else {
-              <svg class="w-6 h-6 text-[#1a2b4a]" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
-              </svg>
-            }
+            <app-user-avatar
+              class="w-full h-full"
+              [imageUrl]="avatarUrl()"
+              [displayName]="fullName()"
+              [email]="email()"
+              alt=""
+            />
           </div>
           <div class="settings-row__copy flex-1 text-left min-w-0">
             <p class="settings-row__name text-sm font-semibold text-slate-800 truncate">{{ fullName() }}</p>
