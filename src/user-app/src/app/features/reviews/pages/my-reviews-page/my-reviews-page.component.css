@@ -3,9 +3,18 @@
   margin-top: 2px;
 }
 
+.my-review-card,
+.my-review-card__body {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .my-review-card__body-text {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
