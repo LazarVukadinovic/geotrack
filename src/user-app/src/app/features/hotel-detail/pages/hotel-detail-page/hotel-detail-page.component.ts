@@ -15,6 +15,7 @@ import { HotelDetailService } from '../../services/hotel-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
 import { ExploreService } from '../../../explore/services/explore.service';
 import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
+import { reviewsMoreActionLabel } from '../../../reviews/utils/review-section-ui';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { HotelAmenityIcon, HotelBookingPartner, HotelDetail } from '../../models/hotel-detail.model';
 import type { MapEntityMarker } from '../../../../core/services/map-api.service';
@@ -40,6 +41,7 @@ export class HotelDetailPageComponent {
 
   protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
+  protected readonly reviewsMoreActionLabel = reviewsMoreActionLabel;
 
   protected readonly hotelId = toSignal(
     this.route.paramMap.pipe(map((p) => p.get('id') ?? '')),

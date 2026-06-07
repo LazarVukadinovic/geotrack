@@ -450,7 +450,7 @@
         <section class="pd__section pd__section--reviews">
           <app-section-header
             title="Reviews"
-            actionLabel="More"
+            [actionLabel]="reviewsMoreActionLabel(p.reviews)"
             (action)="openReviews()"
           />
 

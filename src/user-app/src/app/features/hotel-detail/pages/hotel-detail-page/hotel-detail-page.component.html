@@ -295,7 +295,7 @@
             <section class="hd__section hd__section--reviews">
               <app-section-header
                 title="Reviews"
-                actionLabel="More"
+                [actionLabel]="reviewsMoreActionLabel(h.reviews)"
                 (action)="openReviews()"
               />
 
