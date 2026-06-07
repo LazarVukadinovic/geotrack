@@ -17,7 +17,7 @@ export const apiUrlInterceptor: HttpInterceptorFn = (req, next) => {
   } else if (isConfiguredApiUrl(req.url)) {
     includeCredentials = true;
   } else if (isMediaPath(req.url)) {
-    url = resolveMediaUrl(req.url);
+    url = resolveMediaUrl(req.url) ?? req.url;
   }
 
   if (url === req.url && (!includeCredentials || req.withCredentials)) {
