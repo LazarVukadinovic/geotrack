@@ -1,6 +1,7 @@
 import { Component, computed, inject, input, output, signal, NgZone, OnDestroy } from '@angular/core';
 import { Observable } from 'rxjs';
 import { UserService } from '../../../core/services/user.service';
+import { UserAvatarComponent } from '../user-avatar/user-avatar.component';
 
 export interface ReviewDraft {
   rating: number;
@@ -14,6 +15,7 @@ const DISMISS_THRESHOLD = 120;
 @Component({
   selector: 'app-review-entry',
   standalone: true,
+  imports: [UserAvatarComponent],
   templateUrl: './review-entry.component.html',
   styleUrl: './review-entry.component.scss',
 })
@@ -32,7 +34,10 @@ export class ReviewEntryComponent implements OnDestroy {
   readonly loginRequested   = output<void>();
   /** Emitted only after a successful submit. */
   readonly reviewSubmitted  = output<ReviewDraft>();
-  protected readonly avatarUrl = inject(UserService).avatarUrl;
+  private readonly userService = inject(UserService);
+  protected readonly avatarUrl = this.userService.avatarUrl;
+  protected readonly fullName = this.userService.fullName;
+  protected readonly email = this.userService.email;
   private  readonly ngZone    = inject(NgZone);
 
   // ─── Popup state ────────────────────────────────────────────────────────────

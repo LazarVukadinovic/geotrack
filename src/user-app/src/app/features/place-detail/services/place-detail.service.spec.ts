@@ -69,7 +69,17 @@ describe('PlaceDetailService image mapping', () => {
         { id: 1, url: '/main.svg', altText: 'Main photo', caption: 'Hero', sortOrder: 0, isMain: true },
       ],
       tags: [],
-      reviews: [],
+      reviews: [
+        {
+          id: 5,
+          authorUserId: 3,
+          authorName: 'Avatar User',
+          avatarUrl: '/media/uploads/avatars/avatar-user.png',
+          rating: 5,
+          body: 'Great.',
+          helpfulCount: 0,
+        },
+      ],
       similar: [],
       isSaved: false,
       contentType: 'place',
@@ -83,6 +93,7 @@ describe('PlaceDetailService image mapping', () => {
       isMain: false,
       sortOrder: 1,
     });
+    expect(detail?.reviews[0]?.avatarUrl).toBe('/media/uploads/avatars/avatar-user.png');
     expect(analytics.track).toHaveBeenCalledWith('detail_view', { entityType: 'place', entityId: 42, destinationId: 99 });
   });
 

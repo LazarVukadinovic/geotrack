@@ -2,7 +2,7 @@ import { Component, DestroyRef, computed, effect, inject, signal } from '@angula
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
-import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
+import { UserAvatarComponent } from '../../../../shared/components/user-avatar/user-avatar.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ReviewsService } from '../../services/reviews.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
@@ -13,7 +13,7 @@ type ReviewsLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
 @Component({
   selector: 'app-reviews-page',
   standalone: true,
-  imports: [ImageFallbackDirective],
+  imports: [UserAvatarComponent],
   providers: [ReviewInteractionsService],
   templateUrl: './reviews-page.component.html',
   styleUrl: './reviews-page.component.scss',
@@ -138,12 +138,6 @@ export class ReviewsPageComponent {
           this.ri.reportError.set('Could not load more reviews. Please try again.');
         },
       });
-  }
-
-  protected reviewInitials(authorName: string): string {
-    const parts = authorName.trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return 'GT';
-    return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || 'GT';
   }
 
   protected trackReview(_index: number, review: FullReview): string {

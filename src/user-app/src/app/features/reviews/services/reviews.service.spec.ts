@@ -74,6 +74,29 @@ describe('ReviewsService', () => {
 
     expect(actualReviewsCount).toBe(2);
   });
+
+  it('preserves author avatar URLs for review avatar rendering', () => {
+    let actualAvatarUrl = '';
+
+    service.getReviews('place', 42).subscribe(result => {
+      actualAvatarUrl = result.reviews[0]?.avatarUrl ?? '';
+    });
+
+    const req = httpMock.expectOne('/api/reviews/places/42?skip=0&take=10');
+    req.flush({
+      items: [
+        {
+          id: 12,
+          authorName: 'Avatar User',
+          avatarUrl: '/media/uploads/avatars/avatar-user.png',
+          rating: 5,
+          body: 'Great.',
+        },
+      ],
+    });
+
+    expect(actualAvatarUrl).toBe('/media/uploads/avatars/avatar-user.png');
+  });
 });
 
 function makeExpectedResult() {
@@ -81,6 +104,7 @@ function makeExpectedResult() {
     reviews: [
       {
         id: '11',
+        authorUserId: 0,
         authorName: 'Mina',
         avatarUrl: '',
         rating: 5,
@@ -88,6 +112,7 @@ function makeExpectedResult() {
         body: 'Lovely.',
         helpfulCount: 0,
         reportedByCurrentUser: true,
+        isOwnReview: false,
       },
     ],
     averageRating: 4.7,

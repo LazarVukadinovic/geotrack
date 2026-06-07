@@ -480,14 +480,12 @@
                     [attr.aria-label]="'View ' + review.authorName + ' reviews'"
                     (click)="ri.goToAuthorReviews(review)"
                   >
-                    <img
+                    <app-user-avatar
                       class="pd__review-avatar"
-                      [src]="review.avatarUrl"
-                      [alt]="review.authorName"
-                      width="44"
-                      height="44"
-                      loading="lazy"
-                      decoding="async"
+                      [size]="44"
+                      [imageUrl]="review.avatarUrl"
+                      [displayName]="review.authorName"
+                      [alt]="'Profile photo of ' + review.authorName"
                     />
                   </button>
                   <div class="pd__review-meta">
