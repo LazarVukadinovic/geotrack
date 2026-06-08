@@ -488,17 +488,17 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<int?>("EventId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ImagePosition")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
                     b.Property<string>("ImageRole")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("gallery");
-
-                    b.Property<string>("ImagePosition")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
 
                     b.Property<string>("ImageSize")
                         .IsRequired()
@@ -2891,10 +2891,10 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("UpdatedAt")
+                    b.Property<DateTime?>("RegionSetupCompletedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("RegionSetupCompletedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("UserId", "TerritoryId");
