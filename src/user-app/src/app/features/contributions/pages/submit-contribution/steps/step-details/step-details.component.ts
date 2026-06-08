@@ -169,6 +169,26 @@ export class StepDetailsComponent implements AfterViewInit {
     if (event.inputType === 'insertParagraph' || event.inputType === 'insertLineBreak') {
       event.preventDefault();
       this.insertDescriptionHtml('<br>');
+      const editor = this.descriptionEditor?.nativeElement;
+      if (editor) {
+        const last = editor.lastChild;
+        const lastMeaningful =
+          last?.nodeType === Node.TEXT_NODE && last.textContent === ''
+            ? last.previousSibling
+            : last;
+        if (lastMeaningful?.nodeName === 'BR') {
+          const phantom = document.createElement('br');
+          editor.appendChild(phantom);
+          const sel = window.getSelection();
+          if (sel) {
+            const r = document.createRange();
+            r.setStartBefore(phantom);
+            r.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(r);
+          }
+        }
+      }
       this.onDescriptionChanged(false);
     }
   }

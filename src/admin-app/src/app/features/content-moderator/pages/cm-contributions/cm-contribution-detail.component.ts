@@ -15,6 +15,7 @@ import {
   CmLocationOption,
 } from '../../../../core/services/content-moderator/content-moderator-contributions.service';
 import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
+import { isLongDescription } from '../../../../shared/utils/description-formatting';
 
 type DestinationChoice = 'existing' | 'new';
 
@@ -41,6 +42,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   processing = false;
   rejectModal = false;
   reviewerNote = '';
+  descriptionExpanded = false;
 
   // Region/destination assignment
   regions: CmRegionOption[] = [];
@@ -88,6 +90,10 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     if (!this.newLocationName.trim()) return false;
     if (this.destinationChoice === 'existing') return !!this.selectedDestinationId;
     return !!this.newDestinationName.trim();
+  }
+
+  get isDescriptionLong(): boolean {
+    return isLongDescription(this.contribution?.description);
   }
 
   get locationDisplay(): string {

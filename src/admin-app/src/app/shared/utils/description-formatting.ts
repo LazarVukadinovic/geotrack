@@ -25,6 +25,12 @@ export function formatDescriptionRichHtml(value: string | null | undefined): str
   return normalizeDescriptionLines(cleaned, line => stripHtml(line).trim().length > 0);
 }
 
+export function isLongDescription(value: string | null | undefined, options: { maxChars?: number; maxLines?: number } = {}): boolean {
+  const formatted = formatDescriptionPlainText(value);
+  const plainText = formatted.replace(/[ \t\f\v]+/g, ' ').trim();
+  return plainText.length > (options.maxChars ?? 260) || formatted.split('\n').length > (options.maxLines ?? 5);
+}
+
 export function normalizeEditorDescriptionHtml(value: string | null | undefined): string {
   const html = formatDescriptionRichHtml(value);
   return html.replace(/\n/g, '<br>');
