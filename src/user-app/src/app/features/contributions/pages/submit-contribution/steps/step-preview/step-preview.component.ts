@@ -5,12 +5,15 @@ import { BackgroundImageFallbackDirective } from '../../../../../../shared/direc
 import { getContributionAmenityLabel } from '../../../../services/contribution-amenities';
 import { PhotoGalleryComponent } from '../../../../../../shared/components/photo-gallery/photo-gallery.component';
 import type { EntityImage } from '../../../../../../core/models/entity-image.model';
+import { DescriptionRichHtmlPipe } from '../../../../../../shared/pipes/description-rich-html.pipe';
+import { isLongDescription } from '../../../../../../shared/utils/description-formatting';
 
 @Component({
   selector: 'app-step-preview',
   standalone: true,
-  imports: [CommonModule, BackgroundImageFallbackDirective, PhotoGalleryComponent],
+  imports: [CommonModule, BackgroundImageFallbackDirective, PhotoGalleryComponent, DescriptionRichHtmlPipe],
   templateUrl: './step-preview.component.html',
+  styleUrl: './step-preview.component.css',
 })
 export class StepPreviewComponent {
   draft = input.required<ContributionDraft>();
@@ -20,6 +23,7 @@ export class StepPreviewComponent {
   back = output<void>();
   readonly galleryLightboxIndex = signal<number | null>(null);
   readonly galleryLightboxImages = signal<EntityImage[]>([]);
+  readonly aboutExpanded = signal(false);
 
   amenityMap: Record<string, { label: string }> = {
     pool:      { label: 'Swimming Pool' },
@@ -68,6 +72,10 @@ get hasOpeningHours(): boolean {
   const details = this.draft().details;
   return !!details?.openingHoursEnabled &&
     (!!details.openingHours?.trim() || (details.operatingHours?.length ?? 0) > 0);
+}
+
+hasLongAbout(description: string | null | undefined): boolean {
+  return isLongDescription(description);
 }
 
 openSingleImage(url: string, caption: string): void {

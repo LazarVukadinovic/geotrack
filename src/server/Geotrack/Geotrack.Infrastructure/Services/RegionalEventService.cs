@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
@@ -253,7 +254,7 @@ public class RegionalEventService : IRegionalEventService
 
         var name = NormalizeRequiredText(request.Name, "Event title is required.", 200, "Event title is too long.");
         var summary = NormalizeRequiredText(request.Summary, "Summary is required.", 160, "Summary is too long.");
-        var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
+        var description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
         var eventTypeId = await ResolveEventTypeIdAsync(request.EventTypeId);
         var parent = await ResolveParentAsync(request.RegionId, request);
@@ -732,11 +733,7 @@ public class RegionalEventService : IRegionalEventService
 
         if (request.Description is not null)
         {
-            var description = request.Description.Trim();
-            if (description.Length > 8000)
-                throw new InvalidOperationException("Description is too long.");
-
-            @event.Description = description;
+            @event.Description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 8000, "Description is too long.") ?? string.Empty;
         }
 
         if (request.Summary is not null)

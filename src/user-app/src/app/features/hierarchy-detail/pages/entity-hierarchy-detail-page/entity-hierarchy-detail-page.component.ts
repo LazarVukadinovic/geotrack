@@ -4,6 +4,7 @@ import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { combineLatest } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 
 interface DetailParentLink {
   label: string;
@@ -43,7 +44,7 @@ type LoadState = 'loading' | 'loaded' | 'notFound' | 'error';
 @Component({
   selector: 'app-entity-hierarchy-detail-page',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, DescriptionRichHtmlPipe],
   templateUrl: './entity-hierarchy-detail-page.component.html',
   styleUrl: './entity-hierarchy-detail-page.component.scss',
 })

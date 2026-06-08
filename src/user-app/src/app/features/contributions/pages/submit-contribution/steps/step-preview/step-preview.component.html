@@ -74,7 +74,21 @@
       <!-- Description -->
       <div *ngIf="draft().details?.description" class="mb-5">
         <p class="text-sm font-bold text-slate-800 mb-2">About this place</p>
-        <p class="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{{ draft().details?.description }}</p>
+        <div
+          class="step-preview__about-wrap"
+          [class.step-preview__about-wrap--collapsed]="hasLongAbout(draft().details?.description) && !aboutExpanded()"
+        >
+          <p class="text-sm text-slate-600 leading-relaxed whitespace-pre-line" [innerHTML]="draft().details?.description | descriptionRichHtml"></p>
+        </div>
+        <button
+          *ngIf="hasLongAbout(draft().details?.description)"
+          type="button"
+          class="step-preview__about-toggle"
+          [attr.aria-expanded]="aboutExpanded()"
+          (click)="aboutExpanded.set(!aboutExpanded())"
+        >
+          {{ aboutExpanded() ? 'Show less' : 'Show more' }}
+        </button>
       </div>
 
       <div *ngIf="hasOpeningHours" class="mb-5">

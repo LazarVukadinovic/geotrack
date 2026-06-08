@@ -19,11 +19,13 @@ import { ExploreSectionListingService } from '../../../explore/services/explore-
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { PlaceDetail } from '../../../../core/models/place.model';
 import type { MapEntityMarker, MapEntityType } from '../../../../core/services/map-api.service';
+import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
+import { isLongDescription } from '../../../../shared/utils/description-formatting';
 
 @Component({
   selector: 'app-place-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent],
+  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent, DescriptionRichHtmlPipe],
   providers: [ReviewInteractionsService],
   templateUrl: './place-detail-page.component.html',
   styleUrl: './place-detail-page.component.scss',
@@ -56,6 +58,7 @@ export class PlaceDetailPageComponent {
 
   protected readonly scrollProgress = signal(0);
   protected readonly hoursExpanded = signal(false);
+  protected readonly aboutExpanded = signal(false);
   protected readonly galleryOpen = signal(false);
   protected readonly galleryStartIndex = signal(0);
   protected readonly ownershipClaimOpen = signal(false);
@@ -149,6 +152,7 @@ export class PlaceDetailPageComponent {
       this.placeId();
       this.scrollProgress.set(0);
       this.hoursExpanded.set(false);
+      this.aboutExpanded.set(false);
       this.galleryOpen.set(false);
       const el = this.pdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
@@ -415,6 +419,10 @@ export class PlaceDetailPageComponent {
       default:
         return 'M5 12.5 9.5 17 19 7';
     }
+  }
+
+  protected hasLongAbout(about: string | null | undefined): boolean {
+    return isLongDescription(about);
   }
 
   private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {

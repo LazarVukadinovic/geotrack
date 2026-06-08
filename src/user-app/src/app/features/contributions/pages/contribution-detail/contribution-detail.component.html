@@ -189,7 +189,22 @@
             @if (d.description) {
               <div class="contribution-detail__section contribution-detail__section--about">
                 <p class="contribution-detail__section-label text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">About this place</p>
-                <p class="contribution-detail__description text-sm text-slate-600 leading-relaxed whitespace-pre-line">{{ d.description }}</p>
+                <div
+                  class="contribution-detail__description-wrap"
+                  [class.contribution-detail__description-wrap--collapsed]="hasLongAbout(d.description) && !aboutExpanded()"
+                >
+                  <p class="contribution-detail__description text-sm text-slate-600 leading-relaxed whitespace-pre-line" [innerHTML]="d.description | descriptionRichHtml"></p>
+                </div>
+                @if (hasLongAbout(d.description)) {
+                  <button
+                    type="button"
+                    class="contribution-detail__about-toggle"
+                    [attr.aria-expanded]="aboutExpanded()"
+                    (click)="aboutExpanded.set(!aboutExpanded())"
+                  >
+                    {{ aboutExpanded() ? 'Show less' : 'Show more' }}
+                  </button>
+                }
               </div>
               <div class="contribution-detail__divider contribution-detail__divider--info h-px bg-slate-100"></div>
             }

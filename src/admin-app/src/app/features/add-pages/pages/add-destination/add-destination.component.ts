@@ -30,6 +30,7 @@ import {
   RegionalDestinationTagDto,
   RegionalDestinationUpdateRequest,
 } from '../../../../core/models/destination.model';
+import { normalizeEditorDescriptionHtml } from '../../../../shared/utils/description-formatting';
 import {
   applyAssignedRegionViewport,
   assignedRegionZone,
@@ -386,7 +387,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
         setTimeout(() => {
           if (this.editorRef?.nativeElement) {
-            this.editorRef.nativeElement.innerHTML = dto.description ?? '';
+            this.editorRef.nativeElement.innerHTML = normalizeEditorDescriptionHtml(dto.description);
             this.syncEmptyState();
             this.notifyStateChanged();
           }
@@ -476,6 +477,15 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.notifyStateChanged();
   }
 
+  onEditorKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      document.execCommand('insertLineBreak');
+      this.syncToolbarState();
+      this.syncEmptyState();
+    }
+  }
+
   execFormat(command: 'bold' | 'italic' | 'underline'): void {
     document.execCommand(command, false, undefined);
     this.editorRef.nativeElement.focus();
@@ -492,6 +502,18 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.syncEmptyState();
   }
 
+  onEditorPaste(event: ClipboardEvent): void {
+    const clipboard = event.clipboardData;
+    if (!clipboard) return;
+
+    event.preventDefault();
+    const html = clipboard.getData('text/html');
+    const text = clipboard.getData('text/plain');
+    document.execCommand('insertHTML', false, normalizeEditorDescriptionHtml(html || text));
+    this.syncToolbarState();
+    this.syncEmptyState();
+  }
+
   onEditorBlur(): void {
     this.syncToolbarState();
     const el = this.editorRef?.nativeElement;
@@ -500,6 +522,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')
     ) {
       el.innerHTML = '';
+    } else if (el) {
+      el.innerHTML = normalizeEditorDescriptionHtml(el.innerHTML);
     }
     this.syncEmptyState();
   }
@@ -767,7 +791,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const descriptionHtml = normalizeEditorDescriptionHtml(this.editorRef?.nativeElement?.innerHTML);
 
     return {
       regionId,
@@ -814,7 +838,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const descriptionHtml = normalizeEditorDescriptionHtml(this.editorRef?.nativeElement?.innerHTML);
 
     return {
       name,

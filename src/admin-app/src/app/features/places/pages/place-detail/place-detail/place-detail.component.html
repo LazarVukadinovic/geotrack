@@ -175,8 +175,8 @@
                 <h3 class="text-sm font-bold text-gray-800">Description</h3>
               </div>
               <div class="px-6 py-5">
-                <div class="text-sm text-gray-600 leading-relaxed"
-                     [innerHTML]="(item)['description']"></div>
+                <div class="text-sm text-gray-600 leading-relaxed whitespace-pre-line"
+                     [innerHTML]="(item)['description'] | descriptionRichHtml"></div>
               </div>
             </div>
           </ng-container>

@@ -35,6 +35,7 @@ import {
   RegionalEventTypeDto,
   RegionalEventUpdateRequest,
 } from '../../../../core/models/event.model';
+import { normalizeEditorDescriptionHtml } from '../../../../shared/utils/description-formatting';
 import { EventsListService } from '../../../../core/services/events-list.service';
 import {
   applyAssignedRegionViewport,
@@ -388,6 +389,15 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  onEditorKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      document.execCommand('insertLineBreak');
+      this.syncToolbarState();
+      this.syncEmptyState();
+    }
+  }
+
   execFormat(command: 'bold' | 'italic' | 'underline'): void {
     document.execCommand(command, false, undefined);
     this.editorRef.nativeElement.focus();
@@ -404,11 +414,25 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.syncEmptyState();
   }
 
+  onEditorPaste(event: ClipboardEvent): void {
+    const clipboard = event.clipboardData;
+    if (!clipboard) return;
+
+    event.preventDefault();
+    const html = clipboard.getData('text/html');
+    const text = clipboard.getData('text/plain');
+    document.execCommand('insertHTML', false, normalizeEditorDescriptionHtml(html || text));
+    this.syncToolbarState();
+    this.syncEmptyState();
+  }
+
   onEditorBlur(): void {
     this.syncToolbarState();
     const el = this.editorRef?.nativeElement;
     if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
       el.innerHTML = '';
+    } else if (el) {
+      el.innerHTML = normalizeEditorDescriptionHtml(el.innerHTML);
     }
     this.syncEmptyState();
   }
@@ -868,7 +892,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
         setTimeout(() => {
           if (this.editorRef?.nativeElement) {
-            this.editorRef.nativeElement.innerHTML = dto.description ?? '';
+            this.editorRef.nativeElement.innerHTML = normalizeEditorDescriptionHtml(dto.description);
             this.syncEmptyState();
             this.cdr.markForCheck();
           }
@@ -1196,7 +1220,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       eventTypeId: this.eventTypeId,
       name,
       summary,
-      description: this.editorRef?.nativeElement?.innerHTML?.trim() || null,
+      description: normalizeEditorDescriptionHtml(this.editorRef?.nativeElement?.innerHTML) || null,
       status: 'Published',
       venueName: this.customVenueName.trim() || null,
       isAllDay: this.allDay,
@@ -1576,7 +1600,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       eventTypeId: this.eventTypeId,
       name,
       summary,
-      description: this.editorRef?.nativeElement?.innerHTML?.trim() ?? '',
+      description: normalizeEditorDescriptionHtml(this.editorRef?.nativeElement?.innerHTML),
       venueName: this.customVenueName.trim(),
       isAllDay: this.allDay,
       startsAt,

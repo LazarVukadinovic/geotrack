@@ -11,11 +11,12 @@ import type { EntityImage } from '../../../../core/models/entity-image.model';
 import { EventDetailService } from '../../services/event-detail.service';
 import type { EventDetail } from '../../models/event-detail.model';
 import type { MapEntityMarker } from '../../../../core/services/map-api.service';
+import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 
 @Component({
   selector: 'app-event-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent],
+  imports: [SectionHeaderComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent, DescriptionRichHtmlPipe],
   templateUrl: './event-detail-page.component.html',
   styleUrl: './event-detail-page.component.scss',
 })

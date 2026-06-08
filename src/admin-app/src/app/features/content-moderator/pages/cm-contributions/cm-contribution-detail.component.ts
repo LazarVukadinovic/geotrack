@@ -14,13 +14,14 @@ import {
   CmDestinationOption,
   CmLocationOption,
 } from '../../../../core/services/content-moderator/content-moderator-contributions.service';
+import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 
 type DestinationChoice = 'existing' | 'new';
 
 @Component({
   selector: 'app-cm-contribution-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent, DescriptionRichHtmlPipe],
   templateUrl: './cm-contribution-detail.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -67,9 +68,6 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   locationImageError = '';
 
   readonly galleryLimit = 8;
-  readonly descriptionLimit = 300;
-  showFullDescription = false;
-
   get userName(): string { return this.auth.fullName || 'Content Moderator'; }
   get userRole(): string { return this.auth.getUser()?.role || 'Content Moderator'; }
 

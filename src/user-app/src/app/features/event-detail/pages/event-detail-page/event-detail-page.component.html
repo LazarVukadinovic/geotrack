@@ -163,7 +163,7 @@
 
             <section class="ed__section ed__section--about">
               <h2 class="ed__section-title">About the Event</h2>
-              <p class="ed__about" [innerHTML]="ev.about"></p>
+              <p class="ed__about" [innerHTML]="ev.about | descriptionRichHtml"></p>
               @if (allGalleryImages().length > 0) {
                 <button type="button" class="ed__view-photos" (click)="openGallery(0)">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">

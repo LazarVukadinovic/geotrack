@@ -5,6 +5,7 @@ using System.Globalization;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
@@ -1916,7 +1917,7 @@ public class PlaceContributionService : IPlaceContributionService
             OpeningHours = contribution.OpeningHours,
             OperatingHoursEnabled = contribution.OperatingHoursEnabled,
             OperatingHoursJson = contribution.OperatingHoursJson,
-            Description = contribution.Description,
+            Description = DisplayTextSafety.CleanOptionalRichMultiline(contribution.Description) ?? string.Empty,
             Latitude = contribution.Latitude.Value,
             Longitude = contribution.Longitude.Value,
             ContactEmail = contribution.ContactEmail,
@@ -1966,7 +1967,7 @@ public class PlaceContributionService : IPlaceContributionService
         place.OpeningHours = contribution.OpeningHours;
         place.OperatingHoursEnabled = contribution.OperatingHoursEnabled;
         place.OperatingHoursJson = contribution.OperatingHoursJson;
-        place.Description = contribution.Description;
+        place.Description = DisplayTextSafety.CleanOptionalRichMultiline(contribution.Description) ?? string.Empty;
         place.Latitude = contribution.Latitude.Value;
         place.Longitude = contribution.Longitude.Value;
         place.ContactEmail = contribution.ContactEmail;
@@ -2652,7 +2653,7 @@ public class PlaceContributionService : IPlaceContributionService
             OperatingHours = DeserializeOperatingHours(contribution.OperatingHoursJson),
             Latitude = contribution.Latitude,
             Longitude = contribution.Longitude,
-            Description = contribution.Description,
+            Description = DisplayTextSafety.CleanOptionalRichMultiline(contribution.Description) ?? string.Empty,
             ContactEmail = contribution.ContactEmail,
             PhoneNumber = contribution.PhoneNumber,
             Phone = contribution.PhoneNumber,
@@ -2798,7 +2799,7 @@ public class PlaceContributionService : IPlaceContributionService
             detail.OpeningHours = place.OpeningHours;
         }
         if (string.IsNullOrWhiteSpace(detail.Description))
-            detail.Description = place.Description;
+            detail.Description = DisplayTextSafety.CleanOptionalRichMultiline(place.Description) ?? string.Empty;
         if (!detail.Latitude.HasValue)
             detail.Latitude = place.Latitude;
         if (!detail.Longitude.HasValue)
@@ -2899,7 +2900,7 @@ public class PlaceContributionService : IPlaceContributionService
         detail.OperatingHours = DeserializeOperatingHours(place.OperatingHoursJson);
         detail.Latitude = place.Latitude;
         detail.Longitude = place.Longitude;
-        detail.Description = place.Description;
+        detail.Description = DisplayTextSafety.CleanOptionalRichMultiline(place.Description) ?? string.Empty;
         detail.ContactEmail = place.ContactEmail;
         detail.PhoneNumber = place.Number;
         detail.Phone = place.Number;
@@ -3419,7 +3420,7 @@ public class PlaceContributionService : IPlaceContributionService
     }
 
     private static string NormalizeDescription(string? description) =>
-        description?.Trim() ?? string.Empty;
+        DisplayTextSafety.CleanOptionalRichMultiline(description) ?? string.Empty;
 
     private static string NormalizeRequiredName(string? value, string fieldName, int maxLength)
     {

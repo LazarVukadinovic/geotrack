@@ -1,6 +1,7 @@
-import { Component, input, output, effect } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, ViewChild, effect, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { formatDescriptionPlainText, normalizeEditorDescriptionHtml } from '../../../../../../shared/utils/description-formatting';
 
 export interface BookingPartner {
   id: string;
@@ -39,7 +40,9 @@ export interface DetailsData {
   imports: [CommonModule, FormsModule],
   templateUrl: './step-details.component.html',
 })
-export class StepDetailsComponent {
+export class StepDetailsComponent implements AfterViewInit {
+  @ViewChild('descriptionEditor') private descriptionEditor?: ElementRef<HTMLDivElement>;
+
   data = input<DetailsData | null>(null);
   isAccommodation = input(false);
   saved = output<DetailsData>();
@@ -73,7 +76,13 @@ export class StepDetailsComponent {
     effect(() => {
       const d = this.data();
       if (d) {
-        Object.assign(this.form, d);
+        Object.assign(this.form, {
+          ...d,
+          description: normalizeEditorDescriptionHtml(d.description),
+        });
+        if (!this.descriptionEditorHasFocus()) {
+          this.writeDescriptionEditor();
+        }
         if (d.operatingHours?.length) {
           this.applyOperatingHours(d.operatingHours);
         } else {
@@ -93,6 +102,18 @@ export class StepDetailsComponent {
     operatingHours: [],
     bookingPartners: [],
   };
+
+  ngAfterViewInit(): void {
+    this.writeDescriptionEditor();
+  }
+
+  get descriptionTextLength(): number {
+    return formatDescriptionPlainText(this.form.description).length;
+  }
+
+  get hasDescriptionText(): boolean {
+    return this.descriptionTextLength > 0;
+  }
 
   onContinue(): void {
     this.submitted = true;
@@ -141,6 +162,39 @@ export class StepDetailsComponent {
       p.id === id ? { ...p, url } : p
     );
     this.changed.emit({ ...this.form });
+  }
+
+
+  onDescriptionBeforeInput(event: InputEvent): void {
+    if (event.inputType === 'insertParagraph' || event.inputType === 'insertLineBreak') {
+      event.preventDefault();
+      this.insertDescriptionHtml('<br>');
+      this.onDescriptionChanged(false);
+    }
+  }
+
+  onDescriptionPaste(event: ClipboardEvent): void {
+    const clipboard = event.clipboardData;
+    if (!clipboard) return;
+
+    event.preventDefault();
+    const html = clipboard.getData('text/html');
+    const text = clipboard.getData('text/plain');
+    document.execCommand('insertHTML', false, normalizeEditorDescriptionHtml(html || text));
+    this.onDescriptionChanged(false);
+  }
+
+  onDescriptionBlur(): void {
+    const editor = this.descriptionEditor?.nativeElement;
+    if (!editor) return;
+
+    editor.innerHTML = normalizeEditorDescriptionHtml(editor.innerHTML);
+    this.onDescriptionChanged(false);
+  }
+
+  onDescriptionChanged(_syncToolbarState = false): void {
+    this.form.description = normalizeEditorDescriptionHtml(this.descriptionEditor?.nativeElement.innerHTML);
+    this.changed.emit(this.normalizedForm());
   }
 
   onOpeningHoursChanged(): void {
@@ -297,7 +351,7 @@ export class StepDetailsComponent {
     const openingHours = this.form.openingHoursEnabled ? this.buildOpeningHoursText() : '';
     const operatingHours = this.form.openingHoursEnabled ? this.buildOperatingHoursPayload() : [];
     return {
-      description: this.form.description.trim(),
+      description: normalizeEditorDescriptionHtml(this.form.description),
       phone: this.form.phone.trim(),
       contactEmail: this.form.contactEmail.trim(),
       website: this.isAccommodation() ? '' : this.form.website.trim(),
@@ -315,6 +369,49 @@ export class StepDetailsComponent {
     return this.days
       .map(day => day.open ? `${day.name}: ${day.openTime} - ${day.closeTime}` : `${day.name}: Closed`)
       .join('\n');
+  }
+
+  private writeDescriptionEditor(): void {
+    const editor = this.descriptionEditor?.nativeElement;
+    if (!editor) return;
+
+    const html = normalizeEditorDescriptionHtml(this.form.description);
+    if (editor.innerHTML !== html) {
+      editor.innerHTML = html;
+    }
+  }
+
+  private descriptionEditorHasFocus(): boolean {
+    return document.activeElement === this.descriptionEditor?.nativeElement;
+  }
+
+  private insertDescriptionHtml(html: string): void {
+    const editor = this.descriptionEditor?.nativeElement;
+    if (!editor) return;
+
+    editor.focus();
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !editor.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+
+    const range = window.getSelection()?.getRangeAt(0);
+    if (!range) return;
+
+    range.deleteContents();
+    const fragment = range.createContextualFragment(html);
+    const lastNode = fragment.lastChild;
+    range.insertNode(fragment);
+    if (lastNode) {
+      range.setStartAfter(lastNode);
+      range.collapse(true);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
   }
 
   private buildOperatingHoursPayload(): ContributionOperatingHour[] {

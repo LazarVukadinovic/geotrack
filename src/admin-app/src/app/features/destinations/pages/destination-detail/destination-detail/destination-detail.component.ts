@@ -10,12 +10,13 @@ import { TopbarComponent }  from '../../../../../shared/components/topbar/topbar
 import { DestinationsListService, DestinationListItem } from '../../../../../core/services/destinations-list.service';
 import { LightboxService } from '../../../../../core/services/lightbox.service';
 import { MapTileLayerService } from '../../../../../core/services/map-tile-layer.service';
+import { DescriptionRichHtmlPipe } from '../../../../../shared/pipes/description-rich-html.pipe';
 declare const L: any;
 
 @Component({
   selector: 'app-destination-detail',
   standalone: true,
-  imports: [CommonModule, DecimalPipe, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, DecimalPipe, FormsModule, SidebarComponent, TopbarComponent, DescriptionRichHtmlPipe],
   templateUrl: './destination-detail.component.html',
 })
 export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDestroy {

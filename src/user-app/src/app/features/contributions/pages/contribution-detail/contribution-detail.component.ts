@@ -7,13 +7,15 @@ import { BackgroundImageFallbackDirective } from '../../../../shared/directives/
 import { getContributionAmenityLabel } from '../../services/contribution-amenities';
 import { PhotoGalleryComponent } from '../../../../shared/components/photo-gallery/photo-gallery.component';
 import type { EntityImage } from '../../../../core/models/entity-image.model';
+import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
+import { isLongDescription } from '../../../../shared/utils/description-formatting';
 
 const MAX_PROOF_BYTES = 10 * 1024 * 1024;
 
 @Component({
   selector: 'app-contribution-detail',
   standalone: true,
-  imports: [CommonModule, BackgroundImageFallbackDirective, PhotoGalleryComponent],
+  imports: [CommonModule, BackgroundImageFallbackDirective, PhotoGalleryComponent, DescriptionRichHtmlPipe],
   templateUrl: './contribution-detail.component.html',
   styleUrl: './contribution-detail.component.css',
 })
@@ -35,6 +37,7 @@ export class ContributionDetailPageComponent implements OnInit {
   protected readonly ownershipClaimSubmitting = signal(false);
   protected readonly mediaLightboxIndex = signal<number | null>(null);
   protected readonly mediaLightboxImages = signal<EntityImage[]>([]);
+  protected readonly aboutExpanded = signal(false);
 
   protected readonly amenityMap: Record<string, string> = {
     pool: 'Swimming Pool',
@@ -100,6 +103,7 @@ export class ContributionDetailPageComponent implements OnInit {
     this.isLoading.set(true);
     this.hasError.set(false);
     this.detail.set(null);
+    this.aboutExpanded.set(false);
 
     this.contributions.getDetail(id).subscribe({
       next: (data) => {
@@ -119,6 +123,10 @@ export class ContributionDetailPageComponent implements OnInit {
 
   protected getPartnerLabel(id: string): string {
     return this.partnerMap[id] ?? id;
+  }
+
+  protected hasLongAbout(description: string | null | undefined): boolean {
+    return isLongDescription(description);
   }
 
   protected openSingleImage(url: string, caption: string): void {

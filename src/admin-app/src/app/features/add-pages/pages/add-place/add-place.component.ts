@@ -34,6 +34,7 @@ import {
   RegionalStayTypeDto,
   RegionalPlaceUpdateRequest,
 } from '../../../../core/models/place.model';
+import { normalizeEditorDescriptionHtml } from '../../../../shared/utils/description-formatting';
 import {
   applyAssignedRegionViewport,
   assignedRegionZone,
@@ -619,7 +620,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
         setTimeout(() => {
           if (this.editorRef?.nativeElement) {
-            this.editorRef.nativeElement.innerHTML = dto.description ?? '';
+            this.setEditorHtml(dto.description);
             this.syncEmptyState();
             this.notifyStateChanged();
           }
@@ -865,6 +866,15 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.padTimePart(value);
   }
 
+  onEditorKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      document.execCommand('insertLineBreak');
+      this.syncToolbarState();
+      this.syncEmptyState();
+    }
+  }
+
   execFormat(command: 'bold' | 'italic' | 'underline'): void {
     document.execCommand(command, false, undefined);
     this.editorRef.nativeElement.focus();
@@ -872,6 +882,19 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onEditorChange(): void {
+    this.syncToolbarState();
+    this.syncEmptyState();
+  }
+
+  onEditorPaste(event: ClipboardEvent): void {
+    const clipboard = event.clipboardData;
+    if (!clipboard) return;
+
+    event.preventDefault();
+    const html = clipboard.getData('text/html');
+    const text = clipboard.getData('text/plain');
+    const content = html || this.escapeHtml(text).replace(/\r\n|\r|\n/g, '<br>');
+    document.execCommand('insertHTML', false, this.normalizeEditorHtml(content));
     this.syncToolbarState();
     this.syncEmptyState();
   }
@@ -886,6 +909,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const el = this.editorRef?.nativeElement;
     if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
       el.innerHTML = '';
+    } else if (el) {
+      el.innerHTML = this.normalizeEditorHtml(el.innerHTML);
     }
     this.syncEmptyState();
   }
@@ -1203,7 +1228,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const operatingHours = this.buildOperatingHoursPayload();
     if (!operatingHours) return null;
 
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const descriptionHtml = this.getEditorHtml();
 
     return {
       regionId,
@@ -1288,7 +1313,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const operatingHours = this.buildOperatingHoursPayload();
     if (!operatingHours) return null;
 
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const descriptionHtml = this.getEditorHtml();
 
     return {
       locationId,
@@ -1961,6 +1986,30 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const text = el.innerText ?? el.textContent ?? '';
     this.editorIsEmpty = text.trim() === '' && !el.querySelector('img');
     this.notifyStateChanged();
+  }
+
+  private setEditorHtml(value: string | null | undefined): void {
+    const el = this.editorRef?.nativeElement;
+    if (!el) return;
+
+    el.innerHTML = this.normalizeEditorHtml(value ?? '');
+  }
+
+  private getEditorHtml(): string {
+    return this.normalizeEditorHtml(this.editorRef?.nativeElement?.innerHTML ?? '');
+  }
+
+  private normalizeEditorHtml(value: string): string {
+    return normalizeEditorDescriptionHtml(value);
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   private syncToolbarState(): void {

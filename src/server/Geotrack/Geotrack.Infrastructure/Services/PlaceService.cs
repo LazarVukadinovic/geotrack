@@ -262,7 +262,7 @@ public class PlaceService : IPlaceService
             OperatingHours = ParseStructuredOperatingHours(place.OperatingHoursJson),
             OpeningHoursSchedule = ParseOpeningHoursSchedule(place.OperatingHoursJson),
             Website = DisplayTextSafety.CleanOptional(place.Website),
-            About = DisplayTextSafety.CleanOptional(place.Description),
+            About = DisplayTextSafety.CleanOptionalRichMultiline(place.Description),
             Reviews = previewReviews
                 .Select(r => new ReviewDto
                 {
@@ -440,7 +440,7 @@ public class PlaceService : IPlaceService
             ReviewCount = FormatReviewCountLabel(reviewCount),
             Distance = detailDistance,
             PricePerNight = place.Stay?.PricePerNight,
-            About = DisplayTextSafety.CleanOptional(place.Description),
+            About = DisplayTextSafety.CleanOptionalRichMultiline(place.Description),
             Website = null,
             ContactEmail = place.ContactEmail,
             PhoneNumber = place.Number,
@@ -1405,7 +1405,7 @@ public class PlaceService : IPlaceService
             place.Name = request.Name.Trim();
 
         if (request.Description != null)
-            place.Description = request.Description.Trim();
+            place.Description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description) ?? string.Empty;
 
         if (request.OperatingHoursEnabled.HasValue || request.OperatingHours is not null)
         {
@@ -1581,7 +1581,7 @@ public class PlaceService : IPlaceService
             OperatingHours = ParseStructuredOperatingHours(refreshedPlace.OperatingHoursJson),
             OpeningHoursSchedule = ParseOpeningHoursSchedule(refreshedPlace.OperatingHoursJson),
             Website = DisplayTextSafety.CleanOptional(refreshedPlace.Website),
-            About = DisplayTextSafety.CleanOptional(refreshedPlace.Description),
+            About = DisplayTextSafety.CleanOptionalRichMultiline(refreshedPlace.Description),
             Reviews = previewReviews
                 .Select(r => new ReviewDto
                 {

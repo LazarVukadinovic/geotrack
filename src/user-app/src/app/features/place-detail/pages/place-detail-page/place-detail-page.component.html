@@ -214,7 +214,19 @@
 
             <section class="pd__section pd__section--about">
               <h2 class="pd__section-title">About this place</h2>
-              <p class="pd__about" [innerHTML]="p.about"></p>
+              <div class="pd__about-wrap" [class.pd__about-wrap--collapsed]="hasLongAbout(p.about) && !aboutExpanded()">
+                <p class="pd__about" [innerHTML]="p.about | descriptionRichHtml"></p>
+              </div>
+              @if (hasLongAbout(p.about)) {
+                <button
+                  type="button"
+                  class="pd__about-toggle"
+                  [attr.aria-expanded]="aboutExpanded()"
+                  (click)="aboutExpanded.set(!aboutExpanded())"
+                >
+                  {{ aboutExpanded() ? 'Show less' : 'Show more' }}
+                </button>
+              }
               @if (allGalleryImages().length > 0) {
                 <button type="button" class="pd__view-photos" (click)="openGallery(0)">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">

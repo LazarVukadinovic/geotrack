@@ -93,17 +93,7 @@
             @if (contribution.description) {
               <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Description</h3>
-                <p class="text-sm text-gray-700 whitespace-pre-wrap">{{
-                  showFullDescription || contribution.description.length <= descriptionLimit
-                    ? contribution.description
-                    : (contribution.description | slice:0:descriptionLimit) + '…'
-                }}</p>
-                @if (contribution.description.length > descriptionLimit) {
-                  <button type="button" (click)="showFullDescription = !showFullDescription"
-                    class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800">
-                    {{ showFullDescription ? 'Show less' : 'Show more' }}
-                  </button>
-                }
+                <p class="text-sm text-gray-700 whitespace-pre-wrap" [innerHTML]="contribution.description | descriptionRichHtml"></p>
               </div>
             }
 

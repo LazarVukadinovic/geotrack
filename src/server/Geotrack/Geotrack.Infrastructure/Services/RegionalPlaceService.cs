@@ -2,6 +2,7 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
@@ -332,7 +333,7 @@ public class RegionalPlaceService : IRegionalPlaceService
 
         var name = NormalizeRequiredText(request.Name, "Place name is required.", 200, "Place name is too long.");
         var summary = NormalizeRequiredText(request.Summary, "Summary is required.", 160, "Summary is too long.");
-        var description = NormalizeOptionalText(request.Description, 2000, "Description is too long.") ?? string.Empty;
+        var description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 2000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
         var coordinates = ResolveRequiredCoordinates(request.Latitude, request.Longitude);
         ValidateCoordinatesWithinBoundaries(coordinates, location.LocationBoundaryGeometry, location.DestinationBoundaryGeometry);
@@ -868,11 +869,7 @@ public class RegionalPlaceService : IRegionalPlaceService
 
         if (request.Description is not null)
         {
-            var description = request.Description.Trim();
-            if (description.Length > 2000)
-                throw new InvalidOperationException("Description is too long.");
-
-            place.Description = description;
+            place.Description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 2000, "Description is too long.") ?? string.Empty;
         }
 
         if (request.Address is not null)

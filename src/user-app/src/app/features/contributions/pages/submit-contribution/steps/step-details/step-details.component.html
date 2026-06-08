@@ -8,12 +8,24 @@
     <div class="mb-4">
       <div class="flex items-center justify-between mb-2">
         <label class="text-sm font-semibold text-slate-700">Description</label>
-        <span class="text-xs text-slate-400">{{ form.description.length }}/2000</span>
+        <span class="text-xs text-slate-400">{{ descriptionTextLength }}/2000</span>
       </div>
-      <textarea [(ngModel)]="form.description" (ngModelChange)="changed.emit({...form})" maxlength="2000" rows="7"
-        placeholder="Describe the atmosphere, surroundings, and unique features..."
-        class="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-700 placeholder-slate-300 outline-none resize-none focus:border-[#e8722a] transition-colors">
-      </textarea>
+      <div class="overflow-hidden rounded-xl border border-slate-200 focus-within:border-[#e8722a] transition-colors">
+        <div class="relative">
+          @if (!hasDescriptionText) {
+            <span class="pointer-events-none absolute left-3 top-3 text-sm text-slate-300">Describe the atmosphere, surroundings, and unique features...</span>
+          }
+          <div
+            #descriptionEditor
+            contenteditable="true"
+            class="min-h-[168px] max-h-[260px] overflow-y-auto w-full px-3 py-3 text-sm text-slate-700 outline-none"
+            (beforeinput)="onDescriptionBeforeInput($event)"
+            (input)="onDescriptionChanged()"
+            (blur)="onDescriptionBlur()"
+            (paste)="onDescriptionPaste($event)"
+          ></div>
+        </div>
+      </div>
     </div>
 
     <div class="mb-4">

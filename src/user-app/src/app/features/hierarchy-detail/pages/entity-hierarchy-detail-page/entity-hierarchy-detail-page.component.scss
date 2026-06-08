@@ -134,6 +134,7 @@
   margin: 0;
   color: var(--color-muted, #6b7a99);
   line-height: 1.7;
+  white-space: pre-line;
 
   &--collapsed {
     display: -webkit-box;

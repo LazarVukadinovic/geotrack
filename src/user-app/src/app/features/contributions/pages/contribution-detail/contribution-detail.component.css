@@ -14,6 +14,50 @@
   display: contents;
 }
 
+.contribution-detail__description-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.contribution-detail__description-wrap--collapsed {
+  max-height: 132px;
+}
+
+.contribution-detail__description-wrap--collapsed::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 40px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #ffffff);
+}
+
+.contribution-detail__about-toggle {
+  display: inline-flex;
+  align-items: center;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #e8722a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.contribution-detail__about-toggle:hover {
+  color: #c95616;
+}
+
+.contribution-detail__about-toggle:focus-visible {
+  outline: 2px solid #e8722a;
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
 @media (min-width: 1024px) {
   :host {
     font-family: var(--font-sans);

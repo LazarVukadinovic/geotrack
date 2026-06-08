@@ -4,6 +4,7 @@ using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -375,7 +376,7 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             ThumbnailImageUrl = baseItem.ThumbnailImageUrl,
             PreviewText = baseItem.PreviewText,
             DetailRoute = baseItem.DetailRoute,
-            Description = contribution.Description,
+            Description = DisplayTextSafety.CleanOptionalRichMultiline(contribution.Description) ?? string.Empty,
             Address = contribution.Address,
             OpeningHours = contribution.OpeningHours,
             OperatingHoursEnabled = contribution.OperatingHoursEnabled,

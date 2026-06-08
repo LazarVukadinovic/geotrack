@@ -39,7 +39,11 @@
 
       @if (d.description) {
         <div class="ehd__description-wrap">
-          <p class="ehd__description" [class.ehd__description--collapsed]="!descriptionExpanded()">{{ d.description }}</p>
+          <p
+            class="ehd__description"
+            [class.ehd__description--collapsed]="!descriptionExpanded()"
+            [innerHTML]="d.description | descriptionRichHtml"
+          ></p>
           @if (d.description.length > 200) {
             <button type="button" class="ehd__description-toggle" (click)="descriptionExpanded.set(!descriptionExpanded())">
               {{ descriptionExpanded() ? 'Show less' : 'Show more' }}
