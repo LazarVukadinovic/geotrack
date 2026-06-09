@@ -546,9 +546,15 @@
 
     @if (ri.isReportReasonOther()) {
       <textarea
+        id="hotel-review-report-reason"
+        name="hotelReviewReportReason"
         class="hd__reason-text"
         placeholder="Please describe the issue..."
         rows="3"
+        autocomplete="off"
+        inputmode="text"
+        autocapitalize="sentences"
+        spellcheck="true"
         [value]="ri.customReason()"
         (input)="ri.customReason.set($any($event.target).value)"
       ></textarea>
@@ -598,9 +604,15 @@
     </div>
 
     <textarea
+      id="hotel-review-edit-body"
+      name="hotelReviewEditBody"
       class="hd__reason-text"
       placeholder="Share your experience..."
       rows="4"
+      autocomplete="off"
+      inputmode="text"
+      autocapitalize="sentences"
+      spellcheck="true"
       [value]="ri.editBody()"
       (input)="ri.editBody.set($any($event.target).value)"
     ></textarea>
