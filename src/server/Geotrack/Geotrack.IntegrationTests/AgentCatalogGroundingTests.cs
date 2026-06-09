@@ -80,6 +80,8 @@ public class AgentCatalogGroundingTests
             .SingleAsync(place => place.Name == "Banje Beach");
         var expectedImage = OrderedImageUrls(seededBeach.Images).First();
 
+        Assert.Equal("/media/seed/banje-beach.webp", expectedImage);
+
         var response = await orchestrator.ChatAsync(ChatRequest("beach in Dubrovnik"), userId: 1);
         var card = Assert.Single(response.Cards, card =>
             card.EntityType == "place" &&

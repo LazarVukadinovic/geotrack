@@ -1163,6 +1163,9 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<int?>("CreatedByUserId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1444,6 +1447,9 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -2518,7 +2524,15 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<string>("City")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("ContactEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Country")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
@@ -2548,6 +2562,14 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<bool>("OperatingHoursEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("OperatingHoursJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("OriginalSnapshotJson")
                         .IsRequired()
                         .HasColumnType("jsonb");
@@ -2560,6 +2582,10 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.Property<string>("OwnershipProofOriginalFileName")
                         .HasColumnType("text");
+
+                    b.Property<string>("Region")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime?>("OwnershipProofUploadedAt")
                         .HasColumnType("timestamp with time zone");

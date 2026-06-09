@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Domain.Entities.Core;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -12,10 +14,12 @@ namespace Geotrack.Server.Controllers;
 public class PlacesController : ControllerBase
 {
     private readonly IPlaceService _placeService;
+    private readonly IContributionMediaStorageService _mediaStorage;
 
-    public PlacesController(IPlaceService placeService)
+    public PlacesController(IPlaceService placeService, IContributionMediaStorageService mediaStorage)
     {
         _placeService = placeService;
+        _mediaStorage = mediaStorage;
     }
 
     [HttpGet]
@@ -152,14 +156,95 @@ public class PlacesController : ControllerBase
     [HttpPut("{id:int}/owner-update")]
     [Authorize]
     [EnableRateLimiting("contributions")]
-    public async Task<IActionResult> OwnerUpdatePlace([FromRoute] int id, [FromBody] OwnerUpdatePlaceRequestDto request)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> OwnerUpdatePlace(
+        [FromRoute] int id,
+        [FromForm] string payload,
+        IFormFile? cardImage,
+        IFormFile? coverImage,
+        List<IFormFile>? galleryImages)
     {
         var userId = GetUserId();
         if (!userId.HasValue)
             return Unauthorized();
 
+        OwnerUpdatePlaceRequestDto? request;
         try
         {
+            request = JsonSerializer.Deserialize<OwnerUpdatePlaceRequestDto>(
+                payload,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException)
+        {
+            return BadRequest(new { message = "Invalid payload." });
+        }
+
+        if (request is null)
+            return BadRequest(new { message = "Payload is required." });
+
+        try
+        {
+            request.Images ??= new List<OwnerUpdatePlaceImageDto>();
+
+            if (coverImage is { Length: > 0 })
+            {
+                var bytes = await ReadFileBytesAsync(coverImage);
+                if (bytes is { Length: > 0 })
+                {
+                    var url = (await _mediaStorage.StoreAsync(userId.Value, bytes)).MediaUrl;
+                    request.Images.RemoveAll(img => EntityImageRole.Normalize(img.ImageRole) == EntityImageRole.Cover);
+                    request.Images.Add(new OwnerUpdatePlaceImageDto
+                    {
+                        Url = url,
+                        ImageRole = EntityImageRole.Cover,
+                        SortOrder = -10,
+                        ImagePosition = request.ImagePosition,
+                        ImageSize = request.ImageSize,
+                    });
+                }
+            }
+
+            if (cardImage is { Length: > 0 })
+            {
+                var bytes = await ReadFileBytesAsync(cardImage);
+                if (bytes is { Length: > 0 })
+                {
+                    var url = (await _mediaStorage.StoreAsync(userId.Value, bytes)).MediaUrl;
+                    request.Images.RemoveAll(img => EntityImageRole.Normalize(img.ImageRole) == EntityImageRole.Card);
+                    request.Images.Add(new OwnerUpdatePlaceImageDto
+                    {
+                        Url = url,
+                        ImageRole = EntityImageRole.Card,
+                        SortOrder = -9,
+                        ImagePosition = request.CardImagePosition,
+                        ImageSize = request.CardImageSize,
+                    });
+                }
+            }
+
+            if (galleryImages is { Count: > 0 })
+            {
+                var nextSort = request.Images
+                    .Where(img => EntityImageRole.Normalize(img.ImageRole) == EntityImageRole.Gallery)
+                    .Select(img => img.SortOrder)
+                    .DefaultIfEmpty(-1)
+                    .Max() + 1;
+
+                foreach (var file in galleryImages)
+                {
+                    var bytes = await ReadFileBytesAsync(file);
+                    if (bytes is not { Length: > 0 }) continue;
+                    var url = (await _mediaStorage.StoreAsync(userId.Value, bytes)).MediaUrl;
+                    request.Images.Add(new OwnerUpdatePlaceImageDto
+                    {
+                        Url = url,
+                        ImageRole = EntityImageRole.Gallery,
+                        SortOrder = nextSort++,
+                    });
+                }
+            }
+
             var result = await _placeService.OwnerUpdatePlaceAsync(id, userId.Value, request);
             return Ok(result);
         }
@@ -169,6 +254,15 @@ public class PlacesController : ControllerBase
                 ? StatusCode(403, new { message = "Forbidden." })
                 : MapException(ex);
         }
+    }
+
+    private static async Task<byte[]?> ReadFileBytesAsync(IFormFile? file)
+    {
+        if (file is null || file.Length == 0) return null;
+        await using var stream = file.OpenReadStream();
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+        return memory.ToArray();
     }
 
     [HttpPost("{id:int}/reviews")]

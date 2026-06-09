@@ -59,15 +59,35 @@ public static class SeedData
     private sealed record SerbiaSeedRegionFallbackDefinition(
         string Key,
         string RegionName,
-        string[] Aliases);
+        string[] Aliases,
+        string? Description = null);
 
     private static readonly SerbiaSeedRegionFallbackDefinition[] SerbiaSeedRegionFallbacks =
     [
-        new("belgrade", "Belgrade", ["Beograd"]),
-        new("south-backa", "South Backa District", ["South Bačka District", "Juzna Backa District", "Južna Bačka District"]),
-        new("zlatibor", "Zlatibor District", ["Zlatibor"]),
-        new("raska", "Raska District", ["Raška District", "Raska"]),
-        new("sumadija", "Sumadija District", ["Šumadija District", "Sumadija", "Šumadija"])
+        new("belgrade", "Belgrade", ["Beograd"],
+            "Belgrade is Serbia's capital and largest city, situated at the confluence of the Sava and Danube rivers. " +
+            "It is known for its fortress of Kalemegdan, its bohemian Skadarlija quarter, a vibrant cafe and nightlife culture, " +
+            "and a compact historic core surrounded by expanding modern neighbourhoods. " +
+            "The city is the political, cultural, and economic centre of the country, and a major hub for regional transport and tourism."),
+        new("south-backa", "South Backa District", ["South Bačka District", "Juzna Backa District", "Južna Bačka District"],
+            "South Bačka District is the most populous district of Vojvodina, home to Novi Sad — Serbia's second-largest city and a 2022 European Capital of Culture. " +
+            "The district is characterised by the flat Pannonian plains, the Danube riverfront, the Fruška Gora national park, and a rich multicultural heritage. " +
+            "Novi Sad's Petrovaradin Fortress, historic old town, and Exit music festival attract visitors throughout the year."),
+        new("zlatibor", "Zlatibor District", ["Zlatibor"],
+            "Zlatibor District is a mountainous region in southwestern Serbia, centred on the Zlatibor plateau at around 1,000 metres elevation. " +
+            "It is one of Serbia's most popular domestic tourism destinations, offering ski slopes in winter and hiking, cycling, and fresh-air retreats in summer. " +
+            "The area is also known for the Šargan Eight heritage railway, the Drvengrad (Küstendorf) village built by filmmaker Emir Kusturica, " +
+            "and traditional wooden architecture across rural villages."),
+        new("raska", "Raska District", ["Raška District", "Raska"],
+            "Raška District, in south-central Serbia, is the historic heartland of the medieval Serbian state. " +
+            "It encompasses the UNESCO-listed monasteries of Sopoćani and Studenica, the spa town of Novi Pazar, " +
+            "and the Kopaonik massif — Serbia's premier ski resort and a national park offering mountain activities year-round. " +
+            "The region reflects a layered heritage of Byzantine, Ottoman, and Serbian Orthodox traditions."),
+        new("sumadija", "Sumadija District", ["Šumadija District", "Sumadija", "Šumadija"],
+            "Šumadija District is the geographic and historical heart of Serbia, taking its name from the forests (šuma) that once covered the region. " +
+            "Its capital, Kragujevac, was the first capital of modern Serbia and retains significant industrial and cultural history. " +
+            "The district is known for its rolling hills, vineyards, plum orchards, and traditional village life, " +
+            "as well as the Sumarice Memorial Park commemorating World War II victims.")
     ];
 
     private static readonly Dictionary<string, Dictionary<string, string>> SeedRegionBoundaryAliases =
@@ -170,6 +190,7 @@ public static class SeedData
     {
         await db.Database.MigrateAsync();
 
+        await EnsureStandardStayTypesAsync(db);
         var tagLookup = await EnsureSmartTagTaxonomyAsync(db);
         await EnsureInterestTopicsAsync(db, tagLookup);
         await EnsureExploreDemoPlaceTagsAsync(db, tagLookup);
@@ -183,9 +204,42 @@ public static class SeedData
         await EnsureDefaultModerationTermsAsync(db);
     }
 
+    private static readonly (string Name, string Slug, string Description)[] StandardStayTypes =
+    [
+        ("Hotel",     "hotel",     "Hotel accommodation"),
+        ("Villa",     "villa",     "Private villa accommodation"),
+        ("Apartment", "apartment", "Private apartment accommodation"),
+        ("Resort",    "resort",    "Resort accommodation"),
+        ("Cabin",     "cabin",     "Cabin accommodation"),
+        ("Glamping",  "glamping",  "Glamping accommodation"),
+        ("Hostel",    "hostel",    "Hostel accommodation"),
+    ];
+
+    private static async Task EnsureStandardStayTypesAsync(AppDbContext db)
+    {
+        var now = DateTime.UtcNow;
+        foreach (var (name, slug, description) in StandardStayTypes)
+        {
+            var exists = await db.StayTypes.AnyAsync(st => st.Slug == slug);
+            if (!exists)
+            {
+                db.StayTypes.Add(new StayType
+                {
+                    Name = name,
+                    Slug = slug,
+                    Description = description,
+                    CreatedAt = now,
+                });
+            }
+        }
+        await db.SaveChangesAsync();
+    }
+
     private static async Task InitializeCoreAsync(AppDbContext db)
     {
         await db.Database.MigrateAsync();
+
+        await EnsureStandardStayTypesAsync(db);
 
         if (await db.Destinations.AnyAsync())
         {
@@ -379,7 +433,14 @@ public static class SeedData
             Name = "Dubrovnik",
             DestinationTypeId = cityType.Id,
             RegionId = croatiaSeedRegion.Id,
-            Description = "A compact Adriatic heritage city known for stone walls, coastal views and island escapes.",
+            Summary = "A compact Adriatic heritage city known for stone walls, coastal views and island escapes.",
+            Description = "Dubrovnik is one of the most visited cities on the Adriatic, widely recognised for its remarkably intact medieval city walls — " +
+                "a UNESCO World Heritage Site since 1979. The Old Town is largely car-free and can be explored entirely on foot, " +
+                "with the main limestone-paved street (Stradun) connecting the Pile Gate to the Ploče Gate. " +
+                "The city sits on a peninsula overlooking the clear blue waters of the Adriatic, with the island of Lokrum visible just offshore. " +
+                "Beyond the walls, the surrounding coastline and nearby islands offer day-trip options including sea-kayaking, island ferry services, " +
+                "and the cable car ascent of Mount Srđ. Dubrovnik has a Mediterranean climate with hot, dry summers and mild winters, " +
+                "making it a year-round destination, though peak season (July–August) is intensely busy.",
             Latitude = 42.6507,
             Longitude = 18.0944,
             CreatedAt = now
@@ -395,41 +456,76 @@ public static class SeedData
         var oldTown = new Location
         {
             Name = "Old Town",
+            Summary = "The historic walled core of Dubrovnik, encircled by medieval fortifications and open to the Adriatic.",
+            Description = "Dubrovnik's Old Town is a UNESCO World Heritage Site enclosed by some of the best-preserved medieval city walls in Europe. " +
+                "The main pedestrian artery, Stradun, connects the Pile Gate to the Ploče Gate and is lined with limestone-paved streets, " +
+                "Renaissance churches, baroque fountains, and open-air cafes. " +
+                "Key landmarks include the Rector's Palace, the Franciscan Monastery with its 14th-century pharmacy, " +
+                "and a network of steep lanes leading up to the walls walkway with panoramic sea views. " +
+                "The area is compact and walkable, best explored on foot in the early morning or evening to avoid peak-hour crowds.",
             DestinationId = dubrovnik.Id,
             LocationTypeId = neighborhoodType.Id,
             Latitude = 42.6413,
             Longitude = 18.1090,
-            CreatedAt = now
+            Status = "Published",
+            CreatedAt = now,
+            PublishedAt = now
         };
 
         var ploce = new Location
         {
             Name = "Ploce",
+            Summary = "The upscale residential and beach district east of the Old Town walls, home to pebble coves and sea-view terraces.",
+            Description = "Ploče is the district immediately east of the Ploče Gate, the eastern entrance to Dubrovnik's Old Town. " +
+                "It offers a quieter, more residential feel than the walled city itself, with tree-lined lanes, boutique hotels, " +
+                "and direct access to Banje Beach — the closest sandy and pebble beach to the city centre. " +
+                "The area is popular with visitors who want proximity to the Old Town combined with sea-swimming access. " +
+                "Several luxury hotels are located here, taking advantage of the elevated views over the Adriatic and toward Lokrum Island.",
             DestinationId = dubrovnik.Id,
             LocationTypeId = districtType.Id,
             Latitude = 42.6422,
             Longitude = 18.1180,
-            CreatedAt = now
+            Status = "Published",
+            CreatedAt = now,
+            PublishedAt = now
         };
 
         var lapad = new Location
         {
             Name = "Lapad",
+            Summary = "A peninsula district west of the city centre with family beaches, a resort strip, and a relaxed bay promenade.",
+            Description = "Lapad is a green peninsula to the west of Dubrovnik's centre, separated from the city by the Gruž harbour. " +
+                "It is the main resort area, characterised by a long promenade (šetalište) running along Lapad Bay, " +
+                "a concentration of hotels and apartment complexes, several pebble and sand beaches, " +
+                "and a calmer pace than the Old Town. " +
+                "The area is well-suited to families and those who prefer a quieter base with reliable beach access. " +
+                "Sunsets from the western edge of the peninsula offer sweeping views over the open Adriatic.",
             DestinationId = dubrovnik.Id,
             LocationTypeId = districtType.Id,
             Latitude = 42.6559,
             Longitude = 18.0712,
-            CreatedAt = now
+            Status = "Published",
+            CreatedAt = now,
+            PublishedAt = now
         };
 
         var gruz = new Location
         {
             Name = "Gruz",
+            Summary = "The working harbour and ferry port of Dubrovnik, with a daily market, local restaurants, and island-boat connections.",
+            Description = "Gruž is Dubrovnik's main port and harbour area, situated to the northwest of the Old Town. " +
+                "It serves as the departure point for ferries to the Elaphiti Islands, Korčula, Split, and international lines. " +
+                "Unlike the tourist-heavy Old Town, Gruž has a more everyday local character — " +
+                "the Gruž morning market (open daily) is one of the best places to buy fresh seafood, produce, and local cheese. " +
+                "Several well-regarded konobas and seafood restaurants are found near the waterfront, " +
+                "making it a good choice for a meal away from Old Town prices.",
             DestinationId = dubrovnik.Id,
             LocationTypeId = harborType.Id,
             Latitude = 42.6592,
             Longitude = 18.0863,
-            CreatedAt = now
+            Status = "Published",
+            CreatedAt = now,
+            PublishedAt = now
         };
 
         db.Locations.AddRange(oldTown, ploce, lapad, gruz);
@@ -807,6 +903,47 @@ public static class SeedData
         AddPlaceTags(db, oldTownApartment, T("apartment-stay"), T("old-town"), T("boutique-stay"), T("budget"));
 
         await db.SaveChangesAsync();
+
+        async Task UpdatePlaceHoursAsync(Place place, string? openingHours, string? operatingHoursJson)
+        {
+            var changed = false;
+            if (place.OpeningHours != openingHours) { place.OpeningHours = openingHours; changed = true; }
+            var shouldBeEnabled = operatingHoursJson != null;
+            if (place.OperatingHoursJson != operatingHoursJson) { place.OperatingHoursJson = operatingHoursJson; changed = true; }
+            if (place.OperatingHoursEnabled != shouldBeEnabled) { place.OperatingHoursEnabled = shouldBeEnabled; changed = true; }
+            if (changed) await db.SaveChangesAsync();
+        }
+
+        static string BuildHoursJson(params (string days, string hours)[] schedule)
+        {
+            var entries = schedule.Select(s =>
+            {
+                var h = s.hours.Trim();
+                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
+                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
+                var norm = h.Replace("–", " - ");
+                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
+                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
+                if (parts.Length >= 2)
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
+                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
+            });
+            return "[" + string.Join(",", entries) + "]";
+        }
+
+        static string BuildDailyHoursJson(string hours)
+            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
+
+        await UpdatePlaceHoursAsync(banjeBeach, "06:00 - 22:00", BuildDailyHoursJson("06:00 - 22:00"));
+        await UpdatePlaceHoursAsync(nautika, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
+        await UpdatePlaceHoursAsync(konobaPupo, "11:00 - 23:00", BuildDailyHoursJson("11:00 - 23:00"));
+        await UpdatePlaceHoursAsync(cogito, "07:30 - 21:00", BuildDailyHoursJson("07:30 - 21:00"));
+        await UpdatePlaceHoursAsync(cityWalls, "08:00 - 18:30", BuildDailyHoursJson("08:00 - 18:30"));
+        await UpdatePlaceHoursAsync(lokrumIsland, "09:00 - 18:00", BuildDailyHoursJson("09:00 - 18:00"));
+        await UpdatePlaceHoursAsync(gruzFishingPier, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(lapadBay, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         db.UserTags.AddRange(
             new UserTag { UserId = marko.Id, TagId = T("fishing").Id },
@@ -1512,11 +1649,19 @@ public static class SeedData
             ?? await db.Territories.FirstOrDefaultAsync(item => item.CountryCode == "HR")
             ?? await db.Territories.FirstOrDefaultAsync(item => item.Name == "Croatia");
 
+        const string croatiaDescription =
+            "Croatia is a Central European and Mediterranean country situated along the eastern Adriatic coast. " +
+            "Known for its stunning coastline of over 1,700 islands, its UNESCO-listed historic cities, and its national parks, " +
+            "Croatia offers an exceptional blend of natural beauty, cultural heritage, and year-round tourism appeal. " +
+            "From the ancient walled city of Dubrovnik to the lakes of Plitvice and the seafront promenades of Split and Zadar, " +
+            "the country attracts millions of visitors seeking history, outdoor adventure, and Mediterranean cuisine.";
+
         if (territory is null)
         {
             territory = new Territory
             {
                 Name = "Croatia",
+                Description = croatiaDescription,
                 CountryCode = "HR",
                 CountryIso3 = "HRV",
                 TerritoryKind = TerritoryKinds.Country,
@@ -1528,6 +1673,7 @@ public static class SeedData
         }
 
         territory.Name = "Croatia";
+        territory.Description ??= croatiaDescription;
         territory.CountryCode = "HR";
         territory.CountryIso3 = "HRV";
         territory.TerritoryKind = TerritoryKinds.Country;
@@ -1554,7 +1700,14 @@ public static class SeedData
                 Name = "Dubrovnik",
                 DestinationTypeId = cityType.Id,
                 RegionId = region.Id,
-                Description = "A compact Adriatic heritage city known for stone walls, coastal views and island escapes.",
+                Summary = "A compact Adriatic heritage city known for stone walls, coastal views and island escapes.",
+                Description = "Dubrovnik is one of the most visited cities on the Adriatic, widely recognised for its remarkably intact medieval city walls — " +
+                    "a UNESCO World Heritage Site since 1979. The Old Town is largely car-free and can be explored entirely on foot, " +
+                    "with the main limestone-paved street (Stradun) connecting the Pile Gate to the Ploče Gate. " +
+                    "The city sits on a peninsula overlooking the clear blue waters of the Adriatic, with the island of Lokrum visible just offshore. " +
+                    "Beyond the walls, the surrounding coastline and nearby islands offer day-trip options including sea-kayaking, island ferry services, " +
+                    "and the cable car ascent of Mount Srđ. Dubrovnik has a Mediterranean climate with hot, dry summers and mild winters, " +
+                    "making it a year-round destination, though peak season (July–August) is intensely busy.",
                 Latitude = 42.6507,
                 Longitude = 18.0944,
                 Status = "Published",
@@ -1580,9 +1733,22 @@ public static class SeedData
             changed = true;
         }
 
+        if (string.IsNullOrWhiteSpace(destination.Summary))
+        {
+            destination.Summary = "A compact Adriatic heritage city known for stone walls, coastal views and island escapes.";
+            changed = true;
+        }
+
         if (string.IsNullOrWhiteSpace(destination.Description))
         {
-            destination.Description = "A compact Adriatic heritage city known for stone walls, coastal views and island escapes.";
+            destination.Description =
+                "Dubrovnik is one of the most visited cities on the Adriatic, widely recognised for its remarkably intact medieval city walls — " +
+                "a UNESCO World Heritage Site since 1979. The Old Town is largely car-free and can be explored entirely on foot, " +
+                "with the main limestone-paved street (Stradun) connecting the Pile Gate to the Ploče Gate. " +
+                "The city sits on a peninsula overlooking the clear blue waters of the Adriatic, with the island of Lokrum visible just offshore. " +
+                "Beyond the walls, the surrounding coastline and nearby islands offer day-trip options including sea-kayaking, island ferry services, " +
+                "and the cable car ascent of Mount Srđ. Dubrovnik has a Mediterranean climate with hot, dry summers and mild winters, " +
+                "making it a year-round destination, though peak season (July–August) is intensely busy.";
             changed = true;
         }
 
@@ -1610,6 +1776,57 @@ public static class SeedData
         {
             destination.UpdatedAt = now;
             await db.SaveChangesAsync();
+        }
+
+        await EnsureInitialDubrovnikPlaceHoursAsync(db);
+    }
+
+    private static async Task EnsureInitialDubrovnikPlaceHoursAsync(AppDbContext db)
+    {
+        static string BuildHoursJson(params (string day, string hours)[] schedule)
+        {
+            var entries = schedule.Select(s =>
+            {
+                var h = s.hours.Trim();
+                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
+                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
+                var norm = h.Replace("–", " - ");
+                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
+                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
+                if (parts.Length >= 2)
+                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
+                return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
+            });
+            return "[" + string.Join(",", entries) + "]";
+        }
+
+        static string BuildDailyHoursJson(string hours)
+            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
+
+        var placeHours = new[]
+        {
+            ("Banje Beach",                "06:00 - 22:00",  BuildDailyHoursJson("06:00 - 22:00")),
+            ("Nautika Restaurant",         "12:00 - 23:00",  BuildDailyHoursJson("12:00 - 23:00")),
+            ("Konoba Pupo",                "11:00 - 23:00",  BuildDailyHoursJson("11:00 - 23:00")),
+            ("Cogito Coffee",              "07:30 - 21:00",  BuildDailyHoursJson("07:30 - 21:00")),
+            ("Dubrovnik City Walls",       "08:00 - 18:30",  BuildDailyHoursJson("08:00 - 18:30")),
+            ("Lokrum Island",              "09:00 - 18:00",  BuildDailyHoursJson("09:00 - 18:00")),
+            ("Gruz Fishing Pier",          "Open 24h",       BuildDailyHoursJson("Open 24h")),
+            ("Lapad Bay Promenade",        "Open 24h",       BuildDailyHoursJson("Open 24h")),
+        };
+
+        foreach (var (name, openingHours, operatingHoursJson) in placeHours)
+        {
+            var place = await db.Places.FirstOrDefaultAsync(p => p.Name == name);
+            if (place is null) continue;
+
+            var changed = false;
+            if (place.OpeningHours != openingHours) { place.OpeningHours = openingHours; changed = true; }
+            if (place.OperatingHoursJson != operatingHoursJson) { place.OperatingHoursJson = operatingHoursJson; changed = true; }
+            if (!place.OperatingHoursEnabled) { place.OperatingHoursEnabled = true; changed = true; }
+            if (changed) await db.SaveChangesAsync();
         }
     }
 
@@ -1686,11 +1903,18 @@ public static class SeedData
                 $"Croatia seed cannot choose between multiple fallback ADM1 regions for {CroatiaSeedRegionName}.");
         }
 
+        const string dubrovnikNeretvaDescription =
+            "Dubrovnik-Neretva County is the southernmost county of Croatia, stretching along the lower Dalmatian coast " +
+            "and encompassing the Pelješac Peninsula, the Neretva delta, and a scattering of islands including Korčula, Mljet, and the Elaphiti archipelago. " +
+            "The region is anchored by Dubrovnik, a UNESCO World Heritage Site and one of the most visited cities on the Adriatic. " +
+            "Beyond the city walls, the county offers wine routes on Pelješac, kayaking around Lokrum, and pristine national park landscapes on Mljet.";
+
         if (region is null)
         {
             region = new Region
             {
                 Name = CroatiaSeedRegionName,
+                Description = dubrovnikNeretvaDescription,
                 TerritoryId = croatia.Id,
                 BoundaryShapeGroup = CroatiaIso3,
                 BoundaryAdmLevel = Adm1BoundaryLevel,
@@ -1699,6 +1923,10 @@ public static class SeedData
             };
 
             db.Regions.Add(region);
+        }
+        else
+        {
+            region.Description ??= dubrovnikNeretvaDescription;
         }
 
         var candidate = await FindCroatiaSeedAdm1CandidateAsync(db);
@@ -1897,11 +2125,20 @@ public static class SeedData
             ?? await db.Territories.FirstOrDefaultAsync(item => item.CountryCode == SerbiaIso2)
             ?? await db.Territories.FirstOrDefaultAsync(item => item.Name == "Serbia");
 
+        const string serbiaDescription =
+            "Serbia is a landlocked country in the heart of the Balkans, bordered by eight countries and traversed by the Danube, Sava, and Morava rivers. " +
+            "It offers a compelling mix of medieval monasteries, fortress cities, dynamic urban culture, and mountain resorts. " +
+            "Belgrade, the capital, is known for its vibrant nightlife, riverside kafanas, and rich history at the confluence of two great rivers. " +
+            "The countryside features Orthodox monasteries in the rolling hills of Šumadija, the dramatic gorges of the Danube, " +
+            "the ski slopes of Kopaonik and Zlatibor, and fertile plains stretching through Vojvodina. " +
+            "Serbia's cuisine — grilled meats, freshwater fish, and local rakija — reflects a proud culinary tradition.";
+
         if (territory is null)
         {
             territory = new Territory
             {
                 Name = "Serbia",
+                Description = serbiaDescription,
                 CountryCode = SerbiaIso2,
                 CountryIso3 = SerbiaIso3,
                 TerritoryKind = TerritoryKinds.Country,
@@ -1912,6 +2149,8 @@ public static class SeedData
             await db.SaveChangesAsync();
             return territory;
         }
+
+        territory.Description ??= serbiaDescription;
 
         var changed = false;
         if (territory.Name != "Serbia")
@@ -2137,6 +2376,7 @@ public static class SeedData
                 region = new Region
                 {
                     Name = definition.RegionName,
+                    Description = definition.Description,
                     TerritoryId = serbia.Id,
                     BoundaryShapeGroup = SerbiaIso3,
                     BoundaryAdmLevel = Adm1BoundaryLevel,
@@ -2152,6 +2392,13 @@ public static class SeedData
             {
                 throw new InvalidOperationException(
                     $"Serbia seed cannot choose between multiple fallback ADM1 regions for {definition.RegionName}.");
+            }
+
+            if (region.Description is null && definition.Description is not null)
+            {
+                region.Description = definition.Description;
+                region.UpdatedAt = now;
+                changed = true;
             }
 
             if (region.BoundaryCandidateId is null)
@@ -2666,7 +2913,7 @@ public static class SeedData
         await AddLocationImagesIfMissingAsync("Lapad", Unsplash("1596275281743-e4c30b6e0e27"));
         await AddLocationImagesIfMissingAsync("Gruz", Unsplash("1500530855697-b586d89ba3ee"));
 
-        await AddPlaceImagesIfMissingAsync("Banje Beach", Unsplash("1507525428034-b723cf961d3e"), Unsplash("1519046904884-53103b34b206"));
+        await AddPlaceImagesIfMissingAsync("Banje Beach", SeedWebp("banje-beach"));
         await AddPlaceImagesIfMissingAsync("Nautika Restaurant", Unsplash("1414235077428-338989a2e8c0"));
         await AddPlaceImagesIfMissingAsync("Cogito Coffee", Unsplash("1495474472287-4d71bcdd2085"));
         await AddPlaceImagesIfMissingAsync("Dubrovnik City Walls", SeedMedia("dubrovnik-old-town"));
@@ -3899,7 +4146,14 @@ public static class SeedData
             return destination;
         }
 
-        async Task<Location> EnsureLocationAsync(Destination destination, string name, LocationType locationType, double latitude, double longitude)
+        async Task<Location> EnsureLocationAsync(
+            Destination destination,
+            string name,
+            LocationType locationType,
+            double latitude,
+            double longitude,
+            string? summary = null,
+            string? description = null)
         {
             var location = await db.Locations.FirstOrDefaultAsync(x => x.DestinationId == destination.Id && x.Name == name);
             if (location is not null)
@@ -3911,6 +4165,16 @@ public static class SeedData
                     location.Longitude = longitude;
                     changed = true;
                 }
+                if (summary is not null && string.IsNullOrWhiteSpace(location.Summary))
+                {
+                    location.Summary = summary;
+                    changed = true;
+                }
+                if (description is not null && string.IsNullOrWhiteSpace(location.Description))
+                {
+                    location.Description = description;
+                    changed = true;
+                }
                 if (changed) await db.SaveChangesAsync();
                 return location;
             }
@@ -3918,6 +4182,8 @@ public static class SeedData
             location = new Location
             {
                 Name = name,
+                Summary = summary,
+                Description = description ?? string.Empty,
                 DestinationId = destination.Id,
                 LocationTypeId = locationType.Id,
                 Latitude = latitude,
@@ -4334,12 +4600,25 @@ public static class SeedData
 
         static string BuildHoursJson(params (string days, string hours)[] schedule)
         {
-            var entries = schedule.Select(s => $"{{\"day\":\"{s.days}\",\"hours\":\"{s.hours}\"}}");
+            var entries = schedule.Select(s =>
+            {
+                var h = s.hours.Trim();
+                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
+                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
+                var norm = h.Replace("–", " - ");
+                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
+                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
+                if (parts.Length >= 2)
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
+                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
+            });
             return "[" + string.Join(",", entries) + "]";
         }
 
         static string BuildDailyHoursJson(string hours)
-            => BuildHoursJson(("Mon", hours), ("Tue", hours), ("Wed", hours), ("Thu", hours), ("Fri", hours), ("Sat", hours), ("Sun", hours));
+            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
 
         async Task AddEntityImagesIfMissingAsync(EntityImageTargetType targetType, string title, int? destinationId = null, int? placeId = null, int? eventId = null, params string[] urls)
         {
@@ -4455,10 +4734,30 @@ public static class SeedData
             "dest-budget-stays");
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Destination, "Beograd", destinationId: beograd.Id, urls: new[] { Unsplash("1546776310-eef45dd6d63c") });
 
-        var stariGrad = await EnsureLocationAsync(beograd, "Stari Grad", neighborhoodType, 44.8176, 20.4571);
-        var dorcol = await EnsureLocationAsync(beograd, "Dorcol", neighborhoodType, 44.8230, 20.4599);
-        var savamala = await EnsureLocationAsync(beograd, "Savamala", districtType, 44.8113, 20.4504);
-        var ada = await EnsureLocationAsync(beograd, "Ada Ciganlija", waterfrontType, 44.7850, 20.3958);
+        var stariGrad = await EnsureLocationAsync(beograd, "Stari Grad", neighborhoodType, 44.8176, 20.4571,
+            summary: "Belgrade's historic core on the confluence hill, home to Kalemegdan Fortress, pedestrian Knez Mihailova, and riverside cafes.",
+            description: "Stari Grad (Old Town) is the historic municipality at the heart of Belgrade, stretching from Kalemegdan Fortress down to the riverbanks of the Sava and Danube. " +
+                "The main pedestrian street, Knez Mihailova, runs through it lined with 19th-century buildings, shops, galleries, and cafes. " +
+                "Kalemegdan Park sits above both rivers with fortress walls, outdoor chess tables, and sweeping views. " +
+                "The neighbourhood is home to most of Belgrade's major cultural institutions, museums, and the Serbian national theatre.");
+        var dorcol = await EnsureLocationAsync(beograd, "Dorcol", neighborhoodType, 44.8230, 20.4599,
+            summary: "A relaxed bohemian quarter along the Danube with independent cafes, creative studios, and the Skadarlija street.",
+            description: "Dorćol is a historic riverside neighbourhood northeast of Stari Grad, bordered by the Danube. " +
+                "It retains a quieter, more residential atmosphere than the city centre, with tree-lined streets, " +
+                "independent coffee shops, craft beer bars, and the bohemian Skadarlija cobblestone lane — " +
+                "lined with traditional Serbian restaurants (kafanas) and folk music in the evenings.");
+        var savamala = await EnsureLocationAsync(beograd, "Savamala", districtType, 44.8113, 20.4504,
+            summary: "Belgrade's creative and nightlife district along the Sava, transformed from a warehouse zone into galleries, clubs and restaurants.",
+            description: "Savamala is a formerly industrial riverside quarter that has become Belgrade's leading arts and nightlife precinct. " +
+                "Old warehouses and riverside buildings now house galleries, design studios, clubs, and bars. " +
+                "The area is most active from Thursday to Sunday nights and is the starting point for Belgrade's famous floating club (splavovi) scene on the Sava. " +
+                "It is also home to the annual Mikser festival and several independent creative venues.");
+        var ada = await EnsureLocationAsync(beograd, "Ada Ciganlija", waterfrontType, 44.7850, 20.3958,
+            summary: "Belgrade's river island beach and recreation park on the Sava, popular for swimming, cycling, sports and summer nightlife.",
+            description: "Ada Ciganlija is a river island on the Sava that has been converted into a peninsula recreation area. " +
+                "During summer it functions as Belgrade's main city beach, with a 4 km lake shore, water sports, beach bars, and volleyball courts. " +
+                "The surrounding parkland has cycling and running paths that are busy year-round with locals. " +
+                "In season, Ada becomes one of the most visited day-trip destinations in the city.");
         await AddLocationTagsIfMissingAsync(stariGrad, "old-town-core", "walkable-area", "local-area");
         await AddLocationTagsIfMissingAsync(dorcol, "local-area", "walkable-area", "casual");
         await AddLocationTagsIfMissingAsync(savamala, "waterfront-area", "local-area", "art");
@@ -4480,6 +4779,11 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(hotelMoskva, "boutique-stay", "old-town-nearby", "premium", "history");
         await ForceSetPlaceImageAsync(kalemegdan, SeedWebp("kalemegdan"));
         await ForceSetPlaceImageAsync(adaLake, SeedWebp("ada-ciganlija"));
+        await UpdatePlaceHoursAsync(kalemegdan, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(skadarlija, "11:00 - 00:00", BuildDailyHoursJson("11:00 - 00:00"));
+        await UpdatePlaceHoursAsync(kafeterija, "08:00 - 22:00", BuildDailyHoursJson("08:00 - 22:00"));
+        await UpdatePlaceHoursAsync(adaLake, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(hotelMoskva, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var noviSad = await EnsureDestinationAsync("Novi Sad", "Danube-side city known for Petrovaradin Fortress, relaxed streets, cafes and festival culture.", cityType, noviSadRegion, 45.2671, 19.8335);
         await AddDestinationTagsIfMissingAsync(noviSad,
@@ -4494,8 +4798,19 @@ public static class SeedData
             "dest-cafe-culture",
             "dest-boutique-hotels",
             "dest-budget-stays");
-        var nsCenter = await EnsureLocationAsync(noviSad, "Novi Sad Center", neighborhoodType, 45.2551, 19.8452);
-        var petrovaradin = await EnsureLocationAsync(noviSad, "Petrovaradin", districtType, 45.2528, 19.8625);
+        var nsCenter = await EnsureLocationAsync(noviSad, "Novi Sad Center", neighborhoodType, 45.2551, 19.8452,
+            summary: "The walkable city centre of Novi Sad with Liberty Square, the pedestrian zone, and the main cultural venues.",
+            description: "Novi Sad Center encompasses the main pedestrian area around Liberty Square (Trg slobode), " +
+                "the city's principal gathering point anchored by the Name of Mary Church and the town hall. " +
+                "The surrounding streets are lined with 19th-century Austro-Hungarian architecture, sidewalk cafes, boutique shops, and galleries. " +
+                "The centre is compact and walkable, and leads down to the Danube quay — a popular evening promenade.");
+        var petrovaradin = await EnsureLocationAsync(noviSad, "Petrovaradin", districtType, 45.2528, 19.8625,
+            summary: "The historic fortress neighbourhood across the river, with underground tunnels, artist studios, and the EXIT festival grounds.",
+            description: "Petrovaradin is the district directly across the Danube from central Novi Sad, dominated by the 18th-century Petrovaradin Fortress — " +
+                "one of the largest and best-preserved Baroque fortifications in Europe. " +
+                "The fortress complex includes underground military tunnels open for tours, a clock tower with reversed clock hands, " +
+                "a city history museum, and artist ateliers within the walls. " +
+                "Each July it hosts the EXIT Music Festival, one of Europe's largest summer music events.");
         await AddLocationTagsIfMissingAsync(nsCenter, "walkable-area", "local-area", "casual");
         await AddLocationTagsIfMissingAsync(petrovaradin, "panoramic-view", "history", "fortress");
         var fortress = await EnsurePlaceAsync("Petrovaradin Fortress", "Fortress above the Danube", "Petrovaradin, Novi Sad", ptLandmark, petrovaradin, "Historic fortress with river views, galleries, tunnels and festival grounds.", 45.2528, 19.8625, "Open 24h", 4.8, 840);
@@ -4505,6 +4820,9 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(fortress, "history", "culture", "fortress", "panoramic-view", "walking-route");
         await AddPlaceTagsIfMissingAsync(strand, "waterfront", "swimming", "family-friendly");
         await AddPlaceTagsIfMissingAsync(fishZelenish, "local-favorite", "casual", "traditional", "vegetarian-friendly", "local-food", "food-market");
+        await UpdatePlaceHoursAsync(fortress, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(strand, "08:00 - 23:00", BuildDailyHoursJson("08:00 - 23:00"));
+        await UpdatePlaceHoursAsync(fishZelenish, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
 
         var zlatibor = await EnsureDestinationAsync("Zlatibor", "Mountain destination with viewpoints, lakes, pine landscapes, family stays and outdoor activities.", mountainType, zlatiborRegion, 43.7297, 19.7003);
         await AddDestinationTagsIfMissingAsync(zlatibor,
@@ -4520,8 +4838,18 @@ public static class SeedData
             "dest-family-stays",
             "dest-spa-hotels",
             "dest-mountain-lodges");
-        var zlatiborCenter = await EnsureLocationAsync(zlatibor, "Zlatibor Center", districtType, 43.7297, 19.7003);
-        var tornik = await EnsureLocationAsync(zlatibor, "Tornik", mountainAreaType, 43.6862, 19.6545);
+        var zlatiborCenter = await EnsureLocationAsync(zlatibor, "Zlatibor Center", districtType, 43.7297, 19.7003,
+            summary: "The central resort plateau of Zlatibor with hotels, the lake promenade, the Gold Gondola departure point, and family amenities.",
+            description: "Zlatibor Center is the main settlement on the Zlatibor plateau, sitting at around 1,000 metres elevation. " +
+                "It is centred on the artificial Zlatibor Lake with a lakeside promenade popular with visitors year-round. " +
+                "The area offers the highest concentration of hotels, restaurants, and tourist facilities on the plateau, " +
+                "as well as the base station of the Gold Gondola cable car which ascends toward Tornik Peak.");
+        var tornik = await EnsureLocationAsync(zlatibor, "Tornik", mountainAreaType, 43.6862, 19.6545,
+            summary: "Zlatibor's highest peak area with ski slopes, a gondola station, and open mountain terrain for hiking and views.",
+            description: "Tornik (1,496 m) is the highest point of the Zlatibor plateau and the location of the area's main ski infrastructure. " +
+                "In winter it operates ski runs of varying difficulty connected by lifts. " +
+                "In summer, the mountain is used for hiking, paragliding, and scenic walks with open views over the Dinaric plateau. " +
+                "The Gold Gondola connects Zlatibor Center to the upper cable car station near Tornik summit in about 20 minutes.");
         await AddLocationTagsIfMissingAsync(zlatiborCenter, "family-friendly", "relaxed-area", "local-area");
         await AddLocationTagsIfMissingAsync(tornik, "panoramic-view", "hiking", "nature");
         var goldGondola = await EnsurePlaceAsync("Gold Gondola Zlatibor", "Long panoramic gondola ride", "Zlatibor Center", ptLandmark, zlatiborCenter, "Panoramic gondola route toward Tornik with mountain and lake views.", 43.7304, 19.6971, "09:00 - 17:00", 4.7, 500);
@@ -4529,6 +4857,8 @@ public static class SeedData
         await RemovePlaceIfExistsAsync("Zlatibor Mountain Lodge");
         await AddPlaceTagsIfMissingAsync(goldGondola, "cable-car", "panoramic-view", "family-friendly", "nature");
         await AddPlaceTagsIfMissingAsync(tornikViewpoint, "hiking", "panoramic-view", "nature", "walking-route");
+        await UpdatePlaceHoursAsync(goldGondola, "09:00 - 17:00", BuildDailyHoursJson("09:00 - 17:00"));
+        await UpdatePlaceHoursAsync(tornikViewpoint, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var kopaonik = await EnsureDestinationAsync("Kopaonik", "Mountain and ski destination with trails, viewpoints, hotels and winter activities.", mountainType, kopaonikRegion, 43.2856, 20.8095);
         await AddDestinationTagsIfMissingAsync(kopaonik,
@@ -4542,8 +4872,18 @@ public static class SeedData
             "dest-spa-hotels",
             "dest-mountain-lodges",
             "dest-family-stays");
-        var skiCenter = await EnsureLocationAsync(kopaonik, "Kopaonik Ski Center", mountainAreaType, 43.2856, 20.8095);
-        var pancic = await EnsureLocationAsync(kopaonik, "Pancic Peak", mountainAreaType, 43.2670, 20.8229);
+        var skiCenter = await EnsureLocationAsync(kopaonik, "Kopaonik Ski Center", mountainAreaType, 43.2856, 20.8095,
+            summary: "The main resort base of Kopaonik National Park with ski runs, mountain hotels, and year-round outdoor activities.",
+            description: "Kopaonik Ski Center is the central hub of the Kopaonik resort, located within the national park at around 1,770 metres. " +
+                "It is the largest ski resort in Serbia, with over 55 km of prepared ski runs connected by modern lifts. " +
+                "In summer, the area is used for mountain biking, hiking, and nature tourism, with the national park's endemic flora and fauna. " +
+                "The resort village has a pedestrian zone, hotels, restaurants, and ski rental facilities.");
+        var pancic = await EnsureLocationAsync(kopaonik, "Pancic Peak", mountainAreaType, 43.2670, 20.8229,
+            summary: "The highest point of Kopaonik at 2,017 m, named after botanist Josif Pančić, with far-reaching views on clear days.",
+            description: "Pančić Peak (Pančićev vrh) is the highest point of the Kopaonik massif at 2,017 metres. " +
+                "It is accessible on foot from the ski centre and offers panoramic views extending on clear days to distant ranges. " +
+                "The peak is named after Josif Pančić, the 19th-century Serbian botanist who discovered the Pančić's spruce (Picea omorika) in this area. " +
+                "A monument to Pančić stands near the summit, and the peak is a common hiking goal from the ski centre base.");
         await AddLocationTagsIfMissingAsync(skiCenter, "family-friendly", "local-area", "nature");
         await AddLocationTagsIfMissingAsync(pancic, "panoramic-view", "hiking", "nature");
         var skiCenterPlace = await EnsurePlaceAsync("Kopaonik Ski Center", "Main ski and outdoor activity area", "Kopaonik", ptNature, skiCenter, "Main mountain activity area for skiing, walking, viewpoints and seasonal outdoor activities.", 43.2856, 20.8095, "08:00 - 17:00", 4.7, 640);
@@ -4552,6 +4892,8 @@ public static class SeedData
         await AddStayAmenitiesIfMissingAsync(grandStay, wifi, breakfast, parking, spa, airConditioning);
         await AddPlaceTagsIfMissingAsync(skiCenterPlace, "hiking", "panoramic-view", "family-friendly");
         await AddPlaceTagsIfMissingAsync(hotelGrand, "luxury-stay", "premium", "wellness");
+        await UpdatePlaceHoursAsync(skiCenterPlace, "08:00 - 17:00", BuildDailyHoursJson("08:00 - 17:00"));
+        await UpdatePlaceHoursAsync(hotelGrand, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var tara = await EnsureDestinationAsync("Tara", "National park destination with viewpoints, lakes, forest roads and quiet nature stays.", nationalParkType, taraRegion, 43.9450, 19.4340);
         await AddDestinationTagsIfMissingAsync(tara,
@@ -4566,14 +4908,26 @@ public static class SeedData
             "dest-local-food",
             "dest-family-stays",
             "dest-mountain-lodges");
-        var mitrovac = await EnsureLocationAsync(tara, "Mitrovac", mountainAreaType, 43.9312, 19.4306);
-        var zaovine = await EnsureLocationAsync(tara, "Zaovine", waterfrontType, 43.8768, 19.3956);
+        var mitrovac = await EnsureLocationAsync(tara, "Mitrovac", mountainAreaType, 43.9312, 19.4306,
+            summary: "The main settlement of Tara National Park, a base for hiking, viewpoints and forest walks.",
+            description: "Mitrovac is the central hub of Tara National Park, situated at around 1,200 metres in a dense beech and fir forest. " +
+                "It serves as the main starting point for hikes toward Banjska Stena viewpoint and other trails through the park. " +
+                "The settlement has a visitor centre, hotels and mountain huts, and offers a quiet, nature-immersed base for exploring the park. " +
+                "The surrounding forest is one of the best-preserved in Serbia, home to brown bears, wolves and a wide variety of bird species.");
+        var zaovine = await EnsureLocationAsync(tara, "Zaovine", waterfrontType, 43.8768, 19.3956,
+            summary: "A remote mountain lake area on Tara with scenic drives, peaceful shoreline walks and unspoilt nature.",
+            description: "Zaovine is a small, quiet area in the western part of Tara National Park, centred around the artificial Zaovine Lake. " +
+                "The lake was formed by damming the Zaovinska river and sits surrounded by dense forest at around 900 metres. " +
+                "It is one of the most visually striking spots on Tara — calm, remote and largely untouched by mass tourism. " +
+                "The area is ideal for scenic drives along the lake road, short lakeside walks and birdwatching in a peaceful setting.");
         await AddLocationTagsIfMissingAsync(mitrovac, "nature", "quiet-area", "family-friendly");
         await AddLocationTagsIfMissingAsync(zaovine, "waterfront", "nature", "panoramic-view");
         var banjskaStena = await EnsurePlaceAsync("Banjska Stena Viewpoint", "Iconic Tara viewpoint", "Tara National Park", ptNature, mitrovac, "A well-known viewpoint above the Drina canyon and one of Tara's classic short hikes.", 43.9534, 19.3909, "Open 24h", 4.9, 510);
         var zaovineLake = await EnsurePlaceAsync("Zaovine Lake", "Mountain lake and quiet nature area", "Zaovine, Tara", ptNature, zaovine, "A quiet lake area for scenic drives, short walks and nature-focused stays.", 43.8768, 19.3956, "Open 24h", 4.8, 330);
         await AddPlaceTagsIfMissingAsync(banjskaStena, "panoramic-view", "hiking", "nature", "walking-route");
         await AddPlaceTagsIfMissingAsync(zaovineLake, "waterfront", "quiet-area", "nature", "family-friendly");
+        await UpdatePlaceHoursAsync(banjskaStena, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(zaovineLake, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var kragujevac = await EnsureDestinationAsync(SerbiaRegionalManagerAnchorDestinationName, "Serbia's former royal capital and cultural heart of Šumadija, known for its first Serbian theatre, Šumarice Memorial Park and Bubanj lake.", cityType, kragujevacRegion, 44.010590360886276, 20.915278268657637);
         await AddDestinationTagsIfMissingAsync(kragujevac,
@@ -4588,9 +4942,24 @@ public static class SeedData
             "dest-budget-stays",
             "dest-river-walks");
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Destination, "Kragujevac", destinationId: kragujevac.Id, urls: new[] { Unsplash("1558019174-f9f5cb3b11a9") });
-        var kgCenter = await EnsureLocationAsync(kragujevac, "Centar", districtType, 44.010590360886276, 20.915278268657637);
-        var kgSumarice = await EnsureLocationAsync(kragujevac, "Šumarice", parkType, 44.01608378833523, 20.885842264686087);
-        var kgBubanj = await EnsureLocationAsync(kragujevac, "Bubanj", waterfrontType, 44.01709232834811, 20.925827920265036);
+        var kgCenter = await EnsureLocationAsync(kragujevac, "Centar", districtType, 44.010590360886276, 20.915278268657637,
+            summary: "The walkable city centre of Kragujevac with the main square, pedestrian streets, restaurants and cultural venues.",
+            description: "Centar is the historic and commercial heart of Kragujevac, built around the main pedestrian zone and Trg vojvode Radomira Putnika square. " +
+                "The area concentrates the city's main restaurants, cafés, pastry shops, museums and cultural institutions within easy walking distance. " +
+                "Knežev Arsenal — one of the oldest national museums in Serbia — is located here, alongside the Serbian National Theatre and the main shopping streets. " +
+                "The centre is compact and lively, making it the natural starting point for any visit to Kragujevac.");
+        var kgSumarice = await EnsureLocationAsync(kragujevac, "Šumarice", parkType, 44.01608378833523, 20.885842264686087,
+            summary: "A large memorial park west of the city centre, with forested paths, a lake and monuments to World War II victims.",
+            description: "Šumarice Memorial Park is a large forest park on the western edge of Kragujevac, established to commemorate the Kragujevac massacre of October 1941, " +
+                "in which German forces executed around 2,800 civilians. " +
+                "The park is home to Šumaričko Lake, several memorial sculptures and monuments, and kilometres of forested walking and jogging paths. " +
+                "It is a place of both historical significance and everyday recreation, visited by families, joggers and school groups throughout the year.");
+        var kgBubanj = await EnsureLocationAsync(kragujevac, "Bubanj", waterfrontType, 44.01709232834811, 20.925827920265036,
+            summary: "An eastern lakeside area with Bubanj Lake, fitness trails and green spaces for outdoor recreation.",
+            description: "Bubanj is a residential and recreational area in the eastern part of Kragujevac, centred around Bubanj Lake — " +
+                "an artificial lake popular with locals for morning runs, cycling and lakeside walks. " +
+                "The surrounding greenery and maintained fitness trails make it one of the city's favourite spots for outdoor exercise and relaxed weekend outings. " +
+                "The area has a calm, neighbourhood character and offers a pleasant alternative to the busier city centre.");
         await AddLocationTagsIfMissingAsync(kgCenter, "walkable-area", "local-area");
         await AddLocationTagsIfMissingAsync(kgSumarice, "nature", "history", "family-friendly");
         await AddLocationTagsIfMissingAsync(kgBubanj, "waterfront", "nature", "quiet-area");
@@ -4626,15 +4995,19 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(knjazTeatar, "history", "culture", "local-favorite", "architecture");
         await AddPlaceTagsIfMissingAsync(hotelSumariceKg, "family-stay", "budget");
         await AddPlaceTagsIfMissingAsync(hotelZelengora, "family-stay", "budget");
+        await UpdatePlaceHoursAsync(spomenPark, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(jezeroBubanj, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(hotelSumariceKg, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(hotelZelengora, "Open 24h", BuildDailyHoursJson("Open 24h"));
         await UpdatePlaceHoursAsync(muzej21, "09:00–18:00",
-            BuildHoursJson(("Mon", "09:00–18:00"), ("Tue", "08:00–18:00"), ("Wed", "08:00–18:00"), ("Thu", "08:00–18:00"), ("Fri", "09:00–18:00"), ("Sat", "09:00–16:00"), ("Sun", "09:00–16:00")));
+            BuildHoursJson(("Monday", "09:00–18:00"), ("Tuesday", "08:00–18:00"), ("Wednesday", "08:00–18:00"), ("Thursday", "08:00–18:00"), ("Friday", "09:00–18:00"), ("Saturday", "09:00–16:00"), ("Sunday", "09:00–16:00")));
         await UpdatePlaceHoursAsync(ambasadorRestoran, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
         await UpdatePlaceHoursAsync(kafanaBalkan, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
         await UpdatePlaceHoursAsync(toroRestoran, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
         await UpdatePlaceHoursAsync(prvaGimnazija, "Mon–Fri 07:00–20:00",
-            BuildHoursJson(("Mon", "07:00–20:00"), ("Tue", "07:00–20:00"), ("Wed", "07:00–20:00"), ("Thu", "07:00–20:00"), ("Fri", "07:00–20:00"), ("Sat", "Closed"), ("Sun", "Closed")));
+            BuildHoursJson(("Monday", "07:00–20:00"), ("Tuesday", "07:00–20:00"), ("Wednesday", "07:00–20:00"), ("Thursday", "07:00–20:00"), ("Friday", "07:00–20:00"), ("Saturday", "Closed"), ("Sunday", "Closed")));
         await UpdatePlaceHoursAsync(knjazTeatar, "Mon–Sat 10:00–14:00, 18:00–20:00",
-            BuildHoursJson(("Mon", "10:00–14:00, 18:00–20:00"), ("Tue", "10:00–14:00, 18:00–20:00"), ("Wed", "10:00–14:00, 18:00–20:00"), ("Thu", "10:00–14:00, 18:00–20:00"), ("Fri", "10:00–14:00, 18:00–20:00"), ("Sat", "10:00–14:00, 18:00–20:00"), ("Sun", "Closed")));
+            BuildHoursJson(("Monday", "10:00–14:00, 18:00–20:00"), ("Tuesday", "10:00–14:00, 18:00–20:00"), ("Wednesday", "10:00–14:00, 18:00–20:00"), ("Thursday", "10:00–14:00, 18:00–20:00"), ("Friday", "10:00–14:00, 18:00–20:00"), ("Saturday", "10:00–14:00, 18:00–20:00"), ("Sunday", "Closed")));
         await ForceSetDestinationImageAsync(kragujevac, SeedWebp("kg"));
         await ForceSetDestinationImageAsync(beograd, SeedWebp("bg"));
         await ForceSetDestinationImageAsync(noviSad, SeedWebp("ns"));
@@ -4774,6 +5147,7 @@ public static class SeedData
         await AddStayAmenitiesIfMissingAsync(hotelPresidentStay, wifi, airConditioning, parking);
         await AddBookingPartnerIfMissingAsync(hotelPresidentDeL, kgBpBooking, "https://www.booking.com/hotel/rs/president-de-luxe-doo.html");
         await AddPlaceTagsIfMissingAsync(hotelPresidentDeL, "family-stay", "budget");
+        await UpdatePlaceHoursAsync(hotelPresidentDeL, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var hotelIndustrial = await EnsurePlaceAsync(
             "Industrial 1853",
@@ -4791,6 +5165,7 @@ public static class SeedData
         await AddStayAmenitiesIfMissingAsync(hotelIndustrialStay, wifi, airConditioning, breakfast);
         await AddBookingPartnerIfMissingAsync(hotelIndustrial, kgBpBooking, "https://www.booking.com/hotel/rs/industrial-1853.html");
         await AddPlaceTagsIfMissingAsync(hotelIndustrial, "family-stay", "premium");
+        await UpdatePlaceHoursAsync(hotelIndustrial, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var hotelKragujevac = await EnsurePlaceAsync(
             "Hotel Kragujevac",
@@ -4808,6 +5183,7 @@ public static class SeedData
         await AddStayAmenitiesIfMissingAsync(hotelKragujevacStay, wifi, parking, airConditioning);
         await AddBookingPartnerIfMissingAsync(hotelKragujevac, kgBpBooking, "https://www.booking.com/hotel/rs/kragujevac.html");
         await AddPlaceTagsIfMissingAsync(hotelKragujevac, "family-stay", "budget");
+        await UpdatePlaceHoursAsync(hotelKragujevac, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         // New restaurants / cafes / pastry shops
         var peron = await EnsurePlaceAsync(
@@ -4825,7 +5201,7 @@ public static class SeedData
         await EnsureRestaurantAsync(peron);
         await AddPlaceTagsIfMissingAsync(peron, "local-food", "casual", "local-favorite", "dessert");
         await UpdatePlaceHoursAsync(peron, "Mon–Sat 08:00–00:00",
-            BuildHoursJson(("Mon", "08:00–00:00"), ("Tue", "08:00–00:00"), ("Wed", "08:00–00:00"), ("Thu", "08:00–00:00"), ("Fri", "08:00–00:00"), ("Sat", "08:00–00:00"), ("Sun", "10:00–00:00")));
+            BuildHoursJson(("Monday", "08:00–00:00"), ("Tuesday", "08:00–00:00"), ("Wednesday", "08:00–00:00"), ("Thursday", "08:00–00:00"), ("Friday", "08:00–00:00"), ("Saturday", "08:00–00:00"), ("Sunday", "10:00–00:00")));
 
         var velikPark = await EnsurePlaceAsync(
             "Veliki Park",
@@ -4840,6 +5216,7 @@ public static class SeedData
             4.7,
             298);
         await AddPlaceTagsIfMissingAsync(velikPark, "nature", "walking-route", "family-friendly", "quiet-area");
+        await UpdatePlaceHoursAsync(velikPark, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var sumarickoJezero = await EnsurePlaceAsync(
             "Šumaričko jezero",
@@ -4854,6 +5231,7 @@ public static class SeedData
             4.8,
             211);
         await AddPlaceTagsIfMissingAsync(sumarickoJezero, "waterfront", "nature", "quiet-area", "walking-route", "family-friendly");
+        await UpdatePlaceHoursAsync(sumarickoJezero, "Open 24h", BuildDailyHoursJson("Open 24h"));
 
         var srce = await EnsurePlaceAsync(
             "Poslastičarnica Srce",
@@ -4869,7 +5247,7 @@ public static class SeedData
             134);
         await AddPlaceTagsIfMissingAsync(srce, "dessert", "casual", "local-favorite", "local-food");
         await UpdatePlaceHoursAsync(srce, "Mon–Thu 08:00–00:00",
-            BuildHoursJson(("Mon", "08:00–00:00"), ("Tue", "08:00–00:00"), ("Wed", "08:00–00:00"), ("Thu", "08:00–00:00"), ("Fri", "08:00–01:00"), ("Sat", "08:00–01:00"), ("Sun", "11:00–00:00")));
+            BuildHoursJson(("Monday", "08:00–00:00"), ("Tuesday", "08:00–00:00"), ("Wednesday", "08:00–00:00"), ("Thursday", "08:00–00:00"), ("Friday", "08:00–01:00"), ("Saturday", "08:00–01:00"), ("Sunday", "11:00–00:00")));
 
         var nocciola = await EnsurePlaceAsync(
             "Nocciola",
@@ -4900,7 +5278,7 @@ public static class SeedData
             156);
         await AddPlaceTagsIfMissingAsync(mademoiselle, "dessert", "specialty-coffee", "casual", "local-favorite", "local-food");
         await UpdatePlaceHoursAsync(mademoiselle, "Mon–Sat 08:00–00:00",
-            BuildHoursJson(("Mon", "08:00–00:00"), ("Tue", "08:00–00:00"), ("Wed", "08:00–00:00"), ("Thu", "08:00–00:00"), ("Fri", "08:00–00:00"), ("Sat", "08:00–00:00"), ("Sun", "Closed")));
+            BuildHoursJson(("Monday", "08:00–00:00"), ("Tuesday", "08:00–00:00"), ("Wednesday", "08:00–00:00"), ("Thursday", "08:00–00:00"), ("Friday", "08:00–00:00"), ("Saturday", "08:00–00:00"), ("Sunday", "Closed")));
 
         var kafemat27 = await EnsurePlaceAsync(
             "Kafemat 27",
@@ -4916,7 +5294,7 @@ public static class SeedData
             118);
         await AddPlaceTagsIfMissingAsync(kafemat27, "specialty-coffee", "casual", "local-favorite");
         await UpdatePlaceHoursAsync(kafemat27, "Mon–Thu 07:00–00:00",
-            BuildHoursJson(("Mon", "07:00–00:00"), ("Tue", "07:00–00:00"), ("Wed", "07:00–00:00"), ("Thu", "07:00–00:00"), ("Fri", "07:00–01:00"), ("Sat", "07:00–01:00"), ("Sun", "08:00–00:00")));
+            BuildHoursJson(("Monday", "07:00–00:00"), ("Tuesday", "07:00–00:00"), ("Wednesday", "07:00–00:00"), ("Thursday", "07:00–00:00"), ("Friday", "07:00–01:00"), ("Saturday", "07:00–01:00"), ("Sunday", "08:00–00:00")));
 
         var cafeteria = await EnsurePlaceAsync(
             "Cafeteria",
@@ -4932,7 +5310,7 @@ public static class SeedData
             102);
         await AddPlaceTagsIfMissingAsync(cafeteria, "specialty-coffee", "casual", "local-area");
         await UpdatePlaceHoursAsync(cafeteria, "Mon–Thu 07:30–00:00",
-            BuildHoursJson(("Mon", "07:30–00:00"), ("Tue", "07:30–00:00"), ("Wed", "07:30–00:00"), ("Thu", "07:30–00:00"), ("Fri", "07:30–01:00"), ("Sat", "07:30–01:00"), ("Sun", "07:30–00:00")));
+            BuildHoursJson(("Monday", "07:30–00:00"), ("Tuesday", "07:30–00:00"), ("Wednesday", "07:30–00:00"), ("Thursday", "07:30–00:00"), ("Friday", "07:30–01:00"), ("Saturday", "07:30–01:00"), ("Sunday", "07:30–00:00")));
 
         var bigFashion = await EnsurePlaceAsync(
             "Big Fashion Kragujevac",
@@ -4947,6 +5325,7 @@ public static class SeedData
             4.2,
             324);
         await AddPlaceTagsIfMissingAsync(bigFashion, "family-friendly", "local-area");
+        await UpdatePlaceHoursAsync(bigFashion, "09:00 - 22:00", BuildDailyHoursJson("09:00 - 22:00"));
 
         // New Kragujevac events (both at Knežev Arsenal)
         var arsenalFest = await EnsureEventAsync(
@@ -5039,7 +5418,13 @@ public static class SeedData
             return locationType;
         }
 
-        async Task<Location> EnsureLocationAsync(string name, LocationType locationType, double latitude, double longitude)
+        async Task<Location> EnsureLocationAsync(
+            string name,
+            LocationType locationType,
+            double latitude,
+            double longitude,
+            string? summary = null,
+            string? description = null)
         {
             var location = await db.Locations.FirstOrDefaultAsync(x =>
                 x.DestinationId == dubrovnik.Id &&
@@ -5047,17 +5432,33 @@ public static class SeedData
 
             if (location is not null)
             {
+                var changed = false;
+                if (summary is not null && string.IsNullOrWhiteSpace(location.Summary))
+                {
+                    location.Summary = summary;
+                    changed = true;
+                }
+                if (description is not null && string.IsNullOrWhiteSpace(location.Description))
+                {
+                    location.Description = description;
+                    changed = true;
+                }
+                if (changed) await db.SaveChangesAsync();
                 return location;
             }
 
             location = new Location
             {
                 Name = name,
+                Summary = summary,
+                Description = description ?? string.Empty,
                 DestinationId = dubrovnik.Id,
                 LocationTypeId = locationType.Id,
                 Latitude = latitude,
                 Longitude = longitude,
-                CreatedAt = now
+                Status = "Published",
+                CreatedAt = now,
+                PublishedAt = now
             };
 
             db.Locations.Add(location);
@@ -5527,19 +5928,90 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
+        async Task UpdatePlaceHoursAsync(Place place, string? openingHours, string? operatingHoursJson)
+        {
+            var changed = false;
+            if (place.OpeningHours != openingHours) { place.OpeningHours = openingHours; changed = true; }
+            var shouldBeEnabled = operatingHoursJson != null;
+            if (place.OperatingHoursJson != operatingHoursJson) { place.OperatingHoursJson = operatingHoursJson; changed = true; }
+            if (place.OperatingHoursEnabled != shouldBeEnabled) { place.OperatingHoursEnabled = shouldBeEnabled; changed = true; }
+            if (changed) await db.SaveChangesAsync();
+        }
+
+        static string BuildHoursJson(params (string days, string hours)[] schedule)
+        {
+            var entries = schedule.Select(s =>
+            {
+                var h = s.hours.Trim();
+                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
+                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
+                var norm = h.Replace("–", " - ");
+                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
+                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
+                if (parts.Length >= 2)
+                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
+                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
+            });
+            return "[" + string.Join(",", entries) + "]";
+        }
+
+        static string BuildDailyHoursJson(string hours)
+            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
+
         var neighborhoodType = await EnsureLocationTypeAsync("Neighborhood", "City neighborhood");
         var districtType = await EnsureLocationTypeAsync("District", "City district");
         var viewpointType = await EnsureLocationTypeAsync("Viewpoint Area", "Hill, viewpoint or scenic surrounding area");
         var islandType = await EnsureLocationTypeAsync("Island Area", "Island or island-connected area");
 
-        var oldTown = await EnsureLocationAsync("Old Town", neighborhoodType, 42.6413, 18.1090);
-        var ploce = await EnsureLocationAsync("Ploce", districtType, 42.6422, 18.1180);
-        var lapad = await EnsureLocationAsync("Lapad", districtType, 42.6559, 18.0712);
-        var gruz = await EnsureLocationAsync("Gruz", districtType, 42.6592, 18.0863);
-        var pile = await EnsureLocationAsync("Pile", neighborhoodType, 42.6423, 18.1051);
-        var srd = await EnsureLocationAsync("Mount Srd", viewpointType, 42.6492, 18.1112);
-        var lokrum = await EnsureLocationAsync("Lokrum", islandType, 42.6268, 18.1222);
-        var trsteno = await EnsureLocationAsync("Trsteno", districtType, 42.7158, 17.9784);
+        var oldTown = await EnsureLocationAsync("Old Town", neighborhoodType, 42.6413, 18.1090,
+            summary: "The historic walled core of Dubrovnik, encircled by medieval fortifications and open to the Adriatic.",
+            description: "Dubrovnik's Old Town is a UNESCO World Heritage Site enclosed by some of the best-preserved medieval city walls in Europe. " +
+                "The main pedestrian artery, Stradun, connects the Pile Gate to the Ploče Gate and is lined with limestone-paved streets, " +
+                "Renaissance churches, baroque fountains, and open-air cafes. " +
+                "Key landmarks include the Rector's Palace, the Franciscan Monastery with its 14th-century pharmacy, " +
+                "and a network of steep lanes leading up to the walls walkway with panoramic sea views.");
+        var ploce = await EnsureLocationAsync("Ploce", districtType, 42.6422, 18.1180,
+            summary: "The upscale residential and beach district east of the Old Town walls, home to pebble coves and sea-view terraces.",
+            description: "Ploče is the district immediately east of the Ploče Gate, the eastern entrance to Dubrovnik's Old Town. " +
+                "It offers a quieter, more residential feel than the walled city itself, with tree-lined lanes, boutique hotels, " +
+                "and direct access to Banje Beach — the closest sandy and pebble beach to the city centre. " +
+                "Several luxury hotels are located here, taking advantage of the elevated views over the Adriatic and toward Lokrum Island.");
+        var lapad = await EnsureLocationAsync("Lapad", districtType, 42.6559, 18.0712,
+            summary: "A peninsula district west of the city centre with family beaches, a resort strip, and a relaxed bay promenade.",
+            description: "Lapad is a green peninsula to the west of Dubrovnik's centre, separated from the city by the Gruž harbour. " +
+                "It is the main resort area, characterised by a long promenade running along Lapad Bay, " +
+                "a concentration of hotels and apartment complexes, and several pebble and sand beaches suited to families.");
+        var gruz = await EnsureLocationAsync("Gruz", districtType, 42.6592, 18.0863,
+            summary: "The working harbour and ferry port of Dubrovnik, with a daily market, local restaurants, and island-boat connections.",
+            description: "Gruž is Dubrovnik's main port and harbour area. " +
+                "It serves as the departure point for ferries to the Elaphiti Islands, Korčula, Split, and international lines. " +
+                "The Gruž morning market is one of the best places to buy fresh seafood, produce, and local cheese. " +
+                "Several well-regarded konobas and seafood restaurants are found near the waterfront.");
+        var pile = await EnsureLocationAsync("Pile", neighborhoodType, 42.6423, 18.1051,
+            summary: "The gateway neighbourhood outside the Old Town's main western entrance, a hub for transport, bars and coastal views.",
+            description: "Pile is the busy area immediately outside the Pile Gate — the main western entrance to the Old Town. " +
+                "It serves as the city's main transport junction, with bus stops, taxi ranks, and the beginning of the main road to the airport. " +
+                "The neighbourhood offers a mix of visitor facilities, restaurants, and a scenic coastal walk toward Fort Lovrijenac.");
+        var srd = await EnsureLocationAsync("Mount Srd", viewpointType, 42.6492, 18.1112,
+            summary: "The limestone ridge above Dubrovnik with a cable car, fort ruins, and 360-degree views of the Adriatic and old town rooftops.",
+            description: "Mount Srđ rises sharply above Dubrovnik's Old Town to about 412 metres. " +
+                "A modern cable car connects the city to the summit in under four minutes. " +
+                "At the top, Fort Imperial (a Napoleonic-era fortification) houses a museum of the 1991–1995 siege. " +
+                "The panoramic views take in the Old Town, the Elaphiti Islands, and on clear days as far as the Pelješac Peninsula.");
+        var lokrum = await EnsureLocationAsync("Lokrum", islandType, 42.6268, 18.1222,
+            summary: "A forested nature reserve island 10 minutes by boat from the Old Town harbour, with peacocks, a botanical garden and swimming coves.",
+            description: "Lokrum is a small uninhabited island just offshore from Dubrovnik, declared a nature reserve in 1976. " +
+                "Regular boat services run from the Old Town harbour throughout the day in season. " +
+                "The island has a medieval Benedictine monastery, a botanical garden, salt-lake swimming areas, and rocky coves for sea swimming. " +
+                "Peacocks roam freely among the pine and cypress trees, and the island is a popular half-day escape from the city.");
+        var trsteno = await EnsureLocationAsync("Trsteno", districtType, 42.7158, 17.9784,
+            summary: "A small coastal village 18 km northwest of Dubrovnik, known for its Renaissance arboretum — one of the oldest in Croatia.",
+            description: "Trsteno is a quiet coastal settlement on the Dubrovnik Riviera, about 18 kilometres northwest of the city. " +
+                "It is best known for the Trsteno Arboretum, a Renaissance-era garden and tree park founded in the 15th century by the Gučetić noble family. " +
+                "The arboretum features a pair of enormous plane trees estimated to be over 500 years old, ornamental fountains, and sea views. " +
+                "The location was used as a filming location for the King's Landing gardens in Game of Thrones.");
 
         await AddLocationTagsIfMissingAsync(pile, "old-town-nearby", "walkable-area");
         await AddLocationTagsIfMissingAsync(srd, "panoramic-view", "nature");
@@ -6009,6 +6481,34 @@ public static class SeedData
         await AddPlaceTagsIfMissingAsync(harborGuesthouse, "guesthouse-stay", "harbor-stay", "budget", "local-area");
         await AddPlaceTagsIfMissingAsync(familyBeachHotel, "family-stay", "beach-district", "breakfast", "family-friendly");
 
+        await UpdatePlaceHoursAsync(proto, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
+        await UpdatePlaceHoursAsync(tajMahal, "11:00 - 23:30", BuildDailyHoursJson("11:00 - 23:30"));
+        await UpdatePlaceHoursAsync(arsenal, "07:00 - 00:00", BuildDailyHoursJson("07:00 - 00:00"));
+        await UpdatePlaceHoursAsync(dvino, "16:00 - 00:00", BuildDailyHoursJson("16:00 - 00:00"));
+        await UpdatePlaceHoursAsync(peppino, "10:00 - 23:00", BuildDailyHoursJson("10:00 - 23:00"));
+        await UpdatePlaceHoursAsync(orsan, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
+        await UpdatePlaceHoursAsync(pantarul, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
+        await UpdatePlaceHoursAsync(rectorsPalace, "09:00 - 18:00", BuildDailyHoursJson("09:00 - 18:00"));
+        await UpdatePlaceHoursAsync(sponzaPalace, "09:00 - 18:00", BuildDailyHoursJson("09:00 - 18:00"));
+        await UpdatePlaceHoursAsync(franciscan, "09:00 - 18:00", BuildDailyHoursJson("09:00 - 18:00"));
+        await UpdatePlaceHoursAsync(warPhoto, "10:00 - 22:00", BuildDailyHoursJson("10:00 - 22:00"));
+        await UpdatePlaceHoursAsync(lovrijenac, "08:00 - 19:00", BuildDailyHoursJson("08:00 - 19:00"));
+        await UpdatePlaceHoursAsync(mountSrd, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(trstenoArboretum, "08:00 - 19:00", BuildDailyHoursJson("08:00 - 19:00"));
+        await UpdatePlaceHoursAsync(betina, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(copacabana, "08:00 - 22:00", BuildDailyHoursJson("08:00 - 22:00"));
+        await UpdatePlaceHoursAsync(bellevueBeach, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(cableCar, "09:00 - 21:00", BuildDailyHoursJson("09:00 - 21:00"));
+        await UpdatePlaceHoursAsync(blueCaveTour, "09:00 - 18:00", BuildDailyHoursJson("09:00 - 18:00"));
+        await UpdatePlaceHoursAsync(elaphitiTrip, "08:30 - 18:00", BuildDailyHoursJson("08:30 - 18:00"));
+        await UpdatePlaceHoursAsync(lokrumKayak, "09:00 - 17:00", BuildDailyHoursJson("09:00 - 17:00"));
+        await UpdatePlaceHoursAsync(photoWalk, "08:00 - 20:00", BuildDailyHoursJson("08:00 - 20:00"));
+        await UpdatePlaceHoursAsync(fishingCharter, "06:00 - 13:00", BuildDailyHoursJson("06:00 - 13:00"));
+        await UpdatePlaceHoursAsync(stariGrad, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(lapadSunset, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(harborGuesthouse, "Open 24h", BuildDailyHoursJson("Open 24h"));
+        await UpdatePlaceHoursAsync(familyBeachHotel, "Open 24h", BuildDailyHoursJson("Open 24h"));
+
         var imageA = "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=900&q=80";
         var imageB = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80";
         var imageC = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80";
@@ -6151,8 +6651,11 @@ public static class SeedData
 
     private static async Task EnsureExploreDemoPlaceTagsAsync(AppDbContext db, IReadOnlyDictionary<string, Tag> tagLookup)
     {
-        var placesByName = await db.Places
-            .ToDictionaryAsync(place => place.Name, StringComparer.OrdinalIgnoreCase);
+        var placesByName = (await db.Places
+                .OrderBy(place => place.Id)
+                .ToListAsync())
+            .GroupBy(place => place.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         async Task AddIfExistsAsync(string placeName, params string[] tagSlugs)
         {

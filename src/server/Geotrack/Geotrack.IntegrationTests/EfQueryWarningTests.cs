@@ -742,6 +742,11 @@ public sealed class EfQueryWarningTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public Task CreateContentManagerContributionPendingReviewNotificationAsync(
+            PlaceContribution contribution,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task CreateTerritoryRegionCreatedNotificationAsync(
             int territoryId,
             int regionId,

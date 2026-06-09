@@ -80,17 +80,45 @@ describe('EventsListService', () => {
       isRecurring: false,
       isFree: true,
       tagIds: [11],
+      cardImageFile: new File(['card'], 'card.png', { type: 'image/png' }),
+      coverImageFile: new File(['cover'], 'cover.png', { type: 'image/png' }),
     }).subscribe(response => {
       expect(response.id).toBe(15);
     });
 
     const request = http.expectOne('/api/admin/regional/events');
     expect(request.request.method).toBe('POST');
-    expect(request.request.body.internalReferenceId).toBeUndefined();
-    expect(request.request.body.regionId).toBe(7);
-    expect(request.request.body.locationId).toBe(4);
-    expect(request.request.body.tagIds).toEqual([11]);
+    expect(request.request.body instanceof FormData).toBe(true);
+    const payload = JSON.parse(request.request.body.get('payload') as string);
+    expect(payload.internalReferenceId).toBeUndefined();
+    expect(payload.regionId).toBe(7);
+    expect(payload.locationId).toBe(4);
+    expect(payload.tagIds).toEqual([11]);
+    expect(request.request.body.get('cardImage')).toBeInstanceOf(File);
+    expect(request.request.body.get('coverImage')).toBeInstanceOf(File);
     request.flush(eventDto());
+  });
+
+  it('uploads regional event images through the regional media endpoint', () => {
+    service.uploadImages(7, [
+      new File(['card'], 'card.png', { type: 'image/png' }),
+      new File(['gallery'], 'gallery.webp', { type: 'image/webp' }),
+    ]).subscribe(urls => {
+      expect(urls).toEqual([
+        '/media/uploads/regional/card.png',
+        '/media/uploads/regional/gallery.webp',
+      ]);
+    });
+
+    const request = http.expectOne('/api/admin/regional/media/images?regionId=7');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body instanceof FormData).toBe(true);
+    request.flush({
+      images: [
+        { url: '/media/uploads/regional/card.png' },
+        { url: '/media/uploads/regional/gallery.webp' },
+      ],
+    });
   });
 
   it('loads event parents, tags, and types from regional backend endpoints', () => {
@@ -129,6 +157,7 @@ describe('EventsListService', () => {
     expect(item.category).toBe('Festival');
     expect(item.locationName).toBe('Backend Location');
     expect(item.venueName).toBe('Backend Place');
+    expect(item.customVenueName).toBeNull();
     expect(item.dateRange).toContain('May');
     expect(service.findById(15)?.name).toBe('Backend Event');
   });

@@ -175,20 +175,37 @@
                 <h3 class="text-sm font-bold text-gray-800">Description</h3>
               </div>
               <div class="px-6 py-5">
-                <div class="text-sm text-gray-600 leading-relaxed"
-                     [innerHTML]="(item)['description']"></div>
+                <div class="text-sm text-gray-600 leading-relaxed whitespace-pre-line"
+                     [innerHTML]="(item)['description'] | descriptionRichHtml"></div>
+              </div>
+            </div>
+          </ng-container>
+
+          <!-- Amenities -->
+          <ng-container *ngIf="(item)['amenities']?.length">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="text-sm font-bold text-gray-800">Amenities</h3>
+              </div>
+              <div class="px-6 py-5">
+                <div class="flex flex-wrap gap-2">
+                  <span *ngFor="let amenity of (item)['amenities']"
+                        class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                    {{ amenity }}
+                  </span>
+                </div>
               </div>
             </div>
           </ng-container>
 
           <!-- Operating Hours -->
-          <ng-container *ngIf="(item)['hours']?.length">
+          <ng-container *ngIf="(item)['hours']?.length || (item)['openingHours']">
             <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
               <div class="px-6 py-4 border-b border-gray-100">
                 <h3 class="text-sm font-bold text-gray-800">Operating Hours</h3>
               </div>
               <div class="px-6 py-5">
-                <div class="flex flex-col gap-2">
+                <div *ngIf="(item)['hours']?.length; else openingHoursText" class="flex flex-col gap-2">
                   <div *ngFor="let day of (item)['hours']"
                        class="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
                     <span class="text-sm font-medium text-gray-700 w-28">{{ day.name }}</span>
@@ -196,6 +213,9 @@
                     <span *ngIf="!day.open" class="text-xs font-semibold text-red-500">Closed</span>
                   </div>
                 </div>
+                <ng-template #openingHoursText>
+                  <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ (item)['openingHours'] }}</p>
+                </ng-template>
               </div>
             </div>
           </ng-container>
@@ -210,7 +230,7 @@
               </div>
               <div class="px-6 py-5">
                 <div class="grid grid-cols-3 gap-3">
-                  <div *ngFor="let img of (item)['galleryImages']; let i = index"
+                  <div *ngFor="let img of galleryPreview((item)['galleryImages'] || []); let i = index"
                        class="aspect-video rounded-lg overflow-hidden bg-gray-100 cursor-pointer group relative"
                        (click)="openLightbox((item)['galleryImages'] || [], i)">
                     <img [src]="img.url" [alt]="img.name" class="w-full h-full object-cover transition-transform group-hover:scale-105" />
@@ -219,6 +239,11 @@
                         <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
                       </svg>
                     </div>
+                    <span
+                      *ngIf="i === galleryLimit - 1 && galleryOverflow((item)['galleryImages'] || []) > 0"
+                      class="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-bold text-white">
+                      +{{ galleryOverflow((item)['galleryImages'] || []) }}
+                    </span>
                   </div>
                 </div>
               </div>

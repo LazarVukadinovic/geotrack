@@ -4,6 +4,7 @@ using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Contributions;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -385,8 +386,11 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             ThumbnailImageUrl = baseItem.ThumbnailImageUrl,
             PreviewText = baseItem.PreviewText,
             DetailRoute = baseItem.DetailRoute,
-            Description = contribution.Description,
+            Description = DisplayTextSafety.CleanOptionalRichMultiline(contribution.Description) ?? string.Empty,
             Address = contribution.Address,
+            OpeningHours = contribution.OpeningHours,
+            OperatingHoursEnabled = contribution.OperatingHoursEnabled,
+            OperatingHours = DeserializeOperatingHours(contribution.OperatingHoursJson),
             LocationName = contribution.Location?.Name,
             DestinationName = contribution.Location?.Destination?.Name,
             Country = contribution.Location?.Destination?.Region?.Territory?.Name,
@@ -413,6 +417,7 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
                     AltText = image.AltText,
                     Caption = image.Caption,
                     IsMain = image.IsMain,
+                    ImageRole = image.ImageRole,
                     SortOrder = image.SortOrder,
                     ImagePosition = image.ImagePosition,
                     ImageSize = image.ImageSize
@@ -739,6 +744,23 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         catch (JsonException)
         {
             return new List<ContributionBookingPartnerDto>();
+        }
+    }
+
+    private static List<ContributionOperatingHourDto> DeserializeOperatingHours(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return new List<ContributionOperatingHourDto>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<ContributionOperatingHourDto>>(json,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                ?? new List<ContributionOperatingHourDto>();
+        }
+        catch (JsonException)
+        {
+            return new List<ContributionOperatingHourDto>();
         }
     }
 

@@ -147,6 +147,16 @@
                     Delete
                   </button>
                 }
+                @if (item.status === 'Approved' && item.publishedPlaceId != null) {
+                  <button type="button" (click)="viewPlace($event, item)"
+                    class="my-contributions-card__action my-contributions-card__action--view flex-1 flex items-center justify-center gap-1.5 py-2.5 border border-slate-200 rounded-xl text-slate-500 text-sm font-semibold active:bg-slate-50 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                    </svg>
+                    View
+                  </button>
+                }
               </div>
             </div>
           </div>
@@ -206,7 +216,7 @@
       aria-describedby="my-contributions-ownership-description"
     >
       <header class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-slate-100">
-        <h2 id="my-contributions-ownership-title" class="text-base font-bold text-slate-800">Request Ownership</h2>
+        <h2 id="my-contributions-ownership-title" class="text-base font-bold text-slate-800">{{ ownershipClaimIsEdit() ? 'Update Document' : 'Request Ownership' }}</h2>
         <button type="button" (click)="closeOwnershipModal()" [disabled]="ownershipClaimSubmitting()"
           aria-label="Close ownership request"
           class="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 transition-colors">
@@ -221,8 +231,15 @@
           Upload a PDF document proving you own or manage <strong class="text-slate-700">{{ item.name }}</strong>. A regional manager will review your request.
         </p>
 
+        @if (ownershipClaimDetailLoading()) {
+          <div class="flex items-center justify-center py-4 gap-2">
+            <div class="w-5 h-5 border-2 border-[#e8722a] border-t-transparent rounded-full animate-spin"></div>
+            <span class="text-sm text-slate-400">Loading...</span>
+          </div>
+        }
+
         <!-- File picker -->
-        @if (ownershipProofFile()) {
+        @if (!ownershipClaimDetailLoading() && ownershipProofFile()) {
           <div class="bg-white border border-[#e8722a] rounded-2xl overflow-hidden">
             <div class="flex items-center gap-3 px-4 py-3.5">
               <svg class="w-4 h-4 text-[#e8722a] flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -248,7 +265,7 @@
               <span class="text-xs font-semibold text-slate-600">Change document</span>
             </label>
           </div>
-        } @else {
+        } @else if (!ownershipClaimDetailLoading()) {
           <input #ownershipProofInput id="my-contributions-ownership-proof" type="file" accept="application/pdf" class="hidden" (change)="onOwnershipProofSelected($event)"/>
           <label
             class="flex items-center gap-3 px-4 py-3.5 bg-white border border-slate-200 rounded-2xl cursor-pointer transition-colors active:bg-slate-50"
@@ -277,7 +294,7 @@
             class="flex-1 py-3.5 border border-slate-200 rounded-xl text-slate-600 text-sm font-bold disabled:opacity-50 transition-colors active:bg-slate-50">
             Cancel
           </button>
-          <button type="button" (click)="submitOwnershipClaim()" [disabled]="ownershipClaimSubmitting() || !ownershipProofFile()"
+          <button type="button" (click)="submitOwnershipClaim()" [disabled]="ownershipClaimSubmitting() || ownershipClaimDetailLoading() || !ownershipProofFile()"
             class="flex-1 py-3.5 bg-[#e8722a] rounded-xl text-white text-sm font-bold disabled:opacity-50 transition-all active:scale-[0.98]">
             {{ ownershipClaimSubmitting() ? 'Submitting...' : 'Submit Request' }}
           </button>

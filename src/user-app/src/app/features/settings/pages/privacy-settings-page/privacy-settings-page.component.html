@@ -48,14 +48,6 @@
       <div class="flex flex-col gap-3">
         <button
           type="button"
-          (click)="openInterests()"
-          class="rounded-2xl border border-slate-200 px-4 py-3 text-left transition-colors active:bg-slate-50">
-          <span class="block text-sm font-semibold text-slate-800">Review my interests</span>
-          <span class="mt-1 block text-sm text-slate-500">Adjust the categories that shape GeoTrack recommendations.</span>
-        </button>
-
-        <button
-          type="button"
           (click)="openLegal()"
           class="rounded-2xl border border-slate-200 px-4 py-3 text-left transition-colors active:bg-slate-50">
           <span class="block text-sm font-semibold text-slate-800">Read the privacy policy</span>
@@ -205,23 +197,6 @@
       </div>
 
       <div class="privacy-page__quick-actions">
-        <button type="button" class="privacy-page__action-card" (click)="openInterests()">
-          <span class="privacy-page__action-icon" aria-hidden="true">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20.8 4.6a5.2 5.2 0 00-7.4 0L12 6l-1.4-1.4a5.2 5.2 0 10-7.4 7.4L12 20.8l8.8-8.8a5.2 5.2 0 000-7.4z" />
-            </svg>
-          </span>
-          <span class="privacy-page__action-copy">
-            <span class="privacy-page__action-title">Review my interests</span>
-            <span class="privacy-page__action-description">Adjust the categories that shape GeoTrack recommendations.</span>
-          </span>
-          <span class="privacy-page__chevron" aria-hidden="true">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.1" d="M9 5l7 7-7 7" />
-            </svg>
-          </span>
-        </button>
-
         <button type="button" class="privacy-page__action-card" (click)="openLegal()">
           <span class="privacy-page__action-icon" aria-hidden="true">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">

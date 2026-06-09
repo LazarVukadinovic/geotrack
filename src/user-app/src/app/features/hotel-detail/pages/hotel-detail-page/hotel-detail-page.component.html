@@ -187,69 +187,17 @@
           </div>
         }
 
-
-        <!-- ── Booking partners ──────────────────────────────────────────── -->
-        @if (h.images.length > 1) {
-          <section class="hd__gallery" aria-label="Stay photos">
-            <div class="hd__gallery-track" role="list">
-              @for (image of h.images; track image.id) {
-                <button
-                  type="button"
-                  class="hd__gallery-thumb"
-                  [class.hd__gallery-thumb--active]="isGalleryImageActive(image.url)"
-                  [attr.aria-label]="'Show photo ' + ($index + 1) + ' of ' + h.images.length"
-                  (click)="selectGalleryImage(image.url)"
-                >
-                  <img
-                    appImageFallback
-                    class="hd__gallery-img"
-                    [src]="image.url"
-                    [alt]="image.altText || h.title"
-                    width="120"
-                    height="84"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </button>
-              }
-            </div>
-          </section>
-        }
-
-        <div class="hd__detail-grid">
-          <div class="hd__detail-side">
         @if (hasBookingPartners()) {
           <div class="hd__divider hd__divider--booking"></div>
 
           <section class="hd__section hd__section--booking">
             <div class="hd__booking">
-              <p class="hd__booking-heading">Bookings completed on partner sites</p>
+              @if (hasBookingPartners()) {
+                <p class="hd__booking-heading">Bookings completed on partner sites</p>
 
-              @for (partner of primaryBookingPartners(); track partner.id) {
-                <a
-                  class="hd__partner-btn hd__partner-btn--{{ partner.variant }}"
-                  [href]="partner.url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  (click)="onPartnerClick(partner)"
-                >
-                  <span>{{ partner.name }}</span>
-                  <svg class="hd__partner-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
-                  </svg>
-                </a>
-              }
-
-              @if (secondaryBookingPartners().length) {
-                @if (primaryBookingPartners().length) {
-                  <p class="hd__booking-also">Also available on</p>
-                }
-
-                @for (partner of secondaryBookingPartners(); track partner.id) {
+                @for (partner of primaryBookingPartners(); track partner.id) {
                   <a
-                    class="hd__partner-btn hd__partner-btn--muted"
+                    class="hd__partner-btn hd__partner-btn--{{ partner.variant }}"
                     [href]="partner.url"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -263,11 +211,38 @@
                     </svg>
                   </a>
                 }
+
+                @if (secondaryBookingPartners().length) {
+                  @if (primaryBookingPartners().length) {
+                    <p class="hd__booking-also">Also available on</p>
+                  }
+
+                  @for (partner of secondaryBookingPartners(); track partner.id) {
+                    <a
+                      class="hd__partner-btn hd__partner-btn--muted"
+                      [href]="partner.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      (click)="onPartnerClick(partner)"
+                    >
+                      <span>{{ partner.name }}</span>
+                      <svg class="hd__partner-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>
+                      </svg>
+                    </a>
+                  }
+                }
               }
+
             </div>
           </section>
         }
 
+
+        <div class="hd__detail-grid">
+          <div class="hd__detail-side">
             @if (h.contactEmail || h.phoneNumber) {
               <div class="hd__divider hd__divider--contact"></div>
 
@@ -403,6 +378,19 @@
         <section class="hd__section hd__section--about">
           <h2 class="hd__section-title">About this property</h2>
           <p class="hd__about">{{ h.about }}</p>
+          @if (allGalleryImages().length > 0) {
+            <button type="button" class="hd__view-photos" (click)="openGallery(0)">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+                <circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/>
+                <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8.5 5l1.2-1.5h4.6L15.5 5"/>
+              </svg>
+              View gallery
+              <svg class="hd__view-photos-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 18l6-6-6-6"/>
+              </svg>
+            </button>
+          }
         </section>
 
         <!-- ── Amenities ──────────────────────────────────────────────────── -->
@@ -413,8 +401,8 @@
           <div class="hd__amenities" role="list" aria-label="Amenities">
             @for (amenity of h.amenities; track amenity.id) {
               <div class="hd__amenity" role="listitem">
-                <div class="hd__amenity-icon-wrap" aria-hidden="true">
-                  <svg class="hd__amenity-icon" viewBox="0 0 24 24" fill="none">
+                <span class="hd__amenity-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
                     <path
                       stroke="currentColor"
                       stroke-width="1.8"
@@ -423,8 +411,8 @@
                       [attr.d]="amenityIconPath(amenity.icon)"
                     />
                   </svg>
-                </div>
-                <span class="hd__amenity-label">{{ amenity.label }}</span>
+                </span>
+                <span>{{ amenity.label }}</span>
               </div>
             }
           </div>
@@ -485,6 +473,15 @@
 
       </div><!-- /.hd__card -->
     </div><!-- /.hd__scroll -->
+
+    @if (galleryOpen()) {
+      <app-photo-gallery
+        [images]="allGalleryImages()"
+        [title]="h.title"
+        [startIndex]="galleryStartIndex()"
+        (closed)="closeGallery()"
+      />
+    }
 
     @if (ownershipClaimOpen()) {
       <div class="hd__claim-modal" role="dialog" aria-modal="true" aria-label="Request ownership">

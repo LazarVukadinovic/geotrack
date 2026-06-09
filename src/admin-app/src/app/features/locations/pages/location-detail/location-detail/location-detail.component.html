@@ -111,8 +111,8 @@
                 <h3 class="text-sm font-bold text-gray-800">Description</h3>
               </div>
               <div class="px-6 py-5">
-                <div class="text-sm text-gray-600 leading-relaxed"
-                     [innerHTML]="(item)['description']"></div>
+                <div class="text-sm text-gray-600 leading-relaxed whitespace-pre-line"
+                     [innerHTML]="(item)['description'] | descriptionRichHtml"></div>
               </div>
             </div>
           </ng-container>
@@ -127,7 +127,7 @@
               </div>
               <div class="px-6 py-5">
                 <div class="grid grid-cols-3 gap-3">
-                  <div *ngFor="let img of (item)['galleryImages']; let i = index"
+                  <div *ngFor="let img of galleryPreview((item)['galleryImages'] || []); let i = index"
                        class="aspect-video rounded-lg overflow-hidden bg-gray-100 cursor-pointer group relative"
                        (click)="openLightbox((item)['galleryImages'] || [], i)">
                     <img [src]="img.url" [alt]="img.name" class="w-full h-full object-cover transition-transform group-hover:scale-105" />
@@ -136,6 +136,11 @@
                         <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
                       </svg>
                     </div>
+                    <span
+                      *ngIf="i === galleryLimit - 1 && galleryOverflow((item)['galleryImages'] || []) > 0"
+                      class="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-bold text-white">
+                      +{{ galleryOverflow((item)['galleryImages'] || []) }}
+                    </span>
                   </div>
                 </div>
               </div>

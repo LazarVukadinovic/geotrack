@@ -47,6 +47,14 @@
   animation: map-bottom-card-enter 160ms ease-out both;
 }
 
+.map-page__stack-picker {
+  left: var(--map-card-gutter);
+  right: var(--map-card-gutter);
+  bottom: var(--map-bottom-gap);
+  z-index: var(--map-layer-preview);
+  animation: map-bottom-card-enter 160ms ease-out both;
+}
+
 .map-page__locate-button {
   bottom: var(--map-bottom-gap);
   z-index: var(--map-layer-floating-control);
@@ -304,7 +312,8 @@
   }
 
   .map-page__status-card,
-  .map-page__preview-card {
+  .map-page__preview-card,
+  .map-page__stack-picker {
     left: var(--space-6, 1.5rem);
     right: auto;
     width: min(390px, calc(100% - 3rem));

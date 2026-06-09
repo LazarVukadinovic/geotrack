@@ -11,6 +11,7 @@ public class Region
 {
     public int Id { get; set; } // PRIMARY KEY
     public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public string? BoundaryShapeType { get; set; }
     public string? BoundaryShapeGroup { get; set; }
     public string? BoundaryShapeId { get; set; }

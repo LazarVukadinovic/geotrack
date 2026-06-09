@@ -20,6 +20,7 @@ public class PlaceService : IPlaceService
 {
     private const int ListingMaxTake = 50;
     private const string PublishedStatus = "Published";
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly AppDbContext _db;
     private readonly IFavoriteService _favoriteService;
@@ -260,9 +261,11 @@ public class PlaceService : IPlaceService
             Distance = detailDistance,
             OpenStatus = DeriveOpenStatus(place.OpeningHours),
             OpeningHours = DisplayTextSafety.CleanOptional(place.OpeningHours),
+            OperatingHoursEnabled = place.OperatingHoursEnabled,
+            OperatingHours = ParseStructuredOperatingHours(place.OperatingHoursJson),
             OpeningHoursSchedule = ParseOpeningHoursSchedule(place.OperatingHoursJson),
             Website = DisplayTextSafety.CleanOptional(place.Website),
-            About = DisplayTextSafety.CleanOptional(place.Description),
+            About = DisplayTextSafety.CleanOptionalRichMultiline(place.Description),
             Reviews = previewReviews
                 .Select(r => new ReviewDto
                 {
@@ -420,6 +423,7 @@ public class PlaceService : IPlaceService
                 Icon = sa.StayAmenity.IconKey ?? string.Empty
             }) ?? Enumerable.Empty<AmenityDto>();
         var images = ToImageDtos(place.Images);
+        var bookingPartners = BuildHotelBookingPartners(place);
 
         return new HotelDetailDto
         {
@@ -439,18 +443,11 @@ public class PlaceService : IPlaceService
             ReviewCount = FormatReviewCountLabel(reviewCount),
             Distance = detailDistance,
             PricePerNight = place.Stay?.PricePerNight,
-            About = DisplayTextSafety.CleanOptional(place.Description),
+            About = DisplayTextSafety.CleanOptionalRichMultiline(place.Description),
+            Website = null,
             ContactEmail = place.ContactEmail,
             PhoneNumber = place.Number,
-            BookingPartners = place.PlaceBookingPartners
-                .Select(pb => new BookingPartnerDto
-                {
-                    Id = pb.BookingPartner.Id,
-                    Name = pb.BookingPartner.Name,
-                    Variant = pb.BookingPartner.Variant,
-                    Url = pb.Url
-                })
-                .ToList(),
+            BookingPartners = bookingPartners,
             Amenities = stayAmenities
                 .GroupBy(a => new { a.Label, a.Icon })
                 .Select(g => g.First())
@@ -1109,18 +1106,218 @@ public class PlaceService : IPlaceService
     private static string? DeriveOpenStatus(string? hours) =>
         string.IsNullOrWhiteSpace(hours) ? null : "Open";
 
-    private static List<OpeningHoursDayDto>? ParseOpeningHoursSchedule(string? json)
+    private static List<PlaceOperatingHourDto>? ParseStructuredOperatingHours(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
         try
         {
-            return JsonSerializer.Deserialize<List<OpeningHoursDayDto>>(json,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var result = new List<PlaceOperatingHourDto>();
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                var dayOfWeek = ReadJsonString(item, "dayOfWeek");
+                if (string.IsNullOrWhiteSpace(dayOfWeek))
+                    continue;
+
+                var isOpen = ReadJsonBoolean(item, "isOpen");
+                result.Add(new PlaceOperatingHourDto
+                {
+                    DayOfWeek = dayOfWeek,
+                    IsOpen = isOpen,
+                    OpenTime = isOpen ? ReadJsonString(item, "openTime") : null,
+                    CloseTime = isOpen ? ReadJsonString(item, "closeTime") : null,
+                });
+            }
+
+            return result.Count == 0 ? null : result;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static List<OpeningHoursDayDto>? ParseOpeningHoursSchedule(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var schedule = new List<OpeningHoursDayDto>();
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                var legacyDay = ReadJsonString(item, "day");
+                var legacyHours = ReadJsonString(item, "hours");
+                if (!string.IsNullOrWhiteSpace(legacyDay))
+                {
+                    schedule.Add(new OpeningHoursDayDto
+                    {
+                        Day = NormalizeOpeningHoursDayLabel(legacyDay),
+                        Hours = NormalizeOpeningHoursText(legacyHours)
+                    });
+                    continue;
+                }
+
+                var dayOfWeek = ReadJsonString(item, "dayOfWeek");
+                if (string.IsNullOrWhiteSpace(dayOfWeek))
+                    continue;
+
+                var isOpen = ReadJsonBoolean(item, "isOpen");
+                var openTime = ReadJsonString(item, "openTime");
+                var closeTime = ReadJsonString(item, "closeTime");
+                schedule.Add(new OpeningHoursDayDto
+                {
+                    Day = NormalizeOpeningHoursDayLabel(dayOfWeek),
+                    Hours = isOpen && !string.IsNullOrWhiteSpace(openTime) && !string.IsNullOrWhiteSpace(closeTime)
+                        ? $"{openTime.Trim()} - {closeTime.Trim()}"
+                        : "Closed"
+                });
+            }
+
+            return schedule.Count == 0 ? null : schedule;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadJsonString(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+    }
+
+    private static bool ReadJsonBoolean(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.True;
+    }
+
+    private static string NormalizeOpeningHoursDayLabel(string value)
+    {
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "mon" or "monday" => "Monday",
+            "tue" or "tuesday" => "Tuesday",
+            "wed" or "wednesday" => "Wednesday",
+            "thu" or "thursday" => "Thursday",
+            "fri" or "friday" => "Friday",
+            "sat" or "saturday" => "Saturday",
+            "sun" or "sunday" => "Sunday",
+            var other => other
+        };
+    }
+
+    private static string NormalizeOpeningHoursText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Closed";
+
+        return value.Trim().Replace('–', '-').Replace(" - ", " - ").Replace("-", " - ");
+    }
+
+    private static OwnerUpdateOperatingHoursResult NormalizeOwnerUpdateOperatingHours(
+        bool enabled,
+        IReadOnlyCollection<OwnerUpdateOperatingHourDto>? hours)
+    {
+        if (!enabled)
+            return new OwnerUpdateOperatingHoursResult(false, null, []);
+
+        var normalizedHours = new List<OwnerUpdateOperatingHourDto>();
+        var seenDays = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var input in hours ?? Array.Empty<OwnerUpdateOperatingHourDto>())
+        {
+            var day = NormalizeOwnerUpdateDayOfWeek(input.DayOfWeek);
+            if (!seenDays.Add(day))
+                throw new InvalidOperationException("Operating hours contain duplicate days.");
+
+            if (!input.IsOpen)
+            {
+                normalizedHours.Add(new OwnerUpdateOperatingHourDto
+                {
+                    DayOfWeek = day,
+                    IsOpen = false
+                });
+                continue;
+            }
+
+            var openTime = NormalizeOwnerUpdateClockTime(input.OpenTime, "Opening time is invalid.");
+            var closeTime = NormalizeOwnerUpdateClockTime(input.CloseTime, "Closing time is invalid.");
+            if (openTime == closeTime)
+                throw new InvalidOperationException("Opening time and closing time cannot be the same.");
+
+            normalizedHours.Add(new OwnerUpdateOperatingHourDto
+            {
+                DayOfWeek = day,
+                IsOpen = true,
+                OpenTime = openTime,
+                CloseTime = closeTime
+            });
+        }
+
+        if (normalizedHours.Count == 0)
+            throw new InvalidOperationException("Operating hours are required when enabled.");
+
+        return new OwnerUpdateOperatingHoursResult(
+            true,
+            JsonSerializer.Serialize(normalizedHours, JsonOptions),
+            normalizedHours);
+    }
+
+    private static List<OwnerUpdateOperatingHourDto> DeserializeOwnerUpdateOperatingHours(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<OwnerUpdateOperatingHourDto>>(json, JsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static string NormalizeOwnerUpdateDayOfWeek(string? dayOfWeek)
+    {
+        var normalized = (dayOfWeek ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "monday" => "Monday",
+            "tuesday" => "Tuesday",
+            "wednesday" => "Wednesday",
+            "thursday" => "Thursday",
+            "friday" => "Friday",
+            "saturday" => "Saturday",
+            "sunday" => "Sunday",
+            _ => throw new InvalidOperationException("Operating hours day is invalid.")
+        };
+    }
+
+    private static string NormalizeOwnerUpdateClockTime(string? value, string errorMessage)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        if (!TimeSpan.TryParseExact(normalized, "hh\\:mm", null, out _))
+            throw new InvalidOperationException(errorMessage);
+
+        return normalized;
+    }
+
+    private static string? BuildOwnerUpdateOpeningHoursSummary(IReadOnlyCollection<OwnerUpdateOperatingHourDto> hours)
+    {
+        var firstOpen = hours.FirstOrDefault(hour => hour.IsOpen);
+        return firstOpen is null
+            ? "Closed"
+            : $"{firstOpen.DayOfWeek} {firstOpen.OpenTime} - {firstOpen.CloseTime}";
     }
 
     private static string? TrimDescription(string? description, int maxLength)
@@ -1188,10 +1385,17 @@ public class PlaceService : IPlaceService
                 .ThenInclude(l => l.Destination)
             .Include(p => p.Images)
             .Include(p => p.Stay)
+                .ThenInclude(stay => stay!.StayAmenities)
+                    .ThenInclude(stayAmenity => stayAmenity.StayAmenity)
             .Include(p => p.PlaceTags)
                 .ThenInclude(pt => pt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
+            .Include(p => p.PlaceAmenities)
+                .ThenInclude(placeAmenity => placeAmenity.Amenity)
+            .Include(p => p.PlaceBookingPartners)
+                .ThenInclude(placeBookingPartner => placeBookingPartner.BookingPartner)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(p =>
                 p.Id == placeId &&
                 p.Status == PublishedStatus &&
@@ -1214,9 +1418,24 @@ public class PlaceService : IPlaceService
             changedFields.Add(nameof(request.Description));
         }
 
-        if (request.OpeningHours != null)
+        if (request.OperatingHoursEnabled.HasValue || request.OperatingHours is not null)
+        {
+            var operatingHours = NormalizeOwnerUpdateOperatingHours(
+                request.OperatingHoursEnabled ?? place.OperatingHoursEnabled,
+                request.OperatingHours ?? DeserializeOwnerUpdateOperatingHours(place.OperatingHoursJson));
+            place.OperatingHoursEnabled = operatingHours.Enabled;
+            place.OperatingHoursJson = operatingHours.Json;
+            place.OpeningHours = operatingHours.Enabled ? BuildOwnerUpdateOpeningHoursSummary(operatingHours.Hours) : null;
+            if (request.OperatingHoursEnabled.HasValue)
+                changedFields.Add(nameof(request.OperatingHoursEnabled));
+            if (request.OperatingHours is not null)
+                changedFields.Add(nameof(request.OperatingHours));
+        }
+        else if (request.OpeningHours != null)
         {
             place.OpeningHours = NormalizeOwnerUpdateOptional(request.OpeningHours, 1000, "Opening hours are too long.");
+            place.OperatingHoursEnabled = false;
+            place.OperatingHoursJson = null;
             changedFields.Add(nameof(request.OpeningHours));
         }
 
@@ -1274,6 +1493,22 @@ public class PlaceService : IPlaceService
             changedFields.Add(nameof(request.AccessibilityNotes));
         }
 
+        if (request.PlaceTypeId.HasValue && request.PlaceTypeId.Value > 0)
+        {
+            var placeTypeExists = await _db.PlaceTypes.AnyAsync(pt => pt.Id == request.PlaceTypeId.Value);
+            if (!placeTypeExists)
+                throw new InvalidOperationException("Place type is invalid.");
+
+            place.PlaceTypeId = request.PlaceTypeId.Value;
+
+            var linkedContribution = await _db.PlaceContributions
+                .Where(c => c.PlaceId == place.Id && c.Status == PlaceContributionStatus.Approved)
+                .FirstOrDefaultAsync();
+
+            if (linkedContribution != null)
+                linkedContribution.PlaceTypeId = request.PlaceTypeId.Value;
+        }
+
         if (request.Tags is not null)
         {
             await SyncOwnerUpdateTagsAsync(place.Id, request.Tags, now);
@@ -1294,6 +1529,43 @@ public class PlaceService : IPlaceService
         {
             await SyncOwnerUpdateBookingPartnersAsync(place.Id, request.BookingPartners);
             changedFields.Add(nameof(request.BookingPartners));
+        }
+
+        if (request.Images is { Count: > 0 })
+        {
+            var existingImages = await _db.EntityImages
+                .Where(img => img.PlaceId == place.Id)
+                .ToListAsync();
+
+            _db.EntityImages.RemoveRange(existingImages);
+
+            var mainSeen = false;
+            foreach (var img in request.Images.OrderBy(i => i.SortOrder))
+            {
+                if (string.IsNullOrWhiteSpace(img.Url)) continue;
+
+                var role = EntityImageRole.Normalize(img.ImageRole);
+                var isMain = !mainSeen && role == EntityImageRole.Cover;
+                if (isMain) mainSeen = true;
+
+                _db.EntityImages.Add(new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Place,
+                    PlaceId = place.Id,
+                    Url = img.Url,
+                    AltText = string.Empty,
+                    Caption = string.Empty,
+                    IsMain = isMain,
+                    ImageRole = role,
+                    SortOrder = img.SortOrder,
+                    ImagePosition = img.ImagePosition ?? "50% 50%",
+                    ImageSize = img.ImageSize ?? "cover",
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+            }
+
+            changedFields.Add(nameof(request.Images));
         }
 
         place.UpdatedAt = now;
@@ -1319,29 +1591,66 @@ public class PlaceService : IPlaceService
 
         var reviewStats = await GetPlaceReviewStatsAsync(placeId);
         var previewReviews = await GetPlaceReviewPreviewAsync(placeId);
-        var images = ToImageDtos(place.Images);
+        var refreshedPlace = await _db.Places
+            .AsNoTracking()
+            .Include(p => p.PlaceType)
+            .Include(p => p.Location)
+                .ThenInclude(l => l.Destination)
+            .Include(p => p.Images)
+            .Include(p => p.Stay)
+                .ThenInclude(stay => stay!.StayAmenities)
+                    .ThenInclude(stayAmenity => stayAmenity.StayAmenity)
+            .Include(p => p.PlaceTags)
+                .ThenInclude(pt => pt.Tag)
+            .Include(p => p.PlaceAmenities)
+                .ThenInclude(placeAmenity => placeAmenity.Amenity)
+            .Include(p => p.PlaceBookingPartners)
+                .ThenInclude(placeBookingPartner => placeBookingPartner.BookingPartner)
+            .AsSplitQuery()
+            .SingleAsync(p => p.Id == placeId);
+
+        var images = ToImageDtos(refreshedPlace.Images);
+        var ownerUpdateAmenities = refreshedPlace.Stay is not null
+            ? refreshedPlace.Stay.StayAmenities
+                .Select(stayAmenity => new AmenityDto
+                {
+                    Id = stayAmenity.StayAmenityId,
+                    Label = DisplayTextSafety.CleanRequired(stayAmenity.StayAmenity.Name, "Amenity"),
+                    Icon = DisplayTextSafety.CleanOptional(stayAmenity.StayAmenity.IconKey) ?? string.Empty
+                })
+                .ToList()
+            : refreshedPlace.PlaceAmenities
+                .Select(placeAmenity => new AmenityDto
+                {
+                    Id = placeAmenity.AmenityId,
+                    Label = DisplayTextSafety.CleanRequired(placeAmenity.Amenity.Name, "Amenity"),
+                    Icon = DisplayTextSafety.CleanOptional(placeAmenity.Amenity.Icon) ?? string.Empty
+                })
+                .ToList();
 
         return new PlaceDetailDto
         {
-            Id = place.Id,
-            Title = DisplayTextSafety.CleanRequired(place.Name, "Place"),
-            Location = DisplayTextSafety.CleanOptional(place.Location?.Name),
-            LocationId = place.LocationId,
-            LocationName = DisplayTextSafety.CleanOptional(place.Location?.Name),
-            Latitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Latitude : null,
-            Longitude = HasUsableCoordinates(place.Latitude, place.Longitude) ? place.Longitude : null,
-            HeroImage = GetCoverImageUrl(place.Images) ?? images.FirstOrDefault()?.Url,
+            Id = refreshedPlace.Id,
+            Title = DisplayTextSafety.CleanRequired(refreshedPlace.Name, "Place"),
+            Location = DisplayTextSafety.CleanOptional(refreshedPlace.Location?.Name),
+            LocationId = refreshedPlace.LocationId,
+            LocationName = DisplayTextSafety.CleanOptional(refreshedPlace.Location?.Name),
+            Latitude = HasUsableCoordinates(refreshedPlace.Latitude, refreshedPlace.Longitude) ? refreshedPlace.Latitude : null,
+            Longitude = HasUsableCoordinates(refreshedPlace.Latitude, refreshedPlace.Longitude) ? refreshedPlace.Longitude : null,
+            HeroImage = GetCoverImageUrl(refreshedPlace.Images) ?? images.FirstOrDefault()?.Url,
             Images = images,
-            Tags = DisplayTextSafety.CleanLabels(place.PlaceTags.Select(pt => pt.Tag.Name))
+            Tags = DisplayTextSafety.CleanLabels(refreshedPlace.PlaceTags.Select(pt => pt.Tag.Name))
                 .Select(label => new TagLabelDto { Label = label })
                 .ToList(),
             Rating = reviewStats.AverageRating,
             ReviewCount = FormatReviewCountLabel(reviewStats.Count),
-            OpenStatus = DeriveOpenStatus(place.OpeningHours),
-            OpeningHours = DisplayTextSafety.CleanOptional(place.OpeningHours),
-            OpeningHoursSchedule = ParseOpeningHoursSchedule(place.OperatingHoursJson),
-            Website = DisplayTextSafety.CleanOptional(place.Website),
-            About = DisplayTextSafety.CleanOptional(place.Description),
+            OpenStatus = DeriveOpenStatus(refreshedPlace.OpeningHours),
+            OpeningHours = DisplayTextSafety.CleanOptional(refreshedPlace.OpeningHours),
+            OperatingHoursEnabled = refreshedPlace.OperatingHoursEnabled,
+            OperatingHours = ParseStructuredOperatingHours(refreshedPlace.OperatingHoursJson),
+            OpeningHoursSchedule = ParseOpeningHoursSchedule(refreshedPlace.OperatingHoursJson),
+            Website = DisplayTextSafety.CleanOptional(refreshedPlace.Website),
+            About = DisplayTextSafety.CleanOptionalRichMultiline(refreshedPlace.Description),
             Reviews = previewReviews
                 .Select(r => new ReviewDto
                 {
@@ -1360,27 +1669,20 @@ public class PlaceService : IPlaceService
             RelatedEvents = new List<PlaceRelatedEventDto>(),
             Similar = new List<SimilarPlaceDto>(),
             IsSaved = false,
-            IsOwnable = place.PlaceType?.IsOwnable ?? false,
+            IsOwnable = refreshedPlace.PlaceType?.IsOwnable ?? false,
             IsOwnedByCurrentUser = true,
             HasPendingOwnershipClaim = false,
-            ContentType = "place",
-            Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant(),
-            ContactEmail = DisplayTextSafety.CleanOptional(place.ContactEmail),
-            PhoneNumber = DisplayTextSafety.CleanOptional(place.Number),
-            AdmissionPriceRange = DisplayTextSafety.CleanOptional(place.AdmissionPriceRange),
-            BookingExternalLink = DisplayTextSafety.CleanOptional(place.BookingExternalLink),
-            Amenities = place.PlaceAmenities
-                .Select(placeAmenity => new AmenityDto
-                {
-                    Id = placeAmenity.AmenityId,
-                    Label = DisplayTextSafety.CleanRequired(placeAmenity.Amenity.Name, "Amenity"),
-                    Icon = DisplayTextSafety.CleanOptional(placeAmenity.Amenity.Icon) ?? string.Empty
-                })
-                .ToList(),
-            BestTimeToVisit = DisplayTextSafety.CleanOptional(place.BestTimeToVisit),
-            VisitorTips = DisplayTextSafety.CleanOptional(place.VisitorTips),
-            AccessNotes = DisplayTextSafety.CleanOptional(place.AccessNotes),
-            AccessibilityNotes = DisplayTextSafety.CleanOptional(place.AccessibilityNotes)
+            ContentType = refreshedPlace.Stay is not null ? "hotel" : "place",
+            Category = DisplayTextSafety.CleanOptional(refreshedPlace.PlaceType?.Name)?.ToLowerInvariant(),
+            ContactEmail = DisplayTextSafety.CleanOptional(refreshedPlace.ContactEmail),
+            PhoneNumber = DisplayTextSafety.CleanOptional(refreshedPlace.Number),
+            AdmissionPriceRange = DisplayTextSafety.CleanOptional(refreshedPlace.AdmissionPriceRange),
+            BookingExternalLink = DisplayTextSafety.CleanOptional(refreshedPlace.BookingExternalLink),
+            Amenities = ownerUpdateAmenities,
+            BestTimeToVisit = DisplayTextSafety.CleanOptional(refreshedPlace.BestTimeToVisit),
+            VisitorTips = DisplayTextSafety.CleanOptional(refreshedPlace.VisitorTips),
+            AccessNotes = DisplayTextSafety.CleanOptional(refreshedPlace.AccessNotes),
+            AccessibilityNotes = DisplayTextSafety.CleanOptional(refreshedPlace.AccessibilityNotes)
         };
     }
 
@@ -1732,11 +2034,50 @@ public class PlaceService : IPlaceService
     {
         "booking" => "Booking.com",
         "airbnb" => "Airbnb",
-        "hotel" => "Hotel Website",
+        "hotel" => "Official Website",
         "expedia" => "Expedia",
         _ => string.Join(" ", id.Split('-', '_', StringSplitOptions.RemoveEmptyEntries)
             .Select(part => char.ToUpperInvariant(part[0]) + part[1..]))
     };
+
+    private static List<BookingPartnerDto> BuildHotelBookingPartners(Place place)
+    {
+        var partners = place.PlaceBookingPartners
+            .Select(pb => new BookingPartnerDto
+            {
+                Id = pb.BookingPartner.Id,
+                Name = NormalizeHotelBookingPartnerName(pb.BookingPartner.Name),
+                Variant = pb.BookingPartner.Variant,
+                Url = pb.Url
+            })
+            .ToList();
+
+        var website = DisplayTextSafety.CleanOptional(place.Website);
+        if (!string.IsNullOrWhiteSpace(website) &&
+            !partners.Any(partner =>
+                IsOfficialWebsitePartner(partner.Name) ||
+                string.Equals(partner.Url, website, StringComparison.OrdinalIgnoreCase)))
+        {
+            partners.Add(new BookingPartnerDto
+            {
+                Id = 0,
+                Name = "Official Website",
+                Variant = "muted",
+                Url = website
+            });
+        }
+
+        return partners;
+    }
+
+    private static string NormalizeHotelBookingPartnerName(string name) =>
+        IsOfficialWebsitePartner(name) ? "Official Website" : name;
+
+    private static bool IsOfficialWebsitePartner(string? name)
+    {
+        var normalized = (name ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized is "hotel website" or "official website";
+    }
 
     private sealed class PlaceListProjection
     {
@@ -1754,4 +2095,9 @@ public class PlaceService : IPlaceService
         public double? DistanceMeters { get; set; }
         public List<string> Tags { get; set; } = new();
     }
+
+    private sealed record OwnerUpdateOperatingHoursResult(
+        bool Enabled,
+        string? Json,
+        IReadOnlyList<OwnerUpdateOperatingHourDto> Hours);
 }

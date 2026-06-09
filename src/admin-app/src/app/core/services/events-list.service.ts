@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, map, throwError } from 'rxjs';
 import {
   EventSort,
+  RegionalEventImageInputDto,
   RegionalEventCreateRequest,
   RegionalEventDetailDto,
   RegionalEventListItemDto,
@@ -53,7 +54,9 @@ export interface EventListItem {
   address?: string;
   description?: string | null;
   venueName?: string;
+  customVenueName?: string | null;
   ticketPrice?: string | null;
+  externalTicketLink?: string | null;
   duration?: string | null;
   organizerName?: string;
   venueDescription?: string | null;
@@ -149,6 +152,15 @@ export class EventsListService {
     return this.http.put<RegionalEventDetailDto>(`${this.endpoint}/${eventId}`, payload, { params });
   }
 
+  uploadImages(regionId: number, files: File[]): Observable<string[]> {
+    const formData = new FormData();
+    files.forEach(file => formData.append('files', file));
+    const params = new HttpParams().set('regionId', String(regionId));
+    return this.http
+      .post<{ images: { url: string }[] }>('/api/admin/regional/media/images', formData, { params })
+      .pipe(map(response => response.images.map(image => image.url)));
+  }
+
   deleteEvent(regionId: number, eventId: string | number): Observable<void> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.delete<void>(`${this.endpoint}/${eventId}`, { params });
@@ -194,6 +206,10 @@ export class EventsListService {
     return this.http.get<RegionalEventTagDto[]>('/api/admin/regional/event-tags', { params });
   }
 
+  createEventTag(name: string): Observable<RegionalEventTagDto> {
+    return this.http.post<RegionalEventTagDto>('/api/admin/regional/event-tags', { name });
+  }
+
   getEventTypes(): Observable<RegionalEventTypeDto[]> {
     return this.http.get<RegionalEventTypeDto[]>('/api/admin/regional/event-types');
   }
@@ -217,11 +233,25 @@ export class EventsListService {
     return formData;
   }
 
-  toListItem(dto: RegionalEventListItemDto): EventListItem {
+  toListItem(dto: RegionalEventListItemDto & { galleryImageUrls?: string[] | null }): EventListItem {
     const id = String(dto.id);
     const lastUpdatedIso = dto.lastUpdatedAt ?? dto.createdAt ?? null;
     const eventType = dto.eventType ?? dto.category ?? null;
     const venueName = dto.placeName ?? dto.locationName ?? dto.destinationName ?? undefined;
+    const sortedImages = [...(dto.images ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+    const cardImage = sortedImages.find(image => image.isMain) ?? sortedImages[0] ?? null;
+    const coverImage = sortedImages.find(image => !image.isMain && image.sortOrder === 1) ?? cardImage;
+    const galleryImages = sortedImages
+      .filter(image => !image.isMain && image.sortOrder >= 2)
+      .map((image, index) => ({
+        url: image.url,
+        name: image.altText || image.caption || `Gallery image ${index + 1}`,
+      }));
+    const fallbackGalleryImages = (dto.galleryImageUrls ?? [])
+      .filter(url => !galleryImages.some(image => image.url === url))
+      .map((url, index) => ({ url, name: `Gallery image ${galleryImages.length + index + 1}` }));
+    const imageUrl = cardImage?.url ?? dto.imageUrl ?? null;
+    const coverImageUrl = coverImage?.url ?? imageUrl ?? undefined;
     const item: EventListItem = {
       id,
       name: dto.name,
@@ -231,7 +261,7 @@ export class EventsListService {
       status: dto.status || 'Published',
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
-      imageBg: dto.imageUrl ? `url("${dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
+      imageBg: coverImageUrl ? `url("${coverImageUrl}") center/cover` : this.fallbackGradient(dto.id),
       category: eventType ?? 'Event',
       regionId: dto.regionId,
       regionDisplayName: dto.regionDisplayName,
@@ -247,7 +277,7 @@ export class EventsListService {
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
       startsAt: dto.startsAt ?? null,
       endsAt: dto.endsAt ?? null,
-      imageUrl: dto.imageUrl ?? null,
+      imageUrl,
       detailRoute: dto.detailRoute ?? `/events/detail/${dto.id}`,
       editRoute: dto.editRoute ?? `/events/edit/${dto.id}`,
       dateRange: this.formatDateRange(dto.startsAt ?? null, dto.endsAt ?? null),
@@ -259,7 +289,9 @@ export class EventsListService {
       lng: this.toOptionalNumber(dto.longitude),
       address: dto.address ?? undefined,
       venueName: dto.venueName ?? venueName,
+      customVenueName: dto.venueName ?? null,
       ticketPrice: dto.ticketPrice ?? null,
+      externalTicketLink: dto.externalTicketLink ?? null,
       freeEvent: dto.isFree ?? false,
       recurring: dto.isRecurring ?? false,
       allDay: dto.isAllDay ?? false,
@@ -274,7 +306,9 @@ export class EventsListService {
       venueDescription: dto.venueDescription ?? null,
       arrivalTips: dto.arrivalTips ?? null,
       accessibility: dto.accessibility ?? null,
-      coverImageUrl: dto.imageUrl ?? undefined,
+      coverImageUrl,
+      coverImageName: coverImageUrl ? 'Cover image' : undefined,
+      galleryImages: [...galleryImages, ...fallbackGalleryImages],
     };
 
     this.cache.set(id, item);

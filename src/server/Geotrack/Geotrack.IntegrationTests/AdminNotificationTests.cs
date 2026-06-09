@@ -523,7 +523,22 @@ public sealed class AdminNotificationTests
                     Name = "Territory notification cafe-free landmark",
                     Description = "A real contribution created through the contribution service for territory notification coverage.",
                     Latitude = fixture.Latitude,
-                    Longitude = fixture.Longitude
+                    Longitude = fixture.Longitude,
+                    Images =
+                    [
+                        new UpsertPlaceContributionImageDto
+                        {
+                            Url = "/images/territory-notification-card.jpg",
+                            ImageRole = "card",
+                            SortOrder = -9
+                        },
+                        new UpsertPlaceContributionImageDto
+                        {
+                            Url = "/images/territory-notification-cover.jpg",
+                            ImageRole = "cover",
+                            SortOrder = -10
+                        }
+                    ]
                 },
                 cardImageBytes: TestPngBytes(),
                 coverImageBytes: TestPngBytes(),
@@ -1046,8 +1061,7 @@ public sealed class AdminNotificationTests
         var destinationType = await db.DestinationTypes.OrderBy(item => item.Id).FirstAsync();
         var locationType = await db.LocationTypes.OrderBy(item => item.Id).FirstAsync();
         var placeType = await db.PlaceTypes
-            .Where(item => !item.IsOwnable)
-            .OrderBy(item => item.Id)
+            .Where(item => item.Name == "Landmark")
             .FirstAsync();
 
         var territory = new Territory

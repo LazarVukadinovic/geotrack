@@ -27,6 +27,9 @@ describe('StepPreviewComponent', () => {
     features: { tags: ['Beachfront'], amenities: ['wifi'] },
     details: {
       description: 'A test contribution.',
+      openingHoursEnabled: false,
+      openingHours: '',
+      operatingHours: [],
       phone: '',
       contactEmail: '',
       website: '',

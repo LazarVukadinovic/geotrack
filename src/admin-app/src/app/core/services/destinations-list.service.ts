@@ -123,6 +123,10 @@ export class DestinationsListService {
     return this.http.get<RegionalDestinationTagDto[]>('/api/admin/regional/destination-tags', { params });
   }
 
+  createDestinationTag(name: string): Observable<RegionalDestinationTagDto> {
+    return this.http.post<RegionalDestinationTagDto>('/api/admin/regional/destination-tags', { name });
+  }
+
   deleteDestination(regionId: number, destinationId: string | number): Observable<void> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.delete<void>(`${this.endpoint}/${destinationId}`, { params });

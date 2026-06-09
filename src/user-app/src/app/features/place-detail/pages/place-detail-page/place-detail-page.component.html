@@ -208,23 +208,38 @@
 
 
         <!-- ── About ──────────────────────────────────────────────────── -->
-        @if (p.images.length > 0) {
-          <button
-            type="button"
-            class="pd__gallery-open"
-            (click)="openGallery()"
-          >
-            Open Gallery ({{ p.images.length }})
-          </button>
-        }
-
         <div class="pd__detail-grid">
           <div class="pd__detail-main">
             <div class="pd__divider pd__divider--about"></div>
 
             <section class="pd__section pd__section--about">
               <h2 class="pd__section-title">About this place</h2>
-              <p class="pd__about">{{ p.about }}</p>
+              <div class="pd__about-wrap" [class.pd__about-wrap--collapsed]="hasLongAbout(p.about) && !aboutExpanded()">
+                <p class="pd__about" [innerHTML]="p.about | descriptionRichHtml"></p>
+              </div>
+              @if (hasLongAbout(p.about)) {
+                <button
+                  type="button"
+                  class="pd__about-toggle"
+                  [attr.aria-expanded]="aboutExpanded()"
+                  (click)="aboutExpanded.set(!aboutExpanded())"
+                >
+                  {{ aboutExpanded() ? 'Show less' : 'Show more' }}
+                </button>
+              }
+              @if (allGalleryImages().length > 0) {
+                <button type="button" class="pd__view-photos" (click)="openGallery(0)">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+                    <circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/>
+                    <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8.5 5l1.2-1.5h4.6L15.5 5"/>
+                  </svg>
+                  View gallery
+                  <svg class="pd__view-photos-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 18l6-6-6-6"/>
+                  </svg>
+                </button>
+              }
             </section>
 
             @if (p.amenities.length > 0) {
@@ -291,7 +306,7 @@
                   @if (hoursExpanded()) {
                     <div class="pd__hours-schedule">
                       @if (p.openingHoursSchedule && p.openingHoursSchedule.length > 0) {
-                        @for (day of p.openingHoursSchedule; track day.day) {
+                        @for (day of p.openingHoursSchedule; track day.day + ':' + $index) {
                           <div class="pd__hours-day">
                             <span class="pd__hours-day-name">{{ day.day }}</span>
                             <span class="pd__hours-day-val">{{ day.hours }}</span>
@@ -606,44 +621,12 @@
     </div><!-- /.pd__scroll -->
 
     @if (galleryOpen()) {
-      <div class="pd__gallery-modal" role="dialog" aria-modal="true" aria-label="Place gallery">
-        <button
-          type="button"
-          class="pd__gallery-modal-backdrop"
-          aria-label="Close gallery"
-          (click)="closeGallery()"
-        ></button>
-
-        <section class="pd__gallery-modal-panel">
-          <header class="pd__gallery-modal-head">
-            <h2>{{ p.title }} gallery</h2>
-            <button
-              type="button"
-              class="pd__gallery-close"
-              aria-label="Close gallery"
-              (click)="closeGallery()"
-            >×</button>
-          </header>
-
-          <div class="pd__gallery-layout">
-            @for (image of p.images; track image.id) {
-              <figure class="pd__gallery-item">
-                <img
-                  appImageFallback
-                  [src]="image.url"
-                  [style.object-position]="image.imagePosition"
-                  [alt]="image.altText || p.title"
-                  loading="lazy"
-                  decoding="async"
-                />
-                @if (image.caption) {
-                  <figcaption>{{ image.caption }}</figcaption>
-                }
-              </figure>
-            }
-          </div>
-        </section>
-      </div>
+      <app-photo-gallery
+        [images]="allGalleryImages()"
+        [title]="p.title"
+        [startIndex]="galleryStartIndex()"
+        (closed)="closeGallery()"
+      />
     }
 
     @if (ownershipClaimOpen()) {

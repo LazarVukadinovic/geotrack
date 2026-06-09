@@ -43,13 +43,25 @@ export interface RegionalEventListItemDto {
   accessibility?: string | null;
   tags?: RegionalEventTagDto[];
   imageUrl?: string | null;
+  images?: RegionalEventImageDto[] | null;
   detailRoute?: string | null;
   editRoute?: string | null;
   latitude?: number | null;
   longitude?: number | null;
 }
 
-export interface RegionalEventDetailDto extends RegionalEventListItemDto {}
+export interface RegionalEventImageDto {
+  id?: number;
+  url: string;
+  altText?: string | null;
+  caption?: string | null;
+  isMain: boolean;
+  sortOrder: number;
+}
+
+export interface RegionalEventDetailDto extends RegionalEventListItemDto {
+  galleryImageUrls?: string[] | null;
+}
 
 export interface RegionalEventListResponse {
   items: RegionalEventListItemDto[];
@@ -97,6 +109,14 @@ export interface RegionalEventCreateRequest {
   galleryImageFiles?: File[];
 }
 
+export interface RegionalEventImageInputDto {
+  url: string;
+  altText?: string | null;
+  caption?: string | null;
+  isMain: boolean;
+  sortOrder: number;
+}
+
 export interface RegionalEventUpdateRequest {
   parentEntityType?: 'Destination' | 'Location' | 'Place' | null;
   destinationId?: number | null;
@@ -118,8 +138,10 @@ export interface RegionalEventUpdateRequest {
   organizerName?: string | null;
   contactEmail?: string | null;
   attendanceLimit?: number | null;
+  clearAttendanceLimit?: boolean | null;
   ageRestriction?: string | null;
   tagIds?: number[] | null;
+  images?: RegionalEventImageInputDto[] | null;
 }
 
 export interface RegionalEventTagDto {

@@ -10,6 +10,8 @@ import { SectionHeaderComponent } from '../../../../shared/components/section-he
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
 import { UserAvatarComponent } from '../../../../shared/components/user-avatar/user-avatar.component';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
+import { PhotoGalleryComponent } from '../../../../shared/components/photo-gallery/photo-gallery.component';
+import type { EntityImage } from '../../../../core/models/entity-image.model';
 import { HttpClient } from '@angular/common/http';
 import { PlaceDetailService } from '../../services/place-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
@@ -19,11 +21,13 @@ import { reviewsMoreActionLabel } from '../../../reviews/utils/review-section-ui
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { PlaceDetail } from '../../../../core/models/place.model';
 import type { MapEntityMarker, MapEntityType } from '../../../../core/services/map-api.service';
+import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
+import { isLongDescription } from '../../../../shared/utils/description-formatting';
 
 @Component({
   selector: 'app-place-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ReviewEntryComponent, UserAvatarComponent, ImageFallbackDirective, RouterLink],
+  imports: [SectionHeaderComponent, ReviewEntryComponent, UserAvatarComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent, DescriptionRichHtmlPipe],
   providers: [ReviewInteractionsService],
   templateUrl: './place-detail-page.component.html',
   styleUrl: './place-detail-page.component.scss',
@@ -57,8 +61,9 @@ export class PlaceDetailPageComponent {
 
   protected readonly scrollProgress = signal(0);
   protected readonly hoursExpanded = signal(false);
+  protected readonly aboutExpanded = signal(false);
   protected readonly galleryOpen = signal(false);
-  protected readonly selectedImageUrl = signal<string | null>(null);
+  protected readonly galleryStartIndex = signal(0);
   protected readonly ownershipClaimOpen = signal(false);
   protected readonly ownershipProofFile = signal<File | null>(null);
   protected readonly ownershipProofFileName = signal('');
@@ -67,29 +72,32 @@ export class PlaceDetailPageComponent {
   protected readonly ownershipClaimSubmitting = signal(false);
   protected readonly ownershipClaimSubmitted = signal(false);
 
-  protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.place()?.heroImage ?? '');
-  protected readonly heroImagePosition = computed(() => {
-    const p = this.place();
-    const selected = this.selectedImageUrl();
-    if (!p) return '50% 50%';
-    if (!selected || selected === p.heroImage) return p.heroImagePosition || '50% 50%';
-    return p.images.find(image => image.url === selected)?.imagePosition || '50% 50%';
-  });
-  protected readonly heroImageSize = computed(() => {
-    const p = this.place();
-    const selected = this.selectedImageUrl();
-    if (!p) return 'cover';
-    if (!selected || selected === p.heroImage) return p.heroImageSize || 'cover';
-    return p.images.find(image => image.url === selected)?.imageSize || 'cover';
-  });
+  protected readonly heroImage = computed(() => this.place()?.heroImage ?? '');
+  protected readonly heroImagePosition = computed(() => this.place()?.heroImagePosition || '50% 50%');
+  protected readonly heroImageSize = computed(() => this.place()?.heroImageSize || 'cover');
   protected readonly heroImageTransform = computed(() => {
     const size = this.heroImageSize();
     if (size === 'cover') return 'none';
-
     const numeric = Number.parseFloat(size);
     if (!Number.isFinite(numeric) || numeric <= 100) return 'none';
-
     return `scale(${Math.min(numeric, 200) / 100})`;
+  });
+
+  protected readonly allGalleryImages = computed((): EntityImage[] => {
+    const p = this.place();
+    if (!p) return [];
+    const heroImg: EntityImage = {
+      id: '__cover__',
+      url: p.heroImage,
+      altText: p.title,
+      caption: '',
+      isMain: true,
+      imageRole: 'cover',
+      sortOrder: -1,
+      imagePosition: p.heroImagePosition || '50% 50%',
+      imageSize: p.heroImageSize || 'cover',
+    };
+    return p.heroImage ? [heroImg, ...p.images] : [...p.images];
   });
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
@@ -105,7 +113,10 @@ export class PlaceDetailPageComponent {
   protected readonly is24Hours = computed(() => {
     const p = this.place();
     if (!p) return false;
-    if (p.openingHoursSchedule && p.openingHoursSchedule.length > 0) return false;
+    const schedule = p.openingHoursSchedule;
+    if (schedule && schedule.length > 0) {
+      return schedule.every(day => day.hours === '00:00 - 00:00');
+    }
     const hours = (p.openingHours ?? '').toLowerCase().trim();
     return hours.includes('24');
   });
@@ -114,7 +125,7 @@ export class PlaceDetailPageComponent {
     const p = this.place();
     if (!p) return '';
     if (this.is24Hours()) return 'Open now';
-    const schedule = p.openingHoursSchedule;
+    const schedule = (p.openingHoursSchedule ?? []).filter(day => !!day.day?.trim());
     if (!schedule || schedule.length === 0) return p.openStatus ?? '';
     return this.calculateCurrentOpenStatus(schedule, p.openStatus ?? '');
   });
@@ -144,8 +155,8 @@ export class PlaceDetailPageComponent {
       this.placeId();
       this.scrollProgress.set(0);
       this.hoursExpanded.set(false);
+      this.aboutExpanded.set(false);
       this.galleryOpen.set(false);
-      this.selectedImageUrl.set(null);
       const el = this.pdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
@@ -202,15 +213,8 @@ export class PlaceDetailPageComponent {
     void this.router.navigate(['/events', id], { queryParams: this.collectionQueryParams() });
   }
 
-  protected selectGalleryImage(url: string): void {
-    this.selectedImageUrl.set(url);
-  }
-
-  protected isGalleryImageActive(url: string): boolean {
-    return (this.selectedImageUrl() ?? this.place()?.heroImage ?? '') === url;
-  }
-
-  protected openGallery(): void {
+  protected openGallery(startIndex = 0): void {
+    this.galleryStartIndex.set(startIndex);
     this.galleryOpen.set(true);
   }
 
@@ -420,6 +424,10 @@ export class PlaceDetailPageComponent {
     }
   }
 
+  protected hasLongAbout(about: string | null | undefined): boolean {
+    return isLongDescription(about);
+  }
+
   private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {
     if (!this.hasUsableCoordinates(latitude, longitude)) return null;
     return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
@@ -489,13 +497,28 @@ export class PlaceDetailPageComponent {
     const now = new Date();
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const todayName = dayNames[now.getDay()];
+    const yesterdayName = dayNames[(now.getDay() + 6) % 7];
+    const currentMins = now.getHours() * 60 + now.getMinutes();
 
     const todayEntry = schedule.find(d =>
       d.day.toLowerCase() === todayName.toLowerCase() ||
       d.day.toLowerCase().startsWith(todayName.toLowerCase().slice(0, 3)),
     );
+    const yesterdayEntry = schedule.find(d =>
+      d.day.toLowerCase() === yesterdayName.toLowerCase() ||
+      d.day.toLowerCase().startsWith(yesterdayName.toLowerCase().slice(0, 3)),
+    );
 
     if (!todayEntry) return fallback;
+
+    const yesterdayMatch = yesterdayEntry?.hours.toLowerCase().match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+    if (yesterdayMatch) {
+      const yesterdayOpenMins = parseInt(yesterdayMatch[1], 10) * 60 + parseInt(yesterdayMatch[2], 10);
+      const yesterdayCloseMins = parseInt(yesterdayMatch[3], 10) * 60 + parseInt(yesterdayMatch[4], 10);
+      if (yesterdayCloseMins <= yesterdayOpenMins && currentMins < yesterdayCloseMins) {
+        return 'Open now';
+      }
+    }
 
     const hoursStr = todayEntry.hours.toLowerCase();
     if (hoursStr.includes('closed')) return 'Closed now';
@@ -509,12 +532,11 @@ export class PlaceDetailPageComponent {
     const closeH = parseInt(timeMatch[3], 10);
     const closeM = parseInt(timeMatch[4], 10);
 
-    const currentMins = now.getHours() * 60 + now.getMinutes();
     const openMins = openH * 60 + openM;
     const closeMins = closeH * 60 + closeM;
 
-    const isOpen = closeMins === 0
-      ? currentMins >= openMins
+    const isOpen = closeMins <= openMins
+      ? currentMins >= openMins || currentMins < closeMins
       : currentMins >= openMins && currentMins < closeMins;
 
     return isOpen ? 'Open now' : 'Closed now';

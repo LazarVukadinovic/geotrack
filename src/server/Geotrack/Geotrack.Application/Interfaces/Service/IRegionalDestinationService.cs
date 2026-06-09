@@ -28,4 +28,6 @@ public interface IRegionalDestinationService
     Task DeleteDestinationAsync(int userId, int regionId, int destinationId);
 
     Task<List<RegionalDestinationTagDto>> GetDestinationTagsAsync(int userId, string? search);
+
+    Task<RegionalDestinationTagDto> CreateDestinationTagAsync(int userId, RegionalTagCreateRequestDto request);
 }

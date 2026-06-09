@@ -7,6 +7,7 @@ public class Territory
     public int Id { get; set; }
 
     public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public string TerritoryKind { get; set; } = TerritoryKinds.Country;
     public string? CountryCode { get; set; }
     public string? CountryIso3 { get; set; }

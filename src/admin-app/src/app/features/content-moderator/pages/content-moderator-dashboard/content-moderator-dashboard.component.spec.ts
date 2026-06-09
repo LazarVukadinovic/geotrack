@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 import { ContentModeratorDashboardComponent } from './content-moderator-dashboard.component';
 import { ContentModeratorDashboard } from '../../../../core/models/content-moderator/content-moderator-dashboard.model';
 import { ContentModeratorDashboardService } from '../../../../core/services/content-moderator/content-moderator-dashboard.service';
+import { ContentModeratorContributionsService } from '../../../../core/services/content-moderator/content-moderator-contributions.service';
 import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
@@ -39,8 +40,10 @@ class TopbarStubComponent {
 describe('ContentModeratorDashboardComponent', () => {
   let fixture: ComponentFixture<ContentModeratorDashboardComponent>;
   let dashboardService: { loadDashboard: ReturnType<typeof vi.fn> };
+  let contributionsService: { getAll: ReturnType<typeof vi.fn> };
   let router: Router;
   let dashboardResult$: Observable<ContentModeratorDashboard>;
+  let contributionsResult$: Observable<{ status: string }[]>;
 
   const authService = {
     fullName: 'Moderator User',
@@ -49,8 +52,16 @@ describe('ContentModeratorDashboardComponent', () => {
 
   beforeEach(async () => {
     dashboardResult$ = of(dashboardResponse());
+    contributionsResult$ = of([
+      { status: 'PendingReview' },
+      { status: 'Approved' },
+      { status: 'PendingReview' },
+    ]);
     dashboardService = {
       loadDashboard: vi.fn(() => dashboardResult$),
+    };
+    contributionsService = {
+      getAll: vi.fn(() => contributionsResult$),
     };
 
     await TestBed.configureTestingModule({
@@ -59,6 +70,7 @@ describe('ContentModeratorDashboardComponent', () => {
         provideRouter([]),
         { provide: AuthService, useValue: authService },
         { provide: ContentModeratorDashboardService, useValue: dashboardService },
+        { provide: ContentModeratorContributionsService, useValue: contributionsService },
       ],
     })
       .overrideComponent(ContentModeratorDashboardComponent, {
@@ -75,6 +87,7 @@ describe('ContentModeratorDashboardComponent', () => {
     fixture.detectChanges();
 
     expect(dashboardService.loadDashboard).toHaveBeenCalledOnce();
+    expect(contributionsService.getAll).toHaveBeenCalledOnce();
     const text = normalizedText();
     expect(text).toContain('Welcome back, Content Moderator');
     expect(text).toContain('Review Destinations');
@@ -82,8 +95,10 @@ describe('ContentModeratorDashboardComponent', () => {
     expect(text).toContain('Review Locations');
     expect(text).toContain('Review Places');
     expect(text).toContain('Review Events');
+    expect(text).toContain('Place Contributions');
+    expect(text).toContain('2 contributions pending review');
     expect(text).toContain('Review Management');
-    expect(text).toContain('Moderate reported reviews and resolve review reports.');
+    expect(text).toContain('User-flagged reviews awaiting moderation');
     expect(text).not.toContain('Content Review');
     expect(text).not.toContain('Review destinations, locations, places, and events.');
     expect(text).not.toContain('Reported Reviews');

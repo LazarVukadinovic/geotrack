@@ -329,8 +329,20 @@ public sealed class UploadRateLimitHardeningTests
         public Task<PlaceContributionDetailDto?> GetPendingReviewByIdAsync(int contributionId, int? reviewerUserId = null) =>
             Task.FromResult<PlaceContributionDetailDto?>(new PlaceContributionDetailDto { Id = contributionId });
 
+        public Task<GetPlaceContributionsResponseDto> GetPendingForContentManagerAsync() =>
+            Task.FromResult(new GetPlaceContributionsResponseDto());
+
+        public Task<PlaceContributionDetailDto?> GetPendingForContentManagerByIdAsync(int contributionId) =>
+            Task.FromResult<PlaceContributionDetailDto?>(new PlaceContributionDetailDto { Id = contributionId });
+
         public Task<List<ContributionPlaceTypeDto>> GetPlaceTypesAsync() =>
             Task.FromResult(new List<ContributionPlaceTypeDto>());
+
+        public Task<List<ContributionStayTypeDto>> GetStayTypesAsync() =>
+            Task.FromResult(new List<ContributionStayTypeDto>());
+
+        public Task<ContributionFeatureOptionsDto> GetFeatureOptionsAsync() =>
+            Task.FromResult(new ContributionFeatureOptionsDto());
 
         public Task<PlaceContributionDetailDto> CreateAsync(
             int userId,
@@ -362,6 +374,9 @@ public sealed class UploadRateLimitHardeningTests
             string? ownershipProofContentType) =>
             Task.FromResult(new PlaceContributionDetailDto { Id = contributionId });
 
+        public Task<ResolveContributionLocationDto?> ResolveNearestLocationAsync(double latitude, double longitude) =>
+            Task.FromResult<ResolveContributionLocationDto?>(null);
+
         public Task DeleteAsync(int userId, int contributionId) => Task.CompletedTask;
 
         public Task<PlaceContributionDetailDto> ApproveAsync(
@@ -379,5 +394,25 @@ public sealed class UploadRateLimitHardeningTests
             string? internalNote = null,
             string? sourceArea = null) =>
             Task.FromResult(new PlaceContributionDetailDto { Id = contributionId });
+
+        public Task<PlaceContributionDetailDto> ApproveForContentManagerAsync(
+            int contributionId,
+            int reviewerUserId,
+            int regionId,
+            int? existingDestinationId,
+            string? newDestinationName,
+            string? newLocationName,
+            string? note) =>
+            Task.FromResult(new PlaceContributionDetailDto { Id = contributionId });
+
+        public Task<ContributionRegionOptionsDto> GetRegionOptionsAsync() =>
+            Task.FromResult(new ContributionRegionOptionsDto());
+
+        public Task<ContributionLocationOptionsDto> GetDestinationLocationOptionsAsync(int destinationId) =>
+            Task.FromResult(new ContributionLocationOptionsDto());
+
+        public Task AddDestinationCardImageAsync(int destinationId, byte[] imageBytes) => Task.CompletedTask;
+
+        public Task AddLocationCardImageAsync(int locationId, byte[] imageBytes) => Task.CompletedTask;
     }
 }

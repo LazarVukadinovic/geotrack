@@ -64,7 +64,7 @@
         <div class="my-interests__section my-interests__section--suggested">
           <p class="my-interests__section-title ml-1 text-[12px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Suggested from activity</p>
 
-          <div class="my-interests__suggested-card bg-white rounded-2xl shadow-sm px-4 py-4 flex flex-col gap-3">
+          <div class="my-interests__suggested-card bg-white rounded-2xl shadow-sm px-4 py-4 flex flex-col gap-3 overflow-y-auto max-h-52">
             @for (tag of visibleInferredTags(); track tag.tagId) {
               <div class="my-interests__suggested-row flex items-center gap-3">
                 <div class="flex-1 min-w-0">

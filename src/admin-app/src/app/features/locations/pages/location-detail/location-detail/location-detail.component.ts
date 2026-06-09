@@ -10,12 +10,13 @@ import { TopbarComponent }  from '../../../../../shared/components/topbar/topbar
 import { LocationsListService, LocationListItem } from '../../../../../core/services/locations-list.service';
 import { LightboxService } from '../../../../../core/services/lightbox.service';
 import { MapTileLayerService } from '../../../../../core/services/map-tile-layer.service';
+import { DescriptionRichHtmlPipe } from '../../../../../shared/pipes/description-rich-html.pipe';
 declare const L: any;
 
 @Component({
   selector: 'app-location-detail',
   standalone: true,
-  imports: [CommonModule, DecimalPipe, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, DecimalPipe, FormsModule, SidebarComponent, TopbarComponent, DescriptionRichHtmlPipe],
   templateUrl: './location-detail.component.html',
 })
 export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -256,6 +257,16 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
         this.deleteTarget = null;
         this.router.navigate(['/locations']);
       });
+  }
+
+  readonly galleryLimit = 6;
+
+  galleryPreview(images: { url: string; name: string }[]): { url: string; name: string }[] {
+    return images.slice(0, this.galleryLimit);
+  }
+
+  galleryOverflow(images: { url: string; name: string }[]): number {
+    return Math.max(0, images.length - this.galleryLimit);
   }
 
   openLightbox(images: { url: string; name: string }[], index: number): void {

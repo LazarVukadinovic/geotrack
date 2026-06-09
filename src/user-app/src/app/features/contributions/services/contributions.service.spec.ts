@@ -49,6 +49,12 @@ describe('ContributionsService', () => {
     expect(payload['stayType']).toBeUndefined();
     expect(payload['amenities']).toEqual(['wifi']);
     expect(payload['bookingPartners']).toEqual([]);
+    expect(payload['openingHours']).toBeUndefined();
+    expect(payload['operatingHoursEnabled']).toBe(true);
+    expect(payload['operatingHours']).toEqual([
+      { dayOfWeek: 'Monday', isOpen: true, openTime: '09:00', closeTime: '17:00' },
+      { dayOfWeek: 'Tuesday', isOpen: false, openTime: null, closeTime: null },
+    ]);
     expect(((req.request.body as FormData).get('ownershipProofDocument') as File).name)
       .toBe('ownership-proof.pdf');
 
@@ -75,6 +81,7 @@ describe('ContributionsService', () => {
     expect(payload['amenities']).toEqual(['free-wifi']);
     expect(payload['bookingPartners']).toEqual([
       { id: 'booking', url: 'https://booking.example/villa' },
+      { id: 'hotel', url: 'https://example.com' },
     ]);
     expect(((req.request.body as FormData).get('ownershipProofDocument') as File).name)
       .toBe('ownership-proof.pdf');
@@ -126,6 +133,31 @@ describe('ContributionsService', () => {
     httpMock.expectOne('/api/contributions').flush({ contributions: [] });
   });
 
+  it('preserves existing ownership proof metadata when editing without selecting a new PDF', () => {
+    const draft = makePlaceDraft();
+    draft.basics = {
+      ...draft.basics!,
+      placeType: 'Bar',
+      ownershipProofFile: null,
+      ownershipProofDocumentUrl: '/media/uploads/contributions/existing-proof.pdf',
+      ownershipProofOriginalFileName: 'existing-proof.pdf',
+    };
+
+    service.updatePlace(42, draft).subscribe();
+
+    const req = httpMock.expectOne('/api/contributions/places/42');
+    const body = req.request.body as FormData;
+    const payload = JSON.parse(body.get('payload') as string) as Record<string, unknown>;
+
+    expect(payload['placeType']).toBe('Bar');
+    expect(payload['ownershipProofDocumentUrl']).toBe('/media/uploads/contributions/existing-proof.pdf');
+    expect(payload['ownershipProofOriginalFileName']).toBe('existing-proof.pdf');
+    expect(body.has('ownershipProofDocument')).toBe(false);
+
+    req.flush({ contribution: makeApiContribution({ entityType: 'Place', placeType: 'Bar', stayType: null }) });
+    httpMock.expectOne('/api/contributions').flush({ contributions: [] });
+  });
+
   it('maps legacy Stay contribution entity values to the current Place contribution entity type', () => {
     let actual: ContributionDetail | undefined;
 
@@ -167,9 +199,9 @@ describe('ContributionsService', () => {
       stayAmenities: ['free-wifi'],
     }));
 
-    expect(actual?.amenities).toEqual(['wifi', 'breakfast', 'dining', 'ac', 'gym', 'pool', 'sea-view']);
+    expect(actual?.amenities).toEqual(['wifi', 'breakfast', 'dining', 'ac', 'gym', 'pool', 'sea']);
     expect(service.detailToDraft(actual!).features?.amenities)
-      .toEqual(['wifi', 'breakfast', 'dining', 'ac', 'gym', 'pool', 'sea-view']);
+      .toEqual(['wifi', 'breakfast', 'dining', 'ac', 'gym', 'pool', 'sea']);
   });
 
   it('sends normalized backend amenity values in update payload without dropping unknown amenities', () => {
@@ -243,16 +275,18 @@ function makePlaceDraft(): ContributionDraftData {
     basics: {
       name: 'Canonical Cafe',
       placeType: 'Cafe',
+      placeTypeId: null,
       stayType: 'Hotel',
       address: '10 Market Lane',
       city: 'Dubrovnik',
       region: 'Dalmatia',
       country: 'Croatia',
-      placeTypeId: null,
       imageUrl: '',
       cardImageUrl: '',
-      galleryImageUrls: [],
+      cardImageFile: null,
       coverImageFile: null,
+      galleryImageUrls: [],
+      galleryImageFiles: [],
       ownershipProofFile: makePdfFile(),
       lat: 42.6413,
       lng: 18.1089,
@@ -262,6 +296,12 @@ function makePlaceDraft(): ContributionDraftData {
     features: { tags: ['Coffee'], amenities: ['wifi'] },
     details: {
       description: 'A place contribution.',
+      openingHoursEnabled: true,
+      openingHours: 'Mon-Fri 09:00-17:00',
+      operatingHours: [
+        { dayOfWeek: 'Monday', isOpen: true, openTime: '09:00', closeTime: '17:00' },
+        { dayOfWeek: 'Tuesday', isOpen: false, openTime: null, closeTime: null },
+      ],
       phone: '+385111222',
       contactEmail: 'hello@example.com',
       website: 'https://example.com',
@@ -311,6 +351,12 @@ function makeApiContribution(overrides: Partial<Record<string, unknown>> = {}): 
     imagePosition: '50% 50%',
     imageSize: 'cover',
     description: 'A place contribution.',
+    openingHours: 'Mon-Fri 09:00-17:00',
+    operatingHoursEnabled: true,
+    operatingHours: [
+      { dayOfWeek: 'Monday', isOpen: true, openTime: '09:00', closeTime: '17:00' },
+      { dayOfWeek: 'Tuesday', isOpen: false, openTime: null, closeTime: null },
+    ],
     phone: '+385111222',
     contactEmail: 'hello@example.com',
     website: 'https://example.com',

@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Microsoft.EntityFrameworkCore;
@@ -380,6 +381,25 @@ public class RegionalDestinationService : IRegionalDestinationService
                 Slug = tag.Slug
             })
             .ToListAsync();
+    }
+
+    public async Task<RegionalDestinationTagDto> CreateDestinationTagAsync(
+        int userId,
+        RegionalTagCreateRequestDto request)
+    {
+        await EnsureRegionalManagerRoleAsync(userId);
+
+        var tag = await RegionalTagWriter.CreateScopedTagAsync(
+            _db,
+            request.Name,
+            RegionalTagScope.Destination);
+
+        return new RegionalDestinationTagDto
+        {
+            Id = tag.Id,
+            Name = tag.Name,
+            Slug = tag.Slug
+        };
     }
 
     private async Task EnsureAssignedRegionAsync(int userId, int regionId)
