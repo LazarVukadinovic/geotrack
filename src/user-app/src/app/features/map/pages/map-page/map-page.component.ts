@@ -92,6 +92,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private filterCategories: string[] = [];
   private selectedCategoryLabelFilters: string[] = [];
   private readonly markersByKey = new Map<string, MarkerEntry>();
+  private readonly stackMarkersByKey = new Map<string, maplibregl.Marker>();
+  private readonly stackGroupByElement = new WeakMap<HTMLElement, MapEntityMarker[]>();
   private readonly markerImageFallbackUsed = new Set<string>();
   private rawViewportMarkers: MapEntityMarker[] = [];
   private viewportLoadTimeout?: ReturnType<typeof setTimeout>;
@@ -131,6 +133,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private searchBlurTimeout?: ReturnType<typeof setTimeout>;
 
   selectedPlace: MapEntityMarker | null = null;
+  stackedPlacePicker: MapEntityMarker[] | null = null;
   emptyStateMessage = '';
   loadErrorMessage = '';
   routeErrorMessage = '';
@@ -271,6 +274,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       }
       this.markersByKey.clear();
       this.markerImageFallbackUsed.clear();
+
+      for (const marker of this.stackMarkersByKey.values()) {
+        marker.remove();
+      }
+      this.stackMarkersByKey.clear();
 
       this.map.remove();
     }
@@ -1020,12 +1028,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     if (this.selectedPlace) {
       this.closePlace();
       this.cdr.detectChanges();
+    } else if (this.stackedPlacePicker) {
+      this.stackedPlacePicker = null;
+      this.cdr.detectChanges();
     }
   }
 
   private shouldIgnoreMapBackgroundClick(event: MapMouseEvent): boolean {
     const target = event.originalEvent.target;
-    if (target instanceof Element && target.closest('.gt-marker')) {
+    if (target instanceof Element && (target.closest('.gt-marker') || target.closest('.gt-marker-stack'))) {
       return true;
     }
 
@@ -1324,32 +1335,67 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private renderMarkers(markers: MapEntityMarker[], mode: MapMarkersMode): void {
-    const newKeys = new Set<string>();
-    const spreadPositions = new Map<string, { latitude: number; longitude: number }>();
-    for (const m of this.spreadOverlappingMarkers(markers)) {
-      spreadPositions.set(`${m.entityType}:${m.entityId}`, { latitude: m.latitude, longitude: m.longitude });
+    const COORD_PRECISION = 5;
+    const groups = new Map<string, MapEntityMarker[]>();
+    for (const marker of markers) {
+      const coordKey = `${marker.latitude.toFixed(COORD_PRECISION)},${marker.longitude.toFixed(COORD_PRECISION)}`;
+      if (!groups.has(coordKey)) groups.set(coordKey, []);
+      groups.get(coordKey)!.push(marker);
     }
 
-    for (const marker of markers) {
+    const newSingleKeys = new Set<string>();
+    const newStackKeys = new Set<string>();
+
+    // First pass: single markers — added to DOM before stacks so stacks end up on top
+    for (const [, group] of groups) {
+      if (group.length !== 1) continue;
+      const marker = group[0];
       const key = this.getMarkerKey(marker);
-      newKeys.add(key);
-      const pos = spreadPositions.get(key) ?? marker;
+      newSingleKeys.add(key);
       const existing = this.markersByKey.get(key);
       if (existing) {
         existing.data = marker;
-        existing.marker.setLngLat([pos.longitude, pos.latitude]);
+        existing.marker.setLngLat([marker.longitude, marker.latitude]);
         this.refreshMarkerDom(existing, marker);
       } else {
-        const entry = this.createMarkerEntry(marker, pos.latitude, pos.longitude);
+        const entry = this.createMarkerEntry(marker);
         this.markersByKey.set(key, entry);
       }
     }
 
+    // Second pass: stack markers — added to DOM last so they sit on top of single markers
+    for (const [coordKey, group] of groups) {
+      if (group.length <= 1) continue;
+      const stackKey = `stack:${coordKey}`;
+      newStackKeys.add(stackKey);
+      const existingStack = this.stackMarkersByKey.get(stackKey);
+      if (existingStack) {
+        this.refreshStackMarkerDom(existingStack.getElement(), group);
+      } else {
+        const stackMarker = this.createStackMarker(group);
+        this.stackMarkersByKey.set(stackKey, stackMarker);
+      }
+    }
+
     for (const [key, entry] of this.markersByKey) {
-      if (!newKeys.has(key)) {
+      if (!newSingleKeys.has(key)) {
         entry.marker.remove();
         this.markersByKey.delete(key);
         this.markerImageFallbackUsed.delete(key);
+      }
+    }
+
+    for (const [key, marker] of this.stackMarkersByKey) {
+      if (!newStackKeys.has(key)) {
+        marker.remove();
+        this.stackMarkersByKey.delete(key);
+      }
+    }
+
+    for (const marker of this.stackMarkersByKey.values()) {
+      const container = marker.getElement().parentElement;
+      if (container?.parentElement) {
+        container.parentElement.appendChild(container);
       }
     }
 
@@ -1358,12 +1404,26 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     if (this.selectedPlace) {
       const selectedKey = this.getMarkerKey(this.selectedPlace);
       const stillVisible = this.markersByKey.get(selectedKey);
+      const stillInViewport = markers.some(m => this.getMarkerKey(m) === selectedKey);
       if (stillVisible) {
         this.selectedPlace = stillVisible.data;
         this.preserveSelectedPlaceFromNavigation = false;
+      } else if (stillInViewport) {
+        // selectedPlace is inside a stack marker — keep it
       } else if (!this.shouldPreserveSelectedPlaceDuringMarkerRefresh()) {
         this.selectedPlace = null;
         this.clearRoute();
+      }
+    }
+
+    if (this.stackedPlacePicker) {
+      const firstKey = this.getMarkerKey(this.stackedPlacePicker[0]);
+      const coordKey = `${this.stackedPlacePicker[0].latitude.toFixed(COORD_PRECISION)},${this.stackedPlacePicker[0].longitude.toFixed(COORD_PRECISION)}`;
+      const stackKey = `stack:${coordKey}`;
+      const stillExists = this.stackMarkersByKey.has(stackKey) ||
+        markers.some(m => this.getMarkerKey(m) === firstKey);
+      if (!stillExists) {
+        this.stackedPlacePicker = null;
       }
     }
 
@@ -1416,6 +1476,92 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     return entry;
   }
 
+  private createStackMarker(group: MapEntityMarker[]): maplibregl.Marker {
+    const button = document.createElement('button');
+    button.type = 'button';
+    this.refreshStackMarkerDom(button, group);
+
+    const { latitude, longitude } = group[0];
+    const mapMarker = new maplibregl.Marker({ element: button, anchor: 'center' })
+      .setLngLat([longitude, latitude])
+      .addTo(this.map);
+
+    const getGroup = (): MapEntityMarker[] => this.stackGroupByElement.get(button) ?? [];
+    let lastActivatedAt = 0;
+    const stopMarkerEvent = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const activate = (event: Event): void => {
+      stopMarkerEvent(event);
+
+      const now = Date.now();
+      if (now - lastActivatedAt < MARKER_ACTIVATION_DEDUPE_MS) return;
+      lastActivatedAt = now;
+      this.openStackPicker(getGroup());
+    };
+
+    button.addEventListener('pointerdown', stopMarkerEvent);
+    button.addEventListener('pointerup', (event) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      activate(event);
+    });
+    button.addEventListener('click', (event) => {
+      activate(event);
+    });
+    mapMarker.on('click', (event) => {
+      if (event && typeof event === 'object' && 'originalEvent' in event && event.originalEvent) {
+        activate(event.originalEvent as Event);
+      }
+    });
+
+    return mapMarker;
+  }
+
+  private refreshStackMarkerDom(button: HTMLElement, group: MapEntityMarker[]): void {
+    this.stackGroupByElement.set(button, group);
+    const typeClass = `gt-marker-stack--${group[0].entityType}`;
+    button.classList.remove('gt-marker-stack--place', 'gt-marker-stack--stay', 'gt-marker-stack--event');
+    button.classList.add('gt-marker-stack', typeClass);
+    button.setAttribute('aria-label', group.map(m => m.title).join(', '));
+    button.innerHTML = '';
+
+    const layers = Math.min(group.length, 3);
+    for (let i = layers; i >= 1; i--) {
+      const layer = document.createElement('span');
+      layer.className = `gt-marker-stack__layer gt-marker-stack__layer--${i}`;
+
+      const img = document.createElement('img');
+      img.alt = '';
+      img.draggable = false;
+      const src = group[layers - i]?.imageUrl ?? EXPLORE_IMAGE_FALLBACK;
+      img.src = src;
+      img.addEventListener('error', () => { img.src = EXPLORE_IMAGE_FALLBACK; });
+
+      layer.appendChild(img);
+      button.appendChild(layer);
+    }
+  }
+
+  private openStackPicker(group: MapEntityMarker[]): void {
+    this.ngZone.run(() => {
+      this.selectedPlace = null;
+      this.routeErrorMessage = ''; this.routeInfoMessage = '';
+      this.clearRoute();
+      this.stackedPlacePicker = group;
+      this.cdr.detectChanges();
+    });
+  }
+
+  closeStackPicker(): void {
+    this.stackedPlacePicker = null;
+  }
+
+  selectFromStack(marker: MapEntityMarker): void {
+    this.stackedPlacePicker = null;
+    this.onMarkerClick(marker);
+  }
+
   private refreshMarkerDom(entry: MarkerEntry, marker: MapEntityMarker): void {
     const button = entry.marker.getElement();
     button.classList.add('gt-marker');
@@ -1455,6 +1601,12 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private activateMarker(key: string, marker: MapEntityMarker): void {
+    if (this.stackedPlacePicker) {
+      this.stackedPlacePicker = null;
+      this.cdr.detectChanges();
+      return;
+    }
+
     const now = Date.now();
     if (this.lastMarkerActivationKey === key && now - this.lastMarkerActivationAt < MARKER_ACTIVATION_DEDUPE_MS) {
       return;

@@ -17,6 +17,9 @@
                 [showBack]="true" backRoute="/events" />
 
     <div class="flex-1 overflow-y-auto px-8 py-6">
+      <div *ngIf="feedbackMessage" class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        {{ feedbackMessage }}
+      </div>
 
       <!-- ID + status -->
       <div class="flex items-center gap-2 mb-5 text-sm text-gray-500">
@@ -109,6 +112,12 @@
                     <button type="button" (click)="goToParentPlace($event)" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentPlaceName }}</button>
                   </div>
                 </ng-container>
+                <ng-container *ngIf="(item)['customVenueName']">
+                  <div class="flex flex-col gap-1 col-span-2">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Venue Name</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['customVenueName'] }}</span>
+                  </div>
+                </ng-container>
                 <ng-container *ngIf="(item)['dateRange']">
                   <div class="flex flex-col gap-1 col-span-2">
                     <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Date</span>
@@ -169,13 +178,29 @@
           </ng-container>
 
           <!-- Event Details (organizer, contact, limits) -->
-          <ng-container *ngIf="(item)['organizerName'] || (item)['contactEmail'] || (item)['attendanceLimit'] || (item)['ageRestriction']">
+          <ng-container *ngIf="true">
             <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
               <div class="px-6 py-4 border-b border-gray-100">
                 <h3 class="text-sm font-bold text-gray-800">Event Details</h3>
               </div>
               <div class="px-6 py-5">
                 <div class="grid grid-cols-2 gap-4">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Tickets</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['freeEvent'] ? 'Free entry' : ((item)['ticketPrice'] || 'Paid') }}</span>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Recurring</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['recurring'] ? 'Yes' : 'No' }}</span>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">All-day</span>
+                    <span class="text-sm font-medium text-gray-700">{{ (item)['allDay'] ? 'Yes' : 'No' }}</span>
+                  </div>
+                  <div *ngIf="(item)['externalTicketLink']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Ticket Link</span>
+                    <a [href]="(item)['externalTicketLink']" target="_blank" rel="noopener noreferrer" class="text-sm text-blue-700 hover:underline">Open link</a>
+                  </div>
                   <div *ngIf="(item)['organizerName']" class="flex flex-col gap-1">
                     <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Organizer</span>
                     <span class="text-sm font-medium text-gray-700">{{ (item)['organizerName'] }}</span>
@@ -204,8 +229,8 @@
                 <h3 class="text-sm font-bold text-gray-800">Description</h3>
               </div>
               <div class="px-6 py-5">
-                <div class="text-sm text-gray-600 leading-relaxed"
-                     [innerHTML]="(item)['description']"></div>
+                <div class="text-sm text-gray-600 leading-relaxed whitespace-pre-line"
+                     [innerHTML]="(item)['description'] | descriptionRichHtml"></div>
               </div>
             </div>
           </ng-container>
@@ -249,7 +274,7 @@
               </div>
               <div class="px-6 py-5">
                 <div class="grid grid-cols-3 gap-3">
-                  <div *ngFor="let img of (item)['galleryImages']; let i = index"
+                  <div *ngFor="let img of galleryPreview((item)['galleryImages'] || []); let i = index"
                        class="aspect-video rounded-lg overflow-hidden bg-gray-100 cursor-pointer group relative"
                        (click)="openLightbox((item)['galleryImages'] || [], i)">
                     <img [src]="img.url" [alt]="img.name" class="w-full h-full object-cover transition-transform group-hover:scale-105" />
@@ -258,6 +283,11 @@
                         <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
                       </svg>
                     </div>
+                    <span
+                      *ngIf="i === galleryLimit - 1 && galleryOverflow((item)['galleryImages'] || []) > 0"
+                      class="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-bold text-white">
+                      +{{ galleryOverflow((item)['galleryImages'] || []) }}
+                    </span>
                   </div>
                 </div>
               </div>

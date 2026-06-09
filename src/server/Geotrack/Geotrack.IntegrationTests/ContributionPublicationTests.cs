@@ -6,6 +6,7 @@ using System.Text.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.DTOs.Contributions;
+using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.DTOs.Notifications;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Domain.Entities.Core;
@@ -129,6 +130,73 @@ public sealed class ContributionPublicationTests
         Assert.Equal(createdContribution.Contribution.Id, rejectionNotification.RelatedEntityId);
         Assert.Equal($"/contributions/{createdContribution.Contribution.Id}", rejectionNotification.ActionUrl);
         Assert.False(rejectionNotification.IsRead);
+    }
+
+    [Fact]
+    public async Task Approved_owned_contribution_detail_uses_published_place_after_owner_edit()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+
+        using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var createdContribution = await CreatePlaceContributionAsync(contributorClient);
+
+        await GrantRegionalManagerCoverageAsync(app, "elena@example.com", SeedRegionName);
+
+        using var reviewerClient = await LoginAsync(app, "elena@example.com", "password123");
+        var approvalResponse = await reviewerClient.PostAsJsonAsync(
+            $"/api/contributions/{createdContribution.Contribution.Id}/approve",
+            new ReviewPlaceContributionRequestDto { Note = "Ready for owner edits." });
+        approvalResponse.EnsureSuccessStatusCode();
+
+        var approved = await approvalResponse.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(approved);
+        var placeId = Assert.IsType<int>(approved!.Contribution.PlaceId);
+
+        var updatePayload = new
+        {
+            name = "Beta Villa Updated",
+            description = "Updated approved description from owner edit.",
+            website = "https://betavilla.example/updated",
+            contactEmail = "updated@betavilla.example",
+            phoneNumber = "+3857654321",
+            tags = new[] { "Romantic", "Sea View" },
+            amenities = new[] { "spa", "sea-view" },
+            bookingPartners = new[]
+            {
+                new { id = "booking", url = "https://partners.example/booking/beta-villa-updated" }
+            }
+        };
+
+        var ownerUpdateResponse = await PutOwnerUpdateAsync(contributorClient, placeId, updatePayload);
+        ownerUpdateResponse.EnsureSuccessStatusCode();
+
+        var contributionDetail = await contributorClient.GetFromJsonAsync<PlaceContributionResponseDto>(
+            $"/api/contributions/{createdContribution.Contribution.Id}");
+        Assert.NotNull(contributionDetail);
+        Assert.Equal("Beta Villa Updated", contributionDetail!.Contribution.Name);
+        Assert.Equal("Updated approved description from owner edit.", contributionDetail.Contribution.Description);
+        Assert.Equal("updated@betavilla.example", contributionDetail.Contribution.ContactEmail);
+        Assert.Contains("Romantic", contributionDetail.Contribution.Tags);
+        Assert.Contains("Sea View", contributionDetail.Contribution.Tags);
+        Assert.Contains("spa", contributionDetail.Contribution.StayAmenities);
+        Assert.Contains("sea-view", contributionDetail.Contribution.StayAmenities);
+        Assert.Contains(
+            contributionDetail.Contribution.BookingPartners,
+            partner => partner.Id == "booking" && partner.Url == "https://partners.example/booking/beta-villa-updated");
+
+        var contributions = await contributorClient.GetFromJsonAsync<GetPlaceContributionsResponseDto>("/api/contributions");
+        Assert.NotNull(contributions);
+        var card = Assert.Single(contributions!.Contributions, item => item.Id == createdContribution.Contribution.Id);
+        Assert.Equal("Beta Villa Updated", card.Name);
+        Assert.Equal("Approved", card.Status);
+        Assert.Equal(placeId, card.PublishedPlaceId);
+
+        var publicHotelDetail = await contributorClient.GetFromJsonAsync<HotelDetailDto>(
+            $"/api/places/hotels/{placeId}");
+        Assert.NotNull(publicHotelDetail);
+        Assert.StartsWith("Updated approved description from owner edit", publicHotelDetail!.About);
+        Assert.Contains(publicHotelDetail.Tags, tag => tag.Label == "Romantic");
+        Assert.Contains(publicHotelDetail.Amenities, amenity => amenity.Label == "Spa");
     }
 
     [Fact]
@@ -324,8 +392,6 @@ public sealed class ContributionPublicationTests
 
     [Theory]
     [InlineData("Landmark")]
-    [InlineData("Nature")]
-    [InlineData("Beach")]
     public async Task Create_does_not_require_ownership_proof_for_non_business_place_types(string placeType)
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -343,6 +409,24 @@ public sealed class ContributionPublicationTests
         Assert.Equal("PendingReview", created!.Contribution.Status);
         Assert.Equal(placeType, created.Contribution.PlaceType);
         Assert.False(created.Contribution.HasOwnershipProofDocument);
+    }
+
+    [Theory]
+    [InlineData("Beach")]
+    [InlineData("Nature")]
+    [InlineData("Shopping")]
+    public async Task Create_rejects_contribution_for_catalog_only_place_types(string placeType)
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreatePayloadForPlaceType($"Catalog Only {placeType}", placeType);
+
+        var response = await PostContributionAsync(client, payload, ownershipProof: OwnershipProofUpload.Missing);
+
+        await AssertErrorAsync(
+            response,
+            HttpStatusCode.BadRequest,
+            $"Place type '{placeType}' is not available for contributions.");
     }
 
     [Theory]
@@ -452,6 +536,85 @@ public sealed class ContributionPublicationTests
         var outOfRegionDetail = await outOfRegionManager.GetAsync(
             $"/api/admin/regional/requests/contribution/{createdId}?regionId={unassignedRegionId}");
         Assert.Equal(HttpStatusCode.NotFound, outOfRegionDetail.StatusCode);
+    }
+
+    [Fact]
+    public async Task Content_manager_can_approve_unassigned_contribution_into_suggested_region_and_new_destination()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var regionId = await CreateUnassignedRegionAsync(app, "Kolubarski");
+
+        using var contributorClient = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreateGenericPlaceContributionPayload("Valjevo Hidden Cafe");
+        payload["placeType"] = "Landmark";
+        payload["city"] = "Valjevo";
+        payload["region"] = "Kolubara District";
+        payload["country"] = "Serbia";
+        payload["latitude"] = 44.2706;
+        payload["longitude"] = 19.8842;
+        payload["images"] = new[]
+        {
+            new { url = "/images/valjevo-hidden-cafe-card.jpg", imageRole = "card", sortOrder = -9 },
+            new { url = "/images/valjevo-hidden-cafe-cover.jpg", imageRole = "cover", sortOrder = -10 }
+        };
+
+        var createResponse = await PostContributionAsync(contributorClient, payload);
+        if (!createResponse.IsSuccessStatusCode)
+        {
+            var error = await createResponse.Content.ReadAsStringAsync();
+            Assert.True(createResponse.IsSuccessStatusCode, error);
+        }
+        var created = await createResponse.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+        Assert.Null(created!.Contribution.LocationId);
+
+        using var moderatorClient = await RegisterContentModeratorAndLoginAsync(app, "cm-contribution");
+        var detail = await moderatorClient.GetFromJsonAsync<PlaceContributionResponseDto>(
+            $"/api/contributions/content-manager/{created.Contribution.Id}");
+        Assert.NotNull(detail);
+        Assert.Equal(regionId, detail!.Contribution.SuggestedRegionId);
+        Assert.Equal("Kolubarski", detail.Contribution.SuggestedRegionName);
+        Assert.Equal("Valjevo", detail.Contribution.SuggestedDestinationName);
+
+        var approvalResponse = await moderatorClient.PostAsJsonAsync(
+            $"/api/contributions/content-manager/{created.Contribution.Id}/approve",
+            new ContentManagerApproveContributionDto
+            {
+                RegionId = regionId,
+                NewDestinationName = "Valjevo",
+                NewLocationName = "Tesnjar",
+                Note = "Approved into new destination."
+            });
+        approvalResponse.EnsureSuccessStatusCode();
+
+        var approved = await approvalResponse.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(approved);
+        var placeId = Assert.IsType<int>(approved!.Contribution.PlaceId);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var publishedPlace = await db.Places
+            .Include(place => place.Location)
+                .ThenInclude(location => location.Destination)
+            .SingleAsync(place => place.Id == placeId);
+
+        Assert.Equal("Valjevo Hidden Cafe", publishedPlace.Name);
+        Assert.Contains("valjevo hidden cafe", publishedPlace.SearchText);
+        Assert.Equal("Tesnjar", publishedPlace.Location.Name);
+        Assert.Equal("Valjevo", publishedPlace.Location.Destination.Name);
+        Assert.Equal(regionId, publishedPlace.Location.Destination.RegionId);
+
+        var search = await contributorClient.GetFromJsonAsync<ExploreSearchResponseDto>(
+            $"/api/explore/search?destinationId={publishedPlace.Location.DestinationId}&q=hidden");
+        Assert.NotNull(search);
+        Assert.Contains(search!.Items, item => item.Id == placeId && item.Title == "Valjevo Hidden Cafe");
+
+        var explore = await contributorClient.GetFromJsonAsync<ExplorePageDto>(
+            $"/api/explore?destinationId={publishedPlace.Location.DestinationId}");
+        Assert.NotNull(explore);
+        Assert.Contains(explore!.Sections, section =>
+            section.Key == "places" &&
+            section.Items.Any(item => item.Id == placeId && item.Title == "Valjevo Hidden Cafe"));
     }
 
     [Fact]
@@ -636,6 +799,26 @@ public sealed class ContributionPublicationTests
         return await LoginAsync(app, email, "Password123!");
     }
 
+    private static async Task<HttpClient> RegisterContentModeratorAndLoginAsync(GeotrackApiFactory app, string prefix)
+    {
+        var email = $"{prefix}-{Guid.NewGuid():N}@example.com";
+
+        using var registrationClient = app.CreateClient();
+        var registerResponse = await registrationClient.PostAsJsonAsync(
+            "/api/auth/register",
+            new RegisterRequestDto
+            {
+                FullName = "Contribution Content Moderator",
+                Email = email,
+                Password = "Password123!",
+            });
+        registerResponse.EnsureSuccessStatusCode();
+
+        await GrantRoleAsync(app, email, "ContentModerator");
+
+        return await LoginAsync(app, email, "Password123!");
+    }
+
     private static async Task<HttpClient> RegisterRegionalManagerAndLoginAsync(
         GeotrackApiFactory app,
         string prefix,
@@ -682,14 +865,17 @@ public sealed class ContributionPublicationTests
             .SingleAsync();
     }
 
-    private static async Task<int> CreateUnassignedRegionAsync(GeotrackApiFactory app)
+    private static Task<int> CreateUnassignedRegionAsync(GeotrackApiFactory app) =>
+        CreateUnassignedRegionAsync(app, $"Contribution Queue Out {Guid.NewGuid():N}");
+
+    private static async Task<int> CreateUnassignedRegionAsync(GeotrackApiFactory app, string regionName)
     {
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var territory = await db.Territories.OrderBy(item => item.Id).FirstAsync();
         var region = new Region
         {
-            Name = $"Contribution Queue Out {Guid.NewGuid():N}",
+            Name = regionName,
             TerritoryId = territory.Id,
             CreatedAt = DateTime.UtcNow
         };
@@ -719,6 +905,7 @@ public sealed class ContributionPublicationTests
             ["website"] = "https://validation.example",
             ["tags"] = new[] { "Coastal", "Private" },
             ["amenities"] = new[] { "wifi", "pool" },
+            ["images"] = RequiredContributionImages("valid-stay"),
             ["bookingPartners"] = Array.Empty<object>()
         };
     }
@@ -743,9 +930,16 @@ public sealed class ContributionPublicationTests
             ["website"] = "https://canonical-cafe.example",
             ["tags"] = new[] { "Coffee", "Local" },
             ["amenities"] = new[] { "wifi" },
+            ["images"] = RequiredContributionImages("generic-place"),
             ["bookingPartners"] = Array.Empty<object>()
         };
     }
+
+    private static object[] RequiredContributionImages(string prefix) =>
+    [
+        new { url = $"/images/{prefix}-card.jpg", imageRole = "card", sortOrder = -9 },
+        new { url = $"/images/{prefix}-cover.jpg", imageRole = "cover", sortOrder = -10 }
+    ];
 
     private static Dictionary<string, object?> CreatePayloadForPlaceType(string name, string placeType)
     {
@@ -763,6 +957,7 @@ public sealed class ContributionPublicationTests
         var payload = new
         {
             name = "Beta Villa",
+            placeType = "Stay",
             stayType = "Villa",
             address = "123 Coast Road",
             city = "Dubrovnik",
@@ -779,6 +974,11 @@ public sealed class ContributionPublicationTests
             pricePerNight = 123.45m,
             tags = new[] { "Coastal", "Private" },
             amenities = new[] { "wifi", "pool" },
+            images = new[]
+            {
+                new { url = "/images/beta-villa-card.jpg", imageRole = "card", sortOrder = -9 },
+                new { url = "/images/beta-villa-cover.jpg", imageRole = "cover", sortOrder = -10 }
+            },
             bookingPartners = new[]
             {
                 new { id = "booking", url = "https://partners.example/booking/beta-villa" },
@@ -793,7 +993,11 @@ public sealed class ContributionPublicationTests
         AddOwnershipProofDocument(formData);
 
         var response = await client.PostAsync("/api/contributions", formData);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            Assert.True(response.IsSuccessStatusCode, error);
+        }
 
         var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
         Assert.NotNull(created);
@@ -851,6 +1055,19 @@ public sealed class ContributionPublicationTests
         AddOwnershipProofDocument(formData, ownershipProof);
 
         return await client.PostAsync(endpoint, formData);
+    }
+
+    private static async Task<HttpResponseMessage> PutOwnerUpdateAsync(
+        HttpClient client,
+        int placeId,
+        object payload)
+    {
+        using var formData = new MultipartFormDataContent();
+        formData.Add(
+            new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            "payload");
+
+        return await client.PutAsync($"/api/places/{placeId}/owner-update", formData);
     }
 
     private static void AddOwnershipProofDocument(

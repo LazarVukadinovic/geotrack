@@ -344,8 +344,8 @@ public class MapService : IMapService
         var city = FirstNonEmpty(
             address.City,
             address.Town,
-            address.Village,
             address.Municipality,
+            address.Village,
             address.County,
             address.StateDistrict,
             address.State);

@@ -13,6 +13,7 @@ import {
   RegionalPlaceOwnerDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
+  RegionalStayTypeDto,
   RegionalPlaceUpdateRequest,
 } from '../models/place.model';
 
@@ -60,6 +61,7 @@ export interface PlaceListItem {
   coverImageName?: string;
   galleryImages?: { url: string; name: string }[];
   hours?: { name: string; open: boolean; openTime: string; closeTime: string }[];
+  amenities?: string[];
   internalRefId?: string;
   parentLocation?: string;
   bestTimeToVisit?: string;
@@ -198,8 +200,16 @@ export class PlacesListService {
     return this.http.get<RegionalPlaceTagDto[]>('/api/admin/regional/place-tags', { params });
   }
 
+  createPlaceTag(name: string): Observable<RegionalPlaceTagDto> {
+    return this.http.post<RegionalPlaceTagDto>('/api/admin/regional/place-tags', { name });
+  }
+
   getPlaceTypes(): Observable<RegionalPlaceTypeDto[]> {
     return this.http.get<RegionalPlaceTypeDto[]>('/api/admin/regional/place-types');
+  }
+
+  getStayTypes(): Observable<RegionalStayTypeDto[]> {
+    return this.http.get<RegionalStayTypeDto[]>('/api/admin/regional/stay-types');
   }
 
   deletePlace(regionId: number, placeId: string | number): Observable<void> {
@@ -274,6 +284,13 @@ export class PlacesListService {
       lat: typeof detail.latitude === 'number' ? detail.latitude : undefined,
       lng: typeof detail.longitude === 'number' ? detail.longitude : undefined,
       openingHours: detail.openingHours ?? undefined,
+      hours: (detail.operatingHours ?? []).map(hour => ({
+        name: hour.dayOfWeek,
+        open: hour.isOpen,
+        openTime: hour.openTime ?? '',
+        closeTime: hour.closeTime ?? '',
+      })),
+      amenities: (detail.amenities ?? []).map(amenity => amenity.name).filter(Boolean),
       contactEmail: detail.contactEmail ?? undefined,
       phoneNumber: detail.phoneNumber ?? undefined,
       contactPhone: detail.contactPhone ?? detail.phoneNumber ?? undefined,

@@ -291,7 +291,7 @@ public class EventService : IEventService
                 eventLatitude,
                 eventLongitude,
                 useCurrentLocationDistance),
-            About = evt.Description,
+            About = DisplayTextSafety.CleanOptionalRichMultiline(evt.Description) ?? string.Empty,
             Info = new EventDetailInfoDto
             {
                 Date = evt.StartDate.Date == evt.EndDate.Date

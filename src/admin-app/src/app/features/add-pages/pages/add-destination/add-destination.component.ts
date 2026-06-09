@@ -30,6 +30,7 @@ import {
   RegionalDestinationTagDto,
   RegionalDestinationUpdateRequest,
 } from '../../../../core/models/destination.model';
+import { normalizeEditorDescriptionHtml } from '../../../../shared/utils/description-formatting';
 import {
   applyAssignedRegionViewport,
   assignedRegionZone,
@@ -74,7 +75,6 @@ interface ClassItem {
 export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
   private static readonly initialVisibleClassificationTags = 5;
-  private static readonly expandedVisibleClassificationTags = 10;
   private readonly mapTileLayer = inject(MapTileLayerService);
 
   @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
@@ -98,6 +98,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   destinationName = '';
   summary = '';
   tagInput = '';
+  tagFilter = '';
 
   classItems: ClassItem[] = [];
   destinationTags: RegionalDestinationTagDto[] = [];
@@ -219,24 +220,33 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   get selectedAdditionalTags(): RegionalDestinationTagDto[] {
-    const primaryIds = new Set(this.classItems.map((item) => item.tag.id));
     return this.destinationTags
-      .filter((tag) => this.selectedTagIds.has(tag.id) && !primaryIds.has(tag.id))
+      .filter((tag) => this.selectedTagIds.has(tag.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   get visibleClassItems(): ClassItem[] {
-    return this.classItems.slice(0, this.visibleClassificationLimit);
+    const query = this.tagFilter.trim().toLocaleLowerCase();
+    if (!query) return this.classItems;
+
+    return this.classItems.filter((item) =>
+      item.tag.name.toLocaleLowerCase().includes(query) ||
+      item.tag.slug.toLocaleLowerCase().includes(query),
+    );
   }
 
   get showClassificationToggle(): boolean {
-    return this.classItems.length > AddDestinationComponent.initialVisibleClassificationTags;
+    return false;
   }
 
   get visibleClassificationLimit(): number {
     return this.classificationExpanded
-      ? AddDestinationComponent.expandedVisibleClassificationTags
+      ? this.classItems.length
       : AddDestinationComponent.initialVisibleClassificationTags;
+  }
+
+  get remainingClassificationCount(): number {
+    return Math.max(0, this.classItems.length - this.visibleClassItems.length);
   }
 
   get createdDateDisplay(): string {
@@ -377,7 +387,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
         setTimeout(() => {
           if (this.editorRef?.nativeElement) {
-            this.editorRef.nativeElement.innerHTML = dto.description ?? '';
+            this.editorRef.nativeElement.innerHTML = normalizeEditorDescriptionHtml(dto.description);
             this.syncEmptyState();
             this.notifyStateChanged();
           }
@@ -408,25 +418,45 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       clearTimeout(this.tagSearchHandle);
     }
 
-    const query = this.tagInput.trim();
-    if (!query) {
-      this.additionalTagResults = [];
-      this.tagSearchLoading = false;
-      this.notifyStateChanged();
-      return;
-    }
-
-    this.tagSearchHandle = setTimeout(() => this.searchTags(query), 250);
+    this.additionalTagResults = [];
+    this.tagSearchLoading = false;
+    this.notifyStateChanged();
   }
 
   addTag(event: Event): void {
     event.preventDefault();
-    const firstAvailable = this.additionalTagResults.find(
-      (tag) => !this.selectedTagIds.has(tag.id),
+    const name = this.tagInput.trim();
+    if (name.length < 2 || this.tagSearchLoading) return;
+
+    const existingSelectedTag = this.destinationTags.find(
+      tag => tag.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase() && this.selectedTagIds.has(tag.id),
     );
-    if (firstAvailable) {
-      this.selectAdditionalTag(firstAvailable);
+    if (existingSelectedTag) {
+      this.tagInput = '';
+      this.notifyStateChanged();
+      return;
     }
+
+    const tag = this.findTagToAdd();
+    if (tag) {
+      this.selectAdditionalTag(tag);
+      return;
+    }
+
+    this.tagSearchLoading = true;
+    this.tagSearchSubscription?.unsubscribe();
+    this.tagSearchSubscription = this.destinationsService
+      .createDestinationTag(name)
+      .pipe(
+        finalize(() => {
+          this.tagSearchLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: (createdTag) => this.selectAdditionalTag(createdTag),
+        error: (error) => this.handleLoadError(error, 'Unable to create destination tag.'),
+      });
   }
 
   selectAdditionalTag(tag: RegionalDestinationTagDto): void {
@@ -447,6 +477,15 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.notifyStateChanged();
   }
 
+  onEditorKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      document.execCommand('insertLineBreak');
+      this.syncToolbarState();
+      this.syncEmptyState();
+    }
+  }
+
   execFormat(command: 'bold' | 'italic' | 'underline'): void {
     document.execCommand(command, false, undefined);
     this.editorRef.nativeElement.focus();
@@ -463,6 +502,18 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.syncEmptyState();
   }
 
+  onEditorPaste(event: ClipboardEvent): void {
+    const clipboard = event.clipboardData;
+    if (!clipboard) return;
+
+    event.preventDefault();
+    const html = clipboard.getData('text/html');
+    const text = clipboard.getData('text/plain');
+    document.execCommand('insertHTML', false, normalizeEditorDescriptionHtml(html || text));
+    this.syncToolbarState();
+    this.syncEmptyState();
+  }
+
   onEditorBlur(): void {
     this.syncToolbarState();
     const el = this.editorRef?.nativeElement;
@@ -471,6 +522,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')
     ) {
       el.innerHTML = '';
+    } else if (el) {
+      el.innerHTML = normalizeEditorDescriptionHtml(el.innerHTML);
     }
     this.syncEmptyState();
   }
@@ -738,7 +791,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const descriptionHtml = normalizeEditorDescriptionHtml(this.editorRef?.nativeElement?.innerHTML);
 
     return {
       regionId,
@@ -748,7 +801,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       status: 'Published',
       latitude: this.centerLat,
       longitude: this.centerLng,
-      tagIds: [...this.selectedTagIds],
+      tagIds: this.selectedTagIdList(),
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
       galleryImageFiles: this.galleryImages.map((image) => image.file),
@@ -785,7 +838,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const descriptionHtml = normalizeEditorDescriptionHtml(this.editorRef?.nativeElement?.innerHTML);
 
     return {
       name,
@@ -793,7 +846,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       description: descriptionHtml || null,
       latitude: this.centerLat,
       longitude: this.centerLng,
-      tagIds: [...this.selectedTagIds],
+      tagIds: this.selectedTagIdList(),
     };
   }
 
@@ -1102,6 +1155,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       });
   }
 
+  private findTagToAdd(): RegionalDestinationTagDto | null {
+    const query = this.tagInput.trim().toLocaleLowerCase();
+    const exactMatch = this.destinationTags.find(
+      (tag) => tag.name.trim().toLocaleLowerCase() === query && !this.selectedTagIds.has(tag.id),
+    );
+    return exactMatch ?? null;
+  }
+
   private normalizeTags(
     tags: RegionalDestinationTagDto[] | null | undefined,
   ): RegionalDestinationTagDto[] {
@@ -1132,6 +1193,10 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.classItems = [...this.classItems, { tag, checked }].sort((a, b) =>
       a.tag.name.localeCompare(b.tag.name),
     );
+  }
+
+  private selectedTagIdList(): number[] {
+    return [...new Set(this.selectedTagIds)].sort((a, b) => a - b);
   }
 
   private setActiveRegion(regionId: number, updateUrl: boolean): void {

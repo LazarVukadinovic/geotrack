@@ -33,6 +33,7 @@ describe('NewLocationComponent', () => {
     getLocationTypes: ReturnType<typeof vi.fn>;
     getLocationTags: ReturnType<typeof vi.fn>;
     searchLocationTags: ReturnType<typeof vi.fn>;
+    createLocationTag: ReturnType<typeof vi.fn>;
     createLocation: ReturnType<typeof vi.fn>;
   };
 
@@ -73,12 +74,14 @@ describe('NewLocationComponent', () => {
       getLocationTypes: vi.fn(),
       getLocationTags: vi.fn(),
       searchLocationTags: vi.fn(),
+      createLocationTag: vi.fn(),
       createLocation: vi.fn(),
     };
     locationsService.getParentDestinations.mockReturnValue(of(parentDestinations));
     locationsService.getLocationTypes.mockReturnValue(of(locationTypes));
     locationsService.getLocationTags.mockReturnValue(of(tags));
     locationsService.searchLocationTags.mockReturnValue(of([searchedTag]));
+    locationsService.createLocationTag.mockReturnValue(of(searchedTag));
     locationsService.createLocation.mockReturnValue(of({
       id: 44,
       name: 'Created',
@@ -111,6 +114,8 @@ describe('NewLocationComponent', () => {
             getUser: () => ({ email: 'manager@example.com', role: 'RegionalManager' }),
             isAdministrator: () => false,
             isTerritoryManager: () => false,
+            isContentModerator: () => false,
+            getActiveAdminView: () => 'RegionalManager',
             canAccessTerritoryAdmin: () => false,
             logout: vi.fn(),
           },
@@ -187,28 +192,26 @@ describe('NewLocationComponent', () => {
     ]);
   });
 
-  it('supports additional location tag search', async () => {
-    vi.useFakeTimers();
-
-    component.tagInput = 'walk';
-    component.onTagInputChange();
-    vi.advanceTimersByTime(300);
+  it('creates new location tags from the new tag input', async () => {
+    component.tagInput = 'Search Result Tag';
+    component.addTag(new KeyboardEvent('keydown'));
     await Promise.resolve();
 
-    expect(locationsService.searchLocationTags).toHaveBeenCalledWith('walk');
-    expect(component.additionalTagResults[0].id).toBe(4);
-    vi.useRealTimers();
+    expect(locationsService.createLocationTag).toHaveBeenCalledWith('Search Result Tag');
+    expect(component.selectedTagIds.has(4)).toBe(true);
+    expect(component.classItems.find(item => item.tag.id === 4)?.checked).toBe(true);
   });
 
-  it('uses five initial and ten expanded classification tags', () => {
+  it('renders all backend tags inside the compact filterable tag list', () => {
     const manyTags = buildTags(12);
     component.classItems = manyTags.map(tag => ({ tag, checked: false }));
 
-    expect(component.visibleClassItems.map(item => item.tag.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(component.visibleClassItems.map(item => item.tag.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 
-    component.toggleClassificationExpanded();
+    component.tagFilter = '12';
 
-    expect(component.visibleClassItems.map(item => item.tag.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(component.visibleClassItems.map(item => item.tag.id)).toEqual([12]);
+    expect(component.showClassificationToggle).toBe(false);
   });
 
   it('does not render runtime hardcoded classification tags that were not returned by the backend', () => {
@@ -248,6 +251,7 @@ describe('NewLocationComponent', () => {
     component.onClassItemChange(backendTag!);
     component.selectAdditionalTag(searchedTag);
     component.zoneConfirmed = true;
+    setPublishReadyMediaAndCenter();
     (component as any).confirmedLayer = {};
     (component as any).confirmedShapeType = 'Polygon';
     setParentDestinationZone();
@@ -275,6 +279,7 @@ describe('NewLocationComponent', () => {
     component.locationName = 'Created location';
     component.parentDestinationId = 11;
     component.zoneConfirmed = true;
+    setPublishReadyMediaAndCenter();
     (component as any).confirmedLayer = {};
     (component as any).confirmedShapeType = 'Polygon';
     setParentDestinationZone();
@@ -284,6 +289,14 @@ describe('NewLocationComponent', () => {
     expect(component.isSaving).toBe(false);
     expect(component.errorMessage).toBe('Validation failed.');
   });
+
+  function setPublishReadyMediaAndCenter(): void {
+    (component as any).cardImageFile = new File(['card'], 'card.webp', { type: 'image/webp' });
+    (component as any).coverImageFile = new File(['cover'], 'cover.webp', { type: 'image/webp' });
+    component.centerLat = 43;
+    component.centerLng = 19;
+    (component as any).scopeValidationResult = { isAllowed: true };
+  }
 
   function setParentDestinationZone(): void {
     (component as any).mapZones = [{

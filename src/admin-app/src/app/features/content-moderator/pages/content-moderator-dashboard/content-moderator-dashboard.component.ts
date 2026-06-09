@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { Subject, finalize, takeUntil } from 'rxjs';
+import { Subject, forkJoin, finalize, takeUntil } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ContentModeratorDashboardService } from '../../../../core/services/content-moderator/content-moderator-dashboard.service';
+import { ContentModeratorContributionsService } from '../../../../core/services/content-moderator/content-moderator-contributions.service';
 import {
   ContentModeratorDashboard,
   ContentModeratorDashboardStats,
@@ -21,6 +22,7 @@ import {
 export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly dashboardService = inject(ContentModeratorDashboardService);
+  private readonly contributionsService = inject(ContentModeratorContributionsService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly router = inject(Router);
   private readonly destroy$ = new Subject<void>();
@@ -29,6 +31,7 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
   isLoading = false;
   errorMessage: string | null = null;
   pendingReviewReportsCount = 0;
+  pendingContributionsCount = 0;
 
   stats: { label: string; value: number; sub: string; color: string; icon: string; route: string }[] = [];
 
@@ -54,7 +57,10 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
     this.errorMessage = null;
     this.cdr.markForCheck();
 
-    this.dashboardService.loadDashboard()
+    forkJoin({
+      dashboard: this.dashboardService.loadDashboard(),
+      contributions: this.contributionsService.getAll(),
+    })
       .pipe(
         takeUntil(this.destroy$),
         finalize(() => {
@@ -63,15 +69,17 @@ export class ContentModeratorDashboardComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: dashboard => {
+        next: ({ dashboard, contributions }) => {
           this.dashboard = dashboard;
           this.pendingReviewReportsCount = dashboard.badges.pendingReviewReportsCount;
+          this.pendingContributionsCount = contributions.filter(i => i.status === 'PendingReview').length;
           this.buildStats(dashboard.stats);
           this.cdr.markForCheck();
         },
         error: () => {
           this.dashboard = null;
           this.pendingReviewReportsCount = 0;
+          this.pendingContributionsCount = 0;
           this.stats = [];
           this.errorMessage = 'Unable to load content moderator dashboard data.';
           this.cdr.markForCheck();

@@ -86,6 +86,7 @@ public class RegionalEventUpdateRequestDto
     public string? OrganizerName { get; set; }
     public string? ContactEmail { get; set; }
     public int? AttendanceLimit { get; set; }
+    public bool ClearAttendanceLimit { get; set; }
     public string? AgeRestriction { get; set; }
     public string? VenueDescription { get; set; }
     public string? ArrivalTips { get; set; }

@@ -142,7 +142,8 @@
         <div class="divide-y divide-gray-50" *ngIf="!waitingForRegion && !loadingQueue">
           <div
             *ngFor="let req of requests"
-            class="flex items-center gap-4 px-4 py-3.5 hover:bg-gray-50/60 transition-colors group"
+            class="flex items-center gap-4 px-4 py-3.5 hover:bg-gray-50/60 transition-colors group cursor-pointer"
+            (click)="previewRequest(req)"
           >
             <input
               type="checkbox"
@@ -150,6 +151,7 @@
               [checked]="selectedIds.has(req.requestKey)"
               [disabled]="req.status !== 'Pending' || isProcessing(req)"
               (change)="toggleSelect(req, $event)"
+              (click)="$event.stopPropagation()"
             />
 
             <div class="w-14 h-14 rounded-lg flex-shrink-0 bg-gray-100 border border-gray-100 overflow-hidden flex items-center justify-center" style="min-width: 56px;">
@@ -192,17 +194,7 @@
               </span>
             </div>
 
-            <div class="flex items-center gap-2 flex-shrink-0">
-              <button
-                type="button"
-                (click)="previewRequest(req)"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-white border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-                </svg>
-                Preview
-              </button>
+            <div class="flex items-center gap-2 flex-shrink-0" (click)="$event.stopPropagation()">
               <button
                 type="button"
                 [disabled]="req.status !== 'Pending' || isProcessing(req)"

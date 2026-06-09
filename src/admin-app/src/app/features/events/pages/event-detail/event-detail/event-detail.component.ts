@@ -10,12 +10,13 @@ import { TopbarComponent }  from '../../../../../shared/components/topbar/topbar
 import { EventsListService, EventListItem } from '../../../../../core/services/events-list.service';
 import { LightboxService } from '../../../../../core/services/lightbox.service';
 import { MapTileLayerService } from '../../../../../core/services/map-tile-layer.service';
+import { DescriptionRichHtmlPipe } from '../../../../../shared/pipes/description-rich-html.pipe';
 declare const L: any;
 
 @Component({
   selector: 'app-event-detail',
   standalone: true,
-  imports: [CommonModule, DecimalPipe, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, DecimalPipe, FormsModule, SidebarComponent, TopbarComponent, DescriptionRichHtmlPipe],
   templateUrl: './event-detail.component.html',
 })
 export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -36,6 +37,7 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   item:      EventListItem | null = null;
   isLoading  = true;
   notFound   = false;
+  feedbackMessage: string | null = null;
 
   region   = '';
   userName = '';
@@ -54,18 +56,20 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
-    const navState = history.state as Partial<EventListItem> & { regionId?: number };
+    const navState = history.state as Partial<EventListItem> & { regionId?: number; feedbackMessage?: string };
+    const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
+    const regionId = navState?.regionId ?? (Number.isFinite(queryRegionId) && queryRegionId > 0 ? queryRegionId : null);
+    this.feedbackMessage = typeof navState?.feedbackMessage === 'string' ? navState.feedbackMessage : null;
 
     if (id) {
-      const fromService = this.svc.findById(id);
-      if (fromService) {
-        this.setItem(fromService);
+      if (regionId) {
+        this.loadFromBackend(regionId, id);
         return;
       }
 
-      const regionId = navState?.regionId ?? null;
-      if (regionId) {
-        this.loadFromBackend(regionId, id);
+      const fromService = this.svc.findById(id);
+      if (fromService) {
+        this.setItem(fromService);
         return;
       }
     }
@@ -240,8 +244,9 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   editItem(): void {
     const full = this.svc.findById(this.item!.id) ?? this.item!;
-    this.router.navigate(['/events/new'], {
-      state: { place: full, returnTo: `/events/detail/${full.id}` }
+    this.router.navigate([full.editRoute ?? `/events/edit/${full.id}`], {
+      queryParams: full.regionId ? { regionId: full.regionId } : undefined,
+      state: { place: full, regionId: full.regionId, editMode: true, returnTo: `/events/detail/${full.id}` }
     });
   }
 
@@ -264,6 +269,16 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
         this.deleteTarget = null;
         this.router.navigate(['/events']);
       });
+  }
+
+  readonly galleryLimit = 6;
+
+  galleryPreview(images: { url: string; name: string }[]): { url: string; name: string }[] {
+    return images.slice(0, this.galleryLimit);
+  }
+
+  galleryOverflow(images: { url: string; name: string }[]): number {
+    return Math.max(0, images.length - this.galleryLimit);
   }
 
   openLightbox(images: { url: string; name: string }[], index: number): void {

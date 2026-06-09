@@ -84,6 +84,22 @@ describe('StepBasicsComponent', () => {
     expect(component.isValid()).toBe(true);
   });
 
+  it('keeps existing ownership proof locked for approved owner edits', () => {
+    fixture.componentRef.setInput('ownershipProofLocked', true);
+    component.form.ownershipProofDocumentUrl = '/media/uploads/contributions/existing-proof.pdf';
+    component.form.ownershipProofOriginalFileName = 'existing-proof.pdf';
+
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: [makePdfFile()] });
+
+    component.onOwnershipProofSelected({ target: input } as unknown as Event);
+    component.selectPlaceType({ id: 1, name: 'Landmark', description: null, isOwnable: false });
+
+    expect(component.form.ownershipProofFile).toBeNull();
+    expect(component.form.ownershipProofDocumentUrl).toBe('/media/uploads/contributions/existing-proof.pdf');
+    expect(component.form.ownershipProofOriginalFileName).toBe('existing-proof.pdf');
+  });
+
   function fillValidLocation(): void {
     component.form.name = 'Validation Place';
     component.form.city = 'Dubrovnik';

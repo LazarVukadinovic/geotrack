@@ -194,8 +194,14 @@ public sealed class RegionalPlacesTests
         var invalidUrlResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", invalidUrl);
         Assert.Equal(HttpStatusCode.BadRequest, invalidUrlResponse.StatusCode);
 
-        var invalidHours = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId);
-        invalidHours.OperatingHours[0].OpenTime = "18:00";
+        var overnightHours = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId, name: "Overnight Hours Place");
+        overnightHours.OperatingHours[0].OpenTime = "18:00";
+        overnightHours.OperatingHours[0].CloseTime = "09:00";
+        var overnightHoursResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", overnightHours);
+        Assert.Equal(HttpStatusCode.Created, overnightHoursResponse.StatusCode);
+
+        var invalidHours = BuildCreateRequest(fixture.AssignedRegionId, fixture.AssignedLocationId, placeTypeId, name: "Invalid Equal Hours Place");
+        invalidHours.OperatingHours[0].OpenTime = "09:00";
         invalidHours.OperatingHours[0].CloseTime = "09:00";
         var invalidHoursResponse = await manager.PostAsJsonAsync("/api/admin/regional/places", invalidHours);
         Assert.Equal(HttpStatusCode.BadRequest, invalidHoursResponse.StatusCode);

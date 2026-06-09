@@ -9,6 +9,8 @@ import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
+import { PhotoGalleryComponent } from '../../../../shared/components/photo-gallery/photo-gallery.component';
+import type { EntityImage } from '../../../../core/models/entity-image.model';
 import { HttpClient } from '@angular/common/http';
 import { HotelDetailService } from '../../services/hotel-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
@@ -21,7 +23,7 @@ import type { MapEntityMarker } from '../../../../core/services/map-api.service'
 @Component({
   selector: 'app-hotel-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink],
+  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent],
   providers: [ReviewInteractionsService],
   templateUrl: './hotel-detail-page.component.html',
   styleUrl: './hotel-detail-page.component.scss',
@@ -53,7 +55,8 @@ export class HotelDetailPageComponent {
   );
 
   protected readonly scrollProgress = signal(0);
-  protected readonly selectedImageUrl = signal<string | null>(null);
+  protected readonly galleryOpen = signal(false);
+  protected readonly galleryStartIndex = signal(0);
   protected readonly ownershipClaimOpen = signal(false);
   protected readonly ownershipProofFile = signal<File | null>(null);
   protected readonly ownershipProofFileName = signal('');
@@ -61,7 +64,24 @@ export class HotelDetailPageComponent {
   protected readonly ownershipClaimMessage = signal('');
   protected readonly ownershipClaimSubmitting = signal(false);
   protected readonly ownershipClaimSubmitted = signal(false);
-  protected readonly heroImage = computed(() => this.selectedImageUrl() ?? this.hotel()?.heroImage ?? '');
+  protected readonly heroImage = computed(() => this.hotel()?.heroImage ?? '');
+
+  protected readonly allGalleryImages = computed((): EntityImage[] => {
+    const h = this.hotel();
+    if (!h) return [];
+    const heroImg: EntityImage = {
+      id: '__cover__',
+      url: h.heroImage,
+      altText: h.title,
+      caption: '',
+      isMain: true,
+      imageRole: 'cover',
+      sortOrder: -1,
+      imagePosition: '50% 50%',
+      imageSize: 'cover',
+    };
+    return h.heroImage ? [heroImg, ...h.images] : [...h.images];
+  });
 
   protected readonly directionsUrl = computed(() => this.buildDirectionsUrl(
     this.hotel()?.latitude ?? null,
@@ -109,7 +129,7 @@ export class HotelDetailPageComponent {
     effect(() => {
       this.hotelId();
       this.scrollProgress.set(0);
-      this.selectedImageUrl.set(null);
+      this.galleryOpen.set(false);
       const el = this.hdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
@@ -162,12 +182,13 @@ export class HotelDetailPageComponent {
     void this.router.navigate(['/stays', id], { queryParams: this.collectionQueryParams() });
   }
 
-  protected selectGalleryImage(url: string): void {
-    this.selectedImageUrl.set(url);
+  protected openGallery(startIndex = 0): void {
+    this.galleryStartIndex.set(startIndex);
+    this.galleryOpen.set(true);
   }
 
-  protected isGalleryImageActive(url: string): boolean {
-    return (this.selectedImageUrl() ?? this.hotel()?.heroImage ?? '') === url;
+  protected closeGallery(): void {
+    this.galleryOpen.set(false);
   }
 
   protected openOwnershipClaim(): void {

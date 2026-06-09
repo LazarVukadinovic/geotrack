@@ -26,7 +26,7 @@ public class AdminRegionalController : ControllerBase
     private readonly IRegionalAnalyticsService _analytics;
     private readonly IRegionalMediaService _media;
     private readonly ILogger<AdminRegionalController> _logger;
-    private readonly IContributionMediaStorageService _mediaStorage;
+    private readonly IRegionalEntityImageStorageService _imageStorage;
 
     public AdminRegionalController(
         IRegionalDashboardService regionalDashboard,
@@ -39,7 +39,7 @@ public class AdminRegionalController : ControllerBase
         IRegionalScopeValidationService scopeValidation,
         IRegionalAnalyticsService analytics,
         IRegionalMediaService media,
-        IContributionMediaStorageService mediaStorage,
+        IRegionalEntityImageStorageService imageStorage,
         ILogger<AdminRegionalController> logger)
     {
         _regionalDashboard = regionalDashboard;
@@ -53,7 +53,7 @@ public class AdminRegionalController : ControllerBase
         _analytics = analytics;
         _media = media;
         _logger = logger;
-        _mediaStorage = mediaStorage;
+        _imageStorage = imageStorage;
     }
 
     [HttpGet("regions")]
@@ -550,6 +550,23 @@ public class AdminRegionalController : ControllerBase
         }
     }
 
+    [HttpPost("destination-tags")]
+    public async Task<ActionResult<RegionalDestinationTagDto>> CreateDestinationTag(
+        [FromBody] RegionalTagCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _destinations.CreateDestinationTagAsync(GetCurrentUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpDelete("destinations/{id:int}")]
     public async Task<IActionResult> DeleteDestination(
         [FromRoute] int id,
@@ -692,6 +709,23 @@ public class AdminRegionalController : ControllerBase
         try
         {
             return Ok(await _locations.GetLocationTagsAsync(GetCurrentUserId(), search));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("location-tags")]
+    public async Task<ActionResult<RegionalLocationTagDto>> CreateLocationTag(
+        [FromBody] RegionalTagCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _locations.CreateLocationTagAsync(GetCurrentUserId(), request));
         }
         catch (Exception ex)
         {
@@ -885,12 +919,42 @@ public class AdminRegionalController : ControllerBase
         }
     }
 
+    [HttpPost("place-tags")]
+    public async Task<ActionResult<RegionalPlaceTagDto>> CreatePlaceTag(
+        [FromBody] RegionalTagCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _places.CreatePlaceTagAsync(GetCurrentUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("place-types")]
     public async Task<ActionResult<List<RegionalPlaceTypeDto>>> GetPlaceTypes()
     {
         try
         {
             return Ok(await _places.GetPlaceTypesAsync(GetCurrentUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("stay-types")]
+    public async Task<ActionResult<List<RegionalStayTypeDto>>> GetStayTypes()
+    {
+        try
+        {
+            return Ok(await _places.GetStayTypesAsync(GetCurrentUserId()));
         }
         catch (Exception ex)
         {
@@ -1114,6 +1178,23 @@ public class AdminRegionalController : ControllerBase
         }
     }
 
+    [HttpPost("event-tags")]
+    public async Task<ActionResult<RegionalEventTagDto>> CreateEventTag(
+        [FromBody] RegionalTagCreateRequestDto? request)
+    {
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _events.CreateEventTagAsync(GetCurrentUserId(), request));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("event-types")]
     public async Task<ActionResult<List<RegionalEventTypeDto>>> GetEventTypes()
     {
@@ -1313,7 +1394,7 @@ public class AdminRegionalController : ControllerBase
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory);
 
-        var stored = await _mediaStorage.StoreAsync(GetCurrentUserId(), memory.ToArray());
+        var stored = await _imageStorage.StoreImageAsync(GetCurrentUserId(), memory.ToArray(), file.FileName, file.ContentType);
         return stored.MediaUrl;
     }
 

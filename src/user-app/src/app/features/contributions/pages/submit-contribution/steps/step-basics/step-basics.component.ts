@@ -5,14 +5,19 @@ import { HttpClient } from '@angular/common/http';
 import maplibregl, { Map as MapLibreMap, MapStyleImageMissingEvent } from 'maplibre-gl';
 import { firstValueFrom } from 'rxjs';
 import { MapApiService } from '../../../../../../core/services/map-api.service';
+import { ContributionsService } from '../../../../services/contributions.service';
 import { BackgroundImageFallbackDirective } from '../../../../../../shared/directives/background-image-fallback.directive';
+import { PhotoGalleryComponent } from '../../../../../../shared/components/photo-gallery/photo-gallery.component';
+import type { EntityImage } from '../../../../../../core/models/entity-image.model';
 
 const MAP_STYLE_URL = '/map-style.json';
 const DEFAULT_PICKER_LAT = 44.82;
 const DEFAULT_PICKER_LNG = 20.46;
 const MAX_OWNERSHIP_PROOF_BYTES = 10 * 1024 * 1024;
 const FALLBACK_OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe', 'bar']);
-const HIDDEN_CONTRIBUTION_PLACE_TYPES = new Set(['beach', 'nature']);
+const HIDDEN_CONTRIBUTION_PLACE_TYPES = new Set(['beach', 'nature', 'shopping']);
+const COVER_IMAGE_OUTPUT = { width: 1600, height: 900 };
+const CARD_IMAGE_OUTPUT = { width: 960, height: 720 };
 
 export interface ContributionPlaceTypeOption {
   id: number;
@@ -51,19 +56,21 @@ export interface BasicsData {
 @Component({
   selector: 'app-step-basics',
   standalone: true,
-  imports: [CommonModule, FormsModule, BackgroundImageFallbackDirective],
+  imports: [CommonModule, FormsModule, BackgroundImageFallbackDirective, PhotoGalleryComponent],
   templateUrl: './step-basics.component.html',
   styleUrl: './step-basics.component.css',
 })
 export class StepBasicsComponent implements OnInit, OnDestroy {
   private readonly mapApi = inject(MapApiService);
+  private readonly contributions = inject(ContributionsService);
   private readonly http = inject(HttpClient);
   data = input<BasicsData | null>(null);
   locationLocked = input<boolean>(false);
+  ownershipProofLocked = input<boolean>(false);
   saved = output<BasicsData>();
 
   placeTypes = signal<ContributionPlaceTypeOption[]>(defaultPlaceTypes());
-  stayTypes = ['Hotel', 'Villa', 'Apartment', 'Resort', 'Cabin', 'Glamping', 'Hostel'];
+  stayTypes = signal<{ id: number; name: string }[]>(defaultStayTypes());
   coverPreviewUrl = signal('');
   cardPreviewUrl = signal('');
   galleryPreviewUrls = signal<string[]>([]);
@@ -73,11 +80,16 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   pickerLat = signal<number | null>(null);
   pickerLng = signal<number | null>(null);
   isGeocoding = signal(false);
+  locationStatus = signal('');
   submitAttempted = signal(false);
   private pickerMap?: MapLibreMap;
   private pickerResizeObserver?: ResizeObserver;
   private pickerMapInitFrame: number | null = null;
   private pickerMapResizeFrame: number | null = null;
+  private addressGeocodeTimeout: number | null = null;
+  private addressGeocodeRequestId = 0;
+  private lastGeocodedAddressKey = '';
+  private suppressAddressGeocode = false;
 
   form: BasicsData = {
     name: '', placeType: 'Landmark', placeTypeId: null, stayType: 'Hotel', address: '', city: '',
@@ -89,6 +101,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadPlaceTypes();
+    this.loadStayTypes();
   }
 
   selectPlaceType(type: ContributionPlaceTypeOption): void {
@@ -96,7 +109,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     this.form.placeTypeId = type.id;
     this.ownershipProofError.set('');
 
-    if (!this.requiresOwnershipProof()) {
+    if (!this.requiresOwnershipProof() && !this.ownershipProofLocked()) {
       this.form.ownershipProofFile = null;
       this.form.ownershipProofDocumentUrl = null;
       this.form.ownershipProofOriginalFileName = null;
@@ -110,6 +123,8 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   }
 
   onOwnershipProofSelected(e: Event): void {
+    if (this.ownershipProofLocked()) return;
+
     const file = (e.target as HTMLInputElement).files?.[0];
     (e.target as HTMLInputElement).value = '';
     if (!file) return;
@@ -130,24 +145,28 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
   onCoverImageSelected(e: Event): void {
     const file = (e.target as HTMLInputElement).files?.[0];
+    (e.target as HTMLInputElement).value = '';
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       this.coverPreviewUrl.set(reader.result as string);
       this.form.imageUrl = this.coverPreviewUrl();
       this.form.coverImageFile = file;
+      this.resetCoverCrop();
     };
     reader.readAsDataURL(file);
   }
 
   onCardImageSelected(e: Event): void {
     const file = (e.target as HTMLInputElement).files?.[0];
+    (e.target as HTMLInputElement).value = '';
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       this.cardPreviewUrl.set(reader.result as string);
       this.form.cardImageUrl = this.cardPreviewUrl();
       this.form.cardImageFile = file;
+      this.resetCardCrop();
     };
     reader.readAsDataURL(file);
   }
@@ -199,6 +218,12 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   }
 
   galleryLightboxIndex = signal<number | null>(null);
+  visibleGalleryItems = computed(() => {
+    const urls = this.galleryPreviewUrls();
+    const visibleUrls = urls.slice(0, 6);
+    return visibleUrls.map((url, index) => ({ url, index }));
+  });
+  hiddenGalleryCount = computed(() => Math.max(0, this.galleryPreviewUrls().length - this.visibleGalleryItems().length));
 
   openGalleryLightbox(index: number): void {
     this.galleryLightboxIndex.set(index);
@@ -219,6 +244,20 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     const total = this.galleryPreviewUrls().length;
     if (idx === null || idx >= total - 1) return;
     this.galleryLightboxIndex.set(idx + 1);
+  }
+
+  galleryLightboxImages(): EntityImage[] {
+    return this.galleryPreviewUrls().map((url, index) => ({
+      id: String(index),
+      url,
+      imageRole: 'gallery',
+      sortOrder: index,
+      isMain: false,
+      imagePosition: '50% 50%',
+      imageSize: 'cover',
+      altText: `${this.form.name || 'Gallery image'} ${index + 1}`,
+      caption: '',
+    }));
   }
 
   openMapPicker(): void {
@@ -359,6 +398,89 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
       (latitude !== 0 || longitude !== 0);
   }
 
+  onAddressFieldsChanged(): void {
+    if (this.locationLocked() || this.suppressAddressGeocode) return;
+
+    const addressKey = this.addressLookupKey();
+    if (addressKey.length < 4 || addressKey === this.lastGeocodedAddressKey) return;
+
+    if (this.addressGeocodeTimeout !== null) {
+      window.clearTimeout(this.addressGeocodeTimeout);
+    }
+
+    this.addressGeocodeTimeout = window.setTimeout(() => {
+      this.addressGeocodeTimeout = null;
+      void this.geocodeAddressFromFields(addressKey);
+    }, 650);
+  }
+
+  private async geocodeAddressFromFields(addressKey = this.addressLookupKey()): Promise<void> {
+    if (this.locationLocked() || addressKey.length < 4) return;
+
+    const requestId = ++this.addressGeocodeRequestId;
+    this.locationStatus.set('Looking up location...');
+
+    try {
+      const results = await firstValueFrom(this.mapApi.geocode(addressKey));
+      if (requestId !== this.addressGeocodeRequestId) return;
+
+      const result = results.find(item => this.hasUsableCoordinates(item.latitude, item.longitude));
+      if (!result) {
+        this.locationStatus.set('Could not find coordinates for this address.');
+        return;
+      }
+
+      await this.resolveAndFillFromCoordinates(result.latitude, result.longitude, { fillAddress: false });
+      this.lastGeocodedAddressKey = addressKey;
+    } catch {
+      if (requestId === this.addressGeocodeRequestId) {
+        this.locationStatus.set('Could not look up location right now.');
+      }
+    }
+  }
+
+  private addressLookupKey(): string {
+    return [this.form.address, this.form.city, this.form.country]
+      .map(part => (part ?? '').trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  private async resolveAndFillFromCoordinates(
+    lat: number,
+    lng: number,
+    options: { fillAddress: boolean } = { fillAddress: true },
+  ): Promise<void> {
+    this.form.lat = lat;
+    this.form.lng = lng;
+    this.pickerLat.set(lat);
+    this.pickerLng.set(lng);
+
+    this.suppressAddressGeocode = true;
+    try {
+      const [geocode, resolved] = await Promise.all([
+        firstValueFrom(this.mapApi.reverseGeocode(lat, lng)),
+        firstValueFrom(this.contributions.resolveLocation(lat, lng)).catch(() => null),
+      ]);
+
+      if (options.fillAddress && geocode.address) this.form.address = geocode.address;
+
+      // Geographic names always come from reverse geocoding — never from the hierarchy lookup,
+      // which would wrongly show a nearby city (e.g. Kragujevac for a pin in Čačak).
+      if (geocode.city) this.form.city = geocode.city;
+      if (geocode.region) this.form.region = geocode.region;
+      if (geocode.country) this.form.country = geocode.country;
+
+      // locationId is used only for regional-manager routing — null is valid and handled by backend.
+      this.form.locationId = resolved?.locationId ?? null;
+
+      this.lastGeocodedAddressKey = this.addressLookupKey();
+      this.locationStatus.set('Location set.');
+    } finally {
+      this.suppressAddressGeocode = false;
+    }
+  }
+
   async confirmCoordinates(): Promise<void> {
     const lat = this.pickerLat();
     const lng = this.pickerLng();
@@ -372,11 +494,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     this.isGeocoding.set(true);
 
     try {
-      const data = await firstValueFrom(this.mapApi.reverseGeocode(confirmedLat, confirmedLng));
-      if (data.address) this.form.address = data.address;
-      if (data.city) this.form.city = data.city;
-      if (data.region) this.form.region = data.region;
-      if (data.country) this.form.country = data.country;
+      await this.resolveAndFillFromCoordinates(confirmedLat, confirmedLng, { fillAddress: true });
     } catch {
     } finally {
       this.isGeocoding.set(false);
@@ -423,6 +541,15 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     return this.placeTypes().find(type =>
       (selectedId !== null && selectedId > 0 && type.id === selectedId) ||
       normalizePlaceType(type.name) === selectedName);
+  }
+
+  private loadStayTypes(): void {
+    this.http.get<{ id: number; name: string; slug: string }[]>('/api/contributions/stay-types').subscribe({
+      next: (types) => {
+        const normalized = (types ?? []).filter(t => !!t?.name?.trim()).map(t => ({ id: t.id, name: t.name.trim() }));
+        if (normalized.length > 0) this.stayTypes.set(normalized);
+      },
+    });
   }
 
   private loadPlaceTypes(): void {
@@ -478,7 +605,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     return this.hasUsableCoordinates(this.pickerLat(), this.pickerLng()) && !this.isGeocoding();
   }
 
-  onContinue(): void {
+  async onContinue(): Promise<void> {
     this.submitAttempted.set(true);
     if (!this.isValid()) return;
 
@@ -486,7 +613,33 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     this.form.imgBgSize = this.bgSize();
     this.form.cardImgBgPosition = this.cardBgPosition();
     this.form.cardImgBgSize = this.cardBgSize();
-    this.saved.emit({ ...this.form });
+
+    const croppedCoverImageFile = this.form.coverImageFile
+      ? await cropImageFile(
+        this.form.coverImageFile,
+        this.coverPreviewUrl(),
+        this.bgPosition(),
+        this.bgSize(),
+        COVER_IMAGE_OUTPUT.width,
+        COVER_IMAGE_OUTPUT.height,
+        'cover')
+      : this.form.coverImageFile;
+    const croppedCardImageFile = this.form.cardImageFile
+      ? await cropImageFile(
+        this.form.cardImageFile,
+        this.cardPreviewUrl(),
+        this.cardBgPosition(),
+        this.cardBgSize(),
+        CARD_IMAGE_OUTPUT.width,
+        CARD_IMAGE_OUTPUT.height,
+        'card')
+      : this.form.cardImageFile;
+
+    this.saved.emit({
+      ...this.form,
+      coverImageFile: croppedCoverImageFile,
+      cardImageFile: croppedCardImageFile,
+    });
   }
   imgContainer = viewChild<ElementRef<HTMLDivElement>>('imgContainer');
   cardImgContainer = viewChild<ElementRef<HTMLDivElement>>('cardImgContainer');
@@ -604,6 +757,16 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     return parseFloat(val.replace('%', ''));
   }
 
+  resetCoverCrop(): void {
+    this.bgPosition.set('50% 50%');
+    this.bgSize.set('cover');
+  }
+
+  resetCardCrop(): void {
+    this.cardBgPosition.set('50% 50%');
+    this.cardBgSize.set('cover');
+  }
+
   private registerTouchListeners(): void {
     const el = this.imgContainer()?.nativeElement;
     if (!el) return;
@@ -704,6 +867,10 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyPickerMap();
+    if (this.addressGeocodeTimeout !== null) {
+      window.clearTimeout(this.addressGeocodeTimeout);
+      this.addressGeocodeTimeout = null;
+    }
     const el = this.imgContainer()?.nativeElement;
     if (el && this.boundTouchStart) {
       el.removeEventListener('touchstart', this.boundTouchStart);
@@ -729,10 +896,86 @@ function defaultPlaceTypes(): ContributionPlaceTypeOption[] {
   ];
 }
 
+function defaultStayTypes(): { id: number; name: string }[] {
+  return [
+    { id: 0, name: 'Hotel' },
+    { id: 0, name: 'Villa' },
+    { id: 0, name: 'Apartment' },
+    { id: 0, name: 'Resort' },
+    { id: 0, name: 'Cabin' },
+    { id: 0, name: 'Glamping' },
+    { id: 0, name: 'Hostel' },
+  ];
+}
+
 function normalizePlaceType(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase();
 }
 
 function isPdfFile(file: File): boolean {
   return file.type === 'application/pdf' || file.name.trim().toLowerCase().endsWith('.pdf');
+}
+
+function clampPercent(value: number): number {
+  return Math.min(100, Math.max(0, Number.isFinite(value) ? value : 50));
+}
+
+async function cropImageFile(
+  originalFile: File,
+  previewUrl: string,
+  position: string,
+  size: string,
+  outputWidth: number,
+  outputHeight: number,
+  role: 'cover' | 'card',
+): Promise<File> {
+  const source = previewUrl || await fileToDataUrl(originalFile);
+  const image = await loadImage(source);
+  const canvas = document.createElement('canvas');
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+
+  const context = canvas.getContext('2d');
+  if (!context) return originalFile;
+
+  const [xRaw, yRaw] = (position || '50% 50%').split(' ');
+  const focusX = clampPercent(parseFloat(xRaw || '50')) / 100;
+  const focusY = clampPercent(parseFloat(yRaw || '50')) / 100;
+  const zoom = Math.max(100, Number.isFinite(parseFloat(size)) ? parseFloat(size) : 100) / 100;
+  const baseScale = Math.max(outputWidth / image.naturalWidth, outputHeight / image.naturalHeight);
+  const scale = baseScale * zoom;
+  const drawWidth = image.naturalWidth * scale;
+  const drawHeight = image.naturalHeight * scale;
+  const x = clampOffset(outputWidth * focusX - image.naturalWidth * focusX * scale, outputWidth - drawWidth, 0);
+  const y = clampOffset(outputHeight * focusY - image.naturalHeight * focusY * scale, outputHeight - drawHeight, 0);
+
+  context.drawImage(image, x, y, drawWidth, drawHeight);
+
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+  if (!blob) return originalFile;
+
+  const originalName = originalFile.name.replace(/\.[^.]+$/, '');
+  return new File([blob], `${originalName}-${role}.jpg`, { type: 'image/jpeg' });
+}
+
+function clampOffset(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Could not load selected image.'));
+    image.src = src;
+  });
 }

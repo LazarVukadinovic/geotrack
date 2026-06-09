@@ -35,5 +35,7 @@ public interface IRegionalLocationService
 
     Task<List<RegionalLocationTagDto>> GetLocationTagsAsync(int userId, string? search);
 
+    Task<RegionalLocationTagDto> CreateLocationTagAsync(int userId, RegionalTagCreateRequestDto request);
+
     Task<List<RegionalLocationTypeDto>> GetLocationTypesAsync(int userId);
 }

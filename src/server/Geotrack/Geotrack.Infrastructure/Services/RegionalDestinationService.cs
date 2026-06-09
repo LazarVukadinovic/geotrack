@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Microsoft.EntityFrameworkCore;
@@ -220,7 +221,7 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         var name = NormalizeRequiredText(request.Name, "Destination name is required.", 200, "Destination name is too long.");
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
-        var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
+        var description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
         var boundary = BuildBoundary(request.Boundary);
         var coordinates = ResolveCoordinates(request, boundary);
@@ -375,6 +376,25 @@ public class RegionalDestinationService : IRegionalDestinationService
             .ToListAsync();
     }
 
+    public async Task<RegionalDestinationTagDto> CreateDestinationTagAsync(
+        int userId,
+        RegionalTagCreateRequestDto request)
+    {
+        await EnsureRegionalManagerRoleAsync(userId);
+
+        var tag = await RegionalTagWriter.CreateScopedTagAsync(
+            _db,
+            request.Name,
+            RegionalTagScope.Destination);
+
+        return new RegionalDestinationTagDto
+        {
+            Id = tag.Id,
+            Name = tag.Name,
+            Slug = tag.Slug
+        };
+    }
+
     private async Task EnsureAssignedRegionAsync(int userId, int regionId)
     {
         if (regionId <= 0)
@@ -483,7 +503,7 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         if (request.Description is not null)
         {
-            destination.Description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
+            destination.Description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 8000, "Description is too long.") ?? string.Empty;
         }
 
         if (request.DestinationTypeId.HasValue)

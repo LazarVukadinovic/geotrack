@@ -5,13 +5,17 @@ import { HttpClient } from '@angular/common/http';
 import { ContributionDetail, ContributionsService, contributionCanEdit, contributionCanRequestOwnership } from '../../services/contributions.service';
 import { BackgroundImageFallbackDirective } from '../../../../shared/directives/background-image-fallback.directive';
 import { getContributionAmenityLabel } from '../../services/contribution-amenities';
+import { PhotoGalleryComponent } from '../../../../shared/components/photo-gallery/photo-gallery.component';
+import type { EntityImage } from '../../../../core/models/entity-image.model';
+import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
+import { isLongDescription } from '../../../../shared/utils/description-formatting';
 
 const MAX_PROOF_BYTES = 10 * 1024 * 1024;
 
 @Component({
   selector: 'app-contribution-detail',
   standalone: true,
-  imports: [CommonModule, BackgroundImageFallbackDirective],
+  imports: [CommonModule, BackgroundImageFallbackDirective, PhotoGalleryComponent, DescriptionRichHtmlPipe],
   templateUrl: './contribution-detail.component.html',
   styleUrl: './contribution-detail.component.css',
 })
@@ -26,10 +30,14 @@ export class ContributionDetailPageComponent implements OnInit {
   protected readonly hasError = signal(false);
 
   protected readonly ownershipClaimOpen = signal(false);
+  protected readonly ownershipClaimIsEdit = signal(false);
   protected readonly ownershipProofFile = signal<File | null>(null);
   protected readonly ownershipProofFileName = signal('');
   protected readonly ownershipClaimError = signal('');
   protected readonly ownershipClaimSubmitting = signal(false);
+  protected readonly mediaLightboxIndex = signal<number | null>(null);
+  protected readonly mediaLightboxImages = signal<EntityImage[]>([]);
+  protected readonly aboutExpanded = signal(false);
 
   protected readonly amenityMap: Record<string, string> = {
     pool: 'Swimming Pool',
@@ -69,6 +77,18 @@ export class ContributionDetailPageComponent implements OnInit {
     return d ? contributionCanRequestOwnership(d) : false;
   });
 
+  protected readonly visibleGalleryImages = computed(() => (this.detail()?.galleryImageUrls ?? []).slice(0, 4));
+
+  protected readonly hiddenGalleryCount = computed(() => {
+    const total = this.detail()?.galleryImageUrls.length ?? 0;
+    return Math.max(0, total - this.visibleGalleryImages().length);
+  });
+
+  protected readonly hasMedia = computed(() => {
+    const d = this.detail();
+    return !!d?.cardImageUrl || !!d?.coverImageUrl || !!d?.galleryImageUrls.length;
+  });
+
   ngOnInit(): void {
     this.fetchDetail();
   }
@@ -83,6 +103,7 @@ export class ContributionDetailPageComponent implements OnInit {
     this.isLoading.set(true);
     this.hasError.set(false);
     this.detail.set(null);
+    this.aboutExpanded.set(false);
 
     this.contributions.getDetail(id).subscribe({
       next: (data) => {
@@ -104,16 +125,40 @@ export class ContributionDetailPageComponent implements OnInit {
     return this.partnerMap[id] ?? id;
   }
 
+  protected hasLongAbout(description: string | null | undefined): boolean {
+    return isLongDescription(description);
+  }
+
+  protected openSingleImage(url: string, caption: string): void {
+    this.mediaLightboxImages.set([this.toGalleryImage(url, 0, caption)]);
+    this.mediaLightboxIndex.set(0);
+  }
+
+  protected openGallery(index: number): void {
+    const urls = this.detail()?.galleryImageUrls ?? [];
+    this.mediaLightboxImages.set(urls.map((url, imageIndex) =>
+      this.toGalleryImage(url, imageIndex, ''),
+    ));
+    this.mediaLightboxIndex.set(index);
+  }
+
+  protected closeMediaLightbox(): void {
+    this.mediaLightboxIndex.set(null);
+  }
+
   protected onEdit(): void {
     const detail = this.detail();
     if (!detail) return;
 
     if (detail.isOwnership && detail.status === 'Approved' && detail.publishedPlaceId != null) {
       this.router.navigate(['/contributions', detail.id, 'edit'], {
-        state: {
-          locationLocked: true,
-        },
+        state: { locationLocked: true },
       });
+      return;
+    }
+
+    if (detail.isOwnership && (detail.status === 'PendingReview' || detail.status === 'Rejected')) {
+      this.openOwnershipModal(true);
       return;
     }
 
@@ -123,7 +168,8 @@ export class ContributionDetailPageComponent implements OnInit {
     });
   }
 
-  protected openOwnershipModal(): void {
+  protected openOwnershipModal(isEdit = false): void {
+    this.ownershipClaimIsEdit.set(isEdit);
     this.ownershipProofFile.set(null);
     this.ownershipProofFileName.set('');
     this.ownershipClaimError.set('');
@@ -133,6 +179,7 @@ export class ContributionDetailPageComponent implements OnInit {
   protected closeOwnershipModal(): void {
     if (this.ownershipClaimSubmitting()) return;
     this.ownershipClaimOpen.set(false);
+    this.ownershipClaimIsEdit.set(false);
     this.ownershipProofFile.set(null);
     this.ownershipProofFileName.set('');
     this.ownershipClaimError.set('');
@@ -163,25 +210,47 @@ export class ContributionDetailPageComponent implements OnInit {
     if (cover) images.push({ url: cover, imageRole: 'cover', sortOrder: -10 });
     if (card && card !== cover) images.push({ url: card, imageRole: 'card', sortOrder: -9 });
 
-    const formData = new FormData();
-    formData.append('payload', JSON.stringify({
+    const payload = {
       type: 'ClaimOwnership',
       placeId: detail.publishedPlaceId,
       placeType: detail.placeType || 'Place',
-      placeTypeId: null,
+      placeTypeId: detail.placeTypeId ?? null,
       name: detail.name,
-      description: '',
+      description: detail.description || '',
+      locationId: detail.locationId ?? null,
+      address: detail.address || '',
+      city: detail.city || '',
+      region: detail.region || '',
+      country: detail.country || '',
+      latitude: detail.latitude ?? null,
+      longitude: detail.longitude ?? null,
+      imagePosition: detail.imagePosition || '50% 50%',
+      imageSize: detail.imageSize || 'cover',
+      cardImagePosition: detail.cardImagePosition || '50% 50%',
+      cardImageSize: detail.cardImageSize || 'cover',
+      tags: detail.tags ?? [],
+      amenities: detail.amenities ?? [],
+      bookingPartners: detail.bookingPartners ?? [],
       images: images.length > 0 ? images : undefined,
-    }));
+    };
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(payload));
     formData.append('ownershipProofDocument', file);
 
     this.ownershipClaimSubmitting.set(true);
     this.ownershipClaimError.set('');
 
-    this.http.post('/api/contributions/places', formData).subscribe({
+    const isEdit = this.ownershipClaimIsEdit();
+    const request$ = isEdit
+      ? this.http.put(`/api/contributions/places/${detail.id}`, formData)
+      : this.http.post('/api/contributions/places', formData);
+
+    request$.subscribe({
       next: () => {
         this.ownershipClaimSubmitting.set(false);
         this.ownershipClaimOpen.set(false);
+        this.ownershipClaimIsEdit.set(false);
         this.ownershipProofFile.set(null);
         this.ownershipProofFileName.set('');
         this.fetchDetail();
@@ -195,5 +264,21 @@ export class ContributionDetailPageComponent implements OnInit {
 
   protected goBack(): void {
     this.router.navigate(['/contributions']);
+  }
+
+  private toGalleryImage(url: string, index: number, caption: string): EntityImage {
+    const label = caption || `Photo ${index + 1}`;
+
+    return {
+      id: `${label.toLowerCase().replace(/\s+/g, '-')}-${index}`,
+      url,
+      altText: label,
+      caption,
+      isMain: index === 0,
+      imageRole: 'gallery',
+      sortOrder: index,
+      imagePosition: '50% 50%',
+      imageSize: 'cover',
+    };
   }
 }

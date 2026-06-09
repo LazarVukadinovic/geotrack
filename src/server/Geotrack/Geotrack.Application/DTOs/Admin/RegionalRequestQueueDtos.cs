@@ -47,6 +47,9 @@ public class RegionalRequestQueueDetailDto : RegionalRequestQueueItemDto
 {
     public string? Description { get; set; }
     public string? Address { get; set; }
+    public string? OpeningHours { get; set; }
+    public bool OperatingHoursEnabled { get; set; }
+    public List<ContributionOperatingHourDto> OperatingHours { get; set; } = new();
     public string? LocationName { get; set; }
     public string? DestinationName { get; set; }
     public string? City { get; set; }

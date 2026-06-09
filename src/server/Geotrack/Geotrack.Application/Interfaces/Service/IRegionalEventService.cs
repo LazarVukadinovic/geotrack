@@ -48,5 +48,7 @@ public interface IRegionalEventService
 
     Task<List<RegionalEventTagDto>> GetEventTagsAsync(int userId, string? search);
 
+    Task<RegionalEventTagDto> CreateEventTagAsync(int userId, RegionalTagCreateRequestDto request);
+
     Task<List<RegionalEventTypeDto>> GetEventTypesAsync(int userId);
 }

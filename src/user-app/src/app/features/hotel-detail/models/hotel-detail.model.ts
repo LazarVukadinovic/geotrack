@@ -69,6 +69,7 @@ export interface HotelDetail {
   reviewCount?: string;
   distance: string;
   about: string;
+  website?: string | null;
   contactEmail?: string | null;
   phoneNumber?: string | null;
   bookingPartners: HotelBookingPartner[];

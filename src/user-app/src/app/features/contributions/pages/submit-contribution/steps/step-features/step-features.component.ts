@@ -1,13 +1,27 @@
-import { Component, computed, input, output, effect } from '@angular/core';
+import { Component, computed, input, output, effect, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import {
-  getAmenitiesForPlaceType,
+  ContributionAmenityOption,
   normalizeContributionAmenityIds,
 } from '../../../../services/contribution-amenities';
 
 export interface FeaturesData {
   tags: string[];
   amenities: string[];
+}
+
+interface ContributionFeatureOption {
+  id: string;
+  label: string;
+}
+
+interface ContributionFeatureOptionsResponse {
+  characteristics?: ContributionFeatureOption[] | null;
+  amenities?: ContributionFeatureOption[] | null;
+  stayAmenities?: ContributionFeatureOption[] | null;
+  characteristicIdsByPlaceType?: Record<string, string[] | null> | null;
+  amenityIdsByPlaceType?: Record<string, string[] | null> | null;
 }
 
 @Component({
@@ -17,38 +31,82 @@ export interface FeaturesData {
   templateUrl: './step-features.component.html',
   styleUrl: './step-features.component.css',
 })
-export class StepFeaturesComponent {
+export class StepFeaturesComponent implements OnInit {
+  private readonly http = inject(HttpClient);
+
   data = input<FeaturesData | null>(null);
   placeType = input<string | null | undefined>(null);
   saved = output<FeaturesData>();
   back = output<void>();
   changed = output<FeaturesData>();
 
-  characteristicTags = [
-    'Luxury', 'Budget-Friendly',
-    'Family Friendly', 'Adults Only', 'Pet Friendly',
-    'Beachfront', 'Romantic', 'Mountain View', 'City Center', 'Countryside',
-    'Eco-Friendly', 'Business',
-    'Lakefront', 'Historic',
-  ];
+  private readonly backendAmenities = signal<ContributionAmenityOption[] | null>(null);
+  private readonly backendAmenityIdsByPlaceType = signal<Record<string, string[]> | null>(null);
+  private readonly backendCharacteristics = signal<string[]>([]);
+  private readonly backendCharacteristicIdsByPlaceType = signal<Record<string, string[]> | null>(null);
 
-  readonly availableAmenities = computed(() => getAmenitiesForPlaceType(this.placeType()));
+  readonly availableCharacteristics = computed(() => {
+    const characteristics = this.backendCharacteristics();
+    const idsByType = this.backendCharacteristicIdsByPlaceType();
+    const typeKey = characteristicKey(this.placeType() ?? '');
+    const ids = idsByType?.[typeKey];
+
+    if (!ids || ids.length === 0) {
+      return characteristics;
+    }
+
+    const allowed = new Set(ids);
+    return characteristics.filter(tag => allowed.has(characteristicKey(tag)));
+  });
+
+  readonly availableAmenities = computed(() => {
+    const backendAmenities = this.backendAmenities();
+    const backendIdsByType = this.backendAmenityIdsByPlaceType();
+
+    if (!backendAmenities || backendAmenities.length === 0) {
+      return [];
+    }
+
+    const typeKey = characteristicKey(this.placeType() ?? '');
+    const ids = backendIdsByType?.[typeKey];
+    if (!ids || ids.length === 0) {
+      return backendAmenities;
+    }
+
+    const allowed = new Set(normalizeContributionAmenityIds(ids));
+    return backendAmenities.filter(amenity => allowed.has(normalizeContributionAmenityIds([amenity.id])[0] ?? amenity.id));
+  });
 
   selectedTags: string[] = [];
   selectedAmenities: string[] = [];
+
+  ngOnInit(): void {
+    this.loadFeatureOptions();
+  }
 
   constructor() {
     effect(() => {
       const d = this.data();
       if (d) {
-        this.selectedTags = normalizeCharacteristicTags(d.tags, this.characteristicTags);
+        this.selectedTags = normalizeCharacteristicTags(d.tags, this.availableCharacteristics());
         this.selectedAmenities = normalizeContributionAmenityIds(d.amenities);
       }
     });
 
     effect(() => {
-      const available = this.availableAmenities().map(a => a.id);
-      this.selectedAmenities = this.selectedAmenities.filter(id => available.includes(id));
+      const options = this.availableCharacteristics();
+      if (options.length === 0) return;
+
+      const available = new Set(options.map(characteristicKey));
+      this.selectedTags = this.selectedTags.filter(tag => available.has(characteristicKey(tag)));
+    });
+
+    effect(() => {
+      const options = this.availableAmenities();
+      if (options.length === 0) return;
+
+      const available = new Set(normalizeContributionAmenityIds(options.map(a => a.id)));
+      this.selectedAmenities = this.selectedAmenities.filter(id => available.has(normalizeContributionAmenityIds([id])[0] ?? id));
     });
   }
 
@@ -65,23 +123,113 @@ export class StepFeaturesComponent {
   }
 
   toggleAmenity(id: string): void {
-    if (this.isAmenitySelected(id)) this.selectedAmenities = this.selectedAmenities.filter(a => a !== id);
-    else this.selectedAmenities = [...this.selectedAmenities, id];
+    const normalized = normalizeContributionAmenityIds([id])[0] ?? id;
+    if (this.isAmenitySelected(normalized)) this.selectedAmenities = this.selectedAmenities.filter(a => a !== normalized);
+    else this.selectedAmenities = [...this.selectedAmenities, normalized];
     this.changed.emit(this.currentData());
   }
 
-  isAmenitySelected(id: string): boolean { return this.selectedAmenities.includes(id); }
+  isAmenitySelected(id: string): boolean {
+    const normalized = normalizeContributionAmenityIds([id])[0] ?? id;
+    return this.selectedAmenities.includes(normalized);
+  }
 
   onContinue(): void {
     this.saved.emit(this.currentData());
   }
 
   private currentData(): FeaturesData {
+    const characteristics = this.availableCharacteristics();
+
     return {
-      tags: normalizeCharacteristicTags(this.selectedTags, this.characteristicTags),
+      tags: characteristics.length > 0
+        ? normalizeCharacteristicTags(this.selectedTags, characteristics)
+        : this.selectedTags,
       amenities: normalizeContributionAmenityIds(this.selectedAmenities),
     };
   }
+
+  private loadFeatureOptions(): void {
+    this.http.get<ContributionFeatureOptionsResponse>('/api/contributions/feature-options').subscribe({
+      next: (response) => {
+        const characteristics = normalizeOptions(response.characteristics)
+          .map(option => option.label)
+          .filter(Boolean);
+        this.backendCharacteristics.set(characteristics);
+
+        const characteristicIdsByType: Record<string, string[]> = {};
+        for (const [placeType, ids] of Object.entries(response.characteristicIdsByPlaceType ?? {})) {
+          characteristicIdsByType[characteristicKey(placeType)] = (ids ?? []).map(characteristicKey).filter(Boolean);
+        }
+        this.backendCharacteristicIdsByPlaceType.set(
+          Object.keys(characteristicIdsByType).length > 0 ? characteristicIdsByType : null,
+        );
+        this.selectedTags = normalizeCharacteristicTags(this.selectedTags, this.availableCharacteristics());
+
+        const amenities = [
+          ...normalizeAmenityOptions(response.amenities),
+          ...normalizeAmenityOptions(response.stayAmenities),
+        ];
+        if (amenities.length > 0) {
+          this.backendAmenities.set(dedupeOptions(amenities).map(option => ({
+            id: normalizeContributionAmenityIds([option.id])[0] ?? option.id,
+            label: option.label,
+          })));
+        }
+
+        const byType: Record<string, string[]> = {};
+        for (const [placeType, ids] of Object.entries(response.amenityIdsByPlaceType ?? {})) {
+          byType[characteristicKey(placeType)] = normalizeContributionAmenityIds(ids ?? []);
+        }
+        if (Object.keys(byType).length > 0) {
+          this.backendAmenityIdsByPlaceType.set(byType);
+        }
+      },
+      error: () => {
+        this.backendCharacteristics.set([]);
+        this.backendCharacteristicIdsByPlaceType.set(null);
+        this.backendAmenities.set(null);
+        this.backendAmenityIdsByPlaceType.set(null);
+      },
+    });
+  }
+}
+
+function normalizeOptions(values: readonly ContributionFeatureOption[] | null | undefined): ContributionFeatureOption[] {
+  const seen = new Set<string>();
+  const normalized: ContributionFeatureOption[] = [];
+
+  for (const option of values ?? []) {
+    const id = option.id?.trim() ?? '';
+    const label = option.label?.trim() ?? '';
+    const key = characteristicKey(label || id);
+    if (!id || !label || !key || seen.has(key)) continue;
+    seen.add(key);
+    normalized.push({ id, label });
+  }
+
+  return normalized;
+}
+
+function normalizeAmenityOptions(values: readonly ContributionFeatureOption[] | null | undefined): ContributionFeatureOption[] {
+  return (values ?? [])
+    .map(option => ({
+      id: option.id?.trim() ?? '',
+      label: option.label?.trim() ?? '',
+    }))
+    .filter(option => option.id && option.label);
+}
+
+function dedupeOptions(values: readonly ContributionFeatureOption[]): ContributionFeatureOption[] {
+  const seen = new Set<string>();
+  const result: ContributionFeatureOption[] = [];
+  for (const option of values) {
+    const id = normalizeContributionAmenityIds([option.id])[0] ?? option.id;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    result.push({ ...option, id });
+  }
+  return result;
 }
 
 function normalizeCharacteristicTags(

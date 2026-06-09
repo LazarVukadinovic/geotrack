@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
@@ -253,7 +254,7 @@ public class RegionalEventService : IRegionalEventService
 
         var name = NormalizeRequiredText(request.Name, "Event title is required.", 200, "Event title is too long.");
         var summary = NormalizeRequiredText(request.Summary, "Summary is required.", 160, "Summary is too long.");
-        var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
+        var description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
         var eventTypeId = await ResolveEventTypeIdAsync(request.EventTypeId);
         var parent = await ResolveParentAsync(request.RegionId, request);
@@ -263,7 +264,7 @@ public class RegionalEventService : IRegionalEventService
         var ticketPrice = request.IsFree
             ? null
             : NormalizeTicketPrice(request.TicketPrice);
-        var images = RegionalEntityImageRequestNormalizer.Normalize(request.Images, name);
+        var images = RegionalEntityImageRequestNormalizer.Normalize(ResolveCreateImageRequests(request), name);
         var now = DateTime.UtcNow;
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -316,8 +317,6 @@ public class RegionalEventService : IRegionalEventService
 
         _db.Events.Add(@event);
         await _db.SaveChangesAsync();
-
-        _db.EntityImages.AddRange(AddRequiredCreateImages(request, @event.Id, @event.Name, now));
 
         @event.InternalReferenceId = BuildInternalReferenceId(@event.Id);
         await _db.SaveChangesAsync();
@@ -569,6 +568,25 @@ public class RegionalEventService : IRegionalEventService
             .ToListAsync();
     }
 
+    public async Task<RegionalEventTagDto> CreateEventTagAsync(
+        int userId,
+        RegionalTagCreateRequestDto request)
+    {
+        await EnsureRegionalManagerRoleAsync(userId);
+
+        var tag = await RegionalTagWriter.CreateScopedTagAsync(
+            _db,
+            request.Name,
+            RegionalTagScope.Event);
+
+        return new RegionalEventTagDto
+        {
+            Id = tag.Id,
+            Name = tag.Name,
+            Slug = tag.Slug
+        };
+    }
+
     public async Task<List<RegionalEventTypeDto>> GetEventTypesAsync(int userId)
     {
         await EnsureRegionalManagerRoleAsync(userId);
@@ -715,11 +733,7 @@ public class RegionalEventService : IRegionalEventService
 
         if (request.Description is not null)
         {
-            var description = request.Description.Trim();
-            if (description.Length > 8000)
-                throw new InvalidOperationException("Description is too long.");
-
-            @event.Description = description;
+            @event.Description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 8000, "Description is too long.") ?? string.Empty;
         }
 
         if (request.Summary is not null)
@@ -792,6 +806,10 @@ public class RegionalEventService : IRegionalEventService
         if (request.AttendanceLimit.HasValue)
         {
             @event.AttendanceLimit = NormalizeAttendanceLimit(request.AttendanceLimit);
+        }
+        else if (request.ClearAttendanceLimit)
+        {
+            @event.AttendanceLimit = null;
         }
 
         if (request.AgeRestriction is not null)
@@ -939,7 +957,11 @@ public class RegionalEventService : IRegionalEventService
         IEnumerable<RegionalEntityImageInputDto> imageRequests,
         string fallbackAltText)
     {
-        var images = RegionalEntityImageRequestNormalizer.Normalize(imageRequests, fallbackAltText);
+        var existingEventImageUrls = @event.Images
+            .Where(image => image.TargetType == EntityImageTargetType.Event)
+            .Select(image => image.Url)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var images = RegionalEntityImageRequestNormalizer.Normalize(imageRequests, fallbackAltText, existingEventImageUrls);
         var now = DateTime.UtcNow;
 
         _db.EntityImages.RemoveRange(@event.Images.Where(image => image.TargetType == EntityImageTargetType.Event));
@@ -1270,80 +1292,43 @@ public class RegionalEventService : IRegionalEventService
         return attendanceLimit.Value;
     }
 
-
-    private static List<EntityImage> AddRequiredCreateImages(RegionalEventCreateRequestDto request, int entityId, string entityName, DateTime now)
+    private static List<RegionalEntityImageInputDto> ResolveCreateImageRequests(RegionalEventCreateRequestDto request)
     {
-        var cardUrl = NormalizeRequiredImageUrl(request.CardImageUrl, "Card image is required.");
-        var coverUrl = NormalizeRequiredImageUrl(request.CoverImageUrl, "Cover image is required.");
-        var images = new List<EntityImage>
+        if (request.Images.Count > 0)
+            return request.Images;
+
+        if (string.IsNullOrWhiteSpace(request.CardImageUrl))
+            throw new InvalidOperationException("Card image is required.");
+
+        if (string.IsNullOrWhiteSpace(request.CoverImageUrl))
+            throw new InvalidOperationException("Cover image is required.");
+
+        var images = new List<RegionalEntityImageInputDto>
         {
             new()
             {
-                TargetType = EntityImageTargetType.Event,
-                EventId = entityId,
-                Url = cardUrl,
-                AltText = entityName,
+                Url = request.CardImageUrl,
                 IsMain = true,
-                ImageRole = EntityImageRole.Card,
-                SortOrder = 0,
-                CreatedAt = now
+                SortOrder = 0
             },
             new()
             {
-                TargetType = EntityImageTargetType.Event,
-                EventId = entityId,
-                Url = coverUrl,
-                AltText = entityName,
+                Url = request.CoverImageUrl,
                 IsMain = false,
-                ImageRole = EntityImageRole.Cover,
-                SortOrder = 1,
-                CreatedAt = now
+                SortOrder = 1
             }
         };
 
-        var galleryUrls = request.GalleryImageUrls
-            .Select(url => NormalizeOptionalImageUrl(url))
+        images.AddRange(request.GalleryImageUrls
             .Where(url => !string.IsNullOrWhiteSpace(url))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        for (var i = 0; i < galleryUrls.Count; i++)
-        {
-            images.Add(new EntityImage
+            .Select((url, index) => new RegionalEntityImageInputDto
             {
-                TargetType = EntityImageTargetType.Event,
-                EventId = entityId,
-                Url = galleryUrls[i]!,
-                AltText = entityName,
+                Url = url,
                 IsMain = false,
-                ImageRole = EntityImageRole.Gallery,
-                SortOrder = i + 2,
-                CreatedAt = now
-            });
-        }
+                SortOrder = index + 2
+            }));
 
         return images;
-    }
-
-    private static string NormalizeRequiredImageUrl(string? value, string message)
-    {
-        var normalized = NormalizeOptionalImageUrl(value);
-        if (string.IsNullOrWhiteSpace(normalized))
-            throw new InvalidOperationException(message);
-
-        return normalized;
-    }
-
-    private static string? NormalizeOptionalImageUrl(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-
-        var normalized = value.Trim();
-        if (normalized.Length > 1000)
-            throw new InvalidOperationException("Image URL is too long.");
-
-        return normalized;
     }
 
     private static string BuildInternalReferenceId(int eventId) => $"EVT-{eventId:D6}";

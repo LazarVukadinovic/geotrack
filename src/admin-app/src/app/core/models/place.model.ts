@@ -39,6 +39,7 @@ export interface RegionalPlaceListItemDto {
 export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
   isOwnable: boolean;
   hasOwner?: boolean;
+  hasLinkedContribution?: boolean;
   owners: RegionalPlaceOwnerDto[];
   latitude: number;
   longitude: number;
@@ -55,6 +56,7 @@ export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
   accessibilityNotes?: string | null;
   operatingHoursEnabled: boolean;
   operatingHours: RegionalPlaceOperatingHourDto[];
+  amenities?: RegionalPlaceAmenityDto[];
 }
 
 
@@ -92,6 +94,10 @@ export interface RegionalPlaceTagDto {
   slug: string;
 }
 
+export interface RegionalPlaceAmenityDto {
+  name: string;
+}
+
 export interface RegionalPlaceParentLocationDto {
   id: number;
   name: string;
@@ -102,6 +108,12 @@ export interface RegionalPlaceParentLocationDto {
 }
 
 export interface RegionalPlaceTypeDto {
+  id: number;
+  name: string;
+  description?: string | null;
+}
+
+export interface RegionalStayTypeDto {
   id: number;
   name: string;
   description?: string | null;
@@ -119,6 +131,7 @@ export interface RegionalPlaceCreateRequest {
   locationId: number;
   placeTypeId: number;
   stayTypeId?: number | null;
+  stayTypeName?: string | null;
   name: string;
   summary: string;
   description?: string | null;
@@ -146,6 +159,7 @@ export interface RegionalPlaceUpdateRequest {
   locationId?: number | null;
   placeTypeId?: number | null;
   stayTypeId?: number | null;
+  stayTypeName?: string | null;
   name?: string | null;
   subtitle?: string | null;
   description?: string | null;

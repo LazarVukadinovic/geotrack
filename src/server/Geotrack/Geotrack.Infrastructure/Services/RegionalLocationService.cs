@@ -1,6 +1,7 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
+using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Microsoft.EntityFrameworkCore;
@@ -240,7 +241,7 @@ public class RegionalLocationService : IRegionalLocationService
 
         var name = NormalizeRequiredText(request.Name, "Location name is required.", 200, "Location name is too long.");
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
-        var description = NormalizeOptionalText(request.Description, 8000, "Description is too long.") ?? string.Empty;
+        var description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 8000, "Description is too long.") ?? string.Empty;
         var status = NormalizeCreateStatus(request.Status);
         var boundary = BuildBoundary(request.Boundary);
         if (boundary is not null)
@@ -458,6 +459,25 @@ public class RegionalLocationService : IRegionalLocationService
             .ToListAsync();
     }
 
+    public async Task<RegionalLocationTagDto> CreateLocationTagAsync(
+        int userId,
+        RegionalTagCreateRequestDto request)
+    {
+        await EnsureRegionalManagerRoleAsync(userId);
+
+        var tag = await RegionalTagWriter.CreateScopedTagAsync(
+            _db,
+            request.Name,
+            RegionalTagScope.Location);
+
+        return new RegionalLocationTagDto
+        {
+            Id = tag.Id,
+            Name = tag.Name,
+            Slug = tag.Slug
+        };
+    }
+
     public async Task<List<RegionalLocationTypeDto>> GetLocationTypesAsync(int userId)
     {
         await EnsureRegionalManagerRoleAsync(userId);
@@ -589,11 +609,7 @@ public class RegionalLocationService : IRegionalLocationService
 
         if (request.Description is not null)
         {
-            var description = request.Description.Trim();
-            if (description.Length > 2000)
-                throw new InvalidOperationException("Description is too long.");
-
-            location.Description = description;
+            location.Description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 2000, "Description is too long.") ?? string.Empty;
         }
 
         if (request.LocationTypeId.HasValue)

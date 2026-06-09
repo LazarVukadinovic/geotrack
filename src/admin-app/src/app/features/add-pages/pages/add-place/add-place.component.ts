@@ -31,8 +31,10 @@ import {
   RegionalPlaceParentLocationDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
+  RegionalStayTypeDto,
   RegionalPlaceUpdateRequest,
 } from '../../../../core/models/place.model';
+import { normalizeEditorDescriptionHtml } from '../../../../shared/utils/description-formatting';
 import {
   applyAssignedRegionViewport,
   assignedRegionZone,
@@ -54,6 +56,8 @@ interface DayHours {
   openTime: string;
   closeTime: string;
 }
+
+type TimeField = 'openTime' | 'closeTime';
 
 interface MapReverseGeocodeDto {
   address: string;
@@ -86,7 +90,6 @@ interface MapReverseGeocodeDto {
 export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
   private static readonly initialVisibleClassificationTags = 5;
-  private static readonly expandedVisibleClassificationTags = 10;
   private readonly mapTileLayer = inject(MapTileLayerService);
 
   @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
@@ -98,6 +101,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   regionLoading = false;
   parentLocationsLoading = false;
   placeTypesLoading = false;
+  hasLinkedContribution = false;
   tagsLoading = false;
   tagSearchLoading = false;
   isSaving = false;
@@ -116,6 +120,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   summary = '';
   parentLocationId: number | null = null;
   placeTypeId: number | null = null;
+  stayTypeId: number | null = null;
   bestTimeToVisit = '';
   visitorTips = '';
   accessNotes = '';
@@ -126,9 +131,11 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   bookingLink = '';
   opsEnabled = false;
   tagInput = '';
+  tagFilter = '';
 
   parentLocations: RegionalPlaceParentLocationDto[] = [];
   placeTypes: RegionalPlaceTypeDto[] = [];
+  stayTypes: RegionalStayTypeDto[] = [];
   placeTags: RegionalPlaceTagDto[] = [];
   classItems: ClassItem[] = [];
   additionalTagResults: RegionalPlaceTagDto[] = [];
@@ -149,7 +156,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private cardImageFile: File | null = null;
   private coverImageFile: File | null = null;
 
-  allHours = Array.from({ length: 24 }, (_, hour) => `${hour.toString().padStart(2, '0')}:00`);
   days: DayHours[] = [
     { name: 'Monday', open: true, openTime: '09:00', closeTime: '17:00' },
     { name: 'Tuesday', open: true, openTime: '09:00', closeTime: '17:00' },
@@ -159,6 +165,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     { name: 'Saturday', open: true, openTime: '10:00', closeTime: '20:00' },
     { name: 'Sunday', open: false, openTime: '09:00', closeTime: '17:00' },
   ];
+  activeTimePicker: { day: DayHours; field: TimeField } | null = null;
+  timePickerMode: 'hour' | 'minute' = 'hour';
+  isDraggingMinute = false;
+  readonly minuteHandRadius = 138;
+  readonly clockOuterHours = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  readonly clockInnerHours = [0, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+  readonly clockMinutes = Array.from({ length: 12 }, (_, index) => index * 5);
 
   pinModalOpen = false;
   pinConfirmed = false;
@@ -209,6 +222,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.loadAssignedRegions();
     this.applyInitialCoordinatesFromRoute();
     this.loadPlaceTypes();
+    this.loadStayTypes();
     this.loadPlaceTags();
   }
 
@@ -272,25 +286,44 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.placeTypes.find(type => type.id === this.placeTypeId)?.name ?? '';
   }
 
+  get isStayType(): boolean {
+    const name = (this.selectedPlaceTypeName ?? '').toLowerCase().trim();
+    return name === 'stay' || name === 'stays' || name === 'hotel' || name === 'hotels' ||
+      name === 'accommodation' || name === 'accommodations';
+  }
+
+  get selectedStayTypeName(): string {
+    return this.stayTypes.find(t => t.id === this.stayTypeId)?.name ?? '';
+  }
+
   get selectedAdditionalTags(): RegionalPlaceTagDto[] {
-    const primaryIds = new Set(this.classItems.map(item => item.tag.id));
     return this.placeTags
-      .filter(tag => this.selectedTagIds.has(tag.id) && !primaryIds.has(tag.id))
+      .filter(tag => this.selectedTagIds.has(tag.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   get visibleClassItems(): ClassItem[] {
-    return this.classItems.slice(0, this.visibleClassificationLimit);
+    const query = this.tagFilter.trim().toLocaleLowerCase();
+    if (!query) return this.classItems;
+
+    return this.classItems.filter(item =>
+      item.tag.name.toLocaleLowerCase().includes(query) ||
+      item.tag.slug.toLocaleLowerCase().includes(query),
+    );
   }
 
   get showClassificationToggle(): boolean {
-    return this.classItems.length > NewPlaceComponent.initialVisibleClassificationTags;
+    return false;
   }
 
   get visibleClassificationLimit(): number {
     return this.classificationExpanded
-      ? NewPlaceComponent.expandedVisibleClassificationTags
+      ? this.classItems.length
       : NewPlaceComponent.initialVisibleClassificationTags;
+  }
+
+  get remainingClassificationCount(): number {
+    return Math.max(0, this.classItems.length - this.visibleClassItems.length);
   }
 
   get createdDateDisplay(): string {
@@ -486,6 +519,22 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
+  loadStayTypes(): void {
+    this.placesService.getStayTypes().subscribe({
+      next: types => {
+        this.stayTypes = Array.isArray(types) ? types : [];
+        if (this.stayTypeId && !this.stayTypes.some(t => t.id === this.stayTypeId)) {
+          this.stayTypeId = this.stayTypes[0]?.id ?? null;
+        }
+        this.notifyStateChanged();
+      },
+      error: () => {
+        this.stayTypes = [];
+        this.notifyStateChanged();
+      },
+    });
+  }
+
   loadPlaceTags(): void {
     this.tagsLoading = true;
     this.notifyStateChanged();
@@ -518,10 +567,16 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.placesService.getPlace(this.activeRegionId, this.editPlaceId).subscribe({
       next: dto => {
+        const wasLinked = this.hasLinkedContribution;
+        this.hasLinkedContribution = dto.hasLinkedContribution ?? false;
+        if (this.hasLinkedContribution !== wasLinked) {
+          this.loadPlaceTypes();
+        }
         this.placeName = dto.name ?? '';
         this.summary = dto.summary ?? dto.subtitle ?? '';
         this.parentLocationId = dto.locationId ?? null;
         this.placeTypeId = dto.placeTypeId ?? null;
+        this.stayTypeId = dto.stayTypeId ?? null;
         this.bestTimeToVisit = dto.bestTimeToVisit ?? '';
         this.visitorTips = dto.visitorTips ?? '';
         this.accessNotes = dto.accessNotes ?? '';
@@ -565,7 +620,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
         setTimeout(() => {
           if (this.editorRef?.nativeElement) {
-            this.editorRef.nativeElement.innerHTML = dto.description ?? '';
+            this.setEditorHtml(dto.description);
             this.syncEmptyState();
             this.notifyStateChanged();
           }
@@ -600,23 +655,45 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       clearTimeout(this.tagSearchHandle);
     }
 
-    const query = this.tagInput.trim();
-    if (!query) {
-      this.additionalTagResults = [];
-      this.tagSearchLoading = false;
-      this.notifyStateChanged();
-      return;
-    }
-
-    this.tagSearchHandle = setTimeout(() => this.searchTags(query), 250);
+    this.additionalTagResults = [];
+    this.tagSearchLoading = false;
+    this.notifyStateChanged();
   }
 
   addTag(event: Event): void {
     event.preventDefault();
-    const firstAvailable = this.additionalTagResults.find(tag => !this.selectedTagIds.has(tag.id));
-    if (firstAvailable) {
-      this.selectAdditionalTag(firstAvailable);
+    const name = this.tagInput.trim();
+    if (name.length < 2 || this.tagSearchLoading) return;
+
+    const existingSelectedTag = this.placeTags.find(
+      tag => tag.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase() && this.selectedTagIds.has(tag.id),
+    );
+    if (existingSelectedTag) {
+      this.tagInput = '';
+      this.notifyStateChanged();
+      return;
     }
+
+    const tag = this.findTagToAdd();
+    if (tag) {
+      this.selectAdditionalTag(tag);
+      return;
+    }
+
+    this.tagSearchLoading = true;
+    this.tagSearchSubscription?.unsubscribe();
+    this.tagSearchSubscription = this.placesService
+      .createPlaceTag(name)
+      .pipe(
+        finalize(() => {
+          this.tagSearchLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: tag => this.selectAdditionalTag(tag),
+        error: error => this.handleLoadError(error, 'Unable to create place tag.'),
+      });
   }
 
   selectAdditionalTag(tag: RegionalPlaceTagDto): void {
@@ -637,6 +714,167 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.notifyStateChanged();
   }
 
+  openTimePicker(day: DayHours, field: TimeField): void {
+    this.activeTimePicker = { day, field };
+    this.timePickerMode = 'hour';
+    this.notifyStateChanged();
+  }
+
+  closeTimePicker(): void {
+    this.activeTimePicker = null;
+    this.notifyStateChanged();
+  }
+
+  setTimePickerMode(mode: 'hour' | 'minute'): void {
+    this.timePickerMode = mode;
+    this.notifyStateChanged();
+  }
+
+  onTimeInput(day: DayHours, field: TimeField, value: string): void {
+    day[field] = value.replace(/[^\d:]/g, '').slice(0, 5);
+    this.notifyStateChanged();
+  }
+
+  onTimeBlur(day: DayHours, field: TimeField): void {
+    const normalized = this.normalizeTimeInput(day[field]);
+    if (normalized) {
+      day[field] = normalized;
+      this.notifyStateChanged();
+    }
+  }
+
+  selectClockHour(hour: number): void {
+    const picker = this.activeTimePicker;
+    if (!picker) return;
+
+    const [, minutes] = picker.day[picker.field].split(':');
+    picker.day[picker.field] = `${this.padTimePart(hour)}:${minutes || '00'}`;
+    this.timePickerMode = 'minute';
+    this.notifyStateChanged();
+  }
+
+  minuteCircleStyle(): Record<string, string> {
+    const minute = this.currentMinute();
+    const angle = (minute / 60) * 360 - 90;
+    const radius = 138;
+    const x = Math.cos(angle * Math.PI / 180) * radius;
+    const y = Math.sin(angle * Math.PI / 180) * radius;
+    return {
+      left: `calc(50% + ${x}px)`,
+      top: `calc(50% + ${y}px)`,
+      transform: 'translate(-50%, -50%)',
+    };
+  }
+
+  minuteHandAngle(): number {
+    const picker = this.activeTimePicker;
+    if (!picker) return 0;
+    return (Number(picker.day[picker.field].slice(3, 5)) || 0) / 60 * 360;
+  }
+
+  currentMinute(): number {
+    const picker = this.activeTimePicker;
+    if (!picker) return 0;
+    return Number(picker.day[picker.field].slice(3, 5)) || 0;
+  }
+
+  onMinutePointerDown(event: MouseEvent | TouchEvent, el: HTMLElement): void {
+    if (this.timePickerMode !== 'minute') return;
+    this.isDraggingMinute = true;
+    this.applyMinuteFromEvent(event, el);
+    event.preventDefault();
+  }
+
+  onMinutePointerMove(event: MouseEvent | TouchEvent, el: HTMLElement): void {
+    if (!this.isDraggingMinute) return;
+    this.applyMinuteFromEvent(event, el);
+    event.preventDefault();
+  }
+
+  onMinutePointerUp(): void {
+    this.isDraggingMinute = false;
+  }
+
+  private applyMinuteFromEvent(event: MouseEvent | TouchEvent, el: HTMLElement): void {
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let clientX: number, clientY: number;
+    if (window.TouchEvent && event instanceof TouchEvent) {
+      if (!event.touches.length) return;
+      clientX = event.touches[0].clientX;
+      clientY = event.touches[0].clientY;
+    } else {
+      clientX = (event as MouseEvent).clientX;
+      clientY = (event as MouseEvent).clientY;
+    }
+    const angle = Math.atan2(clientY - cy, clientX - cx) * 180 / Math.PI + 90;
+    const minute = Math.round(((angle % 360) + 360) % 360 / 360 * 60) % 60;
+    const picker = this.activeTimePicker;
+    if (!picker) return;
+    const [hours] = picker.day[picker.field].split(':');
+    picker.day[picker.field] = `${hours || '00'}:${this.padTimePart(minute)}`;
+    this.notifyStateChanged();
+  }
+
+  selectClockMinute(minute: number): void {
+    const picker = this.activeTimePicker;
+    if (!picker) return;
+
+    const [hours] = picker.day[picker.field].split(':');
+    picker.day[picker.field] = `${hours || '00'}:${this.padTimePart(minute)}`;
+    this.notifyStateChanged();
+  }
+
+  clockHourStyle(hour: number, ring: 'outer' | 'inner'): Record<string, string> {
+    const arr = ring === 'outer' ? this.clockOuterHours : this.clockInnerHours;
+    const index = arr.indexOf(hour);
+    const angle = (index / 12) * 360 - 90;
+    const radius = ring === 'outer' ? 138 : 95;
+    const x = Math.cos(angle * Math.PI / 180) * radius;
+    const y = Math.sin(angle * Math.PI / 180) * radius;
+    return {
+      left: `calc(50% + ${x}px)`,
+      top: `calc(50% + ${y}px)`,
+      transform: 'translate(-50%, -50%)',
+    };
+  }
+
+  clockButtonStyle(value: number, total: number): Record<string, string> {
+    const angle = (value / total) * 360 - 90;
+    const radius = 138;
+    const x = Math.cos(angle * Math.PI / 180) * radius;
+    const y = Math.sin(angle * Math.PI / 180) * radius;
+    return {
+      left: `calc(50% + ${x}px)`,
+      top: `calc(50% + ${y}px)`,
+      transform: 'translate(-50%, -50%)',
+    };
+  }
+
+  isSelectedClockHour(hour: number): boolean {
+    const picker = this.activeTimePicker;
+    return !!picker && Number(picker.day[picker.field].slice(0, 2)) === hour;
+  }
+
+  isSelectedClockMinute(minute: number): boolean {
+    const picker = this.activeTimePicker;
+    return !!picker && Number(picker.day[picker.field].slice(3, 5)) === minute;
+  }
+
+  formatClockPart(value: number): string {
+    return this.padTimePart(value);
+  }
+
+  onEditorKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      document.execCommand('insertLineBreak');
+      this.syncToolbarState();
+      this.syncEmptyState();
+    }
+  }
+
   execFormat(command: 'bold' | 'italic' | 'underline'): void {
     document.execCommand(command, false, undefined);
     this.editorRef.nativeElement.focus();
@@ -644,6 +882,19 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onEditorChange(): void {
+    this.syncToolbarState();
+    this.syncEmptyState();
+  }
+
+  onEditorPaste(event: ClipboardEvent): void {
+    const clipboard = event.clipboardData;
+    if (!clipboard) return;
+
+    event.preventDefault();
+    const html = clipboard.getData('text/html');
+    const text = clipboard.getData('text/plain');
+    const content = html || this.escapeHtml(text).replace(/\r\n|\r|\n/g, '<br>');
+    document.execCommand('insertHTML', false, this.normalizeEditorHtml(content));
     this.syncToolbarState();
     this.syncEmptyState();
   }
@@ -658,6 +909,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const el = this.editorRef?.nativeElement;
     if (el && (el.innerHTML === '<br>' || el.innerHTML === '&nbsp;' || el.innerHTML.trim() === '')) {
       el.innerHTML = '';
+    } else if (el) {
+      el.innerHTML = this.normalizeEditorHtml(el.innerHTML);
     }
     this.syncEmptyState();
   }
@@ -975,12 +1228,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const operatingHours = this.buildOperatingHoursPayload();
     if (!operatingHours) return null;
 
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const descriptionHtml = this.getEditorHtml();
 
     return {
       regionId,
       locationId,
       placeTypeId,
+      stayTypeId: this.isStayType ? (this.stayTypeId ?? null) : null,
       name,
       summary: normalizedSummary,
       description: descriptionHtml || null,
@@ -998,7 +1252,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       bookingExternalLink: bookingLink,
       operatingHoursEnabled: this.opsEnabled,
       operatingHours,
-      tagIds: [...this.selectedTagIds],
+      tagIds: this.selectedTagIdList(),
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
       galleryImageFiles: this.galleryImages.map(image => image.file),
@@ -1059,11 +1313,12 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const operatingHours = this.buildOperatingHoursPayload();
     if (!operatingHours) return null;
 
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const descriptionHtml = this.getEditorHtml();
 
     return {
       locationId,
       placeTypeId,
+      stayTypeId: this.isStayType ? (this.stayTypeId ?? null) : null,
       name,
       subtitle: normalizedSummary,
       description: descriptionHtml || null,
@@ -1080,7 +1335,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       bookingExternalLink: bookingLink,
       operatingHoursEnabled: this.opsEnabled,
       operatingHours,
-      tagIds: [...this.selectedTagIds],
+      tagIds: this.selectedTagIdList(),
     };
   }
 
@@ -1094,8 +1349,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         continue;
       }
 
-      if (this.toMinutes(day.openTime) >= this.toMinutes(day.closeTime)) {
-        this.errorMessage = `${day.name} opening time must be before closing time.`;
+      if (day.openTime === day.closeTime) {
+        this.errorMessage = `${day.name} opening time and closing time cannot be the same.`;
+        return null;
+      }
+
+      if (!this.isValidClockTime(day.openTime) || !this.isValidClockTime(day.closeTime)) {
+        this.errorMessage = `${day.name} opening hours must use 24-hour HH:mm format.`;
         return null;
       }
 
@@ -1127,6 +1387,28 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         closeTime: incoming.closeTime ?? day.closeTime,
       };
     });
+  }
+
+  private normalizeTimeInput(value: string): string | null {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(\d{1,2})(?::?(\d{0,2}))?$/);
+    if (!match) return null;
+
+    const hours = Number(match[1]);
+    const minutes = Number((match[2] || '0').padEnd(2, '0'));
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      return null;
+    }
+
+    return `${this.padTimePart(hours)}:${this.padTimePart(minutes)}`;
+  }
+
+  private isValidClockTime(value: string): boolean {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+  }
+
+  private padTimePart(value: number): string {
+    return value.toString().padStart(2, '0');
   }
 
   private initMiniMap(): void {
@@ -1314,6 +1596,14 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
+  private findTagToAdd(): RegionalPlaceTagDto | null {
+    const query = this.tagInput.trim().toLocaleLowerCase();
+    const exactMatch = this.placeTags.find(
+      tag => tag.name.trim().toLocaleLowerCase() === query && !this.selectedTagIds.has(tag.id),
+    );
+    return exactMatch ?? null;
+  }
+
   private normalizeParentLocations(
     locations: RegionalPlaceParentLocationDto[] | null | undefined,
   ): RegionalPlaceParentLocationDto[] {
@@ -1327,12 +1617,18 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
+  private static readonly CONTRIBUTION_INELIGIBLE_PLACE_TYPES = new Set(['beach', 'nature', 'shopping']);
+
   private normalizePlaceTypes(types: RegionalPlaceTypeDto[] | null | undefined): RegionalPlaceTypeDto[] {
     const seen = new Set<number>();
     return (types ?? [])
       .filter(type => {
         if (!type || seen.has(type.id)) return false;
         seen.add(type.id);
+        if (this.hasLinkedContribution &&
+            NewPlaceComponent.CONTRIBUTION_INELIGIBLE_PLACE_TYPES.has(type.name.toLowerCase().trim())) {
+          return false;
+        }
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -1363,6 +1659,10 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.classItems = [...this.classItems, { tag, checked }]
       .sort((a, b) => a.tag.name.localeCompare(b.tag.name));
+  }
+
+  private selectedTagIdList(): number[] {
+    return [...new Set(this.selectedTagIds)].sort((a, b) => a - b);
   }
 
   private applyInitialCoordinatesFromRoute(): void {
@@ -1661,11 +1961,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       .join(', ');
   }
 
-  private toMinutes(value: string): number {
-    const [hours, minutes] = value.split(':').map(part => Number(part));
-    return hours * 60 + minutes;
-  }
-
   private isAllowedImage(file: File): boolean {
     const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
     if (!allowed.has(file.type)) {
@@ -1691,6 +1986,30 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const text = el.innerText ?? el.textContent ?? '';
     this.editorIsEmpty = text.trim() === '' && !el.querySelector('img');
     this.notifyStateChanged();
+  }
+
+  private setEditorHtml(value: string | null | undefined): void {
+    const el = this.editorRef?.nativeElement;
+    if (!el) return;
+
+    el.innerHTML = this.normalizeEditorHtml(value ?? '');
+  }
+
+  private getEditorHtml(): string {
+    return this.normalizeEditorHtml(this.editorRef?.nativeElement?.innerHTML ?? '');
+  }
+
+  private normalizeEditorHtml(value: string): string {
+    return normalizeEditorDescriptionHtml(value);
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   private syncToolbarState(): void {

@@ -2202,6 +2202,12 @@ public class AppDbContext : DbContext
             entity.Property(x => x.OpeningHours)
                 .HasMaxLength(200);
 
+            entity.Property(x => x.OperatingHoursEnabled)
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.OperatingHoursJson)
+                .HasColumnType("jsonb");
+
             entity.Property(x => x.Description)
                 .HasMaxLength(2000);
 

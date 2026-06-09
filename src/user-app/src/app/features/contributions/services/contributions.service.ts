@@ -3,12 +3,19 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, map, tap } from 'rxjs';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { BasicsData } from '../pages/submit-contribution/steps/step-basics/step-basics.component';
-import { DetailsData } from '../pages/submit-contribution/steps/step-details/step-details.component';
+import type { ContributionOperatingHour, DetailsData } from '../pages/submit-contribution/steps/step-details/step-details.component';
 import { FeaturesData } from '../pages/submit-contribution/steps/step-features/step-features.component';
 import {
   normalizeContributionAmenityIds,
   toContributionAmenityApiValues,
 } from './contribution-amenities';
+
+export interface ResolveLocationResult {
+  locationId: number | null;
+  locationName: string | null;
+  destinationName: string | null;
+  regionName: string | null;
+}
 
 export type ContributionStatus = 'PendingReview' | 'Approved' | 'Rejected';
 export type ContributionEntityType = 'Place';
@@ -73,6 +80,9 @@ export interface ContributionDetail extends ContributionListItem {
   cardImagePosition: string;
   cardImageSize: string;
   description: string;
+  openingHours: string;
+  operatingHoursEnabled: boolean;
+  operatingHours: ContributionOperatingHour[];
   phone: string;
   contactEmail: string;
   website: string;
@@ -138,6 +148,9 @@ interface ApiContributionDetail extends ApiContributionListItem {
   cardImagePosition?: string | null;
   cardImageSize?: string | null;
   description: string;
+  openingHours?: string | null;
+  operatingHoursEnabled?: boolean | null;
+  operatingHours?: ContributionOperatingHour[] | null;
   phone: string;
   contactEmail: string;
   website: string;
@@ -179,7 +192,12 @@ interface UpsertPlaceContributionPayload {
   imageSize: string;
   cardImagePosition?: string;
   cardImageSize?: string;
+  ownershipProofDocumentUrl?: string | null;
+  ownershipProofOriginalFileName?: string | null;
   description: string;
+  openingHours?: string;
+  operatingHoursEnabled?: boolean;
+  operatingHours?: ContributionOperatingHour[];
   phone: string;
   contactEmail: string;
   website: string;
@@ -218,6 +236,12 @@ export class ContributionsService {
     });
   }
 
+  resolveLocation(latitude: number, longitude: number): Observable<ResolveLocationResult | null> {
+    return this.http.get<ResolveLocationResult | null>('/api/contributions/resolve-location', {
+      params: { latitude: String(latitude), longitude: String(longitude) },
+    });
+  }
+
   getDetail(id: number): Observable<ContributionDetail> {
     return this.http.get<ContributionResponse | ApiContributionDetail>(`/api/contributions/${id}`).pipe(
       map(res => mapDetail(unwrapContributionResponse(res))),
@@ -247,20 +271,58 @@ export class ContributionsService {
   ownerUpdatePlace(placeId: number, draft: ContributionDraftData): Observable<unknown> {
     const basics = requireBasics(draft.basics);
     const features = normalizeFeatures(draft.features);
-    const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
+    const details = normalizeDetails(draft.details, isAccommodation);
 
-    return this.http.put(`/api/places/${placeId}/owner-update`, {
+    // Build existing-image metadata (same logic as toFormData)
+    const images: { url: string; imageRole: string; sortOrder: number; imagePosition?: string; imageSize?: string }[] = [];
+    if (!basics.coverImageFile && basics.cardImageUrl) {
+      images.push({ url: basics.cardImageUrl, imageRole: 'card', sortOrder: -9, imagePosition: basics.cardImgBgPosition || '50% 50%', imageSize: basics.cardImgBgSize || 'cover' });
+    }
+    if (!basics.coverImageFile && basics.imageUrl) {
+      images.push({ url: basics.imageUrl, imageRole: 'cover', sortOrder: -10, imagePosition: basics.imgBgPosition || '50% 50%', imageSize: basics.imgBgSize || 'cover' });
+    }
+    (basics.galleryImageUrls ?? []).forEach((url, index) => {
+      const file = (basics.galleryImageFiles ?? [])[index];
+      if (url && !file && !url.startsWith('data:')) {
+        images.push({ url, imageRole: 'gallery', sortOrder: index });
+      }
+    });
+
+    const payload = {
       name: basics.name,
+      placeTypeId: basics.placeTypeId ?? null,
       description: details.description,
-      website: details.website,
+      operatingHoursEnabled: details.openingHoursEnabled,
+      operatingHours: details.openingHoursEnabled ? details.operatingHours : [],
+      website: isAccommodation ? '' : details.website,
       contactEmail: details.contactEmail,
       phoneNumber: details.phone,
       bookingExternalLink: details.bookingPartners[0]?.url ?? null,
       tags: features.tags,
       amenities: toContributionAmenityApiValues(features.amenities, isAccommodation),
       bookingPartners: details.bookingPartners,
-    }).pipe(
+      images,
+      imagePosition: basics.imgBgPosition || '50% 50%',
+      imageSize: basics.imgBgSize || 'cover',
+      cardImagePosition: basics.cardImgBgPosition || '50% 50%',
+      cardImageSize: basics.cardImgBgSize || 'cover',
+    };
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(payload));
+
+    if (basics.coverImageFile) {
+      formData.append('coverImage', basics.coverImageFile);
+    }
+    if (basics.cardImageFile) {
+      formData.append('cardImage', basics.cardImageFile);
+    }
+    for (const file of basics.galleryImageFiles ?? []) {
+      if (file) formData.append('galleryImages', file);
+    }
+
+    return this.http.put(`/api/places/${placeId}/owner-update`, formData).pipe(
       tap(() => {
         this.analytics.track('contribution_updated', { entityId: placeId });
         this.loadMine();
@@ -281,6 +343,11 @@ export class ContributionsService {
     const coverImageUrl = detail.coverImageUrl || detail.cardImageUrl || detail.galleryImageUrls[0] || '';
     const cardImageUrl = detail.cardImageUrl || detail.galleryImageUrls[0] || coverImageUrl;
     const galleryImageUrls = withoutSelectedImages(detail.galleryImageUrls, cardImageUrl, coverImageUrl);
+    const isAccommodation = isAccommodationPlaceType(detail.placeType || (detail.stayType ? 'Stay' : 'Place'));
+    const bookingPartners = normalizeOfficialWebsitePartner(
+      detail.bookingPartners ?? [],
+      isAccommodation ? detail.website : '',
+    );
 
     return {
       basics: {
@@ -315,10 +382,13 @@ export class ContributionsService {
       },
       details: {
         description: detail.description ?? '',
+        openingHoursEnabled: detail.operatingHoursEnabled || !!detail.openingHours?.trim(),
+        openingHours: detail.openingHours ?? '',
+        operatingHours: detail.operatingHours,
         phone: detail.phone ?? '',
         contactEmail: detail.contactEmail ?? '',
-        website: detail.website ?? '',
-        bookingPartners: detail.bookingPartners ?? [],
+        website: isAccommodation ? '' : detail.website ?? '',
+        bookingPartners,
       },
     };
   }
@@ -326,8 +396,8 @@ export class ContributionsService {
   private toFormData(draft: ContributionDraftData, options?: { type?: ContributionType; placeId?: number | null }): FormData {
     const basics = requireBasics(draft.basics);
     const features = normalizeFeatures(draft.features);
-    const details = normalizeDetails(draft.details);
     const isAccommodation = isAccommodationPlaceType(basics.placeType);
+    const details = normalizeDetails(draft.details, isAccommodation);
 
     const payload: UpsertPlaceContributionPayload = {
       type: options?.type ?? 'CreatePlace',
@@ -347,10 +417,14 @@ export class ContributionsService {
       imageSize: basics.imgBgSize || 'cover',
       cardImagePosition: basics.cardImgBgPosition || '50% 50%',
       cardImageSize: basics.cardImgBgSize || 'cover',
+      ownershipProofDocumentUrl: basics.ownershipProofDocumentUrl ?? null,
+      ownershipProofOriginalFileName: basics.ownershipProofOriginalFileName ?? null,
       description: details.description,
+      operatingHoursEnabled: details.openingHoursEnabled,
+      operatingHours: details.openingHoursEnabled ? details.operatingHours : [],
       phone: details.phone,
       contactEmail: details.contactEmail,
-      website: details.website,
+      website: isAccommodation ? '' : details.website,
       tags: features.tags,
       amenities: toContributionAmenityApiValues(features.amenities, isAccommodation),
       bookingPartners: isAccommodation ? details.bookingPartners : [],
@@ -432,23 +506,51 @@ function normalizeFeatures(features: FeaturesData | null): FeaturesData {
 
 interface NormalizedDetailsData {
   description: string;
+  openingHoursEnabled: boolean;
+  openingHours: string;
+  operatingHours: ContributionOperatingHour[];
   phone: string;
   contactEmail: string;
   website: string;
   bookingPartners: ContributionBookingPartner[];
 }
 
-function normalizeDetails(details: DetailsData | null): NormalizedDetailsData {
-  return {
-    description: details?.description ?? '',
-    phone: details?.phone ?? '',
-    contactEmail: details?.contactEmail?.trim() ?? '',
-    website: details?.website?.trim() ?? '',
-    bookingPartners: (details?.bookingPartners ?? []).map(partner => ({
+function normalizeDetails(details: DetailsData | null, isAccommodation = false): NormalizedDetailsData {
+  const website = details?.website?.trim() ?? '';
+  const bookingPartners = normalizeOfficialWebsitePartner(
+    (details?.bookingPartners ?? []).map(partner => ({
       id: partner.id,
       url: partner.url.trim(),
     })),
+    isAccommodation ? website : '',
+  );
+
+  return {
+    description: details?.description ?? '',
+    openingHoursEnabled: details?.openingHoursEnabled ?? false,
+    openingHours: details?.openingHours?.trim() ?? '',
+    operatingHours: details?.operatingHours ?? [],
+    phone: details?.phone ?? '',
+    contactEmail: details?.contactEmail?.trim() ?? '',
+    website: isAccommodation ? '' : website,
+    bookingPartners,
   };
+}
+
+function normalizeOfficialWebsitePartner(
+  bookingPartners: ContributionBookingPartner[],
+  website: string,
+): ContributionBookingPartner[] {
+  const normalized = bookingPartners.map(partner => ({
+    id: partner.id,
+    url: partner.url.trim(),
+  }));
+
+  if (!website.trim() || normalized.some(partner => partner.id === 'hotel')) {
+    return normalized;
+  }
+
+  return [...normalized, { id: 'hotel', url: website.trim() }];
 }
 
 function mapListItem(item: ApiContributionListItem): ContributionListItem {
@@ -543,6 +645,9 @@ function mapDetail(item: ApiContributionDetail): ContributionDetail {
     cardImagePosition: cardImage?.imagePosition || item.cardImagePosition || '50% 50%',
     cardImageSize: cardImage?.imageSize || item.cardImageSize || 'cover',
     description: item.description ?? '',
+    openingHours: item.openingHours ?? '',
+    operatingHoursEnabled: item.operatingHoursEnabled ?? false,
+    operatingHours: item.operatingHours ?? [],
     phone: item.phone ?? '',
     contactEmail: item.contactEmail ?? '',
     website: item.website ?? '',

@@ -14,6 +14,8 @@ import { Observable, Subject, finalize } from 'rxjs';
 import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
+import { isLongDescription } from '../../../../shared/utils/description-formatting';
 import { ContentModeratorEntityReviewService } from '../../../../core/services/content-moderator/content-moderator-entity-review.service';
 import { ContentModeratorDashboardService } from '../../../../core/services/content-moderator/content-moderator-dashboard.service';
 import { UserAppLinkService } from '../../../../core/services/user-app-link.service';
@@ -88,7 +90,7 @@ const ENTITY_CONFIGS: Record<ContentModeratorEntityType, EntityConfig> = {
 @Component({
   selector: 'app-content-moderator-entity-review',
   standalone: true,
-  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent, DescriptionRichHtmlPipe],
   templateUrl: './entity-review.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -148,6 +150,7 @@ export class ContentModeratorEntityReviewComponent implements OnInit, OnDestroy 
   detailEntity: ContentModeratorEntityReviewDetail | null = null;
   isDetailLoading = false;
   detailErrorMessage = '';
+  detailDescriptionExpanded = false;
 
   confirmation: ConfirmationState | null = null;
   moderationReason = '';
@@ -261,6 +264,7 @@ export class ContentModeratorEntityReviewComponent implements OnInit, OnDestroy 
     this.detailTarget = entity;
     this.detailEntity = null;
     this.detailErrorMessage = '';
+    this.detailDescriptionExpanded = false;
     this.loadDetail(entity.entityId);
     this.cdr.markForCheck();
   }
@@ -591,6 +595,10 @@ export class ContentModeratorEntityReviewComponent implements OnInit, OnDestroy 
       case 'delete':
         return this.entityReviewSvc.delete$(state.entity.entityType, state.entity.entityId, request);
     }
+  }
+
+  get isDetailDescriptionLong(): boolean {
+    return isLongDescription(this.detailEntity?.description);
   }
 
   private refreshDetailIfOpen(updated: ContentModeratorEntityReviewDetail): void {

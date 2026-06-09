@@ -161,9 +161,37 @@ public sealed class RegionalEventsTests
             new RegionalEventUpdateRequestDto
             {
                 Name = "Regional Event 07 Updated",
+                Summary = "Updated event summary.",
                 Description = "Updated event description.",
+                VenueName = "Updated venue hall",
+                IsAllDay = false,
                 StartsAt = updatedStart,
-                EndsAt = updatedEnd
+                EndsAt = updatedEnd,
+                IsRecurring = true,
+                IsFree = false,
+                TicketPrice = "35",
+                ExternalTicketLink = "https://tickets.example.com/updated-event",
+                OrganizerName = "Updated organizer",
+                ContactEmail = "updated-events@example.com",
+                AttendanceLimit = 321,
+                AgeRestriction = "16+",
+                Images =
+                [
+                    new RegionalEntityImageInputDto
+                    {
+                        Url = "/media/seed/events/search-card.webp",
+                        IsMain = true,
+                        SortOrder = 0,
+                        AltText = "Existing search event card"
+                    },
+                    new RegionalEntityImageInputDto
+                    {
+                        Url = "/media/uploads/regional/updated-gallery.webp",
+                        IsMain = false,
+                        SortOrder = 2,
+                        AltText = "Updated gallery image"
+                    }
+                ]
             });
         updateResponse.EnsureSuccessStatusCode();
 
@@ -171,9 +199,22 @@ public sealed class RegionalEventsTests
         Assert.NotNull(updated);
         Assert.Equal(fixture.AssignedRegionId, updated!.RegionId);
         Assert.Equal("Regional Event 07 Updated", updated.Name);
+        Assert.Equal("Updated event summary.", updated.Summary);
         Assert.Equal("Updated event description.", updated.Description);
+        Assert.Equal("Updated venue hall", updated.VenueName);
         AssertDateClose(updatedStart, updated.StartsAt);
         AssertDateClose(updatedEnd, updated.EndsAt);
+        Assert.False(updated.IsAllDay);
+        Assert.True(updated.IsRecurring);
+        Assert.False(updated.IsFree);
+        Assert.Equal("35", updated.TicketPrice);
+        Assert.Equal("https://tickets.example.com/updated-event", updated.ExternalTicketLink);
+        Assert.Equal("Updated organizer", updated.HostedBy);
+        Assert.Equal("updated-events@example.com", updated.ContactEmail);
+        Assert.Equal(321, updated.AttendanceLimit);
+        Assert.Equal("16+", updated.AgeRestriction);
+        Assert.Contains(updated.Images, image => image.Url == "/media/seed/events/search-card.webp" && image.IsMain);
+        Assert.Contains(updated.Images, image => image.Url == "/media/uploads/regional/updated-gallery.webp" && !image.IsMain);
     }
 
     [Fact]
@@ -452,7 +493,10 @@ public sealed class RegionalEventsTests
             ContactEmail = "events@example.com",
             AttendanceLimit = 250,
             AgeRestriction = "All ages",
-            TagIds = [fixture.EventTagId]
+            TagIds = [fixture.EventTagId],
+            CardImageUrl = "/media/uploads/regional/create-card.webp",
+            CoverImageUrl = "/media/uploads/regional/create-cover.webp",
+            GalleryImageUrls = ["/media/uploads/regional/create-gallery.webp"]
         };
     }
 
@@ -639,6 +683,29 @@ public sealed class RegionalEventsTests
 
         db.Events.AddRange(events);
         db.Events.Add(unassignedEvent);
+        await db.SaveChangesAsync();
+
+        db.EntityImages.AddRange(
+            new EntityImage
+            {
+                TargetType = EntityImageTargetType.Event,
+                EventId = events[7].Id,
+                Url = "/media/seed/events/search-card.webp",
+                AltText = "Existing search event card",
+                IsMain = true,
+                SortOrder = 0,
+                CreatedAt = now
+            },
+            new EntityImage
+            {
+                TargetType = EntityImageTargetType.Event,
+                EventId = events[7].Id,
+                Url = "/media/seed/events/search-cover.webp",
+                AltText = "Existing search event cover",
+                IsMain = false,
+                SortOrder = 1,
+                CreatedAt = now
+            });
         await db.SaveChangesAsync();
 
         db.EventReviews.Add(new EventReview

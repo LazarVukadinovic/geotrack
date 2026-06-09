@@ -402,6 +402,20 @@ public class ExploreService : IExploreService
 
         sections.AddRange(dynamicSections);
 
+        if (sections.Count == 0)
+        {
+            var placesSection = await BuildDestinationPlacesFallbackSectionAsync(
+                resolvedDestination.Id,
+                distancePoint,
+                placeFavoriteIds,
+                useCurrentLocationDistance);
+
+            if (placesSection.Items.Count > 0)
+            {
+                sections.Add(placesSection);
+            }
+        }
+
         return new ExplorePageDto
         {
             SelectedDestination = new ExploreDestinationDto
@@ -422,15 +436,69 @@ public class ExploreService : IExploreService
         };
     }
 
-    
+    private async Task<ExploreFeedSectionDto> BuildDestinationPlacesFallbackSectionAsync(
+        int destinationId,
+        Point distancePoint,
+        ISet<int> placeFavoriteIds,
+        bool useCurrentLocationDistance)
+    {
+        var items = await PublicPlaces(_db.Places.AsNoTracking())
+            .Where(p =>
+                p.Location.DestinationId == destinationId &&
+                EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null)
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Subtitle,
+                p.Description,
+                EntityType = p.Stay != null ? "stay" : "place",
+                DetailRoute = p.Stay != null ? $"/stays/{p.Id}" : $"/places/{p.Id}",
+                CategoryLabel = p.Stay != null && p.Stay.StayType != null ? p.Stay.StayType.Name : p.PlaceType.Name,
+                LocationName = p.Location.Name,
+                Image = p.Images
+                    .OrderBy(image => image.ImageRole == EntityImageRole.Card ? 0 : image.ImageRole == EntityImageRole.Cover ? 1 : 2)
+                    .ThenBy(image => image.SortOrder)
+                    .ThenBy(image => image.CreatedAt)
+                    .ThenBy(image => image.Id)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = p.PlaceReviews.Select(r => (double?)r.Rating).Average(),
+                ReviewCount = p.PlaceReviews.Count(),
+                DistanceMeters = EF.Property<Point>(p, SpatialPointFactory.CoordinatesPropertyName).Distance(distancePoint),
+            })
+            .OrderBy(p => p.DistanceMeters)
+            .ThenBy(p => p.Name)
+            .Take(ExploreSectionItemLimit)
+            .ToListAsync();
 
-
-
-    
-
-
-
-
+        return new ExploreFeedSectionDto
+        {
+            Key = "places",
+            Title = "Places",
+            Subtitle = "Approved places in this destination",
+            Layout = "horizontal-cards",
+            CardType = "place-card",
+            MoreRoute = $"/places?destinationId={destinationId}",
+            Priority = 90,
+            Items = items.Select(p => new ExploreFeedSectionItemDto
+            {
+                Id = p.Id,
+                EntityType = p.EntityType,
+                DetailRoute = p.DetailRoute,
+                Title = DisplayTextSafety.CleanRequired(p.Name, "Place"),
+                Subtitle = DisplayTextSafety.CleanOptional(p.Subtitle),
+                Description = TrimDescription(p.Description, 130),
+                CategoryLabel = DisplayTextSafety.CleanOptional(p.CategoryLabel),
+                LocationName = DisplayTextSafety.CleanOptional(p.LocationName),
+                Image = p.Image,
+                Rating = p.AverageRating.HasValue ? Math.Round(p.AverageRating.Value, 1) : null,
+                ReviewCount = FormatReviewCountLabel(p.ReviewCount),
+                Distance = FormatDistanceLabel(p.DistanceMeters, useCurrentLocationDistance),
+                IsSaved = placeFavoriteIds.Contains(p.Id)
+            }).ToList()
+        };
+    }
     private async Task<ExploreSectionPageDto> BuildCuratedForYouPageAsync(
         ResolvedDestinationCandidate destination,
         Point destinationPoint,

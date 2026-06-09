@@ -42,6 +42,7 @@ namespace Geotrack.Application.Services
             {
                 Id = region.Id,
                 Name = region.Name,
+                Description = region.Description,
                 TerritoryId = region.TerritoryId,
                 TerritoryName = region.Territory?.Name,
                 Managers = region.RegionalManagerRegions
@@ -53,6 +54,7 @@ namespace Geotrack.Application.Services
                     })
                     .ToList(),
                 Destinations = region.Destinations
+                    .Where(d => d.Status != "Archived")
                     .OrderBy(d => d.Name)
                     .Select(d => new DestinationSummaryDto
                     {

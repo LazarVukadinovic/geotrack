@@ -9,6 +9,7 @@ public class GetLocationDetailsResponseDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public int DestinationId { get; set; }
     public string? DestinationName { get; set; }
     public int LocationTypeId { get; set; }
