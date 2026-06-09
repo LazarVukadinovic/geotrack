@@ -595,6 +595,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe({
         next: tags => {
           this.placeTags = this.normalizeTags(tags);
+          this.syncSelectedTagsWithAvailableTags();
           this.classItems = this.placeTags.map(tag => ({
             tag,
             checked: this.selectedTagIds.has(tag.id),
@@ -654,10 +655,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         }));
 
         this.selectedTagIds = new Set((dto.tags ?? []).map(tag => tag.id));
-        for (const tag of dto.tags ?? []) {
-          this.upsertPlaceTag(tag);
-          this.upsertClassItem(tag, true);
-        }
+        this.syncSelectedTagsWithAvailableTags();
         this.classItems = this.classItems.map(item => ({
           ...item,
           checked: this.selectedTagIds.has(item.tag.id),
@@ -1735,7 +1733,21 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private selectedTagIdList(): number[] {
-    return [...new Set(this.selectedTagIds)].sort((a, b) => a - b);
+    const allowedIds = this.availableTagIdSet();
+    return [...new Set(this.selectedTagIds)]
+      .filter(id => allowedIds.size === 0 || allowedIds.has(id))
+      .sort((a, b) => a - b);
+  }
+
+  private syncSelectedTagsWithAvailableTags(): void {
+    const allowedIds = this.availableTagIdSet();
+    if (allowedIds.size === 0) return;
+
+    this.selectedTagIds = new Set([...this.selectedTagIds].filter(id => allowedIds.has(id)));
+  }
+
+  private availableTagIdSet(): Set<number> {
+    return new Set(this.placeTags.map(tag => tag.id));
   }
 
   private applyInitialCoordinatesFromRoute(): void {
@@ -2243,6 +2255,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.modalPinLng = payload.modalPinLng;
     this.pinConfirmed = Boolean(payload.pinConfirmed);
     this.selectedTagIds = new Set(payload.selectedTagIds ?? []);
+    this.syncSelectedTagsWithAvailableTags();
     this.classItems = this.classItems.map(item => ({
       ...item,
       checked: this.selectedTagIds.has(item.tag.id),
