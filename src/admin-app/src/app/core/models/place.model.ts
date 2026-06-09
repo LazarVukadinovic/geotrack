@@ -98,6 +98,13 @@ export interface RegionalPlaceAmenityDto {
   name: string;
 }
 
+export interface RegionalPlaceParentDestinationDto {
+  id: number;
+  name: string;
+  displayName: string;
+  status: string;
+}
+
 export interface RegionalPlaceParentLocationDto {
   id: number;
   name: string;

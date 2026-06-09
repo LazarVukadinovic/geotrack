@@ -151,6 +151,14 @@ public class RegionalPlaceOperatingHourDto
     public string? CloseTime { get; set; }
 }
 
+public class RegionalPlaceParentDestinationDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Status { get; set; } = "Published";
+}
+
 public class RegionalPlaceParentLocationDto
 {
     public int Id { get; set; }

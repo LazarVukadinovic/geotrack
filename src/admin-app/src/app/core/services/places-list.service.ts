@@ -9,6 +9,7 @@ import {
   RegionalPlaceListItemDto,
   RegionalPlaceListParams,
   RegionalPlaceListResponse,
+  RegionalPlaceParentDestinationDto,
   RegionalPlaceParentLocationDto,
   RegionalPlaceOwnerDto,
   RegionalPlaceTagDto,
@@ -171,10 +172,31 @@ export class PlacesListService {
     );
   }
 
+  getParentDestinations(
+    regionId: number,
+    search?: string | null,
+    take = 50,
+  ): Observable<RegionalPlaceParentDestinationDto[]> {
+    let params = new HttpParams()
+      .set('regionId', String(regionId))
+      .set('take', String(take));
+
+    const normalizedSearch = search?.trim();
+    if (normalizedSearch) {
+      params = params.set('search', normalizedSearch);
+    }
+
+    return this.http.get<RegionalPlaceParentDestinationDto[]>(
+      '/api/admin/regional/place-parent-destinations',
+      { params },
+    );
+  }
+
   getParentLocations(
     regionId: number,
     search?: string | null,
     take = 50,
+    destinationId?: number | null,
   ): Observable<RegionalPlaceParentLocationDto[]> {
     let params = new HttpParams()
       .set('regionId', String(regionId))
@@ -183,6 +205,10 @@ export class PlacesListService {
     const normalizedSearch = search?.trim();
     if (normalizedSearch) {
       params = params.set('search', normalizedSearch);
+    }
+
+    if (destinationId) {
+      params = params.set('destinationId', String(destinationId));
     }
 
     return this.http.get<RegionalPlaceParentLocationDto[]>(

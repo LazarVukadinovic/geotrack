@@ -607,9 +607,45 @@ public class RegionalPlaceService : IRegionalPlaceService
         await _db.SaveChangesAsync();
     }
 
+    public async Task<List<RegionalPlaceParentDestinationDto>> GetParentDestinationsAsync(
+        int userId,
+        int regionId,
+        string? search,
+        int take)
+    {
+        await EnsureAssignedRegionAsync(userId, regionId);
+
+        var normalizedTake = Math.Clamp(take <= 0 ? MaxTake : take, 1, MaxTake);
+        var query = _db.Destinations
+            .AsNoTracking()
+            .Where(destination => destination.RegionId == regionId);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLowerInvariant();
+            query = query.Where(destination =>
+                destination.Name.ToLower().Contains(term) ||
+                (destination.InternalReferenceId != null && destination.InternalReferenceId.ToLower().Contains(term)));
+        }
+
+        return await query
+            .OrderBy(destination => destination.Name)
+            .ThenBy(destination => destination.Id)
+            .Take(normalizedTake)
+            .Select(destination => new RegionalPlaceParentDestinationDto
+            {
+                Id = destination.Id,
+                Name = destination.Name,
+                DisplayName = destination.Name,
+                Status = destination.Status
+            })
+            .ToListAsync();
+    }
+
     public async Task<List<RegionalPlaceParentLocationDto>> GetParentLocationsAsync(
         int userId,
         int regionId,
+        int? destinationId,
         string? search,
         int take)
     {
@@ -619,6 +655,11 @@ public class RegionalPlaceService : IRegionalPlaceService
         var query = _db.Locations
             .AsNoTracking()
             .Where(location => location.Destination.RegionId == regionId);
+
+        if (destinationId.HasValue)
+        {
+            query = query.Where(location => location.DestinationId == destinationId.Value);
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {

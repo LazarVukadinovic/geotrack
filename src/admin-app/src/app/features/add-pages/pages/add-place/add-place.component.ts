@@ -32,6 +32,7 @@ import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '.
 import {
   RegionalPlaceCreateRequest,
   RegionalPlaceOperatingHourDto,
+  RegionalPlaceParentDestinationDto,
   RegionalPlaceParentLocationDto,
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
@@ -63,6 +64,7 @@ interface DayHours {
 
 interface PlaceFormDraft {
   activeRegionId: number | null;
+  parentDestinationId: number | null;
   placeName: string;
   summary: string;
   parentLocationId: number | null;
@@ -134,6 +136,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   assignedRegions: RegionalAssignedRegion[] = [];
   activeRegionId: number | null = null;
   regionLoading = false;
+  parentDestinationsLoading = false;
   parentLocationsLoading = false;
   placeTypesLoading = false;
   hasLinkedContribution = false;
@@ -153,6 +156,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   placeName = '';
   summary = '';
+  parentDestinationId: number | null = null;
   parentLocationId: number | null = null;
   placeTypeId: number | null = null;
   stayTypeId: number | null = null;
@@ -168,6 +172,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   tagInput = '';
   tagFilter = '';
 
+  parentDestinations: RegionalPlaceParentDestinationDto[] = [];
   parentLocations: RegionalPlaceParentLocationDto[] = [];
   placeTypes: RegionalPlaceTypeDto[] = [];
   stayTypes: RegionalStayTypeDto[] = [];
@@ -225,6 +230,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private miniMarker: any = null;
   private modalMarker: any = null;
   private assignedRegionsSubscription: Subscription | null = null;
+  private parentDestinationsSubscription: Subscription | null = null;
   private parentLocationsSubscription: Subscription | null = null;
   private placeTypesSubscription: Subscription | null = null;
   private tagsSubscription: Subscription | null = null;
@@ -280,6 +286,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.assignedRegionsSubscription?.unsubscribe();
+    this.parentDestinationsSubscription?.unsubscribe();
     this.parentLocationsSubscription?.unsubscribe();
     this.placeTypesSubscription?.unsubscribe();
     this.tagsSubscription?.unsubscribe();
@@ -318,12 +325,29 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.activeRegion?.displayName ?? '';
   }
 
+  get selectedParentDestination(): RegionalPlaceParentDestinationDto | null {
+    if (!this.parentDestinationId) return null;
+
+    return this.parentDestinations.find(destination => destination.id === this.parentDestinationId)
+      ?? (this.selectedParentLocation?.destinationId === this.parentDestinationId
+        ? {
+            id: this.parentDestinationId,
+            name: this.selectedParentLocation.destinationName,
+            displayName: this.selectedParentLocation.destinationName,
+            status: '',
+          }
+        : null);
+  }
+
   get selectedParentLocation(): RegionalPlaceParentLocationDto | null {
     return this.parentLocations.find(location => location.id === this.parentLocationId) ?? null;
   }
 
   get selectedParentDestinationName(): string {
-    return this.selectedParentLocation?.destinationName ?? '';
+    return this.selectedParentDestination?.displayName
+      ?? this.selectedParentDestination?.name
+      ?? this.selectedParentLocation?.destinationName
+      ?? '';
   }
 
   get selectedPlaceTypeName(): string {
@@ -381,6 +405,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   get canPublish(): boolean {
     const mediaReady = this.isEditMode || (Boolean(this.cardImageFile) && Boolean(this.coverImageFile));
     return Boolean(this.activeRegionId) &&
+      Boolean(this.parentDestinationId) &&
       Boolean(this.parentLocationId) &&
       Boolean(this.placeTypeId) &&
       this.placeName.trim().length > 0 &&
@@ -391,6 +416,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       !this.isScopeValidationRejected &&
       mediaReady &&
       !this.regionLoading &&
+      !this.parentDestinationsLoading &&
       !this.parentLocationsLoading &&
       !this.placeTypesLoading &&
       !this.tagsLoading &&
@@ -431,7 +457,9 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
           if (this.assignedRegions.length === 0) {
             this.activeRegionId = null;
+            this.parentDestinationId = null;
             this.parentLocationId = null;
+            this.parentDestinations = [];
             this.parentLocations = [];
             this.clearPersistedRegion();
             this.errorMessage = 'No active assigned region is available for this account.';
@@ -449,7 +477,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
-          this.loadParentLocations();
+          this.loadParentDestinations();
           this.loadRegionViewport(selectedRegion.id);
           this.loadPlaceForEditIfNeeded();
         },
@@ -461,17 +489,57 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     if (regionId === this.activeRegionId) return;
 
     this.setActiveRegion(regionId, true);
+    this.parentDestinationId = null;
     this.parentLocationId = null;
+    this.parentDestinations = [];
     this.parentLocations = [];
     this.resetPin();
-    this.loadParentLocations();
+    this.loadParentDestinations();
     this.loadRegionViewport(regionId);
-    this.feedbackMessage = 'Region changed. Parent location and map pin were cleared.';
+    this.feedbackMessage = 'Region changed. Parent destination, parent location and map pin were cleared.';
     this.notifyStateChanged();
   }
 
-  loadParentLocations(): void {
+  loadParentDestinations(): void {
     if (!this.activeRegionId) {
+      this.parentDestinations = [];
+      this.parentDestinationId = null;
+      this.parentLocations = [];
+      this.parentLocationId = null;
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.parentDestinationsLoading = true;
+    this.notifyStateChanged();
+
+    this.parentDestinationsSubscription?.unsubscribe();
+    this.parentDestinationsSubscription = this.placesService
+      .getParentDestinations(this.activeRegionId)
+      .pipe(
+        finalize(() => {
+          this.parentDestinationsLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: destinations => {
+          this.parentDestinations = this.normalizeParentDestinations(destinations);
+          if (
+            this.parentDestinationId &&
+            !this.parentDestinations.some(destination => destination.id === this.parentDestinationId)
+          ) {
+            this.parentDestinationId = null;
+            this.parentLocationId = null;
+            this.parentLocations = [];
+          }
+        },
+        error: error => this.handleLoadError(error, 'Unable to load parent destinations.'),
+      });
+  }
+
+  loadParentLocations(): void {
+    if (!this.activeRegionId || !this.parentDestinationId) {
       this.parentLocations = [];
       this.parentLocationId = null;
       this.notifyStateChanged();
@@ -483,7 +551,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.parentLocationsSubscription?.unsubscribe();
     this.parentLocationsSubscription = this.placesService
-      .getParentLocations(this.activeRegionId)
+      .getParentLocations(this.activeRegionId, null, 50, this.parentDestinationId)
       .pipe(
         finalize(() => {
           this.parentLocationsLoading = false;
@@ -492,7 +560,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: locations => {
-          this.parentLocations = this.normalizeParentLocations(locations);
+          this.parentLocations = this.normalizeParentLocations(locations)
+            .filter(location => location.destinationId === this.parentDestinationId);
           if (
             this.parentLocationId &&
             !this.parentLocations.some(location => location.id === this.parentLocationId)
@@ -618,7 +687,11 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         this.placeName = dto.name ?? '';
         this.summary = dto.summary ?? dto.subtitle ?? '';
+        this.parentDestinationId = dto.destinationId ?? null;
         this.parentLocationId = dto.locationId ?? null;
+        if (this.parentDestinationId) {
+          this.loadParentLocations();
+        }
         this.placeTypeId = dto.placeTypeId ?? null;
         this.stayTypeId = dto.stayTypeId ?? null;
         this.bestTimeToVisit = dto.bestTimeToVisit ?? '';
@@ -676,6 +749,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       error: error => this.handleLoadError(error, 'Unable to load place for editing.'),
     });
+  }
+
+  onParentDestinationChanged(): void {
+    this.parentLocationId = null;
+    this.parentLocations = [];
+    this.loadParentLocations();
+    this.notifyStateChanged();
   }
 
   onParentLocationChanged(): void {
@@ -1238,9 +1318,19 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
+    if (!this.parentDestinationId) {
+      this.errorMessage = 'Parent destination is required.';
+      return null;
+    }
+
     const locationId = this.parentLocationId;
     if (!locationId) {
       this.errorMessage = 'Parent location is required.';
+      return null;
+    }
+
+    if (this.selectedParentLocation?.destinationId !== this.parentDestinationId) {
+      this.errorMessage = 'Parent location must belong to the selected destination.';
       return null;
     }
 
@@ -1333,9 +1423,19 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private buildUpdatePayload(): RegionalPlaceUpdateRequest | null {
+    if (!this.parentDestinationId) {
+      this.errorMessage = 'Parent destination is required.';
+      return null;
+    }
+
     const locationId = this.parentLocationId;
     if (!locationId) {
       this.errorMessage = 'Parent location is required.';
+      return null;
+    }
+
+    if (this.selectedParentLocation?.destinationId !== this.parentDestinationId) {
+      this.errorMessage = 'Parent location must belong to the selected destination.';
       return null;
     }
 
@@ -1675,6 +1775,19 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       tag => tag.name.trim().toLocaleLowerCase() === query && !this.selectedTagIds.has(tag.id),
     );
     return exactMatch ?? null;
+  }
+
+  private normalizeParentDestinations(
+    destinations: RegionalPlaceParentDestinationDto[] | null | undefined,
+  ): RegionalPlaceParentDestinationDto[] {
+    const seen = new Set<number>();
+    return (destinations ?? [])
+      .filter(destination => {
+        if (!destination || seen.has(destination.id)) return false;
+        seen.add(destination.id);
+        return true;
+      })
+      .sort((a, b) => (a.displayName || a.name).localeCompare(b.displayName || b.name));
   }
 
   private normalizeParentLocations(
@@ -2171,6 +2284,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       Boolean(this.bookingLink.trim()) ||
       Boolean(this.streetAddress.trim()) ||
       Boolean(descriptionHtml) ||
+      Boolean(this.parentDestinationId) ||
       Boolean(this.parentLocationId) ||
       Boolean(this.placeTypeId) ||
       this.selectedTagIds.size > 0 ||
@@ -2183,6 +2297,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
     return {
       activeRegionId: this.activeRegionId,
+      parentDestinationId: this.parentDestinationId,
       placeName: this.placeName,
       summary: this.summary,
       parentLocationId: this.parentLocationId,
@@ -2216,15 +2331,20 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const payload = draft?.payload;
     if (!payload) return;
 
+    this.parentDestinationId = typeof payload.parentDestinationId === 'number' ? payload.parentDestinationId : null;
+    this.parentLocationId = payload.parentLocationId ?? null;
+
     if (typeof payload.activeRegionId === 'number') {
       this.setActiveRegion(payload.activeRegionId, false);
-      this.loadParentLocations();
+      this.loadParentDestinations();
+      if (this.parentDestinationId) {
+        this.loadParentLocations();
+      }
       this.loadRegionViewport(payload.activeRegionId);
     }
 
     this.placeName = payload.placeName ?? this.placeName;
     this.summary = payload.summary ?? this.summary;
-    this.parentLocationId = payload.parentLocationId;
     this.placeTypeId = payload.placeTypeId;
     this.bestTimeToVisit = payload.bestTimeToVisit ?? this.bestTimeToVisit;
     this.visitorTips = payload.visitorTips ?? this.visitorTips;
