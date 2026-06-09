@@ -11,14 +11,18 @@ namespace Geotrack.Infrastructure.Services;
 
 public class JwtService : IJwtService
 {
-    private const int AccessTokenLifetimeMinutes = 15;
+    private const int DefaultAccessTokenLifetimeMinutes = 60;
 
     private readonly IConfiguration _config;
+    private readonly int _accessTokenLifetimeMinutes;
 
     public JwtService(IConfiguration config)
     {
         _config = config;
+        _accessTokenLifetimeMinutes = ResolveAccessTokenLifetimeMinutes(config);
     }
+
+    public int AccessTokenLifetimeSeconds => _accessTokenLifetimeMinutes * 60;
 
     /// <inheritdoc />
     public string GenerateAccessToken(int userId, IEnumerable<string> roles)
@@ -46,7 +50,7 @@ public class JwtService : IJwtService
             issuer: _config["Jwt:Issuer"],
             audience: _config["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(AccessTokenLifetimeMinutes),
+            expires: DateTime.UtcNow.AddMinutes(_accessTokenLifetimeMinutes),
             signingCredentials: creds
         );
 
@@ -59,5 +63,15 @@ public class JwtService : IJwtService
         // 64 cryptographically-random bytes → 128-char hex string.
         var bytes = RandomNumberGenerator.GetBytes(64);
         return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static int ResolveAccessTokenLifetimeMinutes(IConfiguration config)
+    {
+        var configured = config.GetValue<int?>("Jwt:AccessTokenMinutes")
+            ?? DefaultAccessTokenLifetimeMinutes;
+
+        return configured > 0
+            ? configured
+            : DefaultAccessTokenLifetimeMinutes;
     }
 }

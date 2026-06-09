@@ -8,7 +8,14 @@
   (keydown.space)="$event.preventDefault(); onCardClicked()"
 >
   <div class="agent-rec-card__media">
-    <img appImageFallback class="agent-rec-card__img" [src]="imageSrc()" [alt]="imageAlt()" />
+    <img
+      appImageFallback
+      class="agent-rec-card__img"
+      [src]="imageSrc()"
+      [alt]="imageAlt()"
+      loading="lazy"
+      decoding="async"
+    />
 
     <span class="agent-rec-card__badge">{{ entityLabel() }}</span>
 

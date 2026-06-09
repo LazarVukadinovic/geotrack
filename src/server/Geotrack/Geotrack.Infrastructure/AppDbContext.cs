@@ -9,6 +9,7 @@ using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure.Search;
+using Geotrack.Infrastructure.Services.Agent;
 using Geotrack.Infrastructure.Spatial;
 using Microsoft.EntityFrameworkCore;
 using Geometry = NetTopologySuite.Geometries.Geometry;
@@ -77,6 +78,7 @@ public class AppDbContext : DbContext
     public DbSet<EventReview> EventReviews => Set<EventReview>();
     public DbSet<ReviewReport> ReviewReports => Set<ReviewReport>();
     public DbSet<ModerationTerm> ModerationTerms => Set<ModerationTerm>();
+    public DbSet<ModerationAuditLog> ModerationAuditLogs => Set<ModerationAuditLog>();
 
     public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
     public DbSet<AnonymousSession> AnonymousSessions => Set<AnonymousSession>();
@@ -126,6 +128,10 @@ public class AppDbContext : DbContext
 
         modelBuilder.HasPostgresExtension("postgis");
         modelBuilder.HasPostgresExtension("pg_trgm");
+        modelBuilder
+            .HasDbFunction(typeof(AgentPostgresDbFunctions).GetMethod(nameof(AgentPostgresDbFunctions.Unaccent))!)
+            .HasName("unaccent")
+            .IsBuiltIn();
 
         ConfigureTerritories(modelBuilder);
         ConfigureAdministrativeBoundaryCandidates(modelBuilder);
@@ -1912,6 +1918,55 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.MatchType);
             entity.HasIndex(x => x.CreatedByUserId);
             entity.HasIndex(x => x.UpdatedByUserId);
+        });
+
+        modelBuilder.Entity<ModerationAuditLog>(entity =>
+        {
+            entity.ToTable("ModerationAuditLogs");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.TargetType)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Action)
+                .IsRequired()
+                .HasMaxLength(80);
+
+            entity.Property(x => x.PreviousStatus)
+                .HasMaxLength(80);
+
+            entity.Property(x => x.NewStatus)
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Reason)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.InternalNote)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.CorrelationId)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.SourceArea)
+                .HasMaxLength(80);
+
+            entity.Property(x => x.MetadataJson)
+                .HasMaxLength(4000);
+
+            entity.HasOne(x => x.ModeratorUser)
+                .WithMany()
+                .HasForeignKey(x => x.ModeratorUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.TargetType, x.TargetId, x.CreatedAt });
+            entity.HasIndex(x => new { x.ModeratorUserId, x.CreatedAt });
+            entity.HasIndex(x => new { x.Action, x.CreatedAt });
+            entity.HasIndex(x => x.CreatedAt);
         });
     }
 

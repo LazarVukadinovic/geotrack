@@ -68,6 +68,7 @@ export class AgentService {
   private readonly _mcp = signal<AgentProvidersResponse['mcp'] | null>(null);
   private readonly _statusMessage = signal<string | null>(null);
   private readonly _isLoadingAgentInfo = signal(false);
+  private conversationId = createConversationId();
 
   readonly messages = this._messages.asReadonly();
   readonly isTyping = this._isTyping.asReadonly();
@@ -101,7 +102,6 @@ export class AgentService {
     if (!trimmed) return;
 
     if (!this.auth.isLoggedIn()) {
-      this.appendAssistantMessage('Please sign in before using Ask Agent.');
       return;
     }
 
@@ -124,10 +124,12 @@ export class AgentService {
 
     this.http.post<ApiAgentChatResponse>('/api/agent/chat', {
       message: trimmed,
+      conversationId: this.conversationId,
       contextOptions: this.buildSafeContextOptions(),
     }).subscribe({
       next: (res) => {
         this._isTyping.set(false);
+        this.conversationId = cleanContextText(res.conversationId) ?? this.conversationId;
         const cards = normalizeCards(res.cards);
         const response: ChatMessage = {
           id: res.id || crypto.randomUUID(),
@@ -144,6 +146,14 @@ export class AgentService {
         this.appendAssistantMessage(extractSafeError(error, ASK_AGENT_UNAVAILABLE_MESSAGE));
       },
     });
+  }
+
+  startNewChat(): void {
+    this.conversationId = createConversationId();
+    this._messages.set([{ ...AGENT_WELCOME_MESSAGE, timestamp: new Date() }]);
+    this._hasSentMessage.set(false);
+    this._isTyping.set(false);
+    this._statusMessage.set(null);
   }
 
   private appendAssistantMessage(text: string): void {
@@ -163,6 +173,15 @@ export class AgentService {
     const currentLocation = this.location.location();
     const currentCity = cleanContextText(currentLocation?.city || this.location.displayCity());
     const currentLocationName = cleanContextText(currentLocation?.displayLabel);
+
+    if (hasUsableCoordinates(currentLocation?.latitude, currentLocation?.longitude)) {
+      context.latitude = currentLocation!.latitude;
+      context.longitude = currentLocation!.longitude;
+      const source = cleanContextText(currentLocation?.source);
+      if (source) {
+        context.locationSource = source;
+      }
+    }
 
     if (typeof destinationId === 'number' && destinationId > 0) {
       context.destinationId = destinationId;
@@ -350,4 +369,24 @@ function cleanCardText(value: string | null | undefined, maxLength: number): str
 
 function finiteNumberOrNull(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function createConversationId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `chat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function hasUsableCoordinates(latitude: number | null | undefined, longitude: number | null | undefined): boolean {
+  return typeof latitude === 'number' &&
+    typeof longitude === 'number' &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180 &&
+    (latitude !== 0 || longitude !== 0);
 }

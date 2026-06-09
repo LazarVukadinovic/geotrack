@@ -38,6 +38,19 @@ public class AnalyticsService : IAnalyticsService
 
     private static readonly string[] DedupeEventTypes = DedupeWindows.Keys.ToArray();
     private static readonly TimeSpan MaxDedupeWindow = DedupeWindows.Values.Max();
+    private static readonly string[] SensitiveMetadataKeyTokens =
+    [
+        "apikey",
+        "api_key",
+        "authorization",
+        "email",
+        "password",
+        "phone",
+        "prompt",
+        "refresh",
+        "secret",
+        "token"
+    ];
 
     private static readonly IReadOnlySet<string> InterestSignalCandidateEventTypes =
         new HashSet<string>(StringComparer.Ordinal)
@@ -118,7 +131,7 @@ public class AnalyticsService : IAnalyticsService
 
         foreach (var dto in batch.Events.Take(MaxBatchSize))
         {
-            var enriched = TryEnrich(dto, context, now);
+            var enriched = await TryEnrichAsync(dto, context, now, cancellationToken);
             if (enriched is null)
             {
                 continue;
@@ -207,7 +220,11 @@ public class AnalyticsService : IAnalyticsService
             .SingleOrDefaultAsync(ct) ?? false;
     }
 
-    private AnalyticsEvent? TryEnrich(AnalyticsEventDto dto, AnalyticsContext context, DateTime now)
+    private async Task<AnalyticsEvent?> TryEnrichAsync(
+        AnalyticsEventDto dto,
+        AnalyticsContext context,
+        DateTime now,
+        CancellationToken cancellationToken)
     {
         var eventType = NormalizeToken(dto.EventType);
         if (!AnalyticsEventTypes.IsAllowed(eventType))
@@ -262,6 +279,8 @@ public class AnalyticsService : IAnalyticsService
             return null;
         }
 
+        var destinationId = await ResolveDestinationIdAsync(entityType, dto.EntityId, dto.DestinationId, cancellationToken);
+
         return new AnalyticsEvent
         {
             UserId = context.UserId,
@@ -269,13 +288,52 @@ public class AnalyticsService : IAnalyticsService
             EventType = eventType!,
             EntityType = string.IsNullOrWhiteSpace(entityType) ? null : entityType,
             EntityId = dto.EntityId,
-            DestinationId = dto.DestinationId,
+            DestinationId = destinationId,
             Route = NormalizeRoute(dto.Route),
             DurationMs = durationMs,
             MetadataJson = metadataJson,
             OccurredAt = now,
             ClientOccurredAt = NormalizeClientOccurredAt(dto.ClientOccurredAt, now),
         };
+    }
+
+    private async Task<int?> ResolveDestinationIdAsync(
+        string? entityType,
+        int? entityId,
+        int? suppliedDestinationId,
+        CancellationToken cancellationToken)
+    {
+        if (!entityId.HasValue || entityId.Value <= 0)
+        {
+            return suppliedDestinationId is > 0 ? suppliedDestinationId : null;
+        }
+
+        var derivedDestinationId = entityType switch
+        {
+            AnalyticsEntityTypes.Destination => await _db.Destinations
+                .AsNoTracking()
+                .Where(destination => destination.Id == entityId.Value)
+                .Select(destination => (int?)destination.Id)
+                .SingleOrDefaultAsync(cancellationToken),
+            AnalyticsEntityTypes.Location => await _db.Locations
+                .AsNoTracking()
+                .Where(location => location.Id == entityId.Value)
+                .Select(location => (int?)location.DestinationId)
+                .SingleOrDefaultAsync(cancellationToken),
+            AnalyticsEntityTypes.Place or AnalyticsEntityTypes.Hotel => await _db.Places
+                .AsNoTracking()
+                .Where(place => place.Id == entityId.Value)
+                .Select(place => (int?)place.Location.DestinationId)
+                .SingleOrDefaultAsync(cancellationToken),
+            AnalyticsEntityTypes.Event => await _db.Events
+                .AsNoTracking()
+                .Where(eventEntity => eventEntity.Id == entityId.Value)
+                .Select(eventEntity => (int?)eventEntity.DestinationId)
+                .SingleOrDefaultAsync(cancellationToken),
+            _ => null
+        };
+
+        return derivedDestinationId ?? (suppliedDestinationId is > 0 ? suppliedDestinationId : null);
     }
 
     private async Task<List<RecentDedupeEvent>> LoadRecentDedupeEventsAsync(
@@ -385,15 +443,25 @@ public class AnalyticsService : IAnalyticsService
             return "{}";
         }
 
-        if (metadata.Count > MaxMetadataKeys ||
-            metadata.Keys.Any(key => string.IsNullOrWhiteSpace(key) || key.Length > MaxMetadataKeyLength))
+        var sanitized = SanitizeMetadata(metadata);
+        if (sanitized is null)
+        {
+            return null;
+        }
+
+        if (sanitized.Count == 0)
+        {
+            return "{}";
+        }
+
+        if (sanitized.Count > MaxMetadataKeys)
         {
             return null;
         }
 
         try
         {
-            var json = JsonSerializer.Serialize(metadata, MetadataJsonOptions);
+            var json = JsonSerializer.Serialize(sanitized, MetadataJsonOptions);
             return json.Length > MaxMetadataChars ? null : json;
         }
         catch (JsonException)
@@ -404,6 +472,45 @@ public class AnalyticsService : IAnalyticsService
         {
             return null;
         }
+    }
+
+    private static Dictionary<string, object?>? SanitizeMetadata(Dictionary<string, object?> metadata)
+    {
+        var sanitized = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        foreach (var pair in metadata)
+        {
+            var key = pair.Key?.Trim();
+            if (string.IsNullOrWhiteSpace(key) || key.Length > MaxMetadataKeyLength)
+            {
+                return null;
+            }
+
+            if (IsSensitiveMetadataKey(key))
+            {
+                continue;
+            }
+
+            sanitized[key] = pair.Value;
+        }
+
+        return sanitized;
+    }
+
+    private static bool IsSensitiveMetadataKey(string key)
+    {
+        var compact = key
+            .Trim()
+            .ToLowerInvariant()
+            .Replace("-", string.Empty)
+            .Replace("_", string.Empty)
+            .Replace(".", string.Empty)
+            .Replace(" ", string.Empty);
+
+        return SensitiveMetadataKeyTokens.Any(token =>
+            compact.Contains(
+                token.Replace("_", string.Empty),
+                StringComparison.Ordinal));
     }
 
     private static string? NormalizeToken(string? value)

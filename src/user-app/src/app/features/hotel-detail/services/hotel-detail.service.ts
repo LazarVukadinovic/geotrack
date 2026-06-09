@@ -14,6 +14,7 @@ import type { DetailLoadState } from '../../place-detail/services/place-detail.s
 interface ApiHotelDetail {
   id: number;
   title: string;
+  destinationId?: number | null;
   location?: string;
   locationId?: number | null;
   locationName?: string | null;
@@ -167,7 +168,11 @@ export class HotelDetailService {
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');
         this.lastRequestKeyById.delete(id);
-        this.analytics.track('detail_view', { entityType: 'hotel', entityId: dto.id });
+        this.analytics.track('detail_view', {
+          entityType: 'hotel',
+          entityId: dto.id,
+          destinationId: dto.destinationId ?? this.destinationSvc.id() ?? undefined,
+        });
       },
       error: (err) => {
         if (this.lastRequestKeyById.get(id) === requestKey) {

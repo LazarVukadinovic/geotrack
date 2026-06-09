@@ -7,8 +7,17 @@ export function resolveApiUrl(url: string): string {
   return rewritePrefixedUrl(url, API_PREFIX, environment.apiBaseUrl);
 }
 
-export function resolveMediaUrl(url: string): string {
-  return rewritePrefixedUrl(url, MEDIA_PREFIX, environment.mediaBaseUrl);
+export function resolveMediaUrl(url: string | null | undefined): string | null {
+  const normalizedUrl = normalizeMediaInput(url);
+  if (!normalizedUrl) {
+    return null;
+  }
+
+  if (isAbsoluteHttpUrl(normalizedUrl)) {
+    return normalizedUrl;
+  }
+
+  return rewritePrefixedUrl(normalizedUrl, MEDIA_PREFIX, environment.mediaBaseUrl);
 }
 
 export function isConfiguredApiUrl(url: string): boolean {
@@ -38,6 +47,53 @@ function rewritePrefixedUrl(url: string, prefix: string, configuredBaseUrl: stri
 
   const baseUrl = normalizeBaseUrl(configuredBaseUrl, prefix);
   return `${baseUrl}${url.slice(prefix.length)}`;
+}
+
+function normalizeMediaInput(url: string | null | undefined): string | null {
+  const trimmed = url?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (isAbsoluteHttpUrl(trimmed)) {
+    return trimmed;
+  }
+
+  const withoutApiPrefix = stripLeadingPrefix(trimmed, API_PREFIX);
+  const withMediaPrefix = withoutApiPrefix.startsWith(`${MEDIA_PREFIX}/`) || withoutApiPrefix === MEDIA_PREFIX
+    ? withoutApiPrefix
+    : `/${withoutApiPrefix.replace(/^\/+/, '')}`;
+
+  if (withMediaPrefix === MEDIA_PREFIX || withMediaPrefix.startsWith(`${MEDIA_PREFIX}/`)) {
+    return withMediaPrefix;
+  }
+
+  return `${MEDIA_PREFIX}${withMediaPrefix}`;
+}
+
+function stripLeadingPrefix(value: string, prefix: string): string {
+  if (value === prefix) {
+    return '';
+  }
+
+  if (value.startsWith(`${prefix}/`) || value.startsWith(`${prefix}?`)) {
+    return value.slice(prefix.length);
+  }
+
+  const relativePrefix = prefix.replace(/^\/+/, '');
+  if (value === relativePrefix) {
+    return '';
+  }
+
+  if (value.startsWith(`${relativePrefix}/`) || value.startsWith(`${relativePrefix}?`)) {
+    return value.slice(relativePrefix.length);
+  }
+
+  return value;
+}
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
 }
 
 function isConfiguredPrefixUrl(url: string, prefix: string, configuredBaseUrl: string): boolean {

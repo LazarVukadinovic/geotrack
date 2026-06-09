@@ -30,6 +30,10 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
     private const int DefaultMaxSummaryItems = 100;
     private const int DefaultSaveBatchSize = 10;
     private const int DefaultProgressLogInterval = 100;
+    private const int DefaultCandidateListTake = 100;
+    private const int MaxCandidateListTake = 100;
+    private const string CandidateGeometryModeNone = "none";
+    private const string CandidateGeometryModeDisplay = "display";
 
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
@@ -85,6 +89,7 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         string? search = null,
         int skip = 0,
         int? take = null,
+        string? geometryMode = null,
         CancellationToken cancellationToken = default)
     {
         var normalizedLevel = NormalizeRegionAdmLevel(admLevel);
@@ -93,6 +98,14 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         var territoryBoundary = ToValidPolygonalGeometry(assignedTerritoryBoundary)
             ?? throw new InvalidOperationException("Assigned territory boundary geometry is invalid.");
         var normalizedSearch = search?.Trim();
+        var normalizedSkip = Math.Max(0, skip);
+        var normalizedTake = Math.Clamp(take ?? DefaultCandidateListTake, 1, MaxCandidateListTake);
+        var normalizedGeometryMode = NormalizeCandidateGeometryMode(geometryMode);
+        var includeDisplayGeometry = string.Equals(
+            normalizedGeometryMode,
+            CandidateGeometryModeDisplay,
+            StringComparison.Ordinal);
+
         var totalCandidatesForLevel = await _db.AdministrativeBoundaryCandidates
             .AsNoTracking()
             .CountAsync(candidate =>
@@ -100,14 +113,27 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                 candidate.AdmLevel == normalizedLevel,
                 cancellationToken);
 
-        var rows = await _db.AdministrativeBoundaryCandidates
+        var query = _db.AdministrativeBoundaryCandidates
             .AsNoTracking()
             .Where(candidate =>
                 candidate.Source == GeoBoundariesSource &&
                 candidate.AdmLevel == normalizedLevel &&
-                candidate.CountryIso3 == normalizedIso3)
+                candidate.CountryIso3 == normalizedIso3);
+
+        if (!string.IsNullOrWhiteSpace(normalizedSearch))
+        {
+            var loweredSearch = normalizedSearch.ToLowerInvariant();
+            query = query.Where(candidate => candidate.ShapeName.ToLower().Contains(loweredSearch));
+        }
+
+        var matchedFeatures = await query.CountAsync(cancellationToken);
+
+        var rows = await query
             .OrderBy(candidate => candidate.ShapeName)
             .ThenBy(candidate => candidate.ShapeId)
+            .ThenBy(candidate => candidate.Id)
+            .Skip(normalizedSkip)
+            .Take(normalizedTake)
             .Select(candidate => new BoundaryRegionCandidateDbRow
             {
                 Id = candidate.Id,
@@ -121,8 +147,14 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                 ExternalKey = candidate.ExternalKey,
                 CountryIso3 = candidate.CountryIso3,
                 CountryTerritoryId = candidate.CountryTerritoryId,
-                BoundaryGeometry = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName),
-                BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)
+                HasBoundary = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName) != null,
+                HasDisplayBoundary = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName) != null,
+                IsInsideAssignedTerritory =
+                    EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName) != null &&
+                    EF.Property<Geometry>(candidate, BoundaryGeometryPropertyName).Intersects(territoryBoundary),
+                BoundaryDisplayGeometry = includeDisplayGeometry
+                    ? EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)
+                    : null
             })
             .ToListAsync(cancellationToken);
 
@@ -130,30 +162,26 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         {
             AdmLevel = normalizedLevel,
             Iso3 = normalizedIso3,
-            ScannedFeatures = totalCandidatesForLevel
+            GeometryMode = normalizedGeometryMode,
+            ScannedFeatures = totalCandidatesForLevel,
+            MatchedFeatures = matchedFeatures,
+            Skip = normalizedSkip,
+            Take = normalizedTake,
+            HasMore = normalizedSkip + rows.Count < matchedFeatures
         };
 
         foreach (var row in rows)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!string.IsNullOrWhiteSpace(normalizedSearch) &&
-                !row.ShapeName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            response.MatchedFeatures++;
-
-            var geometry = ToValidPolygonalGeometry(row.BoundaryGeometry);
-            var isInside = CandidateIntersectsAssignedTerritory(territoryBoundary, geometry);
+            var isInside = row.IsInsideAssignedTerritory;
 
             response.Items.Add(BuildRegionCandidateDto(
                 row,
-                geometry,
                 isInsideAssignedTerritory: isInside,
                 status: isInside ? "Available" : "InvalidOutsideTerritory",
-                existingRegionId: null));
+                existingRegionId: null,
+                includeDisplayGeometry: includeDisplayGeometry));
         }
 
         response.ReturnedCount = response.Items.Count;
@@ -232,7 +260,9 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                 CountryIso3 = candidate.CountryIso3,
                 CountryTerritoryId = candidate.CountryTerritoryId,
                 BoundaryGeometry = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName),
-                BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)
+                BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName),
+                HasBoundary = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName) != null,
+                HasDisplayBoundary = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName) != null
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -246,23 +276,25 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         return new BoundaryRegionCandidateGeometry(
             BuildRegionCandidateDto(
                 row,
-                geometry,
                 isInsideAssignedTerritory: true,
                 status: "Available",
-            existingRegionId: null),
+                existingRegionId: null,
+                includeDisplayGeometry: true),
             geometry);
     }
 
     private static BoundaryRegionCandidateDto BuildRegionCandidateDto(
         BoundaryRegionCandidateDbRow source,
-        Geometry? geometry,
         bool isInsideAssignedTerritory,
         string status,
-        int? existingRegionId)
+        int? existingRegionId,
+        bool includeDisplayGeometry)
     {
-        var hasBoundary = geometry is not null;
-        var displayGeometry = ToValidPolygonalGeometry(source.BoundaryDisplayGeometry);
-        var hasDisplayBoundary = displayGeometry is not null;
+        var displayGeometry = includeDisplayGeometry
+            ? ToValidPolygonalGeometry(source.BoundaryDisplayGeometry)
+            : null;
+        var hasBoundary = source.HasBoundary;
+        var hasDisplayBoundary = source.HasDisplayBoundary;
         var externalKey = source.ExternalKey;
         var canSelect = hasBoundary &&
             hasDisplayBoundary &&
@@ -294,8 +326,10 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                 hasBoundary,
                 hasDisplayBoundary,
                 isInsideAssignedTerritory),
-            Viewport = BuildRegionMapViewport(displayGeometry),
-            GeometryGeoJson = ToRegionGeoJson(displayGeometry)
+            Viewport = includeDisplayGeometry
+                ? BuildRegionMapViewport(displayGeometry)
+                : new TerritoryRegionMapViewportDto { IsEmpty = true },
+            GeometryGeoJson = includeDisplayGeometry ? ToRegionGeoJson(displayGeometry) : null
         };
     }
 
@@ -375,7 +409,9 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
                 CountryIso3 = candidate.CountryIso3,
                 CountryTerritoryId = candidate.CountryTerritoryId,
                 BoundaryGeometry = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName),
-                BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName)
+                BoundaryDisplayGeometry = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName),
+                HasBoundary = EF.Property<Geometry?>(candidate, BoundaryGeometryPropertyName) != null,
+                HasDisplayBoundary = EF.Property<Geometry?>(candidate, BoundaryDisplayGeometryPropertyName) != null
             })
             .ToListAsync(cancellationToken);
 
@@ -3440,6 +3476,18 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
             : throw new InvalidOperationException("Region boundary candidate ADM level must be ADM1 or ADM2.");
     }
 
+    private static string NormalizeCandidateGeometryMode(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            null or "" or CandidateGeometryModeNone => CandidateGeometryModeNone,
+            CandidateGeometryModeDisplay => CandidateGeometryModeDisplay,
+            "map" => CandidateGeometryModeDisplay,
+            _ => CandidateGeometryModeNone
+        };
+    }
+
     private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)
     {
         foreach (var property in element.EnumerateObject())
@@ -3577,6 +3625,9 @@ public sealed class LocalBoundaryImportService : ILocalBoundaryImportService
         public string ExternalKey { get; set; } = string.Empty;
         public string CountryIso3 { get; set; } = string.Empty;
         public int? CountryTerritoryId { get; set; }
+        public bool HasBoundary { get; set; }
+        public bool HasDisplayBoundary { get; set; }
+        public bool IsInsideAssignedTerritory { get; set; }
         public Geometry? BoundaryGeometry { get; set; }
         public Geometry? BoundaryDisplayGeometry { get; set; }
     }

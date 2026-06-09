@@ -383,7 +383,7 @@ export class AddRegionComponent implements OnInit, AfterViewInit, OnDestroy {
     this.notifyStateChanged();
 
     this.candidateSubscription?.unsubscribe();
-    this.candidateSubscription = this.territoryDashboard.getRegionBoundaryCandidates(territoryId, 'ADM1')
+    this.candidateSubscription = this.territoryDashboard.getRegionBoundaryCandidates(territoryId, 'ADM1', 'display', 100)
       .pipe(
         finalize(() => {
           this.candidateLoading = false;

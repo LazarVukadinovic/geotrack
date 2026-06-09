@@ -8,6 +8,7 @@ import { LocationService } from '../../../../core/services/location.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
+import { UserAvatarComponent } from '../../../../shared/components/user-avatar/user-avatar.component';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { PhotoGalleryComponent } from '../../../../shared/components/photo-gallery/photo-gallery.component';
 import type { EntityImage } from '../../../../core/models/entity-image.model';
@@ -16,6 +17,7 @@ import { HotelDetailService } from '../../services/hotel-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
 import { ExploreService } from '../../../explore/services/explore.service';
 import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
+import { reviewsMoreActionLabel } from '../../../reviews/utils/review-section-ui';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { HotelAmenityIcon, HotelBookingPartner, HotelDetail } from '../../models/hotel-detail.model';
 import type { MapEntityMarker } from '../../../../core/services/map-api.service';
@@ -23,7 +25,7 @@ import type { MapEntityMarker } from '../../../../core/services/map-api.service'
 @Component({
   selector: 'app-hotel-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent],
+  imports: [SectionHeaderComponent, ReviewEntryComponent, UserAvatarComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent],
   providers: [ReviewInteractionsService],
   templateUrl: './hotel-detail-page.component.html',
   styleUrl: './hotel-detail-page.component.scss',
@@ -41,6 +43,7 @@ export class HotelDetailPageComponent {
 
   protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
+  protected readonly reviewsMoreActionLabel = reviewsMoreActionLabel;
 
   protected readonly hotelId = toSignal(
     this.route.paramMap.pipe(map((p) => p.get('id') ?? '')),

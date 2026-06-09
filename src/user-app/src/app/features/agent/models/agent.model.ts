@@ -49,11 +49,13 @@ export interface AgentMcpMetadata {
 }
 
 export interface AgentProvidersResponse {
-  providers?: never[];
   mcp: AgentMcpMetadata;
 }
 
 export interface AgentContextOptions {
+  latitude?: number;
+  longitude?: number;
+  locationSource?: string;
   destinationId?: number;
   currentCity?: string;
   currentDestinationName?: string;

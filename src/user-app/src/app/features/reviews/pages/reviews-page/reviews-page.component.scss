@@ -132,6 +132,7 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: 0 var(--page-gutter);
+  min-width: 0;
 }
 
 .reviews-page__notice {
@@ -161,12 +162,16 @@
   border-radius: var(--radius-lg);
   background: #ffffff;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .reviews-page__review-top {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .reviews-page__avatar {
@@ -216,6 +221,7 @@
   color: #e8570a;
   font-size: var(--text-sm);
   font-weight: 800;
+  flex-shrink: 0;
 
   svg {
     width: 14px;
@@ -228,6 +234,10 @@
   color: #4b5563;
   font-size: var(--text-sm);
   line-height: 1.55;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .reviews-page__report {
@@ -372,6 +382,7 @@
 .reviews-page__review-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
 }

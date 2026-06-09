@@ -14,15 +14,19 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, forkJoin, Subscription } from 'rxjs';
+import { finalize, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { CoverImageCropperComponent } from '../../../../shared/components/cover-image-cropper/cover-image-cropper.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { DestinationsListService } from '../../../../core/services/destinations-list.service';
+import { RegionalMediaService } from '../../../../core/services/regional-media.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
+import { AdminFormDraftService } from '../../../../core/services/admin-form-draft.service';
+import { COVER_IMAGE_ASPECT_RATIO } from '../../../../core/constants/cover-image.constants';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
 import {
@@ -46,10 +50,24 @@ interface ClassItem {
   checked: boolean;
 }
 
+interface DestinationFormDraft {
+  activeRegionId: number | null;
+  destinationName: string;
+  summary: string;
+  descriptionHtml: string;
+  selectedTagIds: number[];
+  centerLat: number | null;
+  centerLng: number | null;
+  zoneConfirmed: boolean;
+  cardImageName: string;
+  coverImageName: string;
+  galleryImageNames: string[];
+}
+
 @Component({
   selector: 'app-add-destination',
   standalone: true,
-  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent, CoverImageCropperComponent],
   templateUrl: './add-destination.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [
@@ -76,6 +94,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
   private static readonly initialVisibleClassificationTags = 5;
   private readonly mapTileLayer = inject(MapTileLayerService);
+  readonly coverImageAspectRatio = COVER_IMAGE_ASPECT_RATIO;
+  readonly coverImageAspectRatioCss = `${COVER_IMAGE_ASPECT_RATIO} / 1`;
 
   @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer') miniMapContainer!: ElementRef<HTMLDivElement>;
@@ -115,10 +135,12 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   cardImageName = '';
   coverImageUrl: string | null = null;
   coverImageName = '';
+  coverCropFile: File | null = null;
   galleryImages: { url: string; name: string; file: File }[] = [];
 
   private cardImageFile: File | null = null;
   private coverImageFile: File | null = null;
+  private coverPreviewObjectUrl: string | null = null;
 
   zoneModalOpen = false;
   zoneConfirmed = false;
@@ -144,6 +166,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private regionViewport: AdminMapViewport | null = null;
   private regionBoundaryZone: AdminMapZone | null = null;
   private scopeValidationResult: RegionalScopeValidationResult | null = null;
+  private unregisterDraftSource: (() => void) | null = null;
 
   constructor(
     private readonly zone: NgZone,
@@ -153,8 +176,10 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     private readonly dashboardService: DashboardService,
     private readonly lightboxService: LightboxService,
     private readonly destinationsService: DestinationsListService,
+    private readonly regionalMedia: RegionalMediaService,
     private readonly auth: AuthService,
     private readonly adminMapService: AdminMapService,
+    private readonly formDrafts: AdminFormDraftService,
   ) {}
 
   ngOnInit(): void {
@@ -164,10 +189,12 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
     this.loadAssignedRegions();
     this.loadDestinationTags();
+    this.registerDraftSource();
   }
 
   ngAfterViewInit(): void {
     setTimeout(() => this.initMiniMap(), 0);
+    setTimeout(() => this.restoreSavedDraftIfPresent(), 0);
   }
 
   ngOnDestroy(): void {
@@ -177,12 +204,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.tagsSubscription?.unsubscribe();
     this.tagSearchSubscription?.unsubscribe();
     this.createSubscription?.unsubscribe();
+    this.unregisterDraftSource?.();
 
     if (this.tagSearchHandle) {
       clearTimeout(this.tagSearchHandle);
     }
 
     this.destroyModalMap();
+    this.revokeCoverPreviewObjectUrl();
     this.lightboxService.close();
     if (this.miniMap) {
       this.miniMap.remove();
@@ -371,6 +400,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
         this.cardImageUrl = dto.cardImageUrl ?? dto.imageUrl ?? this.cardImageUrl;
         this.cardImageName = this.cardImageUrl ? 'Existing card image' : this.cardImageName;
+        this.revokeCoverPreviewObjectUrl();
         this.coverImageUrl = dto.coverImageUrl ?? dto.imageUrl ?? this.coverImageUrl;
         this.coverImageName = this.coverImageUrl ? 'Existing cover image' : this.coverImageName;
         this.galleryImages = (dto.galleryImageUrls ?? []).map((url, index) => ({
@@ -391,6 +421,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
             this.syncEmptyState();
             this.notifyStateChanged();
           }
+          this.restoreSavedDraftIfPresent();
         }, 0);
 
         this.notifyStateChanged();
@@ -564,23 +595,33 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.zone.run(() => {
-        this.coverImageUrl = reader.result as string;
-        this.coverImageName = file.name;
-        this.coverImageFile = file;
-        this.notifyStateChanged();
-      });
-    };
-    reader.readAsDataURL(file);
+    this.coverCropFile = file;
     input.value = '';
+    this.notifyStateChanged();
+  }
+
+  onCoverCropConfirmed(file: File): void {
+    this.revokeCoverPreviewObjectUrl();
+    const previewUrl = URL.createObjectURL(file);
+    this.coverPreviewObjectUrl = previewUrl;
+    this.coverImageUrl = previewUrl;
+    this.coverImageName = file.name;
+    this.coverImageFile = file;
+    this.coverCropFile = null;
+    this.notifyStateChanged();
+  }
+
+  onCoverCropCancelled(): void {
+    this.coverCropFile = null;
+    this.notifyStateChanged();
   }
 
   removeCoverImage(): void {
+    this.revokeCoverPreviewObjectUrl();
     this.coverImageUrl = null;
     this.coverImageName = '';
     this.coverImageFile = null;
+    this.coverCropFile = null;
     this.notifyStateChanged();
   }
 
@@ -700,6 +741,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       )
       .subscribe({
         next: (created) => {
+          this.formDrafts.clearDraft(this.draftFormType());
           this.feedbackMessage = 'Destination published.';
           this.router.navigate(['/destinations'], {
             queryParams: { regionId: created.regionId },
@@ -725,8 +767,23 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.notifyStateChanged();
 
     this.createSubscription?.unsubscribe();
-    this.createSubscription = this.destinationsService
-      .updateDestination(regionId, destinationId, payload)
+    const payload$ = this.coverImageFile
+      ? this.regionalMedia.uploadImages(regionId, [this.coverImageFile]).pipe(
+          map(response => {
+            const uploadedCover = response.images[0]?.url;
+            if (!uploadedCover) {
+              throw new Error('Cover image upload did not return a URL.');
+            }
+
+            return { ...payload, coverImageUrl: uploadedCover };
+          }),
+        )
+      : of(payload);
+
+    this.createSubscription = payload$
+      .pipe(
+        switchMap(preparedPayload => this.destinationsService.updateDestination(regionId, destinationId, preparedPayload)),
+      )
       .pipe(
         finalize(() => {
           this.isSaving = false;
@@ -735,6 +792,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       )
       .subscribe({
         next: (updated) => {
+          this.formDrafts.clearDraft(this.draftFormType());
           this.feedbackMessage = 'Destination updated.';
           this.router.navigate(['/destinations/detail', updated.id], {
             queryParams: { regionId: updated.regionId },
@@ -1316,7 +1374,88 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.notifyStateChanged();
   }
 
+  private revokeCoverPreviewObjectUrl(): void {
+    if (!this.coverPreviewObjectUrl) return;
+
+    URL.revokeObjectURL(this.coverPreviewObjectUrl);
+    this.coverPreviewObjectUrl = null;
+  }
+
   private notifyStateChanged(): void {
     this.cdr.markForCheck();
+  }
+
+  private registerDraftSource(): void {
+    this.unregisterDraftSource = this.formDrafts.register({
+      formType: this.draftFormType(),
+      snapshot: () => this.buildDraftSnapshot(),
+    });
+  }
+
+  private draftFormType(): string {
+    return this.isEditMode ? 'destination-edit' : 'destination-new';
+  }
+
+  private buildDraftSnapshot(): DestinationFormDraft | null {
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const hasDraft =
+      Boolean(this.destinationName.trim()) ||
+      Boolean(this.summary.trim()) ||
+      Boolean(descriptionHtml) ||
+      this.selectedTagIds.size > 0 ||
+      this.hasValidCenter() ||
+      Boolean(this.cardImageName) ||
+      Boolean(this.coverImageName) ||
+      this.galleryImages.length > 0;
+
+    if (!hasDraft) return null;
+
+    return {
+      activeRegionId: this.activeRegionId,
+      destinationName: this.destinationName,
+      summary: this.summary,
+      descriptionHtml,
+      selectedTagIds: [...this.selectedTagIds],
+      centerLat: this.centerLat,
+      centerLng: this.centerLng,
+      zoneConfirmed: this.zoneConfirmed,
+      cardImageName: this.cardImageName,
+      coverImageName: this.coverImageName,
+      galleryImageNames: this.galleryImages.map(image => image.name),
+    };
+  }
+
+  private restoreSavedDraftIfPresent(): void {
+    const draft = this.formDrafts.loadDraft<DestinationFormDraft>(this.draftFormType());
+    const payload = draft?.payload;
+    if (!payload) return;
+
+    if (typeof payload.activeRegionId === 'number') {
+      this.setActiveRegion(payload.activeRegionId, false);
+      this.loadAssignedRegionMap(payload.activeRegionId);
+    }
+
+    this.destinationName = payload.destinationName ?? this.destinationName;
+    this.summary = payload.summary ?? this.summary;
+    this.centerLat = payload.centerLat;
+    this.centerLng = payload.centerLng;
+    this.zoneConfirmed = Boolean(payload.zoneConfirmed && this.hasValidCenter());
+    this.selectedTagIds = new Set(payload.selectedTagIds ?? []);
+    this.classItems = this.classItems.map(item => ({
+      ...item,
+      checked: this.selectedTagIds.has(item.tag.id),
+    }));
+
+    if (this.editorRef?.nativeElement) {
+      this.editorRef.nativeElement.innerHTML = payload.descriptionHtml ?? '';
+      this.syncEmptyState();
+    }
+
+    if (this.hasValidCenter()) {
+      setTimeout(() => this.showZoneOnMiniMap(), 0);
+    }
+
+    this.feedbackMessage = 'Recovered a saved draft. Image files must be selected again.';
+    this.notifyStateChanged();
   }
 }

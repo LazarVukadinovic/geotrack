@@ -4,6 +4,7 @@ import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { combineLatest } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 
 interface DetailParentLink {
@@ -53,6 +54,7 @@ export class EntityHierarchyDetailPageComponent {
   private readonly http = inject(HttpClient);
   private readonly destroyRef = inject(DestroyRef);
   private readonly browserLocation = inject(BrowserLocation);
+  private readonly analytics = inject(AnalyticsService);
 
   protected readonly detail = signal<HierarchyDetail | null>(null);
   protected readonly loadState = signal<LoadState>('loading');
@@ -129,6 +131,7 @@ export class EntityHierarchyDetailPageComponent {
     this.http.get<Record<string, unknown>>(this.endpoint(type, id)).subscribe({
       next: (dto) => {
         this.detail.set(this.mapDto(type, dto));
+        this.trackDetailView(type, dto);
         this.loadState.set('loaded');
       },
       error: (err) => {
@@ -149,6 +152,27 @@ export class EntityHierarchyDetailPageComponent {
       case 'territory':
         return `/api/Territory/${id}`;
     }
+  }
+
+  private trackDetailView(type: EntityType, dto: Record<string, unknown>): void {
+    if (type !== 'destination' && type !== 'location') {
+      return;
+    }
+
+    const entityId = this.toNullableNumber(dto['id']);
+    if (entityId == null || entityId <= 0) {
+      return;
+    }
+
+    const destinationId = type === 'destination'
+      ? entityId
+      : this.toNullableNumber(dto['destinationId']) ?? undefined;
+
+    this.analytics.track('detail_view', {
+      entityType: type,
+      entityId,
+      destinationId,
+    });
   }
 
   private mapDto(type: EntityType, dto: Record<string, unknown>): HierarchyDetail {

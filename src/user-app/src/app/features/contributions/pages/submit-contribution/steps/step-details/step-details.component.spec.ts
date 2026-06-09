@@ -23,6 +23,7 @@ describe('StepDetailsComponent', () => {
   });
 
   it('rejects malformed website URLs', () => {
+    fixture.componentRef.setInput('isAccommodation', false);
     component.form.website = 'javascript:alert(1)';
 
     component.onContinue();

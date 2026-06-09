@@ -8,6 +8,7 @@ import { LocationService } from '../../../../core/services/location.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 import { SectionHeaderComponent } from '../../../../shared/components/section-header/section-header.component';
 import { ReviewEntryComponent } from '../../../../shared/components/review-entry/review-entry.component';
+import { UserAvatarComponent } from '../../../../shared/components/user-avatar/user-avatar.component';
 import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
 import { PhotoGalleryComponent } from '../../../../shared/components/photo-gallery/photo-gallery.component';
 import type { EntityImage } from '../../../../core/models/entity-image.model';
@@ -16,6 +17,7 @@ import { PlaceDetailService } from '../../services/place-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
 import { ExploreService } from '../../../explore/services/explore.service';
 import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
+import { reviewsMoreActionLabel } from '../../../reviews/utils/review-section-ui';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { PlaceDetail } from '../../../../core/models/place.model';
 import type { MapEntityMarker, MapEntityType } from '../../../../core/services/map-api.service';
@@ -25,7 +27,7 @@ import { isLongDescription } from '../../../../shared/utils/description-formatti
 @Component({
   selector: 'app-place-detail-page',
   standalone: true,
-  imports: [SectionHeaderComponent, ReviewEntryComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent, DescriptionRichHtmlPipe],
+  imports: [SectionHeaderComponent, ReviewEntryComponent, UserAvatarComponent, ImageFallbackDirective, RouterLink, PhotoGalleryComponent, DescriptionRichHtmlPipe],
   providers: [ReviewInteractionsService],
   templateUrl: './place-detail-page.component.html',
   styleUrl: './place-detail-page.component.scss',
@@ -43,6 +45,7 @@ export class PlaceDetailPageComponent {
 
   protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
+  protected readonly reviewsMoreActionLabel = reviewsMoreActionLabel;
 
   protected readonly placeId = toSignal(
     this.route.paramMap.pipe(map((p) => p.get('id') ?? '')),

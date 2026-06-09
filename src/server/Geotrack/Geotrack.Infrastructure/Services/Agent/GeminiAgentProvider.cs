@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Geotrack.Application.DTOs.Agent;
 using Geotrack.Application.Interfaces.Service;
@@ -10,10 +11,13 @@ using Microsoft.Extensions.Options;
 
 namespace Geotrack.Infrastructure.Services.Agent;
 
-public class GeminiAgentProvider : IAgentProvider
+public class GeminiAgentProvider
 {
-    private const string ProviderId = "gemini";
     private const int MaxTransientAttempts = 3;
+    private static readonly JsonSerializerOptions GeminiJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
     private readonly HttpClient _httpClient;
     private readonly GeminiOptions _geminiOptions;
     private readonly ILogger<GeminiAgentProvider> _logger;
@@ -28,32 +32,8 @@ public class GeminiAgentProvider : IAgentProvider
         _logger = logger;
     }
 
-    public string Id => ProviderId;
-
-    public AgentProviderMetadataDto GetMetadata(int? userId)
-    {
-        var model = NormalizeModel(_geminiOptions.Model);
-        var hasConfiguredKey = _geminiOptions.ApiKeys.Any(key => !string.IsNullOrWhiteSpace(key));
-        return new AgentProviderMetadataDto
-        {
-            Id = ProviderId,
-            DisplayName = "GeoTrack AI",
-            Enabled = hasConfiguredKey,
-            Models = new List<AgentProviderModelDto>
-            {
-                new()
-                {
-                    Id = model,
-                    DisplayName = model,
-                    IsDefault = true
-                }
-            },
-            DefaultModel = model
-        };
-    }
-
-    public async Task<AgentProviderChatResult> GenerateAsync(
-        AgentProviderChatRequest request,
+    public async Task<GeminiTextGenerationResult> GenerateAsync(
+        GeminiTextGenerationRequest request,
         CancellationToken cancellationToken = default)
     {
         var model = NormalizeModel(request.Model);
@@ -121,6 +101,22 @@ public class GeminiAgentProvider : IAgentProvider
                         continue;
                     }
 
+                    var sanitizedProviderMessage = SanitizeProviderMessage(
+                        providerError?.Error?.Message,
+                        request);
+                    _logger.LogWarning(
+                        "Gemini provider returned status {StatusCode} provider status {ProviderStatus}; mapped to {ErrorCode} on attempt {Attempt}; model {Model}; content count {ContentCount}; tool declaration count {ToolDeclarationCount}; prompt length {PromptLength}; system prompt length {SystemPromptLength}; provider message {ProviderMessage}.",
+                        (int)response.StatusCode,
+                        providerError?.Error?.Status,
+                        mapped.Code,
+                        attempt,
+                        model,
+                        1,
+                        0,
+                        request.UserMessage?.Length ?? 0,
+                        request.SystemPrompt?.Length ?? 0,
+                        sanitizedProviderMessage);
+
                     throw mapped;
                 }
 
@@ -150,7 +146,7 @@ public class GeminiAgentProvider : IAgentProvider
                     throw new AgentException("provider_unavailable", "Gemini did not return an answer.", 503);
                 }
 
-                return new AgentProviderChatResult
+                return new GeminiTextGenerationResult
                 {
                     Text = text.Trim(),
                     Usage = body?.UsageMetadata is null
@@ -184,27 +180,31 @@ public class GeminiAgentProvider : IAgentProvider
         var candidate = string.IsNullOrWhiteSpace(model)
             ? GeminiOptions.DefaultModel
             : model.Trim();
-        if (candidate.Length > 200 || candidate.Any(char.IsControl))
+        if (candidate.Length > 200 ||
+            candidate.Any(char.IsControl) ||
+            !candidate.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase))
         {
-            throw new AgentException("unsupported_model", "The selected model is not available for this provider.", 400);
+            throw new AgentException("unsupported_model", "Ask Agent only supports Gemini text models.", 400);
         }
 
         return candidate;
     }
 
-    private static HttpRequestMessage CreateGenerateContentRequest(Uri url, AgentProviderChatRequest request)
+    private static HttpRequestMessage CreateGenerateContentRequest(Uri url, GeminiTextGenerationRequest request)
     {
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
         httpRequest.Headers.TryAddWithoutValidation("x-goog-api-key", request.ApiKey);
-        httpRequest.Content = JsonContent.Create(new GeminiGenerateContentRequest
+        var body = new GeminiGenerateContentRequest
         {
-            SystemInstruction = new GeminiContent
-            {
-                Parts = new List<GeminiPart>
+            SystemInstruction = string.IsNullOrWhiteSpace(request.SystemPrompt)
+                ? null
+                : new GeminiContent
                 {
-                    new() { Text = request.SystemPrompt }
-                }
-            },
+                    Parts = new List<GeminiPart>
+                    {
+                        new() { Text = request.SystemPrompt }
+                    }
+                },
             Contents = new List<GeminiContent>
             {
                 new()
@@ -221,7 +221,8 @@ public class GeminiAgentProvider : IAgentProvider
                 MaxOutputTokens = 1024,
                 Temperature = 0.2
             }
-        });
+        };
+        httpRequest.Content = JsonContent.Create(body, options: GeminiJsonOptions);
 
         return httpRequest;
     }
@@ -274,6 +275,15 @@ public class GeminiAgentProvider : IAgentProvider
             return new AgentException(
                 "unsupported_model",
                 "The selected model is not available for Gemini.",
+                400);
+        }
+
+        if (statusCode == HttpStatusCode.BadRequest &&
+            string.Equals(providerStatus, "FAILED_PRECONDITION", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AgentException(
+                "provider_config_error",
+                "Gemini is not available for the current provider configuration. Please try again later.",
                 400);
         }
 
@@ -378,9 +388,73 @@ public class GeminiAgentProvider : IAgentProvider
             providerMessage.Contains("daily limit", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static string SanitizeProviderMessage(
+        string? providerMessage,
+        GeminiTextGenerationRequest request)
+    {
+        var sanitized = (providerMessage ?? string.Empty)
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Trim();
+        sanitized = string.Join(' ', sanitized.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        sanitized = RedactExactValue(sanitized, request.ApiKey, "[redacted-api-key]");
+        sanitized = RedactExactValue(sanitized, request.UserMessage, "[redacted-user-message]");
+        sanitized = RedactExactValue(sanitized, request.SystemPrompt, "[redacted-system-prompt]");
+        if (ContainsPromptFragment(sanitized, request.UserMessage) ||
+            ContainsPromptFragment(sanitized, request.SystemPrompt))
+        {
+            return "[redacted-provider-message]";
+        }
+
+        if (sanitized.Length > 300)
+        {
+            sanitized = sanitized[..300] + "...";
+        }
+
+        return string.IsNullOrWhiteSpace(sanitized) ? "none" : sanitized;
+    }
+
+    private static string RedactExactValue(string source, string? value, string replacement)
+    {
+        if (string.IsNullOrWhiteSpace(source) ||
+            string.IsNullOrWhiteSpace(value) ||
+            value.Length < 8)
+        {
+            return source;
+        }
+
+        return source.Replace(value, replacement, StringComparison.Ordinal);
+    }
+
+    private static bool ContainsPromptFragment(string source, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var normalized = string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        if (normalized.Length < 16)
+        {
+            return false;
+        }
+
+        var fragmentLength = Math.Min(40, normalized.Length);
+        for (var index = 0; index <= normalized.Length - fragmentLength; index += 8)
+        {
+            if (source.Contains(normalized.Substring(index, fragmentLength), StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private sealed class GeminiGenerateContentRequest
     {
         [JsonPropertyName("systemInstruction")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public GeminiContent? SystemInstruction { get; set; }
 
         [JsonPropertyName("contents")]
@@ -417,6 +491,7 @@ public class GeminiAgentProvider : IAgentProvider
     private sealed class GeminiContent
     {
         [JsonPropertyName("role")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Role { get; set; }
 
         [JsonPropertyName("parts")]
@@ -426,6 +501,7 @@ public class GeminiAgentProvider : IAgentProvider
     private sealed class GeminiPart
     {
         [JsonPropertyName("text")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Text { get; set; }
     }
 

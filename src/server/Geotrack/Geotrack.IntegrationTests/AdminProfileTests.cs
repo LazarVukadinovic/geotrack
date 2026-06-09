@@ -364,7 +364,7 @@ public sealed class AdminProfileTests
         var tooLarge = await client.PostAsync(
             "/api/admin/profile/avatar",
             BuildMultipart(new byte[(2 * 1024 * 1024) + 1], "image/png", "avatar.png"));
-        Assert.Equal(HttpStatusCode.BadRequest, tooLarge.StatusCode);
+        Assert.Equal((HttpStatusCode)413, tooLarge.StatusCode);
 
         var upload = await client.PostAsync(
             "/api/admin/profile/avatar",

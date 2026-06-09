@@ -43,7 +43,15 @@ describe('AnalyticsPageComponent', () => {
         entityType: row.entityType,
         entityId: row.entityId,
         name: row.name,
-        type: row.entityType === 'location' ? 'LOCATION' : 'PLACE',
+        type: row.entityType === 'destination'
+          ? 'DESTINATION'
+          : row.entityType === 'location'
+            ? 'LOCATION'
+            : row.entityType === 'event'
+              ? 'EVENT'
+              : row.entityType === 'hotel'
+                ? 'STAY'
+                : 'PLACE',
         location: row.regionDisplayName,
         views: row.pageViews,
         visitors: row.uniqueVisitors,
@@ -69,6 +77,7 @@ describe('AnalyticsPageComponent', () => {
         destinations: filter === 'destinations' ? value : empty,
         events: filter === 'events' ? value : empty,
         places: filter === 'places' ? value : empty,
+        stays: filter === 'stays' ? value : empty,
       })),
     } as unknown as RegionalAnalyticsService;
 
@@ -96,6 +105,7 @@ describe('AnalyticsPageComponent', () => {
             isTerritoryManager: () => false,
             canAccessTerritoryAdmin: () => false,
             isRegionalManager: () => true,
+            isContentModerator: () => false,
           },
         },
         { provide: RegionalAnalyticsService, useValue: analyticsService },
@@ -186,7 +196,7 @@ describe('AnalyticsPageComponent', () => {
     expect(tooltipText()).toContain('18');
     let active = activeTrendPoint();
     expect(active).not.toBeNull();
-    expect(active?.getAttribute('cx')).toBe('170');
+    expect(active?.getAttribute('cx')).toBe('181');
 
     points[1].dispatchEvent(new MouseEvent('mouseleave'));
     fixture.detectChanges();
@@ -219,6 +229,18 @@ describe('AnalyticsPageComponent', () => {
     expect(activeTrendPoint()).toBeNull();
   });
 
+  it('renders page views trend axis labels and accessible SVG metadata', () => {
+    fixture.detectChanges();
+
+    const chart = pageViewsTrendChart();
+
+    expect(pageViewsTrendXAxisLabel()).toBe('Day in last 30 days');
+    expect(pageViewsTrendYAxisLabel()).toBe('Page views');
+    expect(chart.querySelector('title')?.textContent).toBe('Page Views Trend');
+    expect(chart.querySelector('desc')?.textContent).toContain('X axis: Day in last 30 days');
+    expect(chart.querySelector('desc')?.textContent).toContain('Y axis: Page views');
+  });
+
   it('generates a non-overshooting page views trend line within the zero baseline', () => {
     const overview = overviewResponse();
     overview.pageViewsTrend = trendPoints([0, 14, 0, 52, 0]);
@@ -237,11 +259,7 @@ describe('AnalyticsPageComponent', () => {
   });
 
   it('renders zero-only page views trend data as a flat baseline', () => {
-    const overview = overviewResponse();
-    overview.pageViewsTrend = trendPoints([0, 0, 0, 0]);
-    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
-
-    fixture.detectChanges();
+    renderTrendValues([0, 0, 0, 0]);
 
     const path = pageViewsTrendLinePath();
     const yValues = pathYCoordinates(path);
@@ -250,6 +268,30 @@ describe('AnalyticsPageComponent', () => {
     expect(yValues.length).toBe(4);
     expect(yValues.every(y => y === 148)).toBe(true);
     expect(pageViewsTrendPoints().length).toBe(4);
+  });
+
+  it('uses unique zero-to-one Y ticks when page views trend max is zero', () => {
+    renderTrendValues([0, 0, 0]);
+
+    expect(pageViewsTrendYLabels()).toEqual(['0', '1']);
+  });
+
+  it('uses unique zero-to-one Y ticks when page views trend max is one', () => {
+    renderTrendValues([0, 1, 0]);
+
+    expect(pageViewsTrendYLabels()).toEqual(['0', '1']);
+  });
+
+  it('uses integer Y ticks for small page views trend counts', () => {
+    renderTrendValues([0, 2, 5]);
+
+    expect(pageViewsTrendYLabels()).toEqual(['0', '1', '2', '3', '4', '5']);
+  });
+
+  it('uses readable nice integer Y ticks for larger page views trend counts', () => {
+    renderTrendValues([0, 50, 100]);
+
+    expect(pageViewsTrendYLabels()).toEqual(['0', '25', '50', '75', '100']);
   });
 
   it('renders sparse page views trend data without invalid SVG', () => {
@@ -262,7 +304,7 @@ describe('AnalyticsPageComponent', () => {
     const path = pageViewsTrendLinePath();
     const yValues = pathYCoordinates(path);
 
-    expect(path).toMatch(/^M24\.0,/);
+    expect(path).toMatch(/^M46\.0,/);
     expect(path).not.toContain('NaN');
     expect(yValues.length).toBe(1);
     expect(yValues[0]).toBeGreaterThanOrEqual(14);
@@ -455,7 +497,7 @@ describe('AnalyticsPageComponent', () => {
   });
 
   it('renders destination ranking data above actionable insights', () => {
-    fixture.detectChanges();
+    renderDestinationRanking();
 
     const text = fixture.nativeElement.textContent as string;
     const rankingIndex = text.indexOf('Destination Ranking');
@@ -469,31 +511,30 @@ describe('AnalyticsPageComponent', () => {
   });
 
   it('shows destination ranking tooltip with rank, destination, visits, and top share', () => {
-    fixture.detectChanges();
+    renderDestinationRanking();
 
     const row = fixture.nativeElement.querySelector('[data-testid="destination-ranking-row"]') as Element;
 
     expect(showTooltip(row)).toContain('Coastal Capital');
     expect(tooltipText()).toContain('Rank');
     expect(tooltipText()).toContain('#1');
+    expect(tooltipText()).toContain('Type');
+    expect(tooltipText()).toContain('Destination');
     expect(tooltipText()).toContain('Visits');
     expect(tooltipText()).toContain('20');
-    expect(tooltipText()).toContain('100%');
+    expect(tooltipText()).toContain('Visitors');
+    expect(tooltipText()).toContain('5');
   });
 
   it('renders destination ranking empty state when no destination visits exist', () => {
-    const emptyOverview = overviewResponse();
-    emptyOverview.destinationRanking = [];
-    vi.mocked(analyticsService.getOverview).mockReturnValue(of(emptyOverview));
-
-    fixture.detectChanges();
+    renderDestinationRanking([]);
 
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('No destination visit data yet.');
   });
 
   it('scales destination ranking bars against the top visit count', () => {
-    fixture.detectChanges();
+    renderDestinationRanking();
 
     const bars = fixture.nativeElement.querySelectorAll('[data-testid="destination-ranking-bar-fill"]') as NodeListOf<HTMLElement>;
 
@@ -689,6 +730,89 @@ describe('AnalyticsPageComponent', () => {
       ?.getAttribute('d') ?? '';
   }
 
+  function pageViewsTrendXAxisLabel(): string {
+    return pageViewsTrendChart()
+      .querySelector('[data-testid="page-views-trend-x-axis-label"]')
+      ?.textContent
+      ?.trim() ?? '';
+  }
+
+  function pageViewsTrendYAxisLabel(): string {
+    return pageViewsTrendChart()
+      .querySelector('[data-testid="page-views-trend-y-axis-label"]')
+      ?.textContent
+      ?.trim() ?? '';
+  }
+
+  function pageViewsTrendYLabels(): string[] {
+    const labels = Array.from(
+      pageViewsTrendChart().querySelectorAll('[data-testid="page-views-trend-y-label"]'),
+    );
+    const texts = labels.map(label => label.textContent?.trim() ?? '');
+
+    expect(new Set(texts).size).toBe(texts.length);
+    return texts;
+  }
+
+  function renderTrendValues(values: number[]): void {
+    const overview = overviewResponse();
+    overview.pageViewsTrend = trendPoints(values);
+    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
+    fixture.detectChanges();
+  }
+
+  function renderDestinationRanking(rows: RegionalAnalyticsEntityMetric[] = destinationRankingMetrics()): void {
+    const overview = overviewResponse();
+    overview.topPerformingEntities = rows;
+    overview.entityRows = rows;
+    overview.pagination = {
+      totalCount: rows.length,
+      skip: 0,
+      take: 25,
+      hasMore: false,
+    };
+    vi.mocked(analyticsService.getOverview).mockReturnValue(of(overview));
+
+    fixture.detectChanges();
+    component.setFilter('destinations');
+    fixture.detectChanges();
+  }
+
+  function destinationRankingMetrics(): RegionalAnalyticsEntityMetric[] {
+    return [
+      {
+        entityType: 'destination',
+        entityId: 2,
+        name: 'Coastal Capital',
+        regionDisplayName: 'Assigned Region',
+        imageUrl: null,
+        pageViews: 20,
+        uniqueVisitors: 5,
+        saves: 2,
+        externalClicks: 1,
+        averageRating: 4.8,
+        reviewCount: 2,
+        status: 'Published',
+        detailRoute: '/destinations/detail/2',
+      },
+      {
+        entityType: 'destination',
+        entityId: 3,
+        name: 'Harbor Quarter',
+        regionDisplayName: 'Assigned Region',
+        imageUrl: null,
+        pageViews: 10,
+        uniqueVisitors: 2,
+        saves: 1,
+        externalClicks: 0,
+        averageRating: 4.2,
+        reviewCount: 1,
+        status: 'Published',
+        detailRoute: '/destinations/detail/3',
+      },
+    ];
+  }
+
   function pathYCoordinates(path: string): number[] {
     return Array.from(path.matchAll(/[ML](-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g))
       .map(match => Number(match[2]));
@@ -711,6 +835,7 @@ describe('AnalyticsPageComponent', () => {
       destination: 'DESTINATION',
       location: 'LOCATION',
       place: 'PLACE',
+      hotel: 'STAY',
       event: 'EVENT',
     };
 

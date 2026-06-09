@@ -1,21 +1,26 @@
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Options;
 using Geotrack.Application.Security;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Geotrack.Infrastructure.Services;
 
 public sealed class RegionalMediaService : IRegionalMediaService
 {
-    private const int MaxFilesPerUpload = 12;
-
     private readonly AppDbContext _db;
     private readonly IRegionalEntityImageStorageService _storage;
+    private readonly UploadLimitsOptions _uploadLimits;
 
-    public RegionalMediaService(AppDbContext db, IRegionalEntityImageStorageService storage)
+    public RegionalMediaService(
+        AppDbContext db,
+        IRegionalEntityImageStorageService storage,
+        IOptions<UploadLimitsOptions> uploadLimits)
     {
         _db = db;
         _storage = storage;
+        _uploadLimits = uploadLimits.Value;
     }
 
     public async Task<RegionalImageUploadResponseDto> UploadImagesAsync(
@@ -29,8 +34,8 @@ public sealed class RegionalMediaService : IRegionalMediaService
         if (files.Count == 0)
             throw new InvalidOperationException("Please select at least one image to upload.");
 
-        if (files.Count > MaxFilesPerUpload)
-            throw new InvalidOperationException($"A maximum of {MaxFilesPerUpload} images can be uploaded at once.");
+        if (files.Count > _uploadLimits.Images.MaxRegionalFilesPerRequest)
+            throw new InvalidOperationException($"A maximum of {_uploadLimits.Images.MaxRegionalFilesPerRequest} images can be uploaded at once.");
 
         var response = new RegionalImageUploadResponseDto();
 

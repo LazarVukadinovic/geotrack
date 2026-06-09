@@ -481,9 +481,13 @@ public class BoundaryRegionCandidateResponseDto
     public string Source { get; set; } = "geoBoundaries";
     public string AdmLevel { get; set; } = "ADM1";
     public string Iso3 { get; set; } = string.Empty;
+    public string GeometryMode { get; set; } = "none";
     public int ScannedFeatures { get; set; }
     public int MatchedFeatures { get; set; }
     public int ReturnedCount { get; set; }
+    public int Skip { get; set; }
+    public int Take { get; set; }
+    public bool HasMore { get; set; }
     public List<BoundaryRegionCandidateDto> Items { get; set; } = new();
     public string Attribution { get; set; } =
         "Boundary data provided by geoBoundaries (gbOpen), licensed under CC BY 4.0.";

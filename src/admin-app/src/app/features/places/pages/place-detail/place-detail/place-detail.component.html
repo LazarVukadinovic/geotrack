@@ -16,7 +16,7 @@
     <app-topbar [userName]="userName" [userRole]="userRole" title="Place Details"
                 [showBack]="true" backRoute="/places" />
 
-    <div class="flex-1 overflow-y-auto px-8 py-6">
+    <div class="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6">
 
       <!-- ID + status -->
       <div class="flex items-center gap-2 mb-5 text-sm text-gray-500">
@@ -26,10 +26,10 @@
               [ngClass]="statusClass(item.status)">{{ item.status }}</span>
       </div>
 
-      <div class="flex gap-6 items-start">
+      <div class="flex flex-col xl:flex-row gap-6 items-start">
 
         <!-- LEFT -->
-        <div class="flex-1 min-w-0 flex flex-col gap-5">
+        <div class="w-full xl:flex-1 min-w-0 flex flex-col gap-5">
 
           <!-- Hero card -->
           <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
@@ -58,7 +58,7 @@
                   <circle cx="12" cy="10" r="3"/>
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
                 </svg>
-                <button type="button" (click)="goToParentLocation($event)" class="text-sm font-semibold text-blue-200 hover:text-white hover:underline bg-transparent border-0 p-0 cursor-pointer">{{ parentLocationName }}</button>
+                <button type="button" (click)="goToParentLocation($event)" class="gt-detail-parent-link text-sm font-semibold">{{ parentLocationName }}</button>
               </div>
             </div>
 
@@ -82,7 +82,7 @@
                 </div>
                 <div class="flex flex-col gap-1">
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parent Location</span>
-                  <button type="button" (click)="goToParentLocation($event)" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentLocationName }}</button>
+                  <button type="button" (click)="goToParentLocation($event)" class="gt-detail-parent-link text-sm font-semibold text-left">{{ parentLocationName }}</button>
                 </div>
                 <div *ngIf="isOwnable" class="flex flex-col gap-1">
                   <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Owner</span>
@@ -181,35 +181,6 @@
             </div>
           </ng-container>
 
-          <!-- Classification & Tags -->
-          <ng-container *ngIf="(item)['classification']?.length || (item)['tags']?.length">
-            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-              <div class="px-6 py-4 border-b border-gray-100">
-                <h3 class="text-sm font-bold text-gray-800">Classification & Tags</h3>
-              </div>
-              <div class="px-6 py-5 flex flex-col gap-4">
-                <div *ngIf="(item)['classification']?.length">
-                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Classification</span>
-                  <div class="flex flex-wrap gap-2">
-                    <span *ngFor="let c of (item)['classification']"
-                          class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-                      {{ c }}
-                    </span>
-                  </div>
-                </div>
-                <div *ngIf="(item)['tags']?.length">
-                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Tags</span>
-                  <div class="flex flex-wrap gap-2">
-                    <span *ngFor="let t of (item)['tags']"
-                          class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                      #{{ t }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </ng-container>
-
           <!-- Amenities -->
           <ng-container *ngIf="(item)['amenities']?.length">
             <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
@@ -279,57 +250,14 @@
             </div>
           </ng-container>
 
-          <!-- Location map -->
-          <ng-container *ngIf="(item)['lat'] || (item)['address']">
-            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-              <div class="flex gap-0">
-                <div class="flex-1 px-6 py-5">
-                  <h3 class="text-sm font-bold text-gray-800 mb-4">Location</h3>
-                  <div class="flex flex-col gap-3">
-                    <div *ngIf="(item)['address']" class="flex items-start gap-2.5">
-                      <svg class="w-4 h-4 text-blue-600 flex-none mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="10" r="3"/>
-                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                      </svg>
-                      <p class="text-sm text-gray-700">{{ (item)['address'] }}</p>
-                    </div>
-                    <div *ngIf="(item)['lat'] && (item)['lng']" class="flex items-center gap-2.5">
-                      <span class="text-xs font-mono text-gray-500">
-                        {{ (item)['lat'] | number:'1.4-4' }}, {{ (item)['lng'] | number:'1.4-4' }}
-                      </span>
-                    </div>
-                    <button *ngIf="(item)['lat'] && (item)['lng']"
-                            (click)="openMapModal()"
-                            class="mt-1 flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 cursor-pointer border-none bg-transparent p-0 transition-colors w-fit">
-                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-                      </svg>
-                      Expand map
-                    </button>
-                  </div>
-                </div>
-                <div *ngIf="(item)['lat']" class="w-64 flex-shrink-0 relative overflow-hidden rounded-r-xl" style="min-height: 180px;">
-                  <div #miniMapContainer
-                       class="absolute inset-0 w-full h-full cursor-pointer"
-                       (click)="openMapModal()"
-                       title="Click to expand map">
-                  </div>
-                  <div class="absolute bottom-2 right-2 pointer-events-none" style="z-index: 500;">
-                    <span class="text-[10px] text-gray-500 bg-white/80 px-1.5 py-0.5 rounded backdrop-blur-sm">Click to expand</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </ng-container>
-
         </div>
 
         <!-- RIGHT panel -->
-        <div class="w-72 flex-shrink-0 flex flex-col gap-4">
+        <div class="w-full xl:w-[360px] xl:min-w-[350px] xl:max-w-[360px] xl:flex-shrink-0 flex flex-col gap-4">
 
           <!-- Actions -->
           <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Actions</h3>
+            <h3 class="gt-entity-detail-sidebar-card-title">ACTIONS</h3>
             <div class="flex flex-col gap-2">
               <button (click)="editItem()"
                       class="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold
@@ -396,9 +324,75 @@
             </div>
           </div>
 
+          <!-- Location map -->
+          <ng-container *ngIf="(item)['lat'] || (item)['address']">
+            <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <h3 class="gt-entity-detail-sidebar-card-title">LOCATION</h3>
+              <div class="flex flex-col gap-3">
+                <div *ngIf="(item)['address']" class="flex items-start gap-2.5">
+                  <svg class="w-4 h-4 text-blue-600 flex-none mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="10" r="3"/>
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                  </svg>
+                  <p class="text-sm text-gray-700 break-words">{{ (item)['address'] }}</p>
+                </div>
+                <div *ngIf="(item)['lat'] && (item)['lng']" class="flex items-center gap-2.5">
+                  <span class="text-xs font-mono text-gray-500">
+                    {{ (item)['lat'] | number:'1.4-4' }}, {{ (item)['lng'] | number:'1.4-4' }}
+                  </span>
+                </div>
+                <div *ngIf="(item)['lat']" class="relative w-full overflow-hidden rounded-lg" style="height: 200px;">
+                  <div #miniMapContainer
+                       class="absolute inset-0 w-full h-full cursor-pointer"
+                       (click)="openMapModal()"
+                       title="Click to expand map">
+                  </div>
+                  <div class="absolute bottom-2 right-2 pointer-events-none" style="z-index: 500;">
+                    <span class="text-[10px] text-gray-500 bg-white/80 px-1.5 py-0.5 rounded backdrop-blur-sm">Click to expand</span>
+                  </div>
+                </div>
+                <button *ngIf="(item)['lat'] && (item)['lng']"
+                        (click)="openMapModal()"
+                        class="flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 cursor-pointer border-none bg-transparent p-0 transition-colors w-fit">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                  </svg>
+                  Expand map
+                </button>
+              </div>
+            </div>
+          </ng-container>
+
+          <!-- Classification & Tags -->
+          <ng-container *ngIf="(item)['classification']?.length || (item)['tags']?.length">
+            <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <h3 class="gt-entity-detail-sidebar-card-title">CLASSIFICATION & TAGS</h3>
+              <div class="flex flex-col gap-4">
+                <div *ngIf="(item)['classification']?.length">
+                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Classification</span>
+                  <div class="flex flex-wrap gap-2 min-w-0">
+                    <span *ngFor="let c of (item)['classification']"
+                          class="inline-flex max-w-full items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-blue-100 whitespace-normal break-words">
+                      {{ c }}
+                    </span>
+                  </div>
+                </div>
+                <div *ngIf="(item)['tags']?.length">
+                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Tags</span>
+                  <div class="flex flex-wrap gap-2 min-w-0">
+                    <span *ngFor="let t of (item)['tags']"
+                          class="inline-flex max-w-full items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 whitespace-normal break-words">
+                      #{{ t }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+
           <!-- Details card -->
           <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-            <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Details</h3>
+            <h3 class="gt-entity-detail-sidebar-card-title">DETAILS</h3>
             <div class="flex flex-col gap-3">
               <div class="flex items-center justify-between">
                 <span class="text-xs text-gray-400">Category</span>
@@ -406,7 +400,7 @@
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-xs text-gray-400">Parent Location</span>
-                <button type="button" (click)="goToParentLocation($event)" class="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer bg-transparent border-0 p-0 text-left">{{ parentLocationName }}</button>
+                <button type="button" (click)="goToParentLocation($event)" class="gt-detail-parent-link text-xs font-semibold text-left">{{ parentLocationName }}</button>
               </div>
               <div *ngIf="isOwnable" class="flex items-start justify-between gap-3">
                 <span class="text-xs text-gray-400">Owner</span>

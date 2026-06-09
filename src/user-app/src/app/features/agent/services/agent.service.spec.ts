@@ -99,6 +99,9 @@ describe('AgentService', () => {
     expect(req.request.body).toMatchObject({
       message: 'Find restaurants near Kotor',
       contextOptions: {
+        latitude: 42.65,
+        longitude: 18.09,
+        locationSource: 'manual',
         destinationId: 42,
         currentDestinationName: 'Dubrovnik',
         currentCity: 'Dubrovnik',
@@ -120,7 +123,21 @@ describe('AgentService', () => {
     req.flush(chatResponse());
   });
 
-  it('omits precise coordinates from chat context', () => {
+  it('does not send chat requests or render backend auth errors when logged out', () => {
+    flushAgentInfo();
+    isLoggedIn.set(false);
+
+    service.sendMessage('sta je skijanje');
+
+    httpMock.expectNone('/api/agent/chat');
+    expect(analytics.track).not.toHaveBeenCalledWith(
+      'agent_prompt_sent',
+      expect.anything(),
+    );
+    expect(service.messages().map(message => message.text)).not.toContain('Please sign in before using Ask Agent.');
+  });
+
+  it('includes available location coordinates in chat context', () => {
     flushAgentInfo();
 
     service.sendMessage('Show me top attractions');
@@ -129,11 +146,60 @@ describe('AgentService', () => {
     expect(req.request.body.contextOptions).toMatchObject({
       destinationId: 42,
       currentDestinationName: 'Dubrovnik',
+      latitude: 42.65,
+      longitude: 18.09,
+      locationSource: 'manual',
     });
-    expect(req.request.body.contextOptions.latitude).toBeUndefined();
-    expect(req.request.body.contextOptions.longitude).toBeUndefined();
 
     req.flush(chatResponse());
+  });
+
+  it('sends a stable conversation id on follow-up chat requests', () => {
+    flushAgentInfo();
+
+    service.sendMessage('Find restaurants in Dubrovnik');
+    const first = httpMock.expectOne('/api/agent/chat');
+    expect(first.request.body.conversationId).toEqual(expect.any(String));
+    const conversationId = first.request.body.conversationId;
+    first.flush(chatResponse({ conversationId }));
+
+    service.sendMessage('And beaches?');
+    const followUp = httpMock.expectOne('/api/agent/chat');
+    expect(followUp.request.body.conversationId).toBe(conversationId);
+    followUp.flush(chatResponse({ conversationId }));
+  });
+
+  it('reuses the same conversation id for rapid sends before the first response returns', () => {
+    flushAgentInfo();
+
+    service.sendMessage('plaze');
+    const first = httpMock.expectOne('/api/agent/chat');
+    const conversationId = first.request.body.conversationId;
+    expect(conversationId).toEqual(expect.any(String));
+
+    service.sendMessage('dubrovnik');
+    const followUp = httpMock.expectOne('/api/agent/chat');
+    expect(followUp.request.body.conversationId).toBe(conversationId);
+
+    first.flush(chatResponse({ conversationId }));
+    followUp.flush(chatResponse({ conversationId }));
+  });
+
+  it('starting a new chat creates a new conversation id', () => {
+    flushAgentInfo();
+
+    service.sendMessage('Find restaurants in Dubrovnik');
+    const first = httpMock.expectOne('/api/agent/chat');
+    const firstConversationId = first.request.body.conversationId;
+    first.flush(chatResponse({ conversationId: firstConversationId }));
+
+    service.startNewChat();
+    service.sendMessage('Find beaches in Dubrovnik');
+    const next = httpMock.expectOne('/api/agent/chat');
+
+    expect(next.request.body.conversationId).toEqual(expect.any(String));
+    expect(next.request.body.conversationId).not.toBe(firstConversationId);
+    next.flush(chatResponse({ conversationId: next.request.body.conversationId }));
   });
 
   it('attaches structured result cards from the chat response', () => {
@@ -228,6 +294,29 @@ describe('AgentService', () => {
     expect(service.messages().at(-1)?.cards?.[0]?.imageUrl).toBeNull();
   });
 
+  it('keeps no-result responses from inheriting previous cards', () => {
+    flushAgentInfo();
+
+    service.sendMessage('Show me beaches in Dubrovnik');
+    const first = httpMock.expectOne('/api/agent/chat');
+    first.flush(chatResponse({
+      cards: [
+        {
+          entityType: 'place',
+          id: 12,
+          title: 'Catalog Beach',
+          detailRoute: '/places/12',
+        },
+      ],
+    }));
+
+    service.sendMessage('Show me volcano observatories');
+    const second = httpMock.expectOne('/api/agent/chat');
+    second.flush(chatResponse({ conversationId: 'conversation-1', cards: [] }));
+
+    expect(service.messages().at(-1)?.cards).toEqual([]);
+  });
+
   it('renders backend unavailable chat errors without asking for a key', () => {
     flushAgentInfo();
 
@@ -251,7 +340,6 @@ describe('AgentService', () => {
     const req = httpMock.expectOne('/api/agent/providers');
     expect(req.request.method).toBe('GET');
     req.flush({
-      providers: [],
       mcp: mcpMetadata(),
     } satisfies AgentProvidersResponse);
   }
@@ -266,6 +354,7 @@ describe('AgentService', () => {
   }
 
   function chatResponse(overrides: Partial<{
+    conversationId: string;
     cards: Array<{
       entityType: 'place' | 'stay' | 'event';
       id: number;

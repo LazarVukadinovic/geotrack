@@ -17,7 +17,17 @@
     />
 
     <div class="flex-1 relative overflow-hidden">
-      <div #mapContainer id="main-map" class="absolute inset-0 w-full h-full"></div>
+      <div
+        #mapContainer
+        id="main-map"
+        class="absolute inset-0 w-full h-full"
+        role="region"
+        aria-label="Regional management map"
+        aria-describedby="admin-map-accessibility-summary"
+      ></div>
+      <p id="admin-map-accessibility-summary" class="sr-only" aria-live="polite">
+        {{ mapAccessibilitySummary }}
+      </p>
 
       <div
         class="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2"
@@ -29,7 +39,9 @@
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
+            <label class="sr-only" for="admin-map-search">Search regional map</label>
             <input
+              id="admin-map-search"
               type="text"
               placeholder="Search places, locations, destinations, or coordinates..."
               [(ngModel)]="searchQuery"
@@ -67,6 +79,7 @@
                 <button
                   type="button"
                   (mousedown)="selectSearchResult(result)"
+                  [attr.aria-label]="'Select ' + result.entityType + ' ' + result.title"
                   class="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-none border-b border-gray-100 last:border-0 transition-colors bg-white text-left"
                 >
                   <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" [style.background]="entityTypeDot(result.entityType)"></span>
@@ -100,6 +113,7 @@
           type="button"
           (click)="navigateToNewDestination()"
           [disabled]="!activeRegionId"
+          aria-label="Create destination in active region"
           class="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 text-xs font-semibold px-3 py-2 rounded-lg hover:bg-purple-50 hover:border-purple-400 hover:text-purple-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all cursor-pointer shadow-lg"
         >
           <svg class="w-3.5 h-3.5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -112,6 +126,7 @@
           type="button"
           (click)="navigateToNewLocation()"
           [disabled]="!activeRegionId"
+          aria-label="Create location in active region"
           class="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 text-xs font-semibold px-3 py-2 rounded-lg hover:bg-cyan-50 hover:border-cyan-400 hover:text-cyan-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all cursor-pointer shadow-lg"
         >
           <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -203,7 +218,14 @@
             <div class="flex gap-3 mb-3">
               <div class="w-14 h-14 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0 relative">
                 @if (selectedEntity.imageUrl) {
-                  <img [src]="selectedEntity.imageUrl" [alt]="selectedEntity.title" (error)="onSelectedEntityImageError()" class="w-full h-full object-cover" />
+                  <img
+                    [src]="selectedEntity.imageUrl"
+                    [alt]="selectedEntity.title"
+                    loading="lazy"
+                    decoding="async"
+                    (error)="onSelectedEntityImageError()"
+                    class="w-full h-full object-cover"
+                  />
                 } @else {
                   <div class="absolute inset-0 flex items-center justify-center text-sm font-bold text-gray-400">
                     {{ selectedEntity.entityType.charAt(0) }}

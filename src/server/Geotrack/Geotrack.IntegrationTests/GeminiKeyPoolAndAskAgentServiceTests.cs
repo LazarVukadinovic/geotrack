@@ -4,6 +4,7 @@ using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Options;
 using Geotrack.Application.Services;
 using Geotrack.Infrastructure.Services.Agent;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -48,6 +49,25 @@ public class GeminiKeyPoolAndAskAgentServiceTests
     }
 
     [Fact]
+    public async Task Generate_falls_back_to_default_when_config_model_is_not_gemini_text()
+    {
+        using var handler = new SequenceHandler(GeminiSuccess("OK"));
+        var service = CreateService(handler, new GeminiOptions
+        {
+            BaseUrl = "https://gemini.test",
+            Model = NonGeminiMediaModel(),
+            ApiKeys = ["first-key-1111"]
+        });
+
+        var result = await service.GenerateAsync(Request());
+
+        Assert.Equal("OK", result.Text);
+        Assert.Equal("gemini-3.5-flash", service.Model);
+        Assert.Contains("/models/gemini-3.5-flash:generateContent", handler.RequestUris.Single());
+        Assert.DoesNotContain(NonGeminiMediaModelPrefix(), handler.RequestUris.Single(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Generate_falls_back_to_next_key_after_quota_error()
     {
         using var handler = new SequenceHandler(
@@ -59,6 +79,52 @@ public class GeminiKeyPoolAndAskAgentServiceTests
 
         Assert.Equal("OK", result.Text);
         Assert.Equal(["first-key-1111", "second-key-2222"], handler.ApiKeys);
+    }
+
+    [Fact]
+    public async Task Generate_tries_configured_fallback_model_for_failed_precondition_without_rotating_keys()
+    {
+        using var handler = new SequenceHandler(
+            GeminiError(HttpStatusCode.BadRequest, "FAILED_PRECONDITION", "Gemini API free tier is not available for this request."),
+            GeminiSuccess("OK"));
+        var service = CreateService(handler, new GeminiOptions
+        {
+            BaseUrl = "https://gemini.test",
+            Model = "gemini-3.1-flash-lite",
+            FallbackModels = ["gemini-3.5-flash"],
+            ApiKeys = ["first-key-1111", "second-key-2222"],
+            KeyCooldownSeconds = 300
+        });
+
+        var result = await service.GenerateAsync(Request());
+
+        Assert.Equal("OK", result.Text);
+        Assert.Equal(["first-key-1111", "first-key-1111"], handler.ApiKeys);
+        Assert.Contains("/models/gemini-3.1-flash-lite:generateContent", handler.RequestUris[0]);
+        Assert.Contains("/models/gemini-3.5-flash:generateContent", handler.RequestUris[1]);
+    }
+
+    [Fact]
+    public async Task Persistent_provider_config_error_puts_key_on_cooldown_and_skips_next_request()
+    {
+        using var handler = new SequenceHandler(
+            GeminiError(HttpStatusCode.BadRequest, "FAILED_PRECONDITION", "Gemini API free tier is not available for this request."),
+            GeminiError(HttpStatusCode.BadRequest, "FAILED_PRECONDITION", "Gemini API free tier is not available for this request."));
+        var service = CreateService(handler, new GeminiOptions
+        {
+            BaseUrl = "https://gemini.test",
+            Model = "gemini-3.1-flash-lite",
+            FallbackModels = ["gemini-3.5-flash"],
+            ApiKeys = ["first-key-1111"],
+            KeyCooldownSeconds = 300
+        });
+
+        var first = await Assert.ThrowsAsync<AgentException>(() => service.GenerateAsync(Request()));
+        var second = await Assert.ThrowsAsync<AgentException>(() => service.GenerateAsync(Request()));
+
+        Assert.Equal("agent_unavailable", first.Code);
+        Assert.Equal("agent_unavailable", second.Code);
+        Assert.Equal(2, handler.RequestCount);
     }
 
     [Fact]
@@ -78,6 +144,27 @@ public class GeminiKeyPoolAndAskAgentServiceTests
         Assert.DoesNotContain(nextAttempts, key => key.Index == first.Index);
         Assert.Single(nextAttempts);
         Assert.Equal(1, pool.AvailableKeyCount);
+    }
+
+    [Fact]
+    public void Key_pool_logs_fingerprint_without_full_key()
+    {
+        var logger = new RecordingLogger<GeminiKeyPool>();
+        var pool = new GeminiKeyPool(
+            Options.Create(new GeminiOptions
+            {
+                ApiKeys = ["first-key-1111", "second-key-2222"],
+                KeyCooldownSeconds = 300
+            }),
+            logger);
+
+        var first = pool.GetAvailableKeys().First();
+        pool.MarkRateLimited(first);
+
+        var logText = string.Join('\n', logger.Messages);
+        Assert.Contains(first.Fingerprint, logText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("first-key-1111", logText, StringComparison.Ordinal);
+        Assert.DoesNotContain("second-key-2222", logText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -193,13 +280,17 @@ public class GeminiKeyPoolAndAskAgentServiceTests
             }),
             NullLogger<GeminiKeyPool>.Instance);
 
-    private static AgentProviderChatRequest Request() => new()
+    private static GeminiTextGenerationRequest Request() => new()
     {
         Model = "gemini-3.5-flash",
         SystemPrompt = "Reply with OK.",
         UserMessage = "Connectivity check.",
         Timeout = TimeSpan.FromSeconds(5)
     };
+
+    private static string NonGeminiMediaModel() => NonGeminiMediaModelPrefix() + "-2";
+
+    private static string NonGeminiMediaModelPrefix() => "gpt-" + "image";
 
     private static HttpResponseMessage GeminiSuccess(string text) => new(HttpStatusCode.OK)
     {
@@ -284,6 +375,27 @@ public class GeminiKeyPoolAndAskAgentServiceTests
             }
 
             base.Dispose(disposing);
+        }
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull =>
+            NullLogger.Instance.BeginScope(state);
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
         }
     }
 }

@@ -8,14 +8,20 @@ using Geotrack.Infrastructure.Repositories;
 using Geotrack.Infrastructure.Services;
 using Geotrack.Infrastructure.Services.Agent;
 using Geotrack.Server;
+using Geotrack.Server.Health;
+using Geotrack.Server.Middleware;
 using Geotrack.Server.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
@@ -26,6 +32,16 @@ using System.Text;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var uploadLimits = builder.Configuration
+    .GetSection("UploadLimits")
+    .Get<UploadLimitsOptions>()
+    ?? new UploadLimitsOptions();
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = uploadLimits.GlobalMaxRequestBodyBytes;
+});
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -48,7 +64,14 @@ builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
 
     options.UseNpgsql(
         configuredConnectionString,
-        npgsqlOptions => npgsqlOptions.UseNetTopologySuite());
+        npgsqlOptions =>
+        {
+            npgsqlOptions.UseNetTopologySuite();
+            npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorCodesToAdd: null);
+        });
 });
 
 builder.Services.AddControllers()
@@ -58,6 +81,29 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.DefaultIgnoreCondition =
             System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     });
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var message = context.ModelState.Values
+            .SelectMany(value => value.Errors)
+            .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
+                ? error.Exception?.Message
+                : error.ErrorMessage)
+            .FirstOrDefault(errorMessage => !string.IsNullOrWhiteSpace(errorMessage))
+            ?? "Invalid request.";
+
+        if (message.Contains("Multipart body length limit", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ObjectResult(new { message = "Uploaded file is too large." })
+            {
+                StatusCode = StatusCodes.Status413PayloadTooLarge
+            };
+        }
+
+        return new BadRequestObjectResult(new { message });
+    };
+});
 
 builder.Services.AddMemoryCache();
 builder.Services.AddResponseCompression(options =>
@@ -87,6 +133,15 @@ builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection
 builder.Services.Configure<BoundaryImportOptions>(builder.Configuration.GetSection("BoundaryImport"));
 builder.Services.Configure<RegionBoundaryBackfillOptions>(builder.Configuration.GetSection("RegionBoundaryBackfill"));
 builder.Services.Configure<RegionalScopeValidationOptions>(builder.Configuration.GetSection("RegionalScopeValidation"));
+builder.Services.Configure<UploadLimitsOptions>(builder.Configuration.GetSection("UploadLimits"));
+builder.Services.Configure<AnalyticsRetentionOptions>(builder.Configuration.GetSection("AnalyticsRetention"));
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = uploadLimits.GlobalMultipartBodyLengthLimitBytes;
+});
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => HealthCheckResult.Healthy("Process is alive."), tags: new[] { "live" })
+    .AddCheck<DatabaseReadinessHealthCheck>("database", tags: new[] { "ready" });
 builder.Services.AddDataProtection()
     .SetApplicationName("GeoTrack");
 
@@ -118,6 +173,8 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddScoped<IDestinationRepository, DestinationRepository>();
 builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<ILocationRepository, LocationRepository>();
@@ -140,6 +197,7 @@ builder.Services.AddSingleton<IAnalyticsProcessingQueue, AnalyticsProcessingQueu
 builder.Services.AddHostedService<AnalyticsEventProcessingWorker>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<IAnalyticsReadService, AnalyticsReadService>();
+builder.Services.AddScoped<IAnalyticsRetentionService, AnalyticsRetentionService>();
 builder.Services.AddScoped<IUserInterestSignalUpdater, UserInterestSignalUpdater>();
 
 builder.Services.AddScoped<IReviewService, ReviewService>();
@@ -147,12 +205,15 @@ builder.Services.AddScoped<IModerationTermCache, ModerationTermCache>();
 builder.Services.AddScoped<IModerationTermService, ModerationTermService>();
 builder.Services.AddScoped<IReviewContentModerationService, ReviewContentModerationService>();
 builder.Services.AddScoped<IReviewReportService, ReviewReportService>();
+builder.Services.AddScoped<IModerationAuditService, ModerationAuditService>();
+builder.Services.AddScoped<IContentHtmlSanitizer, ContentHtmlSanitizer>();
 
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IInterestTopicService, InterestTopicService>();
-builder.Services.AddScoped<IAgentService, AgentService>();
-builder.Services.AddScoped<IApiKeyEncryptionService, ApiKeyEncryptionService>();
-builder.Services.AddScoped<IAiProviderKeyService, AiProviderKeyService>();
+builder.Services.AddSingleton<IAgentTaxonomyProvider, JsonAgentTaxonomyProvider>();
+builder.Services.AddScoped<IAgentDatabaseCapabilityService, AgentDatabaseCapabilityService>();
+builder.Services.AddScoped<IAgentAreaResolver, AgentAreaResolver>();
+builder.Services.AddSingleton<IAgentSemanticSearchService, NoOpAgentSemanticSearchService>();
 builder.Services.AddScoped<IAgentQueryPlanner, AgentQueryPlanner>();
 builder.Services.AddScoped<IGeoTrackToolService, GeoTrackToolService>();
 builder.Services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
@@ -288,10 +349,21 @@ builder.Services.AddRateLimiter(options =>
 
     options.OnRejected = async (ctx, token) =>
     {
+        int? retryAfterSeconds = null;
         if (ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retry))
         {
-            ctx.HttpContext.Response.Headers.RetryAfter = ((int)retry.TotalSeconds).ToString();
+            retryAfterSeconds = (int)retry.TotalSeconds;
+            ctx.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
         }
+
+        var logger = ctx.HttpContext.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("RateLimiting");
+        logger.LogWarning(
+            "Rate limit rejected {Method} {Path}; retry after {RetryAfterSeconds} seconds.",
+            ctx.HttpContext.Request.Method,
+            ctx.HttpContext.Request.Path.Value,
+            retryAfterSeconds);
 
         ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         await ctx.HttpContext.Response.WriteAsJsonAsync(
@@ -400,6 +472,78 @@ builder.Services.AddRateLimiter(options =>
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true,
             }));
+
+    options.AddPolicy("reviews", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("reports", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("contributions", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 12,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("uploads", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("support", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
+
+    options.AddPolicy("userActions", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetUserAndIpRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true,
+            }));
 });
 
 var allowedCorsOrigins = builder.Configuration
@@ -459,81 +603,88 @@ var shouldAutoMigrate =
 
 if (shouldAutoMigrate || shouldSeedOperationalUsers || shouldSeedDemoContent || shouldSeedPublicContent)
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    using var strategyScope = app.Services.CreateScope();
+    var strategyDb = strategyScope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var strategy = strategyDb.Database.CreateExecutionStrategy();
 
-    await db.Database.MigrateAsync();
-
-    if ((shouldSeedDemoContent || shouldSeedPublicContent) &&
-        app.Configuration.GetValue<bool>("Seed:ImportLocalBoundaries:Enabled"))
+    await strategy.ExecuteAsync(async () =>
     {
-        var localBoundaryImport = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm0", true))
+        await db.Database.MigrateAsync();
+
+        if ((shouldSeedDemoContent || shouldSeedPublicContent) &&
+            app.Configuration.GetValue<bool>("Seed:ImportLocalBoundaries:Enabled"))
         {
-            await localBoundaryImport.ImportLocalBoundariesAsync("ADM0");
-        }
+            var localBoundaryImport = scope.ServiceProvider.GetRequiredService<ILocalBoundaryImportService>();
 
-        if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm1", true))
-        {
-            await localBoundaryImport.ImportLocalBoundariesAsync("ADM1");
-        }
-    }
-
-    if (shouldSeedOperationalUsers)
-    {
-        var logger = scope.ServiceProvider
-            .GetRequiredService<ILoggerFactory>()
-            .CreateLogger(nameof(OperationalUserSeeder));
-        await OperationalUserSeeder.EnsureAsync(db, app.Configuration, logger);
-    }
-
-    if (shouldSeedDemoContent)
-    {
-        await SeedData.InitializeAsync(db);
-    }
-    else if (shouldSeedPublicContent)
-    {
-        await SeedData.EnsureRequiredPublicContentAsync(db);
-    }
-
-    if ((shouldSeedDemoContent || shouldSeedPublicContent) &&
-        app.Configuration.GetValue("Seed:SyncAdm1Regions:Enabled", true))
-    {
-        foreach (var syncCountryIso3 in ResolveSeedAdm1SyncCountryIso3s(app.Configuration))
-        {
-            var syncTerritoryId = await db.Territories
-                .AsNoTracking()
-                .Where(territory => territory.CountryIso3 == syncCountryIso3)
-                .OrderBy(territory => territory.Id)
-                .Select(territory => (int?)territory.Id)
-                .FirstOrDefaultAsync();
-
-            if (syncTerritoryId.HasValue)
+            if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm0", true))
             {
-                var regionSync = scope.ServiceProvider.GetRequiredService<IAdmBoundaryRegionSyncService>();
-                var syncSummary = await regionSync.SyncRegionsFromAdm1CandidatesAsync(
-                    syncTerritoryId.Value,
-                    dryRun: false,
-                    forceUpdateGeometry: false,
-                    createMissingRegions: true,
-                    linkExistingRegions: true);
+                await localBoundaryImport.ImportLocalBoundariesAsync("ADM0");
+            }
 
-                var logger = scope.ServiceProvider
-                    .GetRequiredService<ILoggerFactory>()
-                    .CreateLogger("SeedAdm1RegionSync");
-                logger.LogInformation(
-                    "Seed ADM1 region sync for {CountryIso3}: {CreatedCount} created, {LinkedExistingCount} linked, {UpdatedCount} updated, {ExistingLinkedCount} already linked, {AmbiguousCount} ambiguous, {FailedCount} failed.",
-                    syncSummary.CountryIso3,
-                    syncSummary.CreatedCount,
-                    syncSummary.LinkedExistingCount,
-                    syncSummary.UpdatedCount,
-                    syncSummary.ExistingLinkedCount,
-                    syncSummary.AmbiguousCount,
-                    syncSummary.FailedCount);
+            if (app.Configuration.GetValue("Seed:ImportLocalBoundaries:Adm1", true))
+            {
+                await localBoundaryImport.ImportLocalBoundariesAsync("ADM1");
             }
         }
-    }
+
+        if (shouldSeedOperationalUsers)
+        {
+            var logger = scope.ServiceProvider
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger(nameof(OperationalUserSeeder));
+            await OperationalUserSeeder.EnsureAsync(db, app.Configuration, logger);
+        }
+
+        if (shouldSeedDemoContent)
+        {
+            await SeedData.InitializeAsync(db);
+        }
+        else if (shouldSeedPublicContent)
+        {
+            await SeedData.EnsureRequiredPublicContentAsync(db);
+        }
+
+        if ((shouldSeedDemoContent || shouldSeedPublicContent) &&
+            app.Configuration.GetValue("Seed:SyncAdm1Regions:Enabled", true))
+        {
+            foreach (var syncCountryIso3 in ResolveSeedAdm1SyncCountryIso3s(app.Configuration))
+            {
+                var syncTerritoryId = await db.Territories
+                    .AsNoTracking()
+                    .Where(territory => territory.CountryIso3 == syncCountryIso3)
+                    .OrderBy(territory => territory.Id)
+                    .Select(territory => (int?)territory.Id)
+                    .FirstOrDefaultAsync();
+
+                if (syncTerritoryId.HasValue)
+                {
+                    var regionSync = scope.ServiceProvider.GetRequiredService<IAdmBoundaryRegionSyncService>();
+                    var syncSummary = await regionSync.SyncRegionsFromAdm1CandidatesAsync(
+                        syncTerritoryId.Value,
+                        dryRun: false,
+                        forceUpdateGeometry: false,
+                        createMissingRegions: true,
+                        linkExistingRegions: true);
+
+                    var logger = scope.ServiceProvider
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("SeedAdm1RegionSync");
+                    logger.LogInformation(
+                        "Seed ADM1 region sync for {CountryIso3}: {CreatedCount} created, {LinkedExistingCount} linked, {UpdatedCount} updated, {ExistingLinkedCount} already linked, {AmbiguousCount} ambiguous, {FailedCount} failed.",
+                        syncSummary.CountryIso3,
+                        syncSummary.CreatedCount,
+                        syncSummary.LinkedExistingCount,
+                        syncSummary.UpdatedCount,
+                        syncSummary.ExistingLinkedCount,
+                        syncSummary.AmbiguousCount,
+                        syncSummary.FailedCount);
+                }
+            }
+        }
+    });
 }
 
 if (!app.Environment.IsDevelopment())
@@ -559,6 +710,8 @@ if (forwardedHeadersEnabled)
 {
     app.UseForwardedHeaders();
 }
+
+app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseCors("ConfiguredOrigins");
 
@@ -730,6 +883,18 @@ app.UseAuthorization();
 
 app.UseRateLimiter();
 
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("live"),
+    ResponseWriter = WriteHealthCheckResponse
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = WriteHealthCheckResponse
+});
+
 app.MapControllers();
 
 if (File.Exists(Path.Combine(webRoot, "index.html")))
@@ -791,6 +956,20 @@ static string GetUserOrIpRateLimitPartition(HttpContext httpContext)
     }
 
     return $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+}
+
+static string GetUserAndIpRateLimitPartition(HttpContext httpContext)
+{
+    var ipAddress = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    var userId = httpContext.User.FindFirst("userId")?.Value
+        ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    if (!string.IsNullOrWhiteSpace(userId))
+    {
+        return $"user:{userId}:ip:{ipAddress}";
+    }
+
+    return $"ip:{ipAddress}";
 }
 
 static bool IsDemoContentSeedEnabledForEnvironment(IHostEnvironment environment, IConfiguration configuration)
@@ -876,7 +1055,22 @@ static void ApplySecurityHeaders(IHeaderDictionary headers)
         "font-src 'self' data: https://fonts.gstatic.com https://klokantech.github.io; " +
         "connect-src 'self' https:; " +
         "worker-src 'self' blob:; " +
-        "script-src 'self' 'unsafe-inline';";
+        "script-src 'self';";
+}
+
+static Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
+{
+    context.Response.ContentType = "application/json";
+    return context.Response.WriteAsJsonAsync(new
+    {
+        status = report.Status.ToString(),
+        checks = report.Entries.Select(entry => new
+        {
+            name = entry.Key,
+            status = entry.Value.Status.ToString(),
+            description = entry.Value.Description
+        })
+    });
 }
 
 public partial class Program;

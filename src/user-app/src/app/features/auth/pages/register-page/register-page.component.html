@@ -30,6 +30,7 @@
         <button
           type="button"
           (click)="goBack()"
+          aria-label="Go back"
           class="auth-register__back w-8 h-8 flex items-center justify-center text-white/80"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -91,6 +92,10 @@
             name="fullName"
             type="text"
             autocomplete="name"
+            required
+            aria-required="true"
+            [attr.aria-invalid]="fullNameError ? 'true' : null"
+            [attr.aria-describedby]="fullNameError ? 'register-full-name-error' : null"
             [(ngModel)]="fullName"
             (ngModelChange)="onFieldInput()"
             placeholder="Enter your name"
@@ -102,7 +107,7 @@
           />
         </div>
         @if (fullNameError) {
-          <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ fullNameError }}</p>
+          <p id="register-full-name-error" class="ml-3 mt-1.5 text-xs font-medium text-red-500" role="alert">{{ fullNameError }}</p>
         }
       </div>
 
@@ -135,6 +140,10 @@
             name="email"
             type="email"
             autocomplete="email"
+            required
+            aria-required="true"
+            [attr.aria-invalid]="emailError ? 'true' : null"
+            [attr.aria-describedby]="emailError ? 'register-email-error' : null"
             [(ngModel)]="email"
             (ngModelChange)="onFieldInput()"
             placeholder="name@example.com"
@@ -146,7 +155,7 @@
           />
         </div>
         @if (emailError) {
-          <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ emailError }}</p>
+          <p id="register-email-error" class="ml-3 mt-1.5 text-xs font-medium text-red-500" role="alert">{{ emailError }}</p>
         }
       </div>
 
@@ -179,6 +188,10 @@
               id="register-password"
               name="password"
               [type]="showPassword ? 'text' : 'password'"
+              required
+              aria-required="true"
+              [attr.aria-invalid]="passwordError ? 'true' : null"
+              [attr.aria-describedby]="passwordError ? 'register-password-error register-password-requirements' : 'register-password-requirements'"
               [(ngModel)]="password"
               placeholder="Enter your password"
               autocomplete="new-password"
@@ -189,6 +202,7 @@
               <button
                 (click)="showPassword = !showPassword"
                 type="button"
+                [attr.aria-label]="showPassword ? 'Hide password' : 'Show password'"
                 class="absolute inset-y-0 right-4 flex items-center text-slate-300 hover:text-slate-500 transition-colors"
               >
                 @if (!showPassword) {
@@ -216,12 +230,13 @@
           </div>
 
           @if (passwordError) {
-            <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ passwordError }}</p>
+            <p id="register-password-error" class="ml-3 mt-1.5 text-xs font-medium text-red-500" role="alert">{{ passwordError }}</p>
           }
         </div>
 
         <!-- Password requirements -->
         <div
+          id="register-password-requirements"
           class="auth-register__requirements mt-4 bg-white border border-slate-100 rounded-2xl px-4 py-3 space-y-2"
         >
           <div class="auth-register__requirements-icon" aria-hidden="true">
@@ -365,6 +380,10 @@
             id="register-repeat-password"
             name="repeatPassword"
             [type]="showRepeatPassword ? 'text' : 'password'"
+            required
+            aria-required="true"
+            [attr.aria-invalid]="repeatPasswordError ? 'true' : null"
+            [attr.aria-describedby]="repeatPasswordError ? 'register-repeat-password-error' : null"
             [(ngModel)]="repeatPassword"
             (ngModelChange)="onFieldInput()"
             placeholder="Repeat your password"
@@ -377,6 +396,7 @@
             <button
               (click)="showRepeatPassword = !showRepeatPassword"
               type="button"
+              [attr.aria-label]="showRepeatPassword ? 'Hide repeated password' : 'Show repeated password'"
               class="absolute inset-y-0 right-4 flex items-center text-slate-300 hover:text-slate-500 transition-colors"
             >
               @if (!showRepeatPassword) {
@@ -403,12 +423,14 @@
           }
         </div>
         @if (repeatPasswordError) {
-          <p class="ml-3 mt-1.5 text-xs font-medium text-red-500">{{ repeatPasswordError }}</p>
+          <p id="register-repeat-password-error" class="ml-3 mt-1.5 text-xs font-medium text-red-500" role="alert">{{ repeatPasswordError }}</p>
         }
       </div>
 
       @if (submitErrorMessage) {
         <div
+          id="register-submit-error"
+          role="alert"
           class="auth-register__submit-error mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 text-center"
         >
           {{ submitErrorMessage }}

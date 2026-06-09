@@ -3,6 +3,7 @@ using Geotrack.Application.DTOs.Events;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Geotrack.Server.Controllers;
 
@@ -114,6 +115,7 @@ public class EventsController : ControllerBase
 
     [HttpPost("{id:int}/reviews")]
     [Authorize]
+    [EnableRateLimiting("reviews")]
     public async Task<IActionResult> CreateEventReview([FromRoute] int id, [FromBody] CreateEventReviewRequestDto request)
     {
         try

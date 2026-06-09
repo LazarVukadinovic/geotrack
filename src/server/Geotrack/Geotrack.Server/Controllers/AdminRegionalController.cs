@@ -4,9 +4,12 @@ using System.Text;
 using System.Text.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Options;
+using Geotrack.Server.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 
 namespace Geotrack.Server.Controllers;
 
@@ -25,8 +28,9 @@ public class AdminRegionalController : ControllerBase
     private readonly IRegionalScopeValidationService _scopeValidation;
     private readonly IRegionalAnalyticsService _analytics;
     private readonly IRegionalMediaService _media;
+    private readonly IRegionalEntityImageStorageService _regionalImageStorage;
+    private readonly UploadLimitsOptions _uploadLimits;
     private readonly ILogger<AdminRegionalController> _logger;
-    private readonly IRegionalEntityImageStorageService _imageStorage;
 
     public AdminRegionalController(
         IRegionalDashboardService regionalDashboard,
@@ -39,7 +43,8 @@ public class AdminRegionalController : ControllerBase
         IRegionalScopeValidationService scopeValidation,
         IRegionalAnalyticsService analytics,
         IRegionalMediaService media,
-        IRegionalEntityImageStorageService imageStorage,
+        IRegionalEntityImageStorageService regionalImageStorage,
+        IOptions<UploadLimitsOptions> uploadLimits,
         ILogger<AdminRegionalController> logger)
     {
         _regionalDashboard = regionalDashboard;
@@ -52,8 +57,9 @@ public class AdminRegionalController : ControllerBase
         _scopeValidation = scopeValidation;
         _analytics = analytics;
         _media = media;
+        _regionalImageStorage = regionalImageStorage;
+        _uploadLimits = uploadLimits.Value;
         _logger = logger;
-        _imageStorage = imageStorage;
     }
 
     [HttpGet("regions")]
@@ -373,7 +379,9 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPost("media/images")]
-    [RequestSizeLimit(96 * 1024 * 1024)]
+    [EnableRateLimiting("uploads")]
+    [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.ImageMaxFileSizeBytes)]
     public async Task<ActionResult<RegionalImageUploadResponseDto>> UploadImages(
         [FromQuery] int regionId,
         [FromForm] List<IFormFile>? files,
@@ -387,8 +395,10 @@ public class AdminRegionalController : ControllerBase
 
         try
         {
+            await UploadValidation.ValidateRegionalImageUploadAsync(files, _uploadLimits, cancellationToken);
+
             var uploads = new List<RegionalImageUploadFileDto>();
-            foreach (var file in files)
+            foreach (var file in files.Where(file => file is { Length: > 0 }))
             {
                 await using var stream = new MemoryStream();
                 await file.CopyToAsync(stream, cancellationToken);
@@ -491,6 +501,9 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPost("destinations")]
+    [EnableRateLimiting("uploads")]
+    [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.ImageMaxFileSizeBytes)]
     public async Task<ActionResult<RegionalDestinationDetailDto>> CreateDestination()
     {
         try
@@ -634,6 +647,9 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPost("locations")]
+    [EnableRateLimiting("uploads")]
+    [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.ImageMaxFileSizeBytes)]
     public async Task<ActionResult<RegionalLocationDetailDto>> CreateLocation()
     {
         try
@@ -815,6 +831,9 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPost("places")]
+    [EnableRateLimiting("uploads")]
+    [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.ImageMaxFileSizeBytes)]
     public async Task<ActionResult<RegionalPlaceDetailDto>> CreatePlace()
     {
         try
@@ -1031,6 +1050,9 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPost("events")]
+    [EnableRateLimiting("uploads")]
+    [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.ImageMaxFileSizeBytes)]
     public async Task<ActionResult<RegionalEventDetailDto>> CreateEvent()
     {
         try
@@ -1368,10 +1390,23 @@ public class AdminRegionalController : ControllerBase
         if (request is null)
             return null;
 
-        var cardUrl = await StoreRequiredFormImageAsync(form.Files.GetFile("cardImage"), "Card image is required.");
-        var coverUrl = await StoreRequiredFormImageAsync(form.Files.GetFile("coverImage"), "Cover image is required.");
+        var cardImage = form.Files.GetFile("cardImage");
+        var coverImage = form.Files.GetFile("coverImage");
+        var galleryImages = form.Files.GetFiles("galleryImages");
+
+        var filesToValidate = new List<IFormFile>();
+        if (cardImage is { Length: > 0 })
+            filesToValidate.Add(cardImage);
+        if (coverImage is { Length: > 0 })
+            filesToValidate.Add(coverImage);
+        filesToValidate.AddRange(galleryImages.Where(file => file is { Length: > 0 }));
+
+        await UploadValidation.ValidateRegionalImageUploadAsync(filesToValidate, _uploadLimits, HttpContext.RequestAborted);
+
+        var cardUrl = await StoreRequiredFormImageAsync(cardImage, "Card image is required.");
+        var coverUrl = await StoreRequiredFormImageAsync(coverImage, "Cover image is required.");
         var galleryUrls = new List<string>();
-        foreach (var file in form.Files.GetFiles("galleryImages"))
+        foreach (var file in galleryImages.Where(file => file is { Length: > 0 }))
         {
             galleryUrls.Add(await StoreOptionalFormImageAsync(file));
         }
@@ -1392,9 +1427,14 @@ public class AdminRegionalController : ControllerBase
     {
         await using var stream = file.OpenReadStream();
         using var memory = new MemoryStream();
-        await stream.CopyToAsync(memory);
+        await stream.CopyToAsync(memory, HttpContext.RequestAborted);
 
-        var stored = await _imageStorage.StoreImageAsync(GetCurrentUserId(), memory.ToArray(), file.FileName, file.ContentType);
+        var stored = await _regionalImageStorage.StoreImageAsync(
+            GetCurrentUserId(),
+            memory.ToArray(),
+            file.FileName,
+            file.ContentType,
+            HttpContext.RequestAborted);
         return stored.MediaUrl;
     }
 
@@ -1452,6 +1492,7 @@ public class AdminRegionalController : ControllerBase
 
         return ex switch
         {
+            UploadValidationException upload => StatusCode(upload.StatusCode, new { message = upload.Message }),
             UnauthorizedAccessException => StatusCode(StatusCodes.Status403Forbidden, new { message = "Forbidden." }),
             KeyNotFoundException => NotFound(new { message = ex.Message }),
             InvalidOperationException when IsConflict(ex) => Conflict(new { message = ex.Message }),

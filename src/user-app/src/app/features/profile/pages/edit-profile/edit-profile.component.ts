@@ -5,6 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { UserService } from '../../../../core/services/user.service';
 import { buildAvatarDisplayUrl } from '../../../../core/utils/avatar-url';
+import { UserAvatarComponent } from '../../../../shared/components/user-avatar/user-avatar.component';
 
 interface MeResponse {
   id: number;
@@ -29,7 +30,7 @@ const ALLOWED_AVATAR_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'i
 
 @Component({
   selector: 'app-edit-profile',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, UserAvatarComponent],
   templateUrl: './edit-profile.component.html',
   styleUrl: './edit-profile.component.css',
 })

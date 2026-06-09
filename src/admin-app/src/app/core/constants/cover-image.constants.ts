@@ -1,0 +1,6 @@
+export const COVER_IMAGE_ASPECT_RATIO = 17 / 5;
+export const COVER_IMAGE_ASPECT_RATIO_LABEL = '17:5';
+export const COVER_IMAGE_OUTPUT_MAX_WIDTH = 2040;
+export const COVER_IMAGE_MIN_OUTPUT_WIDTH = 680;
+export const COVER_IMAGE_MIN_ZOOM = 1;
+export const COVER_IMAGE_MAX_ZOOM = 4;

@@ -30,6 +30,13 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Data\Agent\agent-taxonomy.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
 	<ItemGroup>
 	<None Update="Data\**\*.geojson">
 		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

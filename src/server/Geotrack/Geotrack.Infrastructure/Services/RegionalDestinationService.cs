@@ -16,19 +16,23 @@ public class RegionalDestinationService : IRegionalDestinationService
     private const string PublishedStatus = "Published";
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
+    private const string ManagedRegionalImagePrefix = "/media/uploads/regional/";
     private static string ExistingEditRoute(int destinationId) => $"/destinations/edit/{destinationId}";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
     private readonly AppDbContext _db;
     private readonly RegionalScopeValidationService _scopeValidation;
+    private readonly IContentHtmlSanitizer _htmlSanitizer;
 
     public RegionalDestinationService(
         AppDbContext db,
-        RegionalScopeValidationService scopeValidation)
+        RegionalScopeValidationService scopeValidation,
+        IContentHtmlSanitizer htmlSanitizer)
     {
         _db = db;
         _scopeValidation = scopeValidation;
+        _htmlSanitizer = htmlSanitizer;
     }
 
     public async Task<RegionalDestinationListResponseDto> GetDestinationsAsync(
@@ -221,7 +225,7 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         var name = NormalizeRequiredText(request.Name, "Destination name is required.", 200, "Destination name is too long.");
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
-        var description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 8000, "Description is too long.") ?? string.Empty;
+        var description = NormalizeRichDescription(request.Description, 8000, "Description is too long.");
         var status = NormalizeCreateStatus(request.Status);
         var boundary = BuildBoundary(request.Boundary);
         var coordinates = ResolveCoordinates(request, boundary);
@@ -294,6 +298,7 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         var destination = await _db.Destinations
             .Include(item => item.DestinationTags)
+            .Include(item => item.Images)
             .SingleOrDefaultAsync(item => item.Id == destinationId && item.RegionId == regionId)
             ?? throw new KeyNotFoundException("Destination not found.");
 
@@ -324,7 +329,9 @@ public class RegionalDestinationService : IRegionalDestinationService
                 .ToList();
         }
 
-        destination.UpdatedAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        ApplyImageUpdates(destination, request, now);
+        destination.UpdatedAt = now;
 
         await _db.SaveChangesAsync();
         return await GetDestinationAsync(userId, regionId, destinationId);
@@ -485,7 +492,7 @@ public class RegionalDestinationService : IRegionalDestinationService
         };
     }
 
-    private static void ApplyUpdate(Destination destination, RegionalDestinationUpdateRequestDto request)
+    private void ApplyUpdate(Destination destination, RegionalDestinationUpdateRequestDto request)
     {
         if (request.Name is not null)
         {
@@ -503,7 +510,7 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         if (request.Description is not null)
         {
-            destination.Description = DisplayTextSafety.CleanOptionalRichMultiline(request.Description, 8000, "Description is too long.") ?? string.Empty;
+            destination.Description = NormalizeRichDescription(request.Description, 8000, "Description is too long.");
         }
 
         if (request.DestinationTypeId.HasValue)
@@ -692,6 +699,15 @@ public class RegionalDestinationService : IRegionalDestinationService
         return normalized;
     }
 
+    private string NormalizeRichDescription(string? value, int maxLength, string tooLongMessage)
+    {
+        var normalized = _htmlSanitizer.SanitizeRichText(value);
+        if (normalized.Length > maxLength)
+            throw new InvalidOperationException(tooLongMessage);
+
+        return normalized;
+    }
+
     private static void ValidateLatitude(double latitude)
     {
         if (!double.IsFinite(latitude) || latitude is < -90 or > 90)
@@ -787,6 +803,75 @@ public class RegionalDestinationService : IRegionalDestinationService
         return normalized.Length <= 160 ? normalized : normalized[..157] + "...";
     }
 
+    private static void ApplyImageUpdates(
+        Destination destination,
+        RegionalDestinationUpdateRequestDto request,
+        DateTime now)
+    {
+        if (!string.IsNullOrWhiteSpace(request.CardImageUrl))
+        {
+            UpsertImage(
+                destination.Images,
+                destination.Id,
+                EntityImageRole.Card,
+                NormalizeManagedImageUrl(request.CardImageUrl, "Card image must be uploaded before it can be assigned."),
+                destination.Name,
+                isMain: true,
+                sortOrder: 0,
+                now);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.CoverImageUrl))
+        {
+            UpsertImage(
+                destination.Images,
+                destination.Id,
+                EntityImageRole.Cover,
+                NormalizeManagedImageUrl(request.CoverImageUrl, "Cover image must be uploaded before it can be assigned."),
+                destination.Name,
+                isMain: false,
+                sortOrder: 1,
+                now);
+        }
+    }
+
+    private static void UpsertImage(
+        ICollection<EntityImage> images,
+        int destinationId,
+        string role,
+        string url,
+        string altText,
+        bool isMain,
+        int sortOrder,
+        DateTime now)
+    {
+        var image = images.FirstOrDefault(item =>
+            item.TargetType == EntityImageTargetType.Destination &&
+            item.DestinationId == destinationId &&
+            item.ImageRole == role);
+
+        if (image is null)
+        {
+            images.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Destination,
+                DestinationId = destinationId,
+                Url = url,
+                AltText = altText,
+                IsMain = isMain,
+                ImageRole = role,
+                SortOrder = sortOrder,
+                CreatedAt = now
+            });
+            return;
+        }
+
+        image.Url = url;
+        image.AltText = altText;
+        image.IsMain = isMain;
+        image.SortOrder = sortOrder;
+        image.UpdatedAt = now;
+    }
 
     private static List<EntityImage> AddRequiredCreateImages(RegionalDestinationCreateRequestDto request, int entityId, string entityName, DateTime now)
     {
@@ -859,6 +944,15 @@ public class RegionalDestinationService : IRegionalDestinationService
         var normalized = value.Trim();
         if (normalized.Length > 1000)
             throw new InvalidOperationException("Image URL is too long.");
+
+        return normalized;
+    }
+
+    private static string NormalizeManagedImageUrl(string? value, string message)
+    {
+        var normalized = NormalizeRequiredImageUrl(value, message);
+        if (!normalized.StartsWith(ManagedRegionalImagePrefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Image must be uploaded before it can be assigned.");
 
         return normalized;
     }

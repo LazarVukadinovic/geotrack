@@ -290,6 +290,19 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     return this.hasActiveFilters || this.isMoreFiltersOpen;
   }
 
+  get mapAccessibilitySummary(): string {
+    const selected = this.selectedPlace
+      ? ` Selected marker: ${this.selectedPlace.title}.`
+      : '';
+    const state = this.loadErrorMessage
+      ? ` Map results unavailable: ${this.loadErrorMessage}`
+      : this.emptyStateMessage
+        ? ` ${this.emptyStateMessage}`
+        : '';
+
+    return `Showing ${this.markersByKey.size} map result${this.markersByKey.size === 1 ? '' : 's'} near ${this.destinationName}.${selected}${state}`;
+  }
+
   zoomIn(): void {
     this.map?.zoomIn({ duration: 300 });
   }
@@ -1568,9 +1581,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     button.classList.remove('gt-marker--place', 'gt-marker--stay', 'gt-marker--event', 'gt-marker--destination');
     button.classList.add(`gt-marker--${marker.entityType}`);
 
-    if (button.getAttribute('aria-label') !== marker.title) {
-      button.setAttribute('aria-label', marker.title);
+    const ariaLabel = `Open ${this.markerTypeLabel(marker)} marker: ${marker.title}`;
+    if (button.getAttribute('aria-label') !== ariaLabel) {
+      button.setAttribute('aria-label', ariaLabel);
     }
+    button.title = ariaLabel;
 
     const key = this.getMarkerKey(marker);
     const desiredSrc = marker.imageUrl ?? EXPLORE_IMAGE_FALLBACK;
@@ -1757,6 +1772,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       case 'destination': return 'destination';
       default: return 'place';
     }
+  }
+
+  private markerTypeLabel(marker: MapEntityMarker): string {
+    if (marker.entityType === 'stay') return 'stay';
+    if (marker.entityType === 'event') return 'event';
+    if (marker.entityType === 'destination') return 'destination';
+    return 'place';
   }
 
   private shouldPreserveSelectedPlaceDuringMarkerRefresh(): boolean {

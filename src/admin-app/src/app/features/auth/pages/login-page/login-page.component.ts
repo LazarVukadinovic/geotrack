@@ -30,7 +30,10 @@ export class LoginComponent implements OnInit {
 
   ngOnInit(): void {
     if (this.route.snapshot.queryParamMap.get('sessionExpired')) {
-      this.authError.set('Your session expired. Please sign in again.');
+      const draftSaved = this.route.snapshot.queryParamMap.get('draftSaved');
+      this.authError.set(draftSaved
+        ? 'Your session expired. Your draft was saved in this browser. Sign in again to continue.'
+        : 'Your session expired. Please sign in again.');
     }
   }
 

@@ -1,3 +1,4 @@
+import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -5,6 +6,12 @@ import { Router, provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
 import { NewEventComponent } from './add-event.component';
+
+@Component({
+  standalone: true,
+  template: '',
+})
+class EventDetailRouteStubComponent {}
 
 describe('NewEventComponent', () => {
   let component: NewEventComponent;
@@ -15,7 +22,11 @@ describe('NewEventComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [NewEventComponent],
-      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideRouter([{ path: 'events/detail/:id', component: EventDetailRouteStubComponent }]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(NewEventComponent);

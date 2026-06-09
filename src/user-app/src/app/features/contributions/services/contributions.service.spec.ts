@@ -81,6 +81,7 @@ describe('ContributionsService', () => {
     expect(payload['amenities']).toEqual(['free-wifi']);
     expect(payload['bookingPartners']).toEqual([
       { id: 'booking', url: 'https://booking.example/villa' },
+      { id: 'hotel', url: 'https://example.com' },
     ]);
     expect(((req.request.body as FormData).get('ownershipProofDocument') as File).name)
       .toBe('ownership-proof.pdf');
@@ -198,9 +199,9 @@ describe('ContributionsService', () => {
       stayAmenities: ['free-wifi'],
     }));
 
-    expect(actual?.amenities).toEqual(['wifi', 'breakfast', 'dining', 'ac', 'gym', 'pool', 'sea-view']);
+    expect(actual?.amenities).toEqual(['wifi', 'breakfast', 'dining', 'ac', 'gym', 'pool', 'sea']);
     expect(service.detailToDraft(actual!).features?.amenities)
-      .toEqual(['wifi', 'breakfast', 'dining', 'ac', 'gym', 'pool', 'sea-view']);
+      .toEqual(['wifi', 'breakfast', 'dining', 'ac', 'gym', 'pool', 'sea']);
   });
 
   it('sends normalized backend amenity values in update payload without dropping unknown amenities', () => {

@@ -29,7 +29,7 @@ public class AdminAuthController : ControllerBase
             var response = await _authService.LoginAdminAsync(request);
             WriteRefreshTokenCookie(response.RefreshToken, response.SessionPersistent);
 
-            return Ok(response);
+            return Ok(Sanitize(response));
         }
         catch (ForbiddenAccessException ex)
         {
@@ -56,7 +56,7 @@ public class AdminAuthController : ControllerBase
             });
             WriteRefreshTokenCookie(response.RefreshToken, response.SessionPersistent);
 
-            return Ok(response);
+            return Ok(Sanitize(response));
         }
         catch (ForbiddenAccessException ex)
         {
@@ -124,5 +124,11 @@ public class AdminAuthController : ControllerBase
     private void DeleteRefreshTokenCookie()
     {
         AuthRefreshCookie.DeleteAll(HttpContext);
+    }
+
+    private static AdminLoginResponseDto Sanitize(AdminLoginResponseDto response)
+    {
+        response.RefreshToken = string.Empty;
+        return response;
     }
 }

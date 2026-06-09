@@ -95,6 +95,7 @@ public class LocationController : ControllerBase
 
     [HttpPost("{id}/reviews")]
     [Authorize]
+    [EnableRateLimiting("reviews")]
     public async Task<IActionResult> CreateLocationReview([FromRoute] int id, [FromBody] CreateLocationReviewRequestDto request)
     {
         try

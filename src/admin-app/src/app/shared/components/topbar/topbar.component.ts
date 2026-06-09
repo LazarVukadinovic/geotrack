@@ -1,7 +1,7 @@
-import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { Subject, finalize, interval, takeUntil } from 'rxjs';
+import { Subject, defer, finalize, interval, takeUntil } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { AdminView } from '../../../core/models/admin-view.model';
 import { buildAvatarDisplayUrl } from '../../../core/utils/avatar-url';
@@ -11,6 +11,36 @@ import {
   AdminNotificationFilter,
 } from '../../../core/models/administrator/admin-notification.model';
 
+type NotificationDrawerStatus = 'closed' | 'idle' | 'loading' | 'success' | 'empty' | 'error';
+
+interface NotificationDrawerState {
+  status: NotificationDrawerStatus;
+  items: AdminNotification[];
+  selectedTab: AdminNotificationFilter;
+  errorMessage: string;
+  loadedAt: number;
+  hasMore: boolean;
+  nextSkip: number | null;
+  loadingMore: boolean;
+  markingAllRead: boolean;
+  markingReadId: number | null;
+}
+
+function initialNotificationDrawerState(): NotificationDrawerState {
+  return {
+    status: 'closed',
+    items: [],
+    selectedTab: 'all',
+    errorMessage: '',
+    loadedAt: 0,
+    hasMore: false,
+    nextSkip: null,
+    loadingMore: false,
+    markingAllRead: false,
+    markingReadId: null,
+  };
+}
+
 @Component({
   selector: 'app-topbar',
   standalone: true,
@@ -19,6 +49,7 @@ import {
 })
 export class TopbarComponent implements OnInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
+  private static readonly notificationCacheTtlMs = 60000;
 
   @Input() title = '';
   @Input() userName = '';
@@ -27,22 +58,16 @@ export class TopbarComponent implements OnInit, OnDestroy {
   @Input() backRoute: string | null = null;
 
   private readonly destroy$ = new Subject<void>();
+  private readonly notificationRequestCancel$ = new Subject<void>();
   private notificationLoadSequence = 0;
   private readonly notificationPageSize = 25;
 
   readonly notificationSkeletonItems = [1, 2, 3, 4];
+  private readonly notificationDrawerState = signal<NotificationDrawerState>(initialNotificationDrawerState());
+
   failedAvatarUrl = '';
   profileMenuOpen = false;
   notificationDrawerOpen = false;
-  notificationFilter: AdminNotificationFilter = 'all';
-  notifications: AdminNotification[] = [];
-  notificationsLoading = false;
-  notificationsLoadingMore = false;
-  notificationsError = '';
-  notificationsHasMore = false;
-  notificationsNextSkip: number | null = null;
-  markingAllNotificationsRead = false;
-  markingNotificationReadId: number | null = null;
 
   constructor(
     private router: Router,
@@ -68,6 +93,8 @@ export class TopbarComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.notificationRequestCancel$.next();
+    this.notificationRequestCancel$.complete();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -110,7 +137,9 @@ export class TopbarComponent implements OnInit, OnDestroy {
   }
 
   get availableViews(): AdminView[] {
-    return this.auth.getAvailableAdminViews();
+    return typeof this.auth.getAvailableAdminViews === 'function'
+      ? this.auth.getAvailableAdminViews()
+      : [];
   }
 
   get showViewSwitcher(): boolean {
@@ -118,7 +147,9 @@ export class TopbarComponent implements OnInit, OnDestroy {
   }
 
   get activeView(): AdminView | null {
-    return this.auth.getActiveAdminView();
+    return typeof this.auth.getActiveAdminView === 'function'
+      ? this.auth.getActiveAdminView()
+      : null;
   }
 
   get avatarAlt(): string {
@@ -157,12 +188,86 @@ export class TopbarComponent implements OnInit, OnDestroy {
     return count > 99 ? '99+' : String(count);
   }
 
+  get notificationState(): NotificationDrawerStatus {
+    return this.notificationDrawerState().status;
+  }
+
+  get notificationFilter(): AdminNotificationFilter {
+    return this.notificationDrawerState().selectedTab;
+  }
+
+  get notifications(): AdminNotification[] {
+    return this.notificationDrawerState().items;
+  }
+
+  get notificationsLoading(): boolean {
+    return this.notificationDrawerState().status === 'loading';
+  }
+
+  get notificationsLoadingMore(): boolean {
+    return this.notificationDrawerState().loadingMore;
+  }
+
+  get notificationsHasLoaded(): boolean {
+    return this.notificationDrawerState().loadedAt > 0;
+  }
+
+  get notificationsLoadedAt(): number {
+    return this.notificationDrawerState().loadedAt;
+  }
+
+  get notificationsError(): string {
+    return this.notificationDrawerState().errorMessage;
+  }
+
+  get notificationsHasMore(): boolean {
+    return this.notificationDrawerState().hasMore;
+  }
+
+  get notificationsNextSkip(): number | null {
+    return this.notificationDrawerState().nextSkip;
+  }
+
+  get markingAllNotificationsRead(): boolean {
+    return this.notificationDrawerState().markingAllRead;
+  }
+
+  get markingNotificationReadId(): number | null {
+    return this.notificationDrawerState().markingReadId;
+  }
+
   get filteredNotifications(): AdminNotification[] {
+    const state = this.notificationDrawerState();
     if (this.notificationFilter === 'unread') {
-      return this.notifications.filter(notification => !notification.isRead);
+      return state.items.filter(notification => !notification.isRead);
     }
 
-    return this.notifications;
+    return state.items;
+  }
+
+  get showNotificationSkeleton(): boolean {
+    const state = this.notificationDrawerState();
+    return state.status === 'loading'
+      && state.loadedAt === 0
+      && state.items.length === 0
+      && !state.errorMessage;
+  }
+
+  get showNotificationError(): boolean {
+    const state = this.notificationDrawerState();
+    return state.status === 'error' && !!state.errorMessage;
+  }
+
+  get showNotificationEmptyState(): boolean {
+    const status = this.notificationState;
+    return (status === 'success' || status === 'empty' || (status === 'loading' && this.notificationsHasLoaded))
+      && !this.showNotificationSkeleton
+      && !this.showNotificationError
+      && this.filteredNotifications.length === 0;
+  }
+
+  get showNotificationList(): boolean {
+    return !this.showNotificationError && this.filteredNotifications.length > 0;
   }
 
   get notificationEmptyTitle(): string {
@@ -173,20 +278,10 @@ export class TopbarComponent implements OnInit, OnDestroy {
 
   get notificationEmptyDescription(): string {
     if (this.notificationFilter === 'unread') {
-      return 'You are all caught up.';
+      return "You're all caught up.";
     }
 
-    if (this.notificationAudienceRole === 'RegionalManager') {
-      return 'Regional requests for your selected region will appear here.';
-    }
-
-    if (this.notificationAudienceRole === 'ContentModerator') {
-      return 'Review reports and moderation updates will appear here.';
-    }
-
-    return this.notificationAudienceRole
-      ? 'Territory requests and region updates will appear here.'
-      : 'New support reports and system alerts will appear here.';
+    return "You're all caught up. New updates will appear here.";
   }
 
   get canMarkAllNotificationsRead(): boolean {
@@ -217,13 +312,29 @@ export class TopbarComponent implements OnInit, OnDestroy {
 
     this.closeProfileMenu();
     this.notificationDrawerOpen = true;
+    this.notificationDrawerState.update(state => ({
+      ...state,
+      status: state.loadedAt > 0
+        ? (state.items.length > 0 ? 'success' : 'empty')
+        : 'idle',
+      errorMessage: '',
+    }));
     this.loadUnreadCount();
-    this.resetAndLoadNotifications();
+
+    if (this.shouldLoadNotificationsOnOpen()) {
+      this.resetAndLoadNotifications(this.notificationsHasLoaded);
+    }
   }
 
   closeNotifications(): void {
+    this.cancelNotificationRequest();
     this.notificationDrawerOpen = false;
-    this.notificationsError = '';
+    this.notificationDrawerState.update(state => ({
+      ...state,
+      status: 'closed',
+      errorMessage: '',
+      loadingMore: false,
+    }));
   }
 
   setNotificationFilter(filter: AdminNotificationFilter): void {
@@ -231,7 +342,10 @@ export class TopbarComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.notificationFilter = filter;
+    this.notificationDrawerState.update(state => ({
+      ...state,
+      selectedTab: filter,
+    }));
   }
 
   retryNotifications(): void {
@@ -252,8 +366,11 @@ export class TopbarComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.markingAllNotificationsRead = true;
-    this.notificationsError = '';
+    this.notificationDrawerState.update(state => ({
+      ...state,
+      markingAllRead: true,
+      errorMessage: '',
+    }));
 
     const audienceRole = this.notificationAudienceRole;
     const regionId = this.notificationRegionId;
@@ -261,19 +378,31 @@ export class TopbarComponent implements OnInit, OnDestroy {
     this.notificationsService.markAllRead$(audienceRole, regionId).pipe(
       takeUntil(this.destroy$),
       finalize(() => {
-        this.markingAllNotificationsRead = false;
+        this.notificationDrawerState.update(state => ({
+          ...state,
+          markingAllRead: false,
+        }));
       }),
     ).subscribe({
       next: result => {
         const readAt = result.readAt ?? new Date().toISOString();
-        this.notifications = this.notifications.map(notification => ({
-          ...notification,
-          isRead: true,
-          readAt: notification.readAt ?? readAt,
+        this.notificationDrawerState.update(state => ({
+          ...state,
+          status: state.items.length > 0 ? 'success' : 'empty',
+          items: state.items.map(notification => ({
+            ...notification,
+            isRead: true,
+            readAt: notification.readAt ?? readAt,
+          })),
+          errorMessage: '',
         }));
       },
       error: () => {
-        this.notificationsError = 'Unable to mark notifications as read. Please try again.';
+        this.notificationDrawerState.update(state => ({
+          ...state,
+          status: 'error',
+          errorMessage: 'Unable to mark notifications as read. Please try again.',
+        }));
       },
     });
   }
@@ -289,27 +418,42 @@ export class TopbarComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.markingNotificationReadId = notification.id;
-    this.notificationsError = '';
+    this.notificationDrawerState.update(state => ({
+      ...state,
+      markingReadId: notification.id,
+      errorMessage: '',
+    }));
     const audienceRole = this.notificationAudienceRole;
     const regionId = this.notificationRegionId;
 
     this.notificationsService.markRead$(notification.id, audienceRole, regionId).pipe(
       takeUntil(this.destroy$),
       finalize(() => {
-        this.markingNotificationReadId = null;
+        this.notificationDrawerState.update(state => ({
+          ...state,
+          markingReadId: null,
+        }));
       }),
     ).subscribe({
       next: result => {
         const readAt = result.readAt ?? new Date().toISOString();
-        this.notifications = this.notifications.map(item =>
-          item.id === notification.id
-            ? { ...item, isRead: true, readAt }
-            : item);
+        this.notificationDrawerState.update(state => ({
+          ...state,
+          items: state.items.map(item =>
+            item.id === notification.id
+              ? { ...item, isRead: true, readAt }
+              : item),
+          status: state.items.length > 0 ? 'success' : 'empty',
+          errorMessage: '',
+        }));
         this.navigateNotification({ ...notification, isRead: true, readAt });
       },
       error: () => {
-        this.notificationsError = 'Unable to mark that notification as read. Please try again.';
+        this.notificationDrawerState.update(state => ({
+          ...state,
+          status: 'error',
+          errorMessage: 'Unable to mark that notification as read. Please try again.',
+        }));
       },
     });
   }
@@ -416,6 +560,7 @@ export class TopbarComponent implements OnInit, OnDestroy {
     this.closeProfileMenu();
     this.closeNotifications();
     this.notificationsService.reset();
+    this.resetNotificationDrawerState();
 
     if (changed || this.router.url !== view.dashboardRoute) {
       this.router.navigateByUrl(view.dashboardRoute);
@@ -434,6 +579,8 @@ export class TopbarComponent implements OnInit, OnDestroy {
 
   signOut(): void {
     this.closeProfileMenu();
+    this.closeNotifications();
+    this.resetNotificationDrawerState();
     this.auth.logout();
     this.router.navigateByUrl('/login');
   }
@@ -486,22 +633,40 @@ export class TopbarComponent implements OnInit, OnDestroy {
       });
   }
 
-  private resetAndLoadNotifications(): void {
-    this.notifications = [];
-    this.notificationsHasMore = false;
-    this.notificationsNextSkip = null;
+  private resetAndLoadNotifications(preserveExisting = false): void {
+    this.cancelNotificationRequest();
+
+    this.notificationDrawerState.update(state => ({
+      ...state,
+      status: 'loading',
+      items: preserveExisting ? state.items : [],
+      loadedAt: preserveExisting ? state.loadedAt : 0,
+      hasMore: false,
+      nextSkip: null,
+      loadingMore: false,
+      errorMessage: '',
+    }));
     this.loadNotifications(true);
   }
 
   private loadNotifications(reset: boolean): void {
     const sequence = ++this.notificationLoadSequence;
     const skip = reset ? 0 : this.notificationsNextSkip ?? this.notifications.length;
-    this.notificationsError = '';
+    let receivedPage = false;
+    let failed = false;
 
     if (reset) {
-      this.notificationsLoading = true;
+      this.notificationDrawerState.update(state => ({
+        ...state,
+        status: 'loading',
+        errorMessage: '',
+      }));
     } else {
-      this.notificationsLoadingMore = true;
+      this.notificationDrawerState.update(state => ({
+        ...state,
+        loadingMore: true,
+        errorMessage: '',
+      }));
     }
 
     const audienceRole = this.notificationAudienceRole;
@@ -515,12 +680,27 @@ export class TopbarComponent implements OnInit, OnDestroy {
       ...(regionId ? { regionId } : {}),
     };
 
-    this.notificationsService.getNotifications$(request).pipe(
+    defer(() => this.notificationsService.getNotifications$(request)).pipe(
       takeUntil(this.destroy$),
+      takeUntil(this.notificationRequestCancel$),
       finalize(() => {
         if (sequence === this.notificationLoadSequence) {
-          this.notificationsLoading = false;
-          this.notificationsLoadingMore = false;
+          this.notificationDrawerState.update(state => {
+            if (receivedPage || failed || state.status !== 'loading') {
+              return {
+                ...state,
+                loadingMore: false,
+              };
+            }
+
+            return {
+              ...state,
+              status: state.items.length > 0 ? 'success' : 'empty',
+              loadedAt: state.loadedAt || Date.now(),
+              loadingMore: false,
+              errorMessage: '',
+            };
+          });
         }
       }),
     ).subscribe({
@@ -529,18 +709,64 @@ export class TopbarComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.notifications = reset ? page.items : [...this.notifications, ...page.items];
-        this.notificationsHasMore = page.hasMore;
-        this.notificationsNextSkip = page.nextSkip ?? null;
+        receivedPage = true;
+        this.notificationDrawerState.update(state => {
+          const items = reset ? page.items : [...state.items, ...page.items];
+
+          return {
+            ...state,
+            status: items.length > 0 ? 'success' : 'empty',
+            items,
+            loadedAt: Date.now(),
+            hasMore: page.hasMore,
+            nextSkip: page.nextSkip ?? null,
+            loadingMore: false,
+            errorMessage: '',
+          };
+        });
       },
       error: () => {
         if (sequence !== this.notificationLoadSequence) {
           return;
         }
 
-        this.notificationsError = 'Unable to load notifications. Please try again.';
+        failed = true;
+        this.notificationDrawerState.update(state => ({
+          ...state,
+          status: 'error',
+          loadingMore: false,
+          errorMessage: 'Unable to load notifications. Please try again.',
+        }));
       },
     });
+  }
+
+  private shouldLoadNotificationsOnOpen(): boolean {
+    if (!this.notificationsHasLoaded || this.notificationsError) {
+      return true;
+    }
+
+    return Date.now() - this.notificationsLoadedAt > TopbarComponent.notificationCacheTtlMs;
+  }
+
+  private cancelNotificationRequest(): void {
+    this.notificationLoadSequence += 1;
+    this.notificationRequestCancel$.next();
+    this.notificationDrawerState.update(state => ({
+      ...state,
+      status: state.status === 'loading'
+        ? state.loadedAt > 0
+          ? (state.items.length > 0 ? 'success' : 'empty')
+          : 'idle'
+        : state.status,
+      loadingMore: false,
+    }));
+  }
+
+  private resetNotificationDrawerState(): void {
+    this.notificationLoadSequence += 1;
+    this.notificationRequestCancel$.next();
+    this.notificationDrawerState.set(initialNotificationDrawerState());
   }
 
   private navigateNotification(notification: AdminNotification): void {
@@ -608,7 +834,7 @@ export class TopbarComponent implements OnInit, OnDestroy {
   }
 
   private currentRoleCode(): string | null {
-    return this.auth.getActiveAdminView()?.roleCode ?? this.auth.getUser()?.activeRoleCode ?? null;
+    return this.activeView?.roleCode ?? this.auth.getUser()?.activeRoleCode ?? null;
   }
 
   private readActiveRegionId(): number | null {

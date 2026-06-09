@@ -15,6 +15,7 @@ import {
 import { ContentModeratorEntityReviewService } from '../../../../core/services/content-moderator/content-moderator-entity-review.service';
 import { ContentModeratorDashboardService } from '../../../../core/services/content-moderator/content-moderator-dashboard.service';
 import { USER_APP_BASE_URL } from '../../../../core/services/user-app-link.service';
+import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 
 @Component({
   selector: 'app-sidebar',
@@ -88,7 +89,7 @@ describe('ContentModeratorEntityReviewComponent user-app preview link', () => {
       ],
     })
       .overrideComponent(ContentModeratorEntityReviewComponent, {
-        set: { imports: [CommonModule, FormsModule, SidebarStubComponent, TopbarStubComponent] },
+        set: { imports: [CommonModule, FormsModule, SidebarStubComponent, TopbarStubComponent, DescriptionRichHtmlPipe] },
       })
       .compileComponents();
 

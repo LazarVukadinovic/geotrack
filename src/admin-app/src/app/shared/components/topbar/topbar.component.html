@@ -197,31 +197,38 @@
       </div>
     </div>
 
-    <div class="flex items-center gap-1 border-b border-gray-100 px-5 py-3">
+    <div class="flex items-center gap-1 border-b border-gray-100 px-5 py-3" role="tablist" aria-label="Notification filters">
       <button
         type="button"
+        role="tab"
         class="rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-gray-50"
         [class.bg-blue-50]="notificationFilter === 'all'"
         [class.text-blue-700]="notificationFilter === 'all'"
         [class.text-gray-500]="notificationFilter !== 'all'"
+        [attr.aria-selected]="notificationFilter === 'all'"
         (click)="setNotificationFilter('all')"
       >
         All
       </button>
       <button
         type="button"
+        role="tab"
         class="rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-gray-50"
         [class.bg-blue-50]="notificationFilter === 'unread'"
         [class.text-blue-700]="notificationFilter === 'unread'"
         [class.text-gray-500]="notificationFilter !== 'unread'"
+        [attr.aria-selected]="notificationFilter === 'unread'"
         (click)="setNotificationFilter('unread')"
       >
         Unread
       </button>
     </div>
 
-    <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-      <div *ngIf="notificationsLoading" class="space-y-3" aria-label="Loading notifications">
+    <div
+      class="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+      [attr.aria-busy]="notificationsLoading || notificationsLoadingMore"
+    >
+      <div *ngIf="showNotificationSkeleton" class="space-y-3" aria-label="Loading notifications">
         <div *ngFor="let item of notificationSkeletonItems" class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
           <div class="flex gap-3">
             <div class="h-9 w-9 rounded-full bg-gray-100"></div>
@@ -234,7 +241,7 @@
         </div>
       </div>
 
-      <div *ngIf="!notificationsLoading && notificationsError" class="rounded-xl border border-red-100 bg-red-50 px-4 py-4">
+      <div *ngIf="showNotificationError" class="rounded-xl border border-red-100 bg-red-50 px-4 py-4" role="alert">
         <p class="text-sm font-medium text-red-700">{{ notificationsError }}</p>
         <button
           type="button"
@@ -245,7 +252,7 @@
         </button>
       </div>
 
-      <div *ngIf="!notificationsLoading && !notificationsError && filteredNotifications.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
+      <div *ngIf="showNotificationEmptyState" class="flex flex-col items-center justify-center py-16 text-center" role="status">
         <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -256,7 +263,7 @@
         <p class="mt-1 max-w-xs text-sm leading-5 text-gray-500">{{ notificationEmptyDescription }}</p>
       </div>
 
-      <div *ngIf="!notificationsLoading && !notificationsError && filteredNotifications.length > 0" class="space-y-3">
+      <div *ngIf="showNotificationList" class="space-y-3">
         <button
           *ngFor="let notification of filteredNotifications; trackBy: trackByNotificationId"
           type="button"

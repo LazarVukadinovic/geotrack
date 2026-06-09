@@ -7,22 +7,13 @@ public class AgentOptions
     public int MaxContextItems { get; set; } = 8;
     public int RequestTimeoutSeconds { get; set; } = 20;
     public int MaxToolResults { get; set; } = 10;
-    public Dictionary<string, AgentProviderOptions> Providers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public AgentNearbySearchOptions NearbySearch { get; set; } = new();
 }
 
-public class AgentProviderOptions
+public class AgentNearbySearchOptions
 {
-    public bool Enabled { get; set; }
-    public string DisplayName { get; set; } = string.Empty;
-    public string BaseUrl { get; set; } = string.Empty;
-    public string DefaultModel { get; set; } = string.Empty;
-    public List<AgentModelOptions> Models { get; set; } = new();
-    public string? ApiKey { get; set; }
-}
-
-public class AgentModelOptions
-{
-    public string Id { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public bool IsDefault { get; set; }
+    public double InitialRadiusKm { get; set; } = 10;
+    public List<double> ExpansionRadiiKm { get; set; } = [25, 50, 100];
+    public double MaxRadiusKm { get; set; } = 100;
+    public int MaxResults { get; set; } = 10;
 }

@@ -10,6 +10,21 @@
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
     <app-topbar [title]="isEditMode ? 'Edit Place' : 'New Place'" [showBack]="true"></app-topbar>
 
+    @if (coverCropFile) {
+      <app-cover-image-cropper
+        [imageFile]="coverCropFile"
+        [aspectRatio]="coverImageAspectRatio"
+        previewLabel="Place cover preview"
+        (cropped)="onCoverCropConfirmed($event)"
+        (cancelled)="onCoverCropCancelled()"
+      ></app-cover-image-cropper>
+    }
+
+    @if (isEditMode) {
+      <div class="px-8 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-700 font-medium">
+        This screen is create-only for now. Existing places are still protected from local mock edits.
+      </div>
+    }
 
     <div class="flex-1 overflow-y-auto px-8 py-6">
       @if (errorMessage) {
@@ -559,12 +574,11 @@
             }
 
             @if (coverImageUrl; as coverUrl) {
-              <div class="relative rounded-xl overflow-hidden group">
+              <div class="relative rounded-xl overflow-hidden group" [style.aspect-ratio]="coverImageAspectRatioCss">
                 <img
                   [src]="coverUrl"
                   alt="Cover preview"
-                  class="w-full object-cover rounded-xl cursor-zoom-in"
-                  style="max-height: 280px;"
+                  class="w-full h-full object-cover rounded-xl cursor-zoom-in"
                   (click)="openLightbox([{ url: coverUrl, name: coverImageName }], 0)"
                 />
                 <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 pointer-events-none">
@@ -689,6 +703,11 @@
               class="relative rounded-lg overflow-hidden mb-3 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
               style="height: 200px;"
               (click)="openPinModal()"
+              (keydown.enter)="openPinModal()"
+              (keydown.space)="$event.preventDefault(); openPinModal()"
+              role="button"
+              tabindex="0"
+              aria-label="Pin place location on map"
               title="Click to pin location"
             >
               <div #miniMapContainer class="w-full h-full"></div>
@@ -842,22 +861,26 @@
 >
   <div
     class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="place-pin-dialog-title"
     style="width: 760px; max-width: 95vw; max-height: 90vh;"
     (click)="$event.stopPropagation()"
   >
     <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
       <div>
-        <h4 class="text-sm font-bold text-gray-900">Pin Location on Map</h4>
+        <h4 id="place-pin-dialog-title" class="text-sm font-bold text-gray-900">Pin Location on Map</h4>
         <p class="text-xs text-gray-500 mt-0.5">Click anywhere on the map to place the pin.</p>
       </div>
       <button
         type="button"
         (click)="closePinModal()"
+        aria-label="Close place pin dialog"
         class="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xl leading-none"
       >x</button>
     </div>
 
-    <div #modalMapContainer style="height: 420px; width: 100%; cursor: crosshair;"></div>
+    <div #modalMapContainer style="height: 420px; width: 100%; cursor: crosshair;" role="region" aria-label="Place pin selection map"></div>
 
     <div class="px-5 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center gap-4">
       @if (modalPinLat !== null && modalPinLng !== null) {

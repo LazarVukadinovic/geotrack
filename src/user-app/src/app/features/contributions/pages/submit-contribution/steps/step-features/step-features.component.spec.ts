@@ -1,20 +1,31 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 
 import { StepFeaturesComponent } from './step-features.component';
 
 describe('StepFeaturesComponent', () => {
   let component: StepFeaturesComponent;
   let fixture: ComponentFixture<StepFeaturesComponent>;
+  let httpTesting: HttpTestingController;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [StepFeaturesComponent]
+      imports: [StepFeaturesComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     })
     .compileComponents();
 
+    httpTesting = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(StepFeaturesComponent);
     component = fixture.componentInstance;
+    fixture.detectChanges();
+    flushFeatureOptions();
     await fixture.whenStable();
+  });
+
+  afterEach(() => {
+    httpTesting.verify();
   });
 
   it('should create', () => {
@@ -56,7 +67,24 @@ describe('StepFeaturesComponent', () => {
     component.onContinue();
 
     expect(saved).toEqual([
-      { tags: ['Beachfront'], amenities: ['sea-view', 'pool'] },
+      { tags: ['Beachfront'], amenities: ['sea', 'pool'] },
     ]);
   });
+
+  function flushFeatureOptions(): void {
+    httpTesting.expectOne('/api/contributions/feature-options').flush({
+      characteristics: [{ id: 'beachfront', label: 'Beachfront' }],
+      amenities: [
+        { id: 'free-wifi', label: 'WIFI' },
+        { id: 'breakfast-included', label: 'Breakfast' },
+        { id: 'on-site-dining', label: 'Dining' },
+        { id: 'air-conditioning', label: 'A/C' },
+        { id: 'sea-view', label: 'Sea view' },
+        { id: 'pool', label: 'Pool' },
+      ],
+      stayAmenities: [],
+      characteristicIdsByPlaceType: null,
+      amenityIdsByPlaceType: null,
+    });
+  }
 });

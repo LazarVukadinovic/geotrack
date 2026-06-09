@@ -11,6 +11,8 @@ namespace Geotrack.IntegrationTests.Infrastructure;
 
 internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyncDisposable
 {
+    private static readonly string[] RequiredPostgresExtensions = ["postgis", "pg_trgm", "unaccent"];
+
     private readonly string _databaseName = $"geotrack_batch11_{Guid.NewGuid():N}";
     private readonly string _environmentName;
     private readonly IReadOnlyDictionary<string, string?> _configurationOverrides;
@@ -71,7 +73,7 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
         create.CommandText = $"CREATE DATABASE \"{_databaseName}\"";
         await create.ExecuteNonQueryAsync();
 
-        await EnsurePostgisEnabledAsync();
+        await EnsureRequiredPostgresExtensionsEnabledAsync();
     }
 
     protected override IHost CreateHost(IHostBuilder builder)
@@ -181,41 +183,47 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
         return builder.ConnectionString;
     }
 
-    private async Task EnsurePostgisEnabledAsync()
+    private async Task EnsureRequiredPostgresExtensionsEnabledAsync()
     {
         await using var connection = new NpgsqlConnection(_testConnectionString);
         await connection.OpenAsync();
 
         try
         {
-            await using (var enable = connection.CreateCommand())
+            foreach (var extensionName in RequiredPostgresExtensions)
             {
-                enable.CommandText = "CREATE EXTENSION IF NOT EXISTS postgis";
+                await using var enable = connection.CreateCommand();
+                enable.CommandText = $"CREATE EXTENSION IF NOT EXISTS \"{extensionName}\"";
                 await enable.ExecuteNonQueryAsync();
             }
 
-            await using var verify = connection.CreateCommand();
-            verify.CommandText = "SELECT PostGIS_Version()";
-            var version = await verify.ExecuteScalarAsync() as string;
-
-            if (string.IsNullOrWhiteSpace(version))
+            foreach (var extensionName in RequiredPostgresExtensions)
             {
-                throw new InvalidOperationException(
-                    "PostGIS was not available in the integration-test database after CREATE EXTENSION. Install PostGIS for the local PostgreSQL server and make sure the test user can enable it.");
+                await using var verify = connection.CreateCommand();
+                verify.CommandText = "SELECT extversion FROM pg_extension WHERE extname = @extensionName";
+                verify.Parameters.AddWithValue("extensionName", extensionName);
+
+                var version = await verify.ExecuteScalarAsync() as string;
+                if (string.IsNullOrWhiteSpace(version))
+                {
+                    throw new InvalidOperationException(
+                        $"PostgreSQL extension {extensionName} was not available in the integration-test database after CREATE EXTENSION. Install the extension package for the local PostgreSQL server and make sure the test user can enable it.");
+                }
             }
         }
-        catch (PostgresException ex) when (ReferencesPostgis(ex))
+        catch (PostgresException ex) when (ReferencesRequiredPostgresExtension(ex))
         {
             throw new InvalidOperationException(
-                "Integration tests require PostGIS in each temporary database. Install PostGIS for the local PostgreSQL server and ensure the configured database user can run `CREATE EXTENSION IF NOT EXISTS postgis;`.",
+                "Integration tests require PostgreSQL extensions postgis, pg_trgm, and unaccent in each temporary database. Install the extension packages for the local PostgreSQL server and ensure the configured database user can run `CREATE EXTENSION IF NOT EXISTS ...;`.",
                 ex);
         }
     }
 
-    private static bool ReferencesPostgis(PostgresException ex)
+    private static bool ReferencesRequiredPostgresExtension(PostgresException ex)
     {
-        return ex.MessageText.Contains("postgis", StringComparison.OrdinalIgnoreCase)
-            || ex.Detail?.Contains("postgis", StringComparison.OrdinalIgnoreCase) == true
-            || ex.Hint?.Contains("postgis", StringComparison.OrdinalIgnoreCase) == true;
+        return RequiredPostgresExtensions.Any(extensionName =>
+            ex.MessageText.Contains(extensionName, StringComparison.OrdinalIgnoreCase)
+            || ex.Detail?.Contains(extensionName, StringComparison.OrdinalIgnoreCase) == true
+            || ex.Hint?.Contains(extensionName, StringComparison.OrdinalIgnoreCase) == true);
     }
 }

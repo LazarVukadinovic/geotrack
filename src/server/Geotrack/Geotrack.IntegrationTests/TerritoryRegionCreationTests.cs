@@ -428,18 +428,31 @@ public sealed class TerritoryRegionCreationTests
             Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
 
             var response = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
-                $"/api/admin/territory/regions/boundary-candidates?territoryId={fixture.AssignedTerritoryId}&level=ADM1&take=10");
+                $"/api/admin/territory/regions/boundary-candidates?territoryId={fixture.AssignedTerritoryId}&level=ADM1&take=10&geometry=display");
 
             Assert.NotNull(response);
             Assert.Equal("ADM1", response!.AdmLevel);
             Assert.Equal("TAA", response.Iso3);
+            Assert.Equal("display", response.GeometryMode);
+            Assert.Equal(4, response.MatchedFeatures);
+            Assert.Equal(4, response.ReturnedCount);
+            Assert.Equal(0, response.Skip);
+            Assert.Equal(10, response.Take);
+            Assert.False(response.HasMore);
             Assert.Equal(4, response.Items.Count);
 
             var inferredResponse = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
                 "/api/admin/territory/regions/boundary-candidates?level=ADM1&take=1");
             Assert.NotNull(inferredResponse);
             Assert.Equal("TAA", inferredResponse!.Iso3);
-            Assert.Equal(4, inferredResponse.Items.Count);
+            Assert.Equal("none", inferredResponse.GeometryMode);
+            Assert.Equal(4, inferredResponse.MatchedFeatures);
+            Assert.Equal(1, inferredResponse.ReturnedCount);
+            Assert.Equal(0, inferredResponse.Skip);
+            Assert.Equal(1, inferredResponse.Take);
+            Assert.True(inferredResponse.HasMore);
+            var inferredItem = Assert.Single(inferredResponse.Items);
+            Assert.Null(inferredItem.GeometryGeoJson);
 
             var available = Assert.Single(response.Items, item => item.ShapeId == "INSIDE-1");
             Assert.Equal("Available", available.Status);

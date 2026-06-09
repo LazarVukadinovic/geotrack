@@ -56,6 +56,27 @@ public sealed class CorsPolicyTests
         AssertCorsAllowsOrigin(response, origin);
     }
 
+    [Fact]
+    public async Task Security_headers_include_csp_without_inline_scripts()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = app.CreateClient();
+
+        using var response = await client.GetAsync("/");
+
+        Assert.True(
+            response.Headers.TryGetValues("Content-Security-Policy", out var cspValues),
+            "Missing Content-Security-Policy header.");
+
+        var csp = Assert.Single(cspValues);
+        Assert.Contains("object-src 'none'", csp);
+        Assert.Contains("base-uri 'self'", csp);
+        Assert.Contains("frame-ancestors 'none'", csp);
+        Assert.Contains("form-action 'self'", csp);
+        Assert.Contains("script-src 'self'", csp);
+        Assert.DoesNotContain("script-src 'self' 'unsafe-inline'", csp);
+    }
+
     private static HttpRequestMessage BuildPreflightRequest(string origin)
     {
         var request = new HttpRequestMessage(HttpMethod.Options, "/api/admin/auth/login");

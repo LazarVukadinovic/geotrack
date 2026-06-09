@@ -109,7 +109,11 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         if (normalizedSource == ContributionSource)
         {
             await EnsureContributionExistsInRegionAsync(regionId, requestId);
-            await _placeContributionService.ApproveAsync(requestId, userId, note);
+            await _placeContributionService.ApproveAsync(
+                requestId,
+                userId,
+                NormalizeDecisionText(note),
+                sourceArea: "RegionalRequestQueue");
             return await BuildSuccessResultAsync(regionId, ContributionSource, requestId);
         }
 
@@ -126,12 +130,18 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
     {
         await EnsureAssignedRegionAsync(userId, regionId);
         var normalizedSource = NormalizeSource(source);
-        var decisionNote = BuildDecisionNote(reason, note);
+        var publicReason = NormalizeDecisionText(reason);
+        var internalNote = NormalizeDecisionText(note);
 
         if (normalizedSource == ContributionSource)
         {
             await EnsureContributionExistsInRegionAsync(regionId, requestId);
-            await _placeContributionService.RejectAsync(requestId, userId, decisionNote);
+            await _placeContributionService.RejectAsync(
+                requestId,
+                userId,
+                publicReason,
+                internalNote,
+                "RegionalRequestQueue");
             return await BuildSuccessResultAsync(regionId, ContributionSource, requestId);
         }
 
@@ -289,8 +299,8 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         return sort switch
         {
             "oldest" => query.OrderBy(contribution => contribution.SubmittedAt).ThenBy(contribution => contribution.Id),
-            "status" => query.OrderBy(contribution => contribution.Status).ThenByDescending(contribution => contribution.SubmittedAt),
-            "type" => query.OrderBy(contribution => contribution.Type).ThenByDescending(contribution => contribution.SubmittedAt),
+            "status" => query.OrderBy(contribution => contribution.Status).ThenByDescending(contribution => contribution.SubmittedAt).ThenByDescending(contribution => contribution.Id),
+            "type" => query.OrderBy(contribution => contribution.Type).ThenByDescending(contribution => contribution.SubmittedAt).ThenByDescending(contribution => contribution.Id),
             _ => query.OrderByDescending(contribution => contribution.SubmittedAt).ThenByDescending(contribution => contribution.Id)
         };
     }
@@ -556,9 +566,11 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         {
             "oldest" => items.OrderBy(item => item.SubmittedAt).ThenBy(item => item.RequestKey, StringComparer.Ordinal),
             "status" => items.OrderBy(item => item.Status, StringComparer.Ordinal)
-                .ThenByDescending(item => item.SubmittedAt),
+                .ThenByDescending(item => item.SubmittedAt)
+                .ThenByDescending(item => item.RequestKey, StringComparer.Ordinal),
             "type" => items.OrderBy(item => item.EntityType, StringComparer.Ordinal)
-                .ThenByDescending(item => item.SubmittedAt),
+                .ThenByDescending(item => item.SubmittedAt)
+                .ThenByDescending(item => item.RequestKey, StringComparer.Ordinal),
             _ => items.OrderByDescending(item => item.SubmittedAt).ThenByDescending(item => item.RequestKey, StringComparer.Ordinal)
         };
     }
@@ -646,17 +658,10 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         }
     }
 
-    private static string BuildDecisionNote(string? reason, string? note)
+    private static string? NormalizeDecisionText(string? value)
     {
-        var parts = new List<string>();
-
-        if (!string.IsNullOrWhiteSpace(reason))
-            parts.Add("Reason: " + reason.Trim());
-
-        if (!string.IsNullOrWhiteSpace(note))
-            parts.Add(note.Trim());
-
-        return string.Join(Environment.NewLine, parts);
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 
     private static string SafeActionError(Exception ex)

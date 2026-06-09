@@ -15,6 +15,7 @@ import {
   TerritoryTopPerformingRegion,
 } from '../../../../core/models/dashboard.model';
 import { TerritoryDashboardService } from '../../../../core/services/territory-dashboard.service';
+import { buildAvatarDisplayUrl } from '../../../../core/utils/avatar-url';
 
 interface TerritoryStatCard {
   label: string;
@@ -140,7 +141,7 @@ export class NationalDashboardComponent implements OnInit, OnDestroy {
   }
 
   managerAvatarUrl(manager: TerritoryRegionManager): string {
-    const avatarUrl = manager.avatarUrl?.trim() ?? '';
+    const avatarUrl = buildAvatarDisplayUrl(manager.avatarUrl, null);
     return avatarUrl && !this.failedManagerAvatarKeys.has(this.managerAvatarKey(manager, avatarUrl))
       ? avatarUrl
       : '';
@@ -165,7 +166,7 @@ export class NationalDashboardComponent implements OnInit, OnDestroy {
   }
 
   onManagerAvatarError(manager: TerritoryRegionManager): void {
-    const avatarUrl = manager.avatarUrl?.trim() ?? '';
+    const avatarUrl = buildAvatarDisplayUrl(manager.avatarUrl, null);
     if (avatarUrl) {
       this.failedManagerAvatarKeys.add(this.managerAvatarKey(manager, avatarUrl));
       this.cdr.markForCheck();

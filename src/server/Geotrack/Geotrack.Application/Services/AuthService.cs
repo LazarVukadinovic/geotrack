@@ -283,11 +283,11 @@ public class AuthService : IAuthService
                 throw new ForbiddenAccessException(AdminAccessDeniedMessage);
         }
 
+        var pair = await IssueTokenPairAsync(stored.UserId, stored.IsPersistent);
         stored.IsRevoked = true;
         stored.RevokedAt = DateTime.UtcNow;
         await _refreshTokenRepository.SaveChangesAsync();
 
-        var pair = await IssueTokenPairAsync(stored.UserId, stored.IsPersistent);
         return (pair, stored.UserId);
     }
 
@@ -336,7 +336,7 @@ public class AuthService : IAuthService
         {
             AccessToken  = accessToken,
             RefreshToken = refreshValue,
-            ExpiresIn    = 900,
+            ExpiresIn    = _jwtService.AccessTokenLifetimeSeconds,
             SessionPersistent = isPersistent,
             Session = BuildSessionDto(user, isPersistent, expiresAt)
         };

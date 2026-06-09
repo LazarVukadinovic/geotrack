@@ -5,6 +5,7 @@ using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Geotrack.Server.Controllers;
 
@@ -154,6 +155,7 @@ public class PlacesController : ControllerBase
 
     [HttpPut("{id:int}/owner-update")]
     [Authorize]
+    [EnableRateLimiting("contributions")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> OwnerUpdatePlace(
         [FromRoute] int id,
@@ -265,6 +267,7 @@ public class PlacesController : ControllerBase
 
     [HttpPost("{id:int}/reviews")]
     [Authorize]
+    [EnableRateLimiting("reviews")]
     public async Task<IActionResult> CreatePlaceReview([FromRoute] int id, [FromBody] CreatePlaceReviewRequestDto request)
     {
         try

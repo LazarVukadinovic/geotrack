@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.IdentityModel.Tokens.Jwt;
 using System.Text.Json;
 using Geotrack.Application.DTOs.Auth;
 using Geotrack.Application.DTOs.Favorites;
@@ -48,7 +49,10 @@ public sealed class AuthFavoritesCollectionsTests
         Assert.NotNull(tokenPair);
         Assert.False(string.IsNullOrWhiteSpace(tokenPair.AccessToken));
         Assert.Equal(string.Empty, tokenPair.RefreshToken);
-        Assert.Equal(900, tokenPair.ExpiresIn);
+        Assert.Equal(3600, tokenPair.ExpiresIn);
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(tokenPair.AccessToken);
+        var remaining = jwt.ValidTo - DateTime.UtcNow;
+        Assert.InRange(remaining.TotalMinutes, 55, 61);
         Assert.True(login.Headers.TryGetValues("Set-Cookie", out var authCookies));
         Assert.Contains(authCookies, value => value.Contains("geotrack_refresh=", StringComparison.Ordinal));
 
@@ -398,11 +402,11 @@ public sealed class AuthFavoritesCollectionsTests
 
         using var oversizedUpload = CreateAvatarUploadContent(new byte[(5 * 1024 * 1024) + 1], "avatar.png", "image/png");
         var oversizedResponse = await client.PutAsync("/api/user/me/avatar", oversizedUpload);
-        Assert.Equal(HttpStatusCode.BadRequest, oversizedResponse.StatusCode);
+        Assert.Equal((HttpStatusCode)413, oversizedResponse.StatusCode);
 
         var oversizedError = await oversizedResponse.Content.ReadFromJsonAsync<Dictionary<string, string>>();
         Assert.NotNull(oversizedError);
-        Assert.Equal("Profile image must be 5 MB or smaller.", oversizedError["message"]);
+        Assert.Equal("Uploaded file is too large.", oversizedError["message"]);
     }
 
     [Fact]
@@ -486,7 +490,7 @@ public sealed class AuthFavoritesCollectionsTests
         Assert.NotNull(onboardingTags);
         Assert.NotEmpty(onboardingTags);
         Assert.Contains(onboardingTags, tag => tag.Slug == "seafood");
-        Assert.DoesNotContain(onboardingTags, tag => tag.Slug == "budget");
+        Assert.Contains(onboardingTags, tag => tag.Slug == "budget");
 
         var updateInterestsResponse = await client.PutAsJsonAsync(
             "/api/user/me/interests",

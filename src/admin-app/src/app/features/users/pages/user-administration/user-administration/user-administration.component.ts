@@ -26,6 +26,7 @@ import {
 } from '../../../../../core/services/national/users.service';
 import { TerritoryDashboardService } from '../../../../../core/services/territory-dashboard.service';
 import { TerritoryAssignedTerritory } from '../../../../../core/models/dashboard.model';
+import { buildAvatarDisplayUrl } from '../../../../../core/utils/avatar-url';
 
 const PAGE_SIZE = 8;
 
@@ -862,7 +863,7 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
   }
 
   avatarUrl(user: TerritoryUser): string | null {
-    const url = user.avatarUrl?.trim() ?? '';
+    const url = buildAvatarDisplayUrl(user.avatarUrl, null);
     return url && !this.failedAvatarIds.has(user.userId) ? url : null;
   }
 

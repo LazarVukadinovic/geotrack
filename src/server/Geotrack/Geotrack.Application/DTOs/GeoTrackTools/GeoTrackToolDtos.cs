@@ -1,10 +1,23 @@
 namespace Geotrack.Application.DTOs.GeoTrackTools;
 
+public static class GeoTrackMatchQualification
+{
+    public const string ExactCategoryMatch = "ExactCategoryMatch";
+    public const string RelatedCategoryMatch = "RelatedCategoryMatch";
+    public const string FallbackMatch = "FallbackMatch";
+    public const string Rejected = "Rejected";
+}
+
 public class GeoTrackToolSearchRequest
 {
     public string? Query { get; set; }
     public string? Location { get; set; }
     public int? DestinationId { get; set; }
+    public List<int> DestinationIds { get; set; } = new();
+    public string? AreaType { get; set; }
+    public int? AreaId { get; set; }
+    public string? Category { get; set; }
+    public List<string> EntityTypes { get; set; } = new();
     public List<string> Tags { get; set; } = new();
     public List<string> Categories { get; set; } = new();
     public List<string> PlaceTypes { get; set; } = new();
@@ -12,6 +25,7 @@ public class GeoTrackToolSearchRequest
     public List<string> EventCategories { get; set; } = new();
     public int? Limit { get; set; }
     public bool UpcomingOnly { get; set; }
+    public bool StrictCategory { get; set; }
 }
 
 public class GeoTrackMapFiltersRequest
@@ -31,6 +45,7 @@ public class GeoTrackToolItemDto
     public string? Description { get; set; }
     public string? Location { get; set; }
     public string? Destination { get; set; }
+    public int? DestinationId { get; set; }
     public string? Category { get; set; }
     public string? DetailRoute { get; set; }
     public string? ImageUrl { get; set; }
@@ -38,9 +53,158 @@ public class GeoTrackToolItemDto
     public int? ReviewCount { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public double? DistanceKm { get; set; }
     public DateTime? StartsAt { get; set; }
     public DateTime? EndsAt { get; set; }
     public List<string> Tags { get; set; } = new();
+    public string MatchQualification { get; set; } = GeoTrackMatchQualification.ExactCategoryMatch;
+    public double CategoryScore { get; set; }
+    public string? MatchReason { get; set; }
+    public bool IsFallback { get; set; }
+}
+
+public class GeoTrackNearbySearchRequest
+{
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+    public double? RadiusKm { get; set; }
+    public string? Category { get; set; }
+    public List<string> EntityTypes { get; set; } = new();
+    public List<string> Tags { get; set; } = new();
+    public List<string> Categories { get; set; } = new();
+    public List<string> PlaceTypes { get; set; } = new();
+    public List<string> StayTypes { get; set; } = new();
+    public List<string> EventCategories { get; set; } = new();
+    public int? Limit { get; set; }
+    public bool StrictCategory { get; set; }
+}
+
+public class GeoTrackNearbySearchResponseDto
+{
+    public List<GeoTrackToolItemDto> Results { get; set; } = new();
+    public int Count { get; set; }
+    public double RadiusKm { get; set; }
+    public string? Category { get; set; }
+}
+
+public class GeoTrackAreaResolveRequest
+{
+    public string Query { get; set; } = string.Empty;
+    public int? Limit { get; set; }
+}
+
+public class GeoTrackAreaResolveResponseDto
+{
+    public List<GeoTrackAreaMatchDto> Matches { get; set; } = new();
+}
+
+public class GeoTrackAreaMatchDto
+{
+    public string Type { get; set; } = string.Empty;
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public List<string> ParentNames { get; set; } = new();
+    public double Confidence { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public int? DestinationId { get; set; }
+    public string? DestinationName { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+}
+
+public class GeoTrackCatalogSearchRequest
+{
+    public string? Query { get; set; }
+    public string? AreaType { get; set; }
+    public int? AreaId { get; set; }
+    public string? Category { get; set; }
+    public List<string> EntityTypes { get; set; } = new();
+    public int? Limit { get; set; }
+}
+
+public class GeoTrackCatalogSearchResponseDto
+{
+    public List<GeoTrackToolItemDto> Results { get; set; } = new();
+    public int Count { get; set; }
+    public string? AreaType { get; set; }
+    public int? AreaId { get; set; }
+    public string? Category { get; set; }
+}
+
+public class GeoTrackAreaContentRequest
+{
+    public string AreaType { get; set; } = string.Empty;
+    public int AreaId { get; set; }
+    public string? Category { get; set; }
+    public List<string> EntityTypes { get; set; } = new();
+    public int? Limit { get; set; }
+}
+
+public class GeoTrackAreaContentResponseDto
+{
+    public List<GeoTrackAreaMatchDto> Destinations { get; set; } = new();
+    public List<GeoTrackAreaMatchDto> Locations { get; set; } = new();
+    public List<GeoTrackToolItemDto> Places { get; set; } = new();
+    public List<GeoTrackToolItemDto> Stays { get; set; } = new();
+    public List<GeoTrackToolItemDto> Events { get; set; } = new();
+    public GeoTrackAreaContentCountsDto Counts { get; set; } = new();
+}
+
+public class GeoTrackAreaContentCountsDto
+{
+    public int Destinations { get; set; }
+    public int Locations { get; set; }
+    public int Places { get; set; }
+    public int Stays { get; set; }
+    public int Events { get; set; }
+}
+
+public class GeoTrackAreaOverviewRequest
+{
+    public string AreaType { get; set; } = string.Empty;
+    public int AreaId { get; set; }
+    public int? LimitPerType { get; set; }
+}
+
+public class GeoTrackAreaOverviewDto
+{
+    public GeoTrackAreaMatchDto? Area { get; set; }
+    public GeoTrackAreaContentCountsDto Counts { get; set; } = new();
+    public List<GeoTrackCategorySummaryDto> TopCategories { get; set; } = new();
+    public List<GeoTrackToolItemDto> TopPlaces { get; set; } = new();
+    public List<GeoTrackToolItemDto> TopStays { get; set; } = new();
+    public List<GeoTrackToolItemDto> TopEvents { get; set; } = new();
+    public List<string> SuggestedFollowUpCategories { get; set; } = new();
+}
+
+public class GeoTrackCategoryOptionsRequest
+{
+    public string? AreaType { get; set; }
+    public int? AreaId { get; set; }
+    public string? CategoryGroup { get; set; }
+}
+
+public class GeoTrackCategoryOptionsResponseDto
+{
+    public List<GeoTrackCategoryGroupDto> CategoryGroups { get; set; } = new();
+}
+
+public class GeoTrackCategoryGroupDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public List<string> EntityTypes { get; set; } = new();
+    public List<string> PlaceTypes { get; set; } = new();
+    public List<string> StayTypes { get; set; } = new();
+    public List<string> EventCategories { get; set; } = new();
+    public List<string> Tags { get; set; } = new();
+}
+
+public class GeoTrackCategorySummaryDto
+{
+    public string Name { get; set; } = string.Empty;
+    public int Count { get; set; }
 }
 
 public class GeoTrackMapFiltersDto
@@ -79,11 +243,30 @@ public class GeoTrackAgentQueryPlanDto
     public string Language { get; set; } = "en";
     public string OriginalMessage { get; set; } = string.Empty;
     public string NormalizedMessage { get; set; } = string.Empty;
+    public string? CategoryGroup { get; set; }
     public List<string> EntityTypes { get; set; } = new();
+    public List<string> RequestedEntityTypes { get; set; } = new();
+    public string? AreaPhrase { get; set; }
     public string? LocationText { get; set; }
     public string? LocationUsed { get; set; }
     public int? DestinationId { get; set; }
     public string? DestinationName { get; set; }
+    public List<int> ContextDestinationIds { get; set; } = new();
+    public List<string> ContextDestinationNames { get; set; } = new();
+    public string? AreaType { get; set; }
+    public int? AreaId { get; set; }
+    public string? AreaName { get; set; }
+    public string? Category { get; set; }
+    public bool StrictCategoryMatch { get; set; }
+    public string FallbackBehavior { get; set; } = "none";
+    public string? FollowUpIntent { get; set; }
+    public bool UsesUserLocation { get; set; }
+    public bool NearbyIntent { get; set; }
+    public bool HasUserCoordinates { get; set; }
+    public bool FallbackAllowed { get; set; }
+    public string? ToolPlan { get; set; }
+    public int MaxResults { get; set; }
+    public string? ExplanationForLogsOnly { get; set; }
     public List<string> Tags { get; set; } = new();
     public List<string> Categories { get; set; } = new();
     public List<string> PlaceTypes { get; set; } = new();
@@ -91,6 +274,8 @@ public class GeoTrackAgentQueryPlanDto
     public List<string> EventCategories { get; set; } = new();
     public List<string> QueryTerms { get; set; } = new();
     public string? QueryText { get; set; }
+    public string? KnowledgeTopic { get; set; }
+    public string? KnowledgeAnswer { get; set; }
     public string RankingIntent { get; set; } = "all";
     public bool UsesCurrentContext { get; set; }
     public bool SearchCatalog { get; set; }
@@ -105,6 +290,7 @@ public class GeoTrackToolSearchTraceDto
     public string? Query { get; set; }
     public string? Location { get; set; }
     public int? DestinationId { get; set; }
+    public double? RadiusKm { get; set; }
     public List<string> Filters { get; set; } = new();
     public int ResultCount { get; set; }
 }

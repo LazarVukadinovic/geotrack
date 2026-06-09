@@ -6,6 +6,7 @@ import { FavoriteStateService } from '../../../core/services/favorite-state.serv
 import { LocationService } from '../../../core/services/location.service';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { SaveToCollectionService } from '../../../core/services/save-to-collection.service';
+import { DestinationService } from '../../../core/services/destination.service';
 import { PlaceDetailService } from './place-detail.service';
 
 describe('PlaceDetailService image mapping', () => {
@@ -27,6 +28,10 @@ describe('PlaceDetailService image mapping', () => {
         {
           provide: LocationService,
           useValue: { location: () => null },
+        },
+        {
+          provide: DestinationService,
+          useValue: { mode: () => 'destination', id: () => 123 },
         },
         {
           provide: AnalyticsService,
@@ -51,11 +56,12 @@ describe('PlaceDetailService image mapping', () => {
   it('orders backend images and derives heroImage from the main image', () => {
     service.loadPlaceDetail('42');
 
-    const req = httpMock.expectOne('/api/places/42');
+    const req = httpMock.expectOne('/api/places/42?distanceOrigin=destination-centre');
     expect(req.request.method).toBe('GET');
     req.flush({
       id: 42,
       title: 'Banje Beach',
+      destinationId: 99,
       location: 'Dubrovnik',
       heroImage: '/legacy-main.svg',
       images: [
@@ -63,7 +69,17 @@ describe('PlaceDetailService image mapping', () => {
         { id: 1, url: '/main.svg', altText: 'Main photo', caption: 'Hero', sortOrder: 0, isMain: true },
       ],
       tags: [],
-      reviews: [],
+      reviews: [
+        {
+          id: 5,
+          authorUserId: 3,
+          authorName: 'Avatar User',
+          avatarUrl: '/media/uploads/avatars/avatar-user.png',
+          rating: 5,
+          body: 'Great.',
+          helpfulCount: 0,
+        },
+      ],
       similar: [],
       isSaved: false,
       contentType: 'place',
@@ -71,21 +87,20 @@ describe('PlaceDetailService image mapping', () => {
 
     const detail = service.getPlaceDetailPageData('42');
     expect(detail?.heroImage).toBe('/main.svg');
-    expect(detail?.images.map((image) => image.url)).toEqual(['/main.svg', '/second.svg']);
+    expect(detail?.images.map((image) => image.url)).toEqual(['/second.svg']);
     expect(detail?.images[0]).toMatchObject({
-      id: '1',
-      altText: 'Main photo',
-      caption: 'Hero',
-      isMain: true,
-      sortOrder: 0,
+      id: '2',
+      isMain: false,
+      sortOrder: 1,
     });
-    expect(analytics.track).toHaveBeenCalledWith('detail_view', { entityType: 'place', entityId: 42 });
+    expect(detail?.reviews[0]?.avatarUrl).toBe('/media/uploads/avatars/avatar-user.png');
+    expect(analytics.track).toHaveBeenCalledWith('detail_view', { entityType: 'place', entityId: 42, destinationId: 99 });
   });
 
   it('keeps heroImage fallback and empty image arrays when images are missing', () => {
     service.loadPlaceDetail('7');
 
-    const req = httpMock.expectOne('/api/places/7');
+    const req = httpMock.expectOne('/api/places/7?distanceOrigin=destination-centre');
     req.flush({
       id: 7,
       title: 'Fallback Place',
@@ -106,7 +121,7 @@ describe('PlaceDetailService image mapping', () => {
   it('normalizes missing similar places to an empty array', () => {
     service.loadPlaceDetail('9');
 
-    const req = httpMock.expectOne('/api/places/9');
+    const req = httpMock.expectOne('/api/places/9?distanceOrigin=destination-centre');
     req.flush({
       id: 9,
       title: 'Quiet Place',

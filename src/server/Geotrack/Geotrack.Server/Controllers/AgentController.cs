@@ -12,14 +12,10 @@ namespace Geotrack.Server.Controllers;
 [EnableRateLimiting("agent")]
 public class AgentController : ControllerBase
 {
-    private readonly IAgentService _agentService;
     private readonly IAgentOrchestrator _agentOrchestrator;
 
-    public AgentController(
-        IAgentService agentService,
-        IAgentOrchestrator agentOrchestrator)
+    public AgentController(IAgentOrchestrator agentOrchestrator)
     {
-        _agentService = agentService;
         _agentOrchestrator = agentOrchestrator;
     }
 
@@ -43,14 +39,6 @@ public class AgentController : ControllerBase
         {
             return StatusCode(ex.StatusCode, new { code = ex.Code, message = ex.SafeMessage });
         }
-    }
-
-    [HttpPost("message")]
-    public async Task<ActionResult> SendMessage([FromBody] AgentSendMessageDto dto)
-    {
-        var userId = GetUserId();
-        var response = await _agentService.ProcessMessageAsync(dto.Text, userId);
-        return Ok(response);
     }
 
     private int? GetUserId()

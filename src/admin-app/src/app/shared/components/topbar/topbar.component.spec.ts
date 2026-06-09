@@ -38,6 +38,7 @@ describe('TopbarComponent', () => {
   const administratorView = getAdminViewByCode('Admin')!;
   const contentModeratorView = getAdminViewByCode('ContentModerator')!;
   const territoryManagerView = getAdminViewByCode('TerritoryManager')!;
+  const territoryAssociateView = getAdminViewByCode('TerritoryAssociate')!;
   const regionalManagerView = getAdminViewByCode('RegionalManager')!;
 
   beforeEach(async () => {
@@ -361,7 +362,7 @@ describe('TopbarComponent', () => {
     fixture.detectChanges();
 
     expect(drawerText()).toContain('No notifications yet');
-    expect(drawerText()).toContain('Review reports and moderation updates will appear here.');
+    expect(drawerText()).toContain("You're all caught up. New updates will appear here.");
   });
 
   it('navigates Regional Manager request notifications to the regional request detail', () => {
@@ -399,7 +400,32 @@ describe('TopbarComponent', () => {
     fixture.detectChanges();
 
     expect(drawerText()).toContain('No notifications yet');
-    expect(drawerText()).toContain('Regional requests for your selected region will appear here.');
+    expect(drawerText()).toContain("You're all caught up. New updates will appear here.");
+  });
+
+  it('opens the Territory Associate notification drawer through the shared territory audience', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
+      supportNotification({
+        type: 'ContributionPendingReview',
+        title: 'Associate request update',
+        message: 'A territory request is ready to review.',
+        targetType: 'Contribution',
+      }),
+    ], 1)));
+    createTerritoryAssociateComponent();
+
+    notificationBell().click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#admin-notification-drawer')).toBeTruthy();
+    expect(drawerText()).toContain('Associate request update');
+    expect(notificationsService.getUnreadCount$).toHaveBeenCalledWith('TerritoryAssociate', null);
+    expect(notificationsService.getNotifications$).toHaveBeenCalledWith({
+      audienceRole: 'TerritoryAssociate',
+      includeRead: true,
+      skip: 0,
+      take: 25,
+    });
   });
 
   it('shows skeleton cards while Administrator notifications are loading', () => {
@@ -426,6 +452,62 @@ describe('TopbarComponent', () => {
     expect(drawerText()).not.toContain('No notifications yet');
   });
 
+  it('shows real notifications on the initial All tab after a pending request resolves', () => {
+    const pending = new Subject<AdminNotificationPage>();
+    notificationsService.getNotifications$.mockReturnValue(pending.asObservable());
+
+    openNotificationDrawer();
+    expect(loadingSkeleton()).toBeTruthy();
+
+    pending.next(notificationPage([
+      supportNotification({ title: 'Initial all notification' }),
+    ], 1));
+    pending.complete();
+    fixture.detectChanges();
+
+    expect(component.notificationFilter).toBe('all');
+    expect(component.notificationState).toBe('success');
+    expect(loadingSkeleton()).toBeNull();
+    expect(drawerText()).toContain('Initial all notification');
+  });
+
+  it('keeps All on the canonical item list after switching to Unread and back', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
+      supportNotification({ title: 'Unread request', isRead: false }),
+      supportNotification({ id: 8, title: 'Read request', isRead: true, readAt: '2026-05-26T21:00:00Z' }),
+    ], 1)));
+
+    openNotificationDrawer();
+    expect(drawerText()).toContain('Unread request');
+    expect(drawerText()).toContain('Read request');
+
+    clickDrawerTab('Unread');
+    expect(drawerText()).toContain('Unread request');
+    expect(drawerText()).not.toContain('Read request');
+    expect(loadingSkeleton()).toBeNull();
+
+    clickDrawerTab('All');
+    expect(component.notificationFilter).toBe('all');
+    expect(loadingSkeleton()).toBeNull();
+    expect(drawerText()).toContain('Unread request');
+    expect(drawerText()).toContain('Read request');
+  });
+
+  it('recreates the drawer after refresh and renders All notifications without a stuck skeleton', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
+      supportNotification({ title: 'Fresh page notification' }),
+    ], 1)));
+
+    createAdministratorComponent();
+    notificationBell().click();
+    fixture.detectChanges();
+
+    expect(component.notificationFilter).toBe('all');
+    expect(component.notificationState).toBe('success');
+    expect(loadingSkeleton()).toBeNull();
+    expect(drawerText()).toContain('Fresh page notification');
+  });
+
   it('shows the all-notifications empty state when the API returns an empty list', () => {
     notificationsService.getNotifications$.mockReturnValue(of(notificationPage([], 0)));
 
@@ -433,7 +515,7 @@ describe('TopbarComponent', () => {
 
     expect(loadingSkeleton()).toBeNull();
     expect(drawerText()).toContain('No notifications yet');
-    expect(drawerText()).toContain('New support reports and system alerts will appear here.');
+    expect(drawerText()).toContain("You're all caught up. New updates will appear here.");
   });
 
   it('shows the unread empty state without reloading when no unread notifications exist', () => {
@@ -447,7 +529,7 @@ describe('TopbarComponent', () => {
     expect(notificationsService.getNotifications$).toHaveBeenCalledTimes(1);
     expect(loadingSkeleton()).toBeNull();
     expect(drawerText()).toContain('No unread notifications');
-    expect(drawerText()).toContain('You are all caught up.');
+    expect(drawerText()).toContain("You're all caught up.");
   });
 
   it('does not show skeleton cards after loading completes with no notifications', () => {
@@ -467,6 +549,51 @@ describe('TopbarComponent', () => {
     expect(loadingSkeleton()).toBeNull();
     expect(drawerText()).toContain('Unable to load notifications. Please try again.');
     expect(drawerButton('Retry')).toBeTruthy();
+  });
+
+  it('does not remain stuck in loading when the notification service throws synchronously', () => {
+    notificationsService.getNotifications$.mockImplementation(() => {
+      throw new Error('sync failure');
+    });
+
+    openNotificationDrawer();
+
+    expect(loadingSkeleton()).toBeNull();
+    expect(component.notificationsLoading).toBe(false);
+    expect(drawerText()).toContain('Unable to load notifications. Please try again.');
+  });
+
+  it('retries the notification request after an API error', () => {
+    notificationsService.getNotifications$
+      .mockReturnValueOnce(throwError(() => new Error('failed')))
+      .mockReturnValueOnce(of(notificationPage([
+        supportNotification({ title: 'Recovered notification' }),
+      ], 1)));
+
+    openNotificationDrawer();
+    drawerButton('Retry')?.click();
+    fixture.detectChanges();
+
+    expect(notificationsService.getNotifications$).toHaveBeenCalledTimes(2);
+    expect(loadingSkeleton()).toBeNull();
+    expect(drawerText()).toContain('Recovered notification');
+    expect(drawerText()).not.toContain('Unable to load notifications. Please try again.');
+  });
+
+  it('cancels drawer loading state when the drawer closes before the request completes', () => {
+    const pending = new Subject<AdminNotificationPage>();
+    notificationsService.getNotifications$.mockReturnValue(pending.asObservable());
+
+    openNotificationDrawer();
+    expect(loadingSkeleton()).toBeTruthy();
+
+    closeNotificationDrawerButton().click();
+    fixture.detectChanges();
+
+    expect(component.notificationsLoading).toBe(false);
+    expect(fixture.nativeElement.querySelector('#admin-notification-drawer')).toBeNull();
+
+    pending.complete();
   });
 
   it('disables Mark all as read when unread count is zero', () => {
@@ -500,6 +627,24 @@ describe('TopbarComponent', () => {
 
     pending.next({ unreadCount: 0, readAt: '2026-05-26T21:00:00Z' });
     pending.complete();
+  });
+
+  it('marks loaded notifications as read and leaves All visible after Mark all as read succeeds', () => {
+    unreadCountValue = 1;
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
+      supportNotification({ title: 'Unread before mark all', isRead: false }),
+    ], 1)));
+
+    openNotificationDrawer();
+    markAllButton().click();
+    fixture.detectChanges();
+
+    expect(component.notifications.every(notification => notification.isRead)).toBe(true);
+    expect(loadingSkeleton()).toBeNull();
+    expect(drawerText()).toContain('Unread before mark all');
+
+    clickDrawerTab('Unread');
+    expect(drawerText()).toContain('No unread notifications');
   });
 
   function openProfileMenu(): void {
@@ -556,6 +701,16 @@ describe('TopbarComponent', () => {
     fixture.detectChanges();
   }
 
+  function createTerritoryAssociateComponent(): void {
+    useTerritoryAssociateUser();
+    notificationsService.getUnreadCount$.mockClear();
+    notificationsService.getNotifications$.mockClear();
+    fixture.destroy();
+    fixture = TestBed.createComponent(TopbarComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  }
+
   function notificationBell(): HTMLButtonElement {
     return fixture.nativeElement.querySelector('[aria-controls="admin-notification-drawer"]') as HTMLButtonElement;
   }
@@ -570,6 +725,10 @@ describe('TopbarComponent', () => {
 
   function markAllButton(): HTMLButtonElement {
     return drawerButton('Mark all as read') ?? drawerButton('Saving...')!;
+  }
+
+  function closeNotificationDrawerButton(): HTMLButtonElement {
+    return fixture.nativeElement.querySelector('[aria-label="Close notifications"]') as HTMLButtonElement;
   }
 
   function clickDrawerTab(label: string): void {
@@ -657,6 +816,17 @@ describe('TopbarComponent', () => {
       role: 'Content Moderator',
       activeRoleCode: 'ContentModerator',
       roles: ['ContentModerator'],
+    };
+  }
+
+  function useTerritoryAssociateUser(): void {
+    activeView = territoryAssociateView;
+    availableViews = [territoryAssociateView];
+    currentUser = {
+      ...currentUser,
+      role: 'Territory Associate',
+      activeRoleCode: 'TerritoryAssociate',
+      roles: ['TerritoryAssociate'],
     };
   }
 

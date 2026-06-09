@@ -17,11 +17,14 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { finalize, forkJoin, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { CoverImageCropperComponent } from '../../../../shared/components/cover-image-cropper/cover-image-cropper.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
+import { AdminFormDraftService } from '../../../../core/services/admin-form-draft.service';
+import { COVER_IMAGE_ASPECT_RATIO } from '../../../../core/constants/cover-image.constants';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
 import {
@@ -49,9 +52,34 @@ declare const L: any;
 
 type EventParentType = 'location' | 'place' | 'destination';
 
-interface ClassItem {
-  tag: RegionalEventTagDto;
-  checked: boolean;
+interface EventFormDraft {
+  activeRegionId: number | null;
+  eventTitle: string;
+  eventTypeId: number | null;
+  summary: string;
+  venueType: EventParentType;
+  selectedDestinationId: number | null;
+  selectedLocationId: number | null;
+  selectedPlaceId: number | null;
+  customVenueName: string;
+  allDay: boolean;
+  recurring: boolean;
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  freeEvent: boolean;
+  ticketPrice: string;
+  externalTicketLink: string;
+  organizerName: string;
+  contactEmail: string;
+  attendanceLimit: string;
+  ageRestriction: string;
+  descriptionHtml: string;
+  selectedTagIds: number[];
+  cardImageName: string;
+  coverImageName: string;
+  galleryImageNames: string[];
 }
 
 interface GalleryImageItem {
@@ -60,10 +88,15 @@ interface GalleryImageItem {
   file?: File;
 }
 
+interface ClassItem {
+  tag: RegionalEventTagDto;
+  checked: boolean;
+}
+
 @Component({
   selector: 'app-new-event',
   standalone: true,
-  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent, CoverImageCropperComponent],
   templateUrl: './add-event.component.html',
   styleUrl: './add-event.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -85,6 +118,8 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly activeRegionStorageKey = 'geotrack_admin_active_region_id';
   private static readonly initialVisibleClassificationTags = 5;
   private readonly mapTileLayer = inject(MapTileLayerService);
+  readonly coverImageAspectRatio = COVER_IMAGE_ASPECT_RATIO;
+  readonly coverImageAspectRatioCss = `${COVER_IMAGE_ASPECT_RATIO} / 1`;
 
   @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer') miniMapContainer!: ElementRef<HTMLDivElement>;
@@ -140,10 +175,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   cardImageName = '';
   coverImageUrl: string | null = null;
   coverImageName = '';
+  coverCropFile: File | null = null;
   galleryImages: GalleryImageItem[] = [];
 
   private cardImageFile: File | null = null;
   private coverImageFile: File | null = null;
+  private coverPreviewObjectUrl: string | null = null;
   private existingImages: RegionalEventImageDto[] = [];
 
   destinations: RegionalEventParentDestinationDto[] = [];
@@ -172,6 +209,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   private regionViewport: AdminMapViewport | null = null;
   private regionBoundaryZone: AdminMapZone | null = null;
   private scopeValidationResult: RegionalScopeValidationResult | null = null;
+  private unregisterDraftSource: (() => void) | null = null;
 
   constructor(
     private readonly zone: NgZone,
@@ -183,6 +221,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly lightboxService: LightboxService,
     private readonly eventsService: EventsListService,
     private readonly adminMapService: AdminMapService,
+    private readonly formDrafts: AdminFormDraftService,
   ) {}
 
   ngOnInit(): void {
@@ -191,10 +230,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.loadAssignedRegions();
     this.loadEventTypes();
     this.loadEventTags();
+    this.registerDraftSource();
   }
 
   ngAfterViewInit(): void {
     setTimeout(() => this.initMiniMap(), 0);
+    setTimeout(() => this.restoreSavedDraftIfPresent(), 0);
   }
 
   ngOnDestroy(): void {
@@ -204,7 +245,9 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.parentSubscription?.unsubscribe();
     this.tagSearchSubscription?.unsubscribe();
     this.createSubscription?.unsubscribe();
+    this.unregisterDraftSource?.();
     if (this.tagSearchHandle) clearTimeout(this.tagSearchHandle);
+    this.revokeCoverPreviewObjectUrl();
     this.lightboxService.close();
     if (this.miniMap) {
       this.miniMap.remove();
@@ -465,25 +508,38 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   onCoverImageSelected(event: Event): void {
     const input = event.target instanceof HTMLInputElement ? event.target : null;
     const file = input?.files?.[0];
-    if (!file || !this.validateImageFile(file)) return;
+    if (!file || !this.validateImageFile(file)) {
+      if (input) input.value = '';
+      return;
+    }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.zone.run(() => {
-        this.coverImageUrl = reader.result as string;
-        this.coverImageName = file.name;
-        this.coverImageFile = file;
-        this.cdr.markForCheck();
-      });
-    };
-    reader.readAsDataURL(file);
+    this.coverCropFile = file;
     if (input) input.value = '';
+    this.cdr.markForCheck();
+  }
+
+  onCoverCropConfirmed(file: File): void {
+    this.revokeCoverPreviewObjectUrl();
+    const previewUrl = URL.createObjectURL(file);
+    this.coverPreviewObjectUrl = previewUrl;
+    this.coverImageUrl = previewUrl;
+    this.coverImageName = file.name;
+    this.coverImageFile = file;
+    this.coverCropFile = null;
+    this.cdr.markForCheck();
+  }
+
+  onCoverCropCancelled(): void {
+    this.coverCropFile = null;
+    this.cdr.markForCheck();
   }
 
   removeCoverImage(): void {
+    this.revokeCoverPreviewObjectUrl();
     this.coverImageUrl = null;
     this.coverImageName = '';
     this.coverImageFile = null;
+    this.coverCropFile = null;
     this.cdr.markForCheck();
   }
 
@@ -624,6 +680,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       }))
       .subscribe({
         next: created => {
+          this.formDrafts.clearDraft(this.draftFormType());
           this.feedbackMessage = 'Event published.';
           this.router.navigate(['/events'], { queryParams: { regionId: created.regionId } });
         },
@@ -1324,6 +1381,13 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     return true;
   }
 
+  private revokeCoverPreviewObjectUrl(): void {
+    if (!this.coverPreviewObjectUrl) return;
+
+    URL.revokeObjectURL(this.coverPreviewObjectUrl);
+    this.coverPreviewObjectUrl = null;
+  }
+
   private syncEmptyState(): void {
     const el = this.editorRef?.nativeElement;
     if (!el) return;
@@ -1636,5 +1700,120 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     return fallback;
+  }
+
+  private registerDraftSource(): void {
+    this.unregisterDraftSource = this.formDrafts.register({
+      formType: this.draftFormType(),
+      snapshot: () => this.buildDraftSnapshot(),
+    });
+  }
+
+  private draftFormType(): string {
+    return 'event-new';
+  }
+
+  private buildDraftSnapshot(): EventFormDraft | null {
+    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const hasDraft =
+      Boolean(this.eventTitle.trim()) ||
+      Boolean(this.summary.trim()) ||
+      Boolean(this.customVenueName.trim()) ||
+      Boolean(this.ticketPrice.trim()) ||
+      Boolean(this.externalTicketLink.trim()) ||
+      Boolean(this.organizerName.trim()) ||
+      Boolean(this.contactEmail.trim()) ||
+      Boolean(this.attendanceLimit.trim()) ||
+      Boolean(this.ageRestriction.trim()) ||
+      Boolean(descriptionHtml) ||
+      Boolean(this.eventTypeId) ||
+      this.hasSelectedParent() ||
+      this.selectedTagIds.size > 0 ||
+      Boolean(this.cardImageName) ||
+      Boolean(this.coverImageName) ||
+      this.galleryImages.length > 0;
+
+    if (!hasDraft) return null;
+
+    return {
+      activeRegionId: this.activeRegionId,
+      eventTitle: this.eventTitle,
+      eventTypeId: this.eventTypeId,
+      summary: this.summary,
+      venueType: this.venueType,
+      selectedDestinationId: this.selectedDestinationId,
+      selectedLocationId: this.selectedLocationId,
+      selectedPlaceId: this.selectedPlaceId,
+      customVenueName: this.customVenueName,
+      allDay: this.allDay,
+      recurring: this.recurring,
+      startDate: this.startDate,
+      endDate: this.endDate,
+      startTime: this.startTime,
+      endTime: this.endTime,
+      freeEvent: this.freeEvent,
+      ticketPrice: this.ticketPrice,
+      externalTicketLink: this.externalTicketLink,
+      organizerName: this.organizerName,
+      contactEmail: this.contactEmail,
+      attendanceLimit: this.attendanceLimit,
+      ageRestriction: this.ageRestriction,
+      descriptionHtml,
+      selectedTagIds: [...this.selectedTagIds],
+      cardImageName: this.cardImageName,
+      coverImageName: this.coverImageName,
+      galleryImageNames: this.galleryImages.map(image => image.name),
+    };
+  }
+
+  private restoreSavedDraftIfPresent(): void {
+    const draft = this.formDrafts.loadDraft<EventFormDraft>(this.draftFormType());
+    const payload = draft?.payload;
+    if (!payload) return;
+
+    this.venueType = payload.venueType ?? this.venueType;
+
+    if (typeof payload.activeRegionId === 'number') {
+      this.activeRegionId = payload.activeRegionId;
+      sessionStorage.setItem(NewEventComponent.activeRegionStorageKey, String(payload.activeRegionId));
+      this.loadAssignedRegionMap(payload.activeRegionId);
+      this.loadParentOptions();
+    }
+
+    this.eventTitle = payload.eventTitle ?? this.eventTitle;
+    this.eventTypeId = payload.eventTypeId;
+    this.summary = payload.summary ?? this.summary;
+    this.selectedDestinationId = payload.selectedDestinationId;
+    this.selectedLocationId = payload.selectedLocationId;
+    this.selectedPlaceId = payload.selectedPlaceId;
+    this.customVenueName = payload.customVenueName ?? this.customVenueName;
+    this.allDay = Boolean(payload.allDay);
+    this.recurring = Boolean(payload.recurring);
+    this.startDate = payload.startDate ?? this.startDate;
+    this.endDate = payload.endDate ?? this.endDate;
+    this.startTime = payload.startTime ?? this.startTime;
+    this.endTime = payload.endTime ?? this.endTime;
+    this.freeEvent = Boolean(payload.freeEvent);
+    this.ticketPrice = payload.ticketPrice ?? this.ticketPrice;
+    this.externalTicketLink = payload.externalTicketLink ?? this.externalTicketLink;
+    this.organizerName = payload.organizerName ?? this.organizerName;
+    this.contactEmail = payload.contactEmail ?? this.contactEmail;
+    this.attendanceLimit = payload.attendanceLimit ?? this.attendanceLimit;
+    this.ageRestriction = payload.ageRestriction ?? this.ageRestriction;
+    this.selectedTagIds = new Set(payload.selectedTagIds ?? []);
+    this.classItems = this.classItems.map(item => ({
+      ...item,
+      checked: this.selectedTagIds.has(item.tag.id),
+    }));
+
+    if (this.editorRef?.nativeElement) {
+      this.editorRef.nativeElement.innerHTML = payload.descriptionHtml ?? '';
+      this.syncEmptyState();
+    }
+
+    this.updateMiniMapFromSelection();
+    this.validateSelectedParentLocation();
+    this.feedbackMessage = 'Recovered a saved draft. Image files must be selected again.';
+    this.cdr.markForCheck();
   }
 }

@@ -13,6 +13,7 @@ import {
   AdminReviewsPage,
   AdminReviewsPageRequest,
 } from '../../models/administrator/admin-review.model';
+import { buildAvatarDisplayUrl } from '../../utils/avatar-url';
 
 const AVATAR_COLORS = ['#2563eb', '#059669', '#7c3aed', '#d97706', '#dc2626', '#0891b2', '#be185d', '#0f766e'];
 
@@ -202,7 +203,7 @@ export class AdminReviewsService {
       userId,
       displayName,
       email: safe.email ?? '',
-      avatarUrl: safe.avatarUrl ?? null,
+      avatarUrl: buildAvatarDisplayUrl(safe.avatarUrl, null) || null,
       initials,
       status: safe.status === 'Suspended' || safe.status === 'Deleted' || safe.status === 'Unknown'
         ? safe.status

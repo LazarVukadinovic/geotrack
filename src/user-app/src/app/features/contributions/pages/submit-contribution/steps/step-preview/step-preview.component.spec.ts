@@ -10,6 +10,7 @@ describe('StepPreviewComponent', () => {
     basics: {
       name: 'Sunny Seaside Villa',
       placeType: 'Stay',
+      placeTypeId: null,
       stayType: 'Villa',
       address: '1 Ocean Road',
       city: 'Malibu',
@@ -17,7 +18,6 @@ describe('StepPreviewComponent', () => {
       country: 'USA',
       imageUrl: '',
       cardImageUrl: '',
-      placeTypeId: null,
       galleryImageUrls: [],
       lat: null,
       lng: null,

@@ -51,17 +51,23 @@ public class PlaceContributionService : IPlaceContributionService
     private readonly IContributionMediaStorageService _mediaStorage;
     private readonly IUserNotificationService _notificationService;
     private readonly IAdminNotificationService _adminNotificationService;
+    private readonly IContentHtmlSanitizer _htmlSanitizer;
+    private readonly IModerationAuditService _auditService;
 
     public PlaceContributionService(
         AppDbContext db,
         IContributionMediaStorageService mediaStorage,
         IUserNotificationService notificationService,
-        IAdminNotificationService adminNotificationService)
+        IAdminNotificationService adminNotificationService,
+        IContentHtmlSanitizer htmlSanitizer,
+        IModerationAuditService auditService)
     {
         _db = db;
         _mediaStorage = mediaStorage;
         _notificationService = notificationService;
         _adminNotificationService = adminNotificationService;
+        _htmlSanitizer = htmlSanitizer;
+        _auditService = auditService;
     }
 
     public async Task<GetPlaceContributionsResponseDto> GetForUserAsync(int userId)
@@ -701,7 +707,12 @@ public class PlaceContributionService : IPlaceContributionService
         await _db.SaveChangesAsync();
     }
 
-    public async Task<PlaceContributionDetailDto> ApproveAsync(int contributionId, int reviewerUserId, string? note)
+    public async Task<PlaceContributionDetailDto> ApproveAsync(
+        int contributionId,
+        int reviewerUserId,
+        string? note,
+        string? internalNote = null,
+        string? sourceArea = null)
     {
         var contribution = await _db.PlaceContributions
             .Include(c => c.Images)
@@ -716,6 +727,9 @@ public class PlaceContributionService : IPlaceContributionService
         await EnsureReviewerCanReviewAsync(reviewerUserId, contribution);
 
         var now = DateTime.UtcNow;
+        var previousStatus = contribution.Status.ToString();
+        var publicNote = NormalizeOptional(note);
+        var normalizedInternalNote = NormalizeOptional(internalNote);
 
         if (contribution.Type == PlaceContributionType.CreatePlace)
         {
@@ -758,8 +772,19 @@ public class PlaceContributionService : IPlaceContributionService
         contribution.Status = PlaceContributionStatus.Approved;
         contribution.ReviewedByUserId = reviewerUserId;
         contribution.ReviewedAt = now;
-        contribution.ReviewNote = NormalizeOptional(note);
+        contribution.ReviewNote = publicNote;
         contribution.UpdatedAt = now;
+
+        await _auditService.RecordAsync(
+            reviewerUserId,
+            "PlaceContribution",
+            contribution.Id,
+            "ApproveContribution",
+            previousStatus,
+            contribution.Status.ToString(),
+            publicNote,
+            normalizedInternalNote,
+            sourceArea ?? "PlaceContributionReview");
 
         await _notificationService.AddContributionDecisionNotificationAsync(contribution);
 
@@ -1056,7 +1081,12 @@ public class PlaceContributionService : IPlaceContributionService
         await _db.SaveChangesAsync();
     }
 
-    public async Task<PlaceContributionDetailDto> RejectAsync(int contributionId, int reviewerUserId, string? note)
+    public async Task<PlaceContributionDetailDto> RejectAsync(
+        int contributionId,
+        int reviewerUserId,
+        string? note,
+        string? internalNote = null,
+        string? sourceArea = null)
     {
         var contribution = await _db.PlaceContributions
             .SingleOrDefaultAsync(c => c.Id == contributionId);
@@ -1070,12 +1100,26 @@ public class PlaceContributionService : IPlaceContributionService
         await EnsureReviewerCanReviewAsync(reviewerUserId, contribution);
 
         var now = DateTime.UtcNow;
+        var previousStatus = contribution.Status.ToString();
+        var publicNote = NormalizeOptional(note);
+        var normalizedInternalNote = NormalizeOptional(internalNote);
 
         contribution.Status = PlaceContributionStatus.Rejected;
         contribution.ReviewedByUserId = reviewerUserId;
         contribution.ReviewedAt = now;
-        contribution.ReviewNote = NormalizeOptional(note);
+        contribution.ReviewNote = publicNote;
         contribution.UpdatedAt = now;
+
+        await _auditService.RecordAsync(
+            reviewerUserId,
+            "PlaceContribution",
+            contribution.Id,
+            "RejectContribution",
+            previousStatus,
+            contribution.Status.ToString(),
+            publicNote,
+            normalizedInternalNote,
+            sourceArea ?? "PlaceContributionReview");
 
         await _notificationService.AddContributionDecisionNotificationAsync(contribution);
 
@@ -1100,7 +1144,8 @@ public class PlaceContributionService : IPlaceContributionService
                 .ThenInclude(p => p!.Location)
                     .ThenInclude(l => l.Destination)
             .Include(c => c.Place)
-                .ThenInclude(p => p!.Images);
+                .ThenInclude(p => p!.Images)
+            .AsSplitQuery();
     }
 
     private async Task<IQueryable<PlaceContribution>> ApplyReviewerScopeAsync(
@@ -1249,10 +1294,10 @@ public class PlaceContributionService : IPlaceContributionService
         PlaceContributionType contributionType,
         UpsertPlaceContributionDto request)
     {
-        // Only ClaimOwnership contributions strictly require an ownership proof document.
-        // For CreatePlace / UpdatePlace, the document is optional — ownable types can be
-        // submitted without it, but the user won't receive edit rights after approval.
-        return contributionType == PlaceContributionType.ClaimOwnership;
+        if (contributionType == PlaceContributionType.ClaimOwnership)
+            return true;
+
+        return await ResolveRequestedPlaceTypeOwnableAsync(request);
     }
 
     private async Task<bool> AllowsOwnershipProofAsync(
@@ -1297,6 +1342,11 @@ public class PlaceContributionService : IPlaceContributionService
         }
 
         var placeTypeName = NormalizeOptional(request.PlaceType);
+        if (placeTypeName is null && !string.IsNullOrWhiteSpace(request.StayType))
+        {
+            placeTypeName = "stay";
+        }
+
         if (placeTypeName is null)
             return false;
 
@@ -1449,6 +1499,7 @@ public class PlaceContributionService : IPlaceContributionService
                 .ThenInclude(pa => pa.Amenity)
             .Include(p => p.PlaceBookingPartners)
                 .ThenInclude(pb => pb.BookingPartner)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(p => p.Id == placeId);
 
         if (place is null)
@@ -1946,6 +1997,7 @@ public class PlaceContributionService : IPlaceContributionService
             .Include(p => p.PlaceTags)
             .Include(p => p.PlaceAmenities)
             .Include(p => p.PlaceBookingPartners)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(p => p.Id == placeId);
 
         if (place is null)
@@ -2858,6 +2910,7 @@ public class PlaceContributionService : IPlaceContributionService
             .Include(p => p.Stay)
                 .ThenInclude(stay => stay!.StayAmenities)
                     .ThenInclude(stayStayAmenity => stayStayAmenity.StayAmenity)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(p => p.Id == contribution.PlaceId.Value);
 
         if (place is null)
@@ -3258,7 +3311,7 @@ public class PlaceContributionService : IPlaceContributionService
         return normalized;
     }
 
-    private static void Validate(UpsertPlaceContributionDto request)
+    private void Validate(UpsertPlaceContributionDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new InvalidOperationException("Name is required.");
@@ -3419,8 +3472,8 @@ public class PlaceContributionService : IPlaceContributionService
         }
     }
 
-    private static string NormalizeDescription(string? description) =>
-        DisplayTextSafety.CleanOptionalRichMultiline(description) ?? string.Empty;
+    private string NormalizeDescription(string? description) =>
+        _htmlSanitizer.SanitizeRichText(description);
 
     private static string NormalizeRequiredName(string? value, string fieldName, int maxLength)
     {

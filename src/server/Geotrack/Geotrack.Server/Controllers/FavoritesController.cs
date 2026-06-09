@@ -2,6 +2,7 @@ using Geotrack.Application.DTOs.Favorites;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Geotrack.Server.Controllers;
 
@@ -18,6 +19,7 @@ public class FavoritesController : ControllerBase
     }
 
     [HttpPost("toggle")]
+    [EnableRateLimiting("userActions")]
     public async Task<ActionResult> Toggle([FromBody] FavoriteToggleDto dto)
     {
         var userId = GetRequiredUserId();

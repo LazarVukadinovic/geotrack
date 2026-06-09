@@ -2,6 +2,7 @@ using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Geotrack.Server.Controllers;
 
@@ -46,6 +47,7 @@ public class ReviewsController : ControllerBase
 
     [Authorize]
     [HttpPost("places/{placeId:int}")]
+    [EnableRateLimiting("reviews")]
     public async Task<IActionResult> CreatePlaceReview(int placeId, [FromBody] CreateReviewDto dto)
     {
         var userId = GetRequiredUserId();
@@ -64,6 +66,7 @@ public class ReviewsController : ControllerBase
 
     [Authorize]
     [HttpPost("events/{eventId:int}")]
+    [EnableRateLimiting("reviews")]
     public async Task<IActionResult> CreateEventReview(int eventId, [FromBody] CreateReviewDto dto)
     {
         var userId = GetRequiredUserId();
@@ -169,6 +172,7 @@ public class ReviewsController : ControllerBase
 
     [Authorize]
     [HttpPut("places/{reviewId:int}")]
+    [EnableRateLimiting("reviews")]
     public async Task<IActionResult> UpdatePlaceReview([FromRoute] int reviewId, [FromBody] CreateReviewDto dto)
     {
         var userId = GetRequiredUserId();
@@ -187,6 +191,7 @@ public class ReviewsController : ControllerBase
 
     [Authorize]
     [HttpPut("events/{reviewId:int}")]
+    [EnableRateLimiting("reviews")]
     public async Task<IActionResult> UpdateEventReview([FromRoute] int reviewId, [FromBody] CreateReviewDto dto)
     {
         var userId = GetRequiredUserId();
@@ -215,6 +220,7 @@ public class ReviewsController : ControllerBase
 
     [Authorize]
     [HttpPost("reports/{targetType}/{reviewId:int}")]
+    [EnableRateLimiting("reports")]
     public async Task<IActionResult> ReportReview(
         [FromRoute] string targetType,
         [FromRoute] int reviewId,

@@ -32,9 +32,10 @@ public class McpController : ControllerBase
     [HttpGet]
     public IActionResult GetStatus()
     {
-        if (!_options.Enabled)
+        var unavailable = RejectUnavailableOrUnauthorized();
+        if (unavailable is not null)
         {
-            return NotFound(new { message = "GeoTrack MCP is disabled." });
+            return unavailable;
         }
 
         if (AcceptsEventStream())
@@ -56,9 +57,10 @@ public class McpController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Handle([FromBody] JsonElement request, CancellationToken cancellationToken)
     {
-        if (!_options.Enabled)
+        var unavailable = RejectUnavailableOrUnauthorized();
+        if (unavailable is not null)
         {
-            return NotFound(new { message = "GeoTrack MCP is disabled." });
+            return unavailable;
         }
 
         if (request.ValueKind == JsonValueKind.Array)
@@ -125,6 +127,22 @@ public class McpController : ControllerBase
         }
 
         return StatusCode(StatusCodes.Status202Accepted);
+    }
+
+    private IActionResult? RejectUnavailableOrUnauthorized()
+    {
+        if (!_options.Enabled)
+        {
+            return NotFound(new { message = "GeoTrack MCP is disabled." });
+        }
+
+        var isAuthenticated = User.Identity?.IsAuthenticated == true;
+        if (!isAuthenticated && (_options.RequireAuth || !_options.AllowAnonymousPublicTools))
+        {
+            return Unauthorized(new { message = "GeoTrack MCP requires authentication." });
+        }
+
+        return null;
     }
 
     private bool AcceptsEventStream() =>
@@ -194,6 +212,61 @@ public class McpController : ControllerBase
                     East = ReadDouble(args, "east"),
                     West = ReadDouble(args, "west"),
                     Zoom = ReadOptionalDouble(args, "zoom") ?? 13d
+                },
+                cancellationToken),
+            "geotrack_resolve_area" => await _toolService.ResolveAreaAsync(
+                new GeoTrackAreaResolveRequest
+                {
+                    Query = ReadString(args, "query", required: true),
+                    Limit = ReadOptionalLimit(args, "limit", 10)
+                },
+                cancellationToken),
+            "geotrack_search_catalog" => await _toolService.SearchCatalogAsync(
+                new GeoTrackCatalogSearchRequest
+                {
+                    Query = ReadString(args, "query", required: false),
+                    AreaType = ReadString(args, "areaType", required: false),
+                    AreaId = ReadOptionalPositiveInt(args, "areaId"),
+                    Category = ReadString(args, "category", required: false),
+                    EntityTypes = ReadOptionalStringList(args, "entityTypes"),
+                    Limit = ReadOptionalLimit(args, "limit", 20)
+                },
+                cancellationToken),
+            "geotrack_search_by_area" => await _toolService.SearchByAreaAsync(
+                new GeoTrackAreaContentRequest
+                {
+                    AreaType = ReadString(args, "areaType", required: true),
+                    AreaId = ReadPositiveInt(args, "areaId"),
+                    Category = ReadString(args, "category", required: false),
+                    EntityTypes = ReadOptionalStringList(args, "entityTypes"),
+                    Limit = ReadOptionalLimit(args, "limit", 20)
+                },
+                cancellationToken),
+            "geotrack_get_area_overview" => await _toolService.GetAreaOverviewAsync(
+                new GeoTrackAreaOverviewRequest
+                {
+                    AreaType = ReadString(args, "areaType", required: true),
+                    AreaId = ReadPositiveInt(args, "areaId"),
+                    LimitPerType = ReadOptionalLimit(args, "limitPerType", 10)
+                },
+                cancellationToken),
+            "geotrack_get_category_options" => await _toolService.GetCategoryOptionsAsync(
+                new GeoTrackCategoryOptionsRequest
+                {
+                    AreaType = ReadString(args, "areaType", required: false),
+                    AreaId = ReadOptionalPositiveInt(args, "areaId"),
+                    CategoryGroup = ReadString(args, "categoryGroup", required: false)
+                },
+                cancellationToken),
+            "geotrack_find_nearby_public_content" => await _toolService.FindNearbyPublicContentAsync(
+                new GeoTrackNearbySearchRequest
+                {
+                    Latitude = ReadLatitude(args, "latitude"),
+                    Longitude = ReadLongitude(args, "longitude"),
+                    RadiusKm = ReadOptionalRadiusKm(args, "radiusKm"),
+                    Category = ReadString(args, "categoryGroup", required: false),
+                    EntityTypes = ReadOptionalStringList(args, "entityTypes"),
+                    Limit = ReadOptionalLimit(args, "limit", 20)
                 },
                 cancellationToken),
             _ => throw new AgentException("tool_not_allowed", "The requested MCP tool is not allowed.", 400)
@@ -271,6 +344,24 @@ public class McpController : ControllerBase
             value > 10)
         {
             throw new AgentException("invalid_tool_arguments", $"{name} must be between 1 and 10.", 400);
+        }
+
+        return value;
+    }
+
+    private static int? ReadOptionalLimit(JsonElement args, string name, int maximum)
+    {
+        if (!args.TryGetProperty(name, out var element) || element.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (element.ValueKind != JsonValueKind.Number ||
+            !element.TryGetInt32(out var value) ||
+            value <= 0 ||
+            value > maximum)
+        {
+            throw new AgentException("invalid_tool_arguments", $"{name} must be between 1 and {maximum}.", 400);
         }
 
         return value;
@@ -358,6 +449,28 @@ public class McpController : ControllerBase
         return value;
     }
 
+    private static double ReadLatitude(JsonElement args, string name)
+    {
+        var value = ReadDouble(args, name);
+        if (value is < -90 or > 90)
+        {
+            throw new AgentException("invalid_tool_arguments", $"{name} must be between -90 and 90.", 400);
+        }
+
+        return value;
+    }
+
+    private static double ReadLongitude(JsonElement args, string name)
+    {
+        var value = ReadDouble(args, name);
+        if (value is < -180 or > 180)
+        {
+            throw new AgentException("invalid_tool_arguments", $"{name} must be between -180 and 180.", 400);
+        }
+
+        return value;
+    }
+
     private static double? ReadOptionalDouble(JsonElement args, string name)
     {
         if (!args.TryGetProperty(name, out var element) || element.ValueKind == JsonValueKind.Null)
@@ -366,6 +479,22 @@ public class McpController : ControllerBase
         }
 
         return ReadDouble(args, name);
+    }
+
+    private static double? ReadOptionalRadiusKm(JsonElement args, string name)
+    {
+        var value = ReadOptionalDouble(args, name);
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        if (value.Value <= 0d || value.Value > 100d)
+        {
+            throw new AgentException("invalid_tool_arguments", $"{name} must be between 0 and 100.", 400);
+        }
+
+        return value;
     }
 
     private static object Result(JsonElement? id, object result) => new
@@ -390,6 +519,98 @@ public class McpController : ControllerBase
         IdTool("geotrack_get_stay_details", "Get safe public details for one GeoTrack stay."),
         SearchTool("geotrack_search_events", "Search public GeoTrack events. Read-only and capped at 10 results.", includeUpcoming: true),
         IdTool("geotrack_get_event_details", "Get safe public details for one GeoTrack event."),
+        new()
+        {
+            Name = "geotrack_resolve_area",
+            Description = "Resolve a user area phrase to public GeoTrack destinations, locations, regions, territories, places, or events. Read-only.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                required = new[] { "query" },
+                properties = new Dictionary<string, object>
+                {
+                    ["query"] = new { type = "string", minLength = 2, maxLength = 100 },
+                    ["limit"] = new { type = "integer", minimum = 1, maximum = 10 }
+                }
+            }
+        },
+        new()
+        {
+            Name = "geotrack_search_catalog",
+            Description = "Unified search over public GeoTrack catalog content. Read-only and capped at 20 results.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                properties = CatalogSearchProperties()
+            }
+        },
+        new()
+        {
+            Name = "geotrack_search_by_area",
+            Description = "Return grouped public catalog content inside a resolved area. Read-only and capped at 20 results per request.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                required = new[] { "areaType", "areaId" },
+                properties = AreaScopedProperties(includeLimit: true)
+            }
+        },
+        new()
+        {
+            Name = "geotrack_get_area_overview",
+            Description = "Summarize public GeoTrack content counts and top results for a resolved area. Read-only.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                required = new[] { "areaType", "areaId" },
+                properties = new Dictionary<string, object>
+                {
+                    ["areaType"] = AreaTypeSchema(),
+                    ["areaId"] = new { type = "integer", minimum = 1 },
+                    ["limitPerType"] = new { type = "integer", minimum = 1, maximum = 10 }
+                }
+            }
+        },
+        new()
+        {
+            Name = "geotrack_get_category_options",
+            Description = "Return known public category groups, tags, and type names Ask Agent can use. Read-only.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                properties = new Dictionary<string, object>
+                {
+                    ["areaType"] = AreaTypeSchema(),
+                    ["areaId"] = new { type = "integer", minimum = 1 },
+                    ["categoryGroup"] = new { type = "string", minLength = 2, maxLength = 50 }
+                }
+            }
+        },
+        new()
+        {
+            Name = "geotrack_find_nearby_public_content",
+            Description = "Find public GeoTrack catalog content near caller-provided coordinates. Read-only and capped at 20 results.",
+            InputSchema = new
+            {
+                type = "object",
+                additionalProperties = false,
+                required = new[] { "latitude", "longitude" },
+                properties = new Dictionary<string, object>
+                {
+                    ["latitude"] = NumberSchema(-90, 90),
+                    ["longitude"] = NumberSchema(-180, 180),
+                    ["radiusKm"] = NumberSchema(0.1, 100),
+                    ["categoryGroup"] = new { type = "string", minLength = 2, maxLength = 50 },
+                    ["entityTypes"] = StringArraySchema(),
+                    ["limit"] = new { type = "integer", minimum = 1, maximum = 20 }
+                }
+            }
+        },
         new()
         {
             Name = "geotrack_get_map_filters",
@@ -474,6 +695,30 @@ public class McpController : ControllerBase
         type = "number",
         minimum,
         maximum
+    };
+
+    private static Dictionary<string, object> CatalogSearchProperties()
+    {
+        var properties = AreaScopedProperties(includeLimit: true);
+        properties["query"] = new { type = "string", minLength = 2, maxLength = 100 };
+        return properties;
+    }
+
+    private static Dictionary<string, object> AreaScopedProperties(bool includeLimit) => new()
+    {
+        ["areaType"] = AreaTypeSchema(),
+        ["areaId"] = new { type = "integer", minimum = 1 },
+        ["category"] = new { type = "string", minLength = 2, maxLength = 50 },
+        ["entityTypes"] = StringArraySchema(),
+        ["limit"] = includeLimit
+            ? new { type = "integer", minimum = 1, maximum = 20 }
+            : new { type = "integer", minimum = 1, maximum = 10 }
+    };
+
+    private static object AreaTypeSchema() => new
+    {
+        type = "string",
+        @enum = new[] { "destination", "location", "region", "territory", "place", "stay", "event" }
     };
 
     private static object StringArraySchema() => new

@@ -3,6 +3,7 @@ using Geotrack.Application.DTOs.Explore;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Geotrack.Server.Controllers;
 
@@ -135,6 +136,7 @@ public class DestinationController : ControllerBase
 
     [HttpPost("{id}/reviews")]
     [Authorize]
+    [EnableRateLimiting("reviews")]
     public async Task<IActionResult> CreateDestinationReview([FromRoute] int id, [FromBody] CreateDestinationReviewRequestDto request)
     {
         try

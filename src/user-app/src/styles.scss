@@ -27,6 +27,11 @@ a {
   text-decoration: none;
 }
 
+[role='button']:focus-visible {
+  outline: 2px solid var(--color-accent-orange);
+  outline-offset: 3px;
+}
+
 img {
   max-width: 100%;
   display: block;
@@ -34,6 +39,40 @@ img {
 
 img.image-fallback-active {
   background: var(--color-primary-navy);
+}
+
+.gt-detail.pd .pd__reviews-list,
+.gt-detail.hd .hd__reviews-list,
+.gt-detail.pd .pd__review,
+.gt-detail.hd .hd__review,
+.gt-detail.pd .pd__review-top,
+.gt-detail.hd .hd__review-top {
+  min-width: 0;
+}
+
+.gt-detail.pd .pd__reviews-list,
+.gt-detail.hd .hd__reviews-list,
+.gt-detail.pd .pd__review,
+.gt-detail.hd .hd__review {
+  max-width: 100%;
+}
+
+.gt-detail.pd .pd__review,
+.gt-detail.hd .hd__review {
+  overflow: hidden;
+}
+
+.gt-detail.pd .pd__review-body,
+.gt-detail.hd .hd__review-body {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.gt-detail.pd .pd__review-actions,
+.gt-detail.hd .hd__review-actions {
+  flex-wrap: wrap;
 }
 
 .visually-hidden {

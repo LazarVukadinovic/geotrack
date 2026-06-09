@@ -1777,6 +1777,74 @@ namespace Geotrack.Infrastructure.Migrations
                     b.ToTable("LocationReviews", (string)null);
                 });
 
+            modelBuilder.Entity("Geotrack.Domain.Entities.Reviews.ModerationAuditLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InternalNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("MetadataJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("ModeratorUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NewStatus")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("PreviousStatus")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("SourceArea")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("TargetId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("Action", "CreatedAt");
+
+                    b.HasIndex("ModeratorUserId", "CreatedAt");
+
+                    b.HasIndex("TargetType", "TargetId", "CreatedAt");
+
+                    b.ToTable("ModerationAuditLogs", (string)null);
+                });
+
             modelBuilder.Entity("Geotrack.Domain.Entities.Reviews.ModerationTerm", b =>
                 {
                     b.Property<int>("Id")
@@ -3625,6 +3693,17 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Navigation("Location");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Geotrack.Domain.Entities.Reviews.ModerationAuditLog", b =>
+                {
+                    b.HasOne("Geotrack.Domain.Entities.Users.User", "ModeratorUser")
+                        .WithMany()
+                        .HasForeignKey("ModeratorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ModeratorUser");
                 });
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Reviews.ModerationTerm", b =>

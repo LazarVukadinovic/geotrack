@@ -8,7 +8,7 @@ namespace Geotrack.Application.DTOs.Auth;
 
 public class LoginResponseDto
 {
-    /// <summary>Short-lived JWT (15 minutes).</summary>
+    /// <summary>Short-lived JWT access token.</summary>
     public string AccessToken { get; set; } = string.Empty;
 
     /// <summary>
@@ -17,8 +17,8 @@ public class LoginResponseDto
     /// </summary>
     public string RefreshToken { get; set; } = string.Empty;
 
-    /// <summary>Access token lifetime in seconds (900 = 15 minutes).</summary>
-    public int ExpiresIn { get; set; } = 900;
+    /// <summary>Access token lifetime in seconds.</summary>
+    public int ExpiresIn { get; set; } = 3600;
 
     public bool SessionPersistent { get; set; }
     public AuthSessionDto? Session { get; set; }

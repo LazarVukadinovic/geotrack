@@ -53,6 +53,8 @@ public class RegionalLocationUpdateRequestDto
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public List<int>? TagIds { get; set; }
+    public string? CardImageUrl { get; set; }
+    public string? CoverImageUrl { get; set; }
 }
 
 public class RegionalLocationCreateRequestDto

@@ -77,6 +77,38 @@
     </section>
   }
 
+  @if (authPromptOpen()) {
+    <div class="agent__auth-backdrop" aria-hidden="true" (click)="closeAuthPrompt()"></div>
+
+    <section
+      #authDialog
+      id="agent-auth-dialog"
+      class="agent__auth-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="agent-auth-title"
+      tabindex="-1"
+    >
+      <header class="agent__auth-head">
+        <h2 id="agent-auth-title" class="agent__auth-title">Sign in to use Ask Agent</h2>
+        <button type="button" class="agent__auth-close" aria-label="Close sign-in prompt" (click)="closeAuthPrompt()">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </header>
+
+      <p class="agent__auth-text">
+        Ask Agent uses the GeoTrack catalog and your context to provide personalized recommendations. Sign in to continue.
+      </p>
+
+      <div class="agent__auth-actions">
+        <button type="button" class="agent__auth-primary" (click)="goToLogin()">Sign in</button>
+        <button type="button" class="agent__auth-secondary" (click)="goToRegister()">Create account</button>
+      </div>
+    </section>
+  }
+
   <div class="agent__messages" #messagesContainer>
     <div class="agent__date-divider">
       <span class="agent__date-divider-label">TODAY</span>
@@ -131,17 +163,20 @@
   </div>
 
   <div class="agent__input-area">
-    <div class="agent__input-row">
+    <div class="agent__input-row" [class.agent__input-row--locked]="!isAuthenticated()" (click)="onComposerClick()">
       <label class="visually-hidden" for="agent-message-input">Ask Agent a question</label>
       <input
         id="agent-message-input"
         name="agentMessage"
         class="agent__input"
         type="text"
-        placeholder="Search the GeoTrack catalog..."
+        [placeholder]="inputPlaceholder()"
         [value]="inputValue()"
+        [readonly]="!isAuthenticated()"
+        [attr.aria-disabled]="!isAuthenticated()"
         (input)="onInputChange($event)"
         (keydown)="onInputKeydown($event)"
+        (focus)="!isAuthenticated() && openAuthPrompt()"
         autocomplete="off"
         autocorrect="off"
         spellcheck="false"
@@ -151,6 +186,7 @@
         type="button"
         class="agent__send-btn"
         [class.agent__send-btn--active]="inputValue().trim().length > 0"
+        [attr.aria-disabled]="!isAuthenticated()"
         (click)="onSend()"
         aria-label="Send message"
       >

@@ -1,22 +1,31 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 
 import { StepBasicsComponent } from './step-basics.component';
 
 describe('StepBasicsComponent', () => {
   let component: StepBasicsComponent;
   let fixture: ComponentFixture<StepBasicsComponent>;
+  let httpTesting: HttpTestingController;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [StepBasicsComponent],
-      providers: [provideHttpClient()],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     })
     .compileComponents();
 
+    httpTesting = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(StepBasicsComponent);
     component = fixture.componentInstance;
+    fixture.detectChanges();
+    flushInitialCatalogRequests();
     await fixture.whenStable();
+  });
+
+  afterEach(() => {
+    httpTesting.verify();
   });
 
   it('should create', () => {
@@ -38,6 +47,8 @@ describe('StepBasicsComponent', () => {
     component.form.name = 'Validation Villa';
     component.form.city = 'Dubrovnik';
     component.form.country = 'Croatia';
+    component.form.imageUrl = '/media/uploads/contributions/cover.webp';
+    component.form.cardImageUrl = '/media/uploads/contributions/card.webp';
     component.form.lat = 42.6507;
     component.form.lng = 18.0944;
 
@@ -62,11 +73,12 @@ describe('StepBasicsComponent', () => {
   }
 
   for (const placeType of ['Stay', 'Restaurant', 'Cafe']) {
-    it(`blocks continue without proof for ${placeType}`, () => {
+    it(`shows ownership warning without proof for ${placeType}`, () => {
       fillValidLocation();
       component.form.placeType = placeType;
 
-      expect(component.isValid()).toBe(false);
+      expect(component.isValid()).toBe(true);
+      expect(component.showOwnershipWarning()).toBe(true);
     });
   }
 
@@ -104,12 +116,19 @@ describe('StepBasicsComponent', () => {
     component.form.name = 'Validation Place';
     component.form.city = 'Dubrovnik';
     component.form.country = 'Croatia';
+    component.form.imageUrl = '/media/uploads/contributions/cover.webp';
+    component.form.cardImageUrl = '/media/uploads/contributions/card.webp';
     component.form.lat = 42.6507;
     component.form.lng = 18.0944;
   }
 
   function makePdfFile(): File {
     return new File(['%PDF-1.4\n% proof\n'], 'ownership-proof.pdf', { type: 'application/pdf' });
+  }
+
+  function flushInitialCatalogRequests(): void {
+    httpTesting.expectOne('/api/contributions/place-types').flush([]);
+    httpTesting.expectOne('/api/contributions/stay-types').flush([]);
   }
 
 });

@@ -369,6 +369,39 @@ public sealed class ContributionPublicationTests
         Assert.Equal("Cafe", listItem.PlaceType);
     }
 
+    [Fact]
+    public async Task Create_sanitizes_rich_text_description_before_saving_contribution()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+
+        var payload = CreateGenericPlaceContributionPayload("Sanitized Contribution Cafe");
+        payload["description"] = """
+            <p onclick="alert(1)">Safe <strong>description</strong></p>
+            <script>alert(1)</script>
+            <a href="javascript:alert(1)">unsafe</a>
+            """;
+
+        var response = await PostContributionAsync(client, payload);
+
+        response.EnsureSuccessStatusCode();
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+
+        Assert.Contains("<strong>description</strong>", created!.Contribution.Description);
+        Assert.DoesNotContain("<script", created.Contribution.Description, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("onclick", created.Contribution.Description, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("javascript:", created.Contribution.Description, StringComparison.OrdinalIgnoreCase);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var saved = await db.PlaceContributions
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == created.Contribution.Id);
+
+        Assert.Equal(created.Contribution.Description, saved.Description);
+    }
+
     [Theory]
     [InlineData("Stay")]
     [InlineData("Restaurant")]
@@ -430,11 +463,12 @@ public sealed class ContributionPublicationTests
     }
 
     [Theory]
-    [InlineData("Restaurant", OwnershipProofUpload.InvalidText, "Ownership proof document must be a PDF file.")]
-    [InlineData("Cafe", OwnershipProofUpload.OversizedPdf, "Ownership proof document must be 10 MB or smaller.")]
+    [InlineData("Restaurant", OwnershipProofUpload.InvalidText, HttpStatusCode.BadRequest, "Ownership proof document must be a PDF, PNG, JPG/JPEG, or WEBP file.")]
+    [InlineData("Cafe", OwnershipProofUpload.OversizedPdf, (HttpStatusCode)413, "Uploaded file is too large.")]
     public async Task Create_rejects_invalid_ownership_proof_documents(
         string placeType,
         OwnershipProofUpload ownershipProof,
+        HttpStatusCode expectedStatusCode,
         string expectedMessage)
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
@@ -446,7 +480,7 @@ public sealed class ContributionPublicationTests
             payload,
             ownershipProof: ownershipProof);
 
-        await AssertErrorAsync(response, HttpStatusCode.BadRequest, expectedMessage);
+        await AssertErrorAsync(response, expectedStatusCode, expectedMessage);
     }
 
     [Theory]
@@ -737,7 +771,7 @@ public sealed class ContributionPublicationTests
         response.EnsureSuccessStatusCode();
         var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
         Assert.NotNull(created);
-        Assert.Contains(created.Contribution.Images, image => image.Url == mediaPath && image.IsMain);
+        Assert.Contains(created.Contribution.Images, image => image.Url == mediaPath);
     }
 
     [Fact]
@@ -990,6 +1024,7 @@ public sealed class ContributionPublicationTests
         formData.Add(
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
             "payload");
+        AddContributionImageFiles(formData);
         AddOwnershipProofDocument(formData);
 
         var response = await client.PostAsync("/api/contributions", formData);
@@ -1032,6 +1067,7 @@ public sealed class ContributionPublicationTests
         formData.Add(
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
             "payload");
+        AddContributionImageFiles(formData);
         AddOwnershipProofDocument(formData);
 
         var response = await client.PostAsync("/api/contributions", formData);
@@ -1052,9 +1088,26 @@ public sealed class ContributionPublicationTests
         formData.Add(
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
             "payload");
+        AddContributionImageFiles(formData);
         AddOwnershipProofDocument(formData, ownershipProof);
 
         return await client.PostAsync(endpoint, formData);
+    }
+
+    private static void AddContributionImageFiles(MultipartFormDataContent formData)
+    {
+        AddContributionImageFile(formData, "cardImage", "card.png");
+        AddContributionImageFile(formData, "coverImage", "cover.png");
+    }
+
+    private static void AddContributionImageFile(
+        MultipartFormDataContent formData,
+        string fieldName,
+        string fileName)
+    {
+        var content = new ByteArrayContent(TestPngBytes());
+        content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        formData.Add(content, fieldName, fileName);
     }
 
     private static async Task<HttpResponseMessage> PutOwnerUpdateAsync(
@@ -1113,6 +1166,10 @@ public sealed class ContributionPublicationTests
         InvalidText,
         OversizedPdf
     }
+
+    private static byte[] TestPngBytes() =>
+        Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=");
 
     private static async Task AssertForbiddenAsync(HttpResponseMessage response)
     {

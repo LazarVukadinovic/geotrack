@@ -1,25 +1,22 @@
 using Geotrack.Application.Interfaces.Service;
+using Geotrack.Application.Options;
+using Microsoft.Extensions.Options;
 
 namespace Geotrack.Server.Services;
 
 public sealed class LocalRegionalEntityImageStorageService : IRegionalEntityImageStorageService
 {
-    private const int MaxImageBytes = 8 * 1024 * 1024;
     private const string RegionalUrlPrefix = "/media/uploads/regional/";
 
-    private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "image/png",
-        "image/jpeg",
-        "image/jpg",
-        "image/webp"
-    };
-
     private readonly string _mediaDirectory;
+    private readonly UploadLimitsOptions _uploadLimits;
 
-    public LocalRegionalEntityImageStorageService(IWebHostEnvironment environment)
+    public LocalRegionalEntityImageStorageService(
+        IWebHostEnvironment environment,
+        IOptions<UploadLimitsOptions> uploadLimits)
     {
         _mediaDirectory = Path.Combine(environment.ContentRootPath, "media", "uploads", "regional");
+        _uploadLimits = uploadLimits.Value;
     }
 
     public async Task<StoredRegionalEntityImageFile> StoreImageAsync(
@@ -32,14 +29,22 @@ public sealed class LocalRegionalEntityImageStorageService : IRegionalEntityImag
         if (fileBytes.Length == 0)
             throw new InvalidOperationException("Please select an image to upload.");
 
-        if (fileBytes.Length > MaxImageBytes)
-            throw new InvalidOperationException("Regional image must be 8 MB or smaller.");
+        if (fileBytes.Length > _uploadLimits.Images.MaxFileSizeBytes)
+            throw new InvalidOperationException($"Regional image must be {FormatBytes(_uploadLimits.Images.MaxFileSizeBytes)} or smaller.");
 
-        if (!string.IsNullOrWhiteSpace(contentType) && !AllowedContentTypes.Contains(contentType.Trim()))
+        var extension = Path.GetExtension(originalFileName ?? string.Empty).ToLowerInvariant();
+        var normalizedContentType = NormalizeContentType(contentType);
+        if (!ContainsOrdinalIgnoreCase(_uploadLimits.Images.RegionalAllowedExtensions, extension) ||
+            !ContainsOrdinalIgnoreCase(_uploadLimits.Images.RegionalAllowedContentTypes, normalizedContentType))
+        {
             throw new InvalidOperationException("Only PNG, JPG/JPEG, or WEBP images are supported.");
+        }
 
         var detectedImage = DetectImageType(fileBytes)
             ?? throw new InvalidOperationException("Only PNG, JPG/JPEG, or WEBP images are supported.");
+
+        if (!MatchesDeclaredImage(detectedImage, extension, normalizedContentType))
+            throw new InvalidOperationException("Only PNG, JPG/JPEG, or WEBP images are supported.");
 
         Directory.CreateDirectory(_mediaDirectory);
 
@@ -92,6 +97,50 @@ public sealed class LocalRegionalEntityImageStorageService : IRegionalEntityImag
         }
 
         return null;
+    }
+
+    private static bool MatchesDeclaredImage(
+        DetectedImage detectedImage,
+        string extension,
+        string contentType)
+    {
+        if (detectedImage.Extension == ".jpg")
+        {
+            return (extension == ".jpg" || extension == ".jpeg") &&
+                (contentType == "image/jpeg" || contentType == "image/jpg");
+        }
+
+        return detectedImage.Extension == extension &&
+            detectedImage.Extension switch
+            {
+                ".png" => contentType == "image/png",
+                ".webp" => contentType == "image/webp",
+                _ => false
+            };
+    }
+
+    private static string NormalizeContentType(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            return string.Empty;
+        }
+
+        return contentType.Split(';', 2)[0].Trim().ToLowerInvariant();
+    }
+
+    private static bool ContainsOrdinalIgnoreCase(IEnumerable<string> values, string value) =>
+        values.Any(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase));
+
+    private static string FormatBytes(long bytes)
+    {
+        const long oneMegabyte = 1024L * 1024L;
+        if (bytes % oneMegabyte == 0)
+        {
+            return $"{bytes / oneMegabyte} MB";
+        }
+
+        return $"{bytes} bytes";
     }
 
     private sealed record DetectedImage(string Extension);

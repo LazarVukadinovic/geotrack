@@ -37,9 +37,20 @@ public interface IPlaceContributionService
 
     Task<ResolveContributionLocationDto?> ResolveNearestLocationAsync(double latitude, double longitude);
     Task DeleteAsync(int userId, int contributionId);
-    Task<PlaceContributionDetailDto> ApproveAsync(int contributionId, int reviewerUserId, string? note);
+    Task<PlaceContributionDetailDto> ApproveAsync(
+        int contributionId,
+        int reviewerUserId,
+        string? note,
+        string? internalNote = null,
+        string? sourceArea = null);
+
+    Task<PlaceContributionDetailDto> RejectAsync(
+        int contributionId,
+        int reviewerUserId,
+        string? note,
+        string? internalNote = null,
+        string? sourceArea = null);
     Task<PlaceContributionDetailDto> ApproveForContentManagerAsync(int contributionId, int reviewerUserId, int regionId, int? existingDestinationId, string? newDestinationName, string? newLocationName, string? note);
-    Task<PlaceContributionDetailDto> RejectAsync(int contributionId, int reviewerUserId, string? note);
     Task<ContributionRegionOptionsDto> GetRegionOptionsAsync();
     Task<ContributionLocationOptionsDto> GetDestinationLocationOptionsAsync(int destinationId);
     Task AddDestinationCardImageAsync(int destinationId, byte[] imageBytes);

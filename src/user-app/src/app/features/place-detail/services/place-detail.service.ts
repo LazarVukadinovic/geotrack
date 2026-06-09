@@ -15,6 +15,7 @@ export type DetailLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'erro
 interface ApiPlaceDetail {
   id: number;
   title: string;
+  destinationId?: number | null;
   location?: string;
   locationId?: number | null;
   locationName?: string | null;
@@ -189,7 +190,11 @@ export class PlaceDetailService {
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');
         this.lastRequestKeyById.delete(id);
-        this.analytics.track('detail_view', { entityType: 'place', entityId: dto.id });
+        this.analytics.track('detail_view', {
+          entityType: 'place',
+          entityId: dto.id,
+          destinationId: dto.destinationId ?? this.destinationSvc.id() ?? undefined,
+        });
       },
       error: (err) => {
         if (this.lastRequestKeyById.get(id) === requestKey) {

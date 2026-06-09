@@ -180,4 +180,6 @@ export interface RegionalPlaceUpdateRequest {
   latitude?: number | null;
   longitude?: number | null;
   tagIds?: number[] | null;
+  cardImageUrl?: string | null;
+  coverImageUrl?: string | null;
 }

@@ -146,25 +146,27 @@
               <ng-container *ngIf="trendChart() as chart">
                 <div class="text-xs text-gray-400 mb-4">{{ chart.subtitle }}</div>
                 <svg
-                  viewBox="0 0 320 160"
+                  viewBox="0 0 320 180"
                   class="w-full"
-                  style="height: 160px;"
+                  style="height: 180px;"
                   role="img"
-                  aria-label="Page views trend line chart"
+                  aria-labelledby="pageViewsTrendTitle pageViewsTrendDescription"
                   data-testid="page-views-trend-chart"
                   (mouseleave)="clearActiveTrendPoint()"
                 >
+                  <title id="pageViewsTrendTitle">Page Views Trend</title>
+                  <desc id="pageViewsTrendDescription">{{ chart.subtitle }}. X axis: {{ chart.xAxisLabel }}. Y axis: {{ chart.yAxisLabel }}.</desc>
                   <defs>
                     <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stop-color="#185FA5" stop-opacity="0.15"/>
                       <stop offset="100%" stop-color="#185FA5" stop-opacity="0"/>
                     </linearGradient>
                   </defs>
-                  <text *ngFor="let lbl of chart.yLabels" x="4" [attr.y]="lbl.y" font-size="9" fill="#9ca3af">{{ lbl.text }}</text>
-                  <line x1="24" y1="14"  x2="316" y2="14"  stroke="#f3f4f6" stroke-width="1"/>
-                  <line x1="24" y1="54"  x2="316" y2="54"  stroke="#f3f4f6" stroke-width="1"/>
-                  <line x1="24" y1="94"  x2="316" y2="94"  stroke="#f3f4f6" stroke-width="1"/>
-                  <line x1="24" y1="134" x2="316" y2="134" stroke="#f3f4f6" stroke-width="1"/>
+                  <text x="9" y="81" transform="rotate(-90 9 81)" text-anchor="middle" font-size="9" font-weight="600" fill="#6b7280" data-testid="page-views-trend-y-axis-label">{{ chart.yAxisLabel }}</text>
+                  <g *ngFor="let lbl of chart.yLabels">
+                    <line x1="46" [attr.y1]="lbl.y" x2="316" [attr.y2]="lbl.y" stroke="#f3f4f6" stroke-width="1"/>
+                    <text x="38" [attr.y]="lbl.y" text-anchor="end" dominant-baseline="middle" font-size="9" fill="#9ca3af" data-testid="page-views-trend-y-label">{{ lbl.text }}</text>
+                  </g>
                   <path [attr.d]="chart.areaPath" fill="url(#areaGrad)"/>
                   <path [attr.d]="chart.linePath" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-testid="page-views-trend-line"/>
                   <g
@@ -214,6 +216,7 @@
                     ></circle>
                   </ng-container>
                   <text *ngFor="let lbl of chart.xLabels" [attr.x]="lbl.x" y="158" font-size="9" fill="#9ca3af" text-anchor="middle">{{ lbl.text }}</text>
+                  <text x="181" y="176" text-anchor="middle" font-size="9" font-weight="600" fill="#6b7280" data-testid="page-views-trend-x-axis-label">{{ chart.xAxisLabel }}</text>
                 </svg>
               </ng-container>
             </div>
@@ -673,55 +676,55 @@
         <!-- ── Right panel ─────────────────────────────────────────────── -->
         <div class="w-72 flex-shrink-0 flex flex-col gap-4">
 
-          <!-- Destination Ranking -->
+          <!-- Type Ranking -->
           <div class="bg-white rounded-xl border border-gray-100 p-5" style="box-shadow: 0 1px 4px rgba(0,0,0,0.04);" data-testid="destination-ranking-card">
             <div class="flex items-center gap-2 mb-1">
               <svg class="w-4 h-4 text-gray-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 21s7-4.35 7-11a7 7 0 10-14 0c0 6.65 7 11 7 11z"/>
                 <circle cx="12" cy="10" r="2.5"/>
               </svg>
-              <span class="text-sm font-semibold text-gray-800">Destination Ranking</span>
+              <span class="text-sm font-semibold text-gray-800">{{ rankingTitle() }}</span>
             </div>
-            <p class="text-xs text-gray-400 mb-4">Most visited destinations by page views</p>
+            <p class="text-xs text-gray-400 mb-4">{{ rankingSubtitle() }}</p>
 
-            <ng-container *ngIf="analyticsLoading && destinationRanking().length === 0; else destinationRankingContent">
-              <p class="text-sm text-gray-400 py-3">Loading destination ranking...</p>
+            <ng-container *ngIf="analyticsLoading && topPerformers().length === 0; else rankingContent">
+              <p class="text-sm text-gray-400 py-3">{{ rankingLoadingText() }}</p>
             </ng-container>
 
-            <ng-template #destinationRankingContent>
-              <div *ngIf="destinationRanking().length > 0; else noDestinationRanking" class="flex flex-col gap-3">
+            <ng-template #rankingContent>
+              <div *ngIf="topPerformers().length > 0; else noRanking" class="flex flex-col gap-3">
                 <div
-                  *ngFor="let item of destinationRanking()"
+                  *ngFor="let item of topPerformers(); let itemIndex = index"
                   class="grid items-center gap-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
                   style="grid-template-columns: 1.5rem minmax(0, 1fr) 2.25rem;"
-                  [appAnalyticsTooltip]="destinationRankingTooltip(item)"
-                  [attr.aria-label]="destinationRankingAriaLabel(item)"
+                  [appAnalyticsTooltip]="rankingTooltip(item, itemIndex)"
+                  [attr.aria-label]="rankingAriaLabel(item, itemIndex)"
                   tabindex="0"
                   role="img"
                   data-testid="destination-ranking-row"
                 >
                   <span class="text-[11px] font-bold text-blue-600 bg-blue-50 rounded-full w-6 h-6 flex items-center justify-center">
-                    {{ item.rank }}
+                    {{ itemIndex + 1 }}
                   </span>
                   <div class="min-w-0">
-                    <div class="text-xs font-medium text-gray-700 truncate" [title]="item.destinationName">
-                      {{ item.destinationName }}
+                    <div class="text-xs font-medium text-gray-700 truncate" [title]="item.name">
+                      {{ item.name }}
                     </div>
                     <div class="h-2.5 bg-gray-100 rounded overflow-hidden mt-1.5">
                       <div
                         class="h-full rounded"
                         style="background: #185FA5;"
-                        [style.width]="destinationRankingBarPct(item) + '%'"
+                        [style.width]="rankingBarPct(item) + '%'"
                         data-testid="destination-ranking-bar-fill"
                       ></div>
                     </div>
                   </div>
-                  <span class="text-xs text-gray-500 text-right font-medium">{{ formatNum(item.visits) }}</span>
+                  <span class="text-xs text-gray-500 text-right font-medium">{{ formatNum(item.views) }}</span>
                 </div>
               </div>
 
-              <ng-template #noDestinationRanking>
-                <p class="text-sm text-gray-400 py-3">No destination visit data yet.</p>
+              <ng-template #noRanking>
+                <p class="text-sm text-gray-400 py-3">{{ rankingEmptyText() }}</p>
               </ng-template>
             </ng-template>
           </div>
@@ -733,7 +736,7 @@
               <span class="text-sm font-semibold text-gray-800">Actionable Insights</span>
             </div>
             <p class="text-xs text-gray-400 mb-4">
-              Automated analysis for {{ regionDisplayName || 'the active region' }}.
+              Automated analysis for {{ entityTypeWord() }} in {{ regionDisplayName || 'the active region' }}.
             </p>
 
             <div class="flex flex-col gap-3">

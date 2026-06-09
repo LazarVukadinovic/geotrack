@@ -69,22 +69,13 @@
                 aria-label="View {{ review.authorName }}'s reviews"
                 (click)="ri.goToAuthorReviews(review)"
               >
-                @if (review.avatarUrl) {
-                  <img
-                    appImageFallback
-                    class="reviews-page__avatar"
-                    [src]="review.avatarUrl"
-                    [alt]="review.authorName"
-                    width="44"
-                    height="44"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                } @else {
-                  <span class="reviews-page__avatar reviews-page__avatar--initials" aria-hidden="true">
-                    {{ reviewInitials(review.authorName) }}
-                  </span>
-                }
+                <app-user-avatar
+                  class="reviews-page__avatar"
+                  [size]="44"
+                  [imageUrl]="review.avatarUrl"
+                  [displayName]="review.authorName"
+                  [alt]="'Profile photo of ' + review.authorName"
+                />
               </button>
 
               <div class="reviews-page__review-meta">
