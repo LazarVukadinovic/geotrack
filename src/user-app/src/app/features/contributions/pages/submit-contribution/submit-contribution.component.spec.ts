@@ -47,6 +47,22 @@ describe('SubmitContributionComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('clears submit errors when leaving the review step', () => {
+    const vm = component as unknown as {
+      currentStep: { set: (value: number) => void; (): number };
+      submitError: { set: (value: string | null) => void; (): string | null };
+      prevStep: () => void;
+    };
+
+    vm.currentStep.set(4);
+    vm.submitError.set('You can add up to 10 gallery images.');
+
+    vm.prevStep();
+
+    expect(vm.currentStep()).toBe(3);
+    expect(vm.submitError()).toBeNull();
+  });
+
   function flushInitialCatalogRequests(): void {
     httpTesting.expectOne('/api/contributions/place-types').flush([]);
     httpTesting.expectOne('/api/contributions/stay-types').flush([]);

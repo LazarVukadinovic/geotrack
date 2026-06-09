@@ -349,6 +349,9 @@ export class SubmitContributionComponent implements OnInit {
   protected prevStep(): void {
     const step = this.currentStep();
     if (step <= 1) return;
+    if (step === 4) {
+      this.submitError.set(null);
+    }
     this.currentStep.update(s => s - 1);
   }
 

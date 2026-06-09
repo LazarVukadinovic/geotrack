@@ -18,6 +18,7 @@ const FALLBACK_OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe', 'bar
 const HIDDEN_CONTRIBUTION_PLACE_TYPES = new Set(['beach', 'nature', 'shopping']);
 const COVER_IMAGE_OUTPUT = { width: 1600, height: 900 };
 const CARD_IMAGE_OUTPUT = { width: 960, height: 720 };
+const MAX_GALLERY_IMAGES = 10;
 
 export interface ContributionPlaceTypeOption {
   id: number;
@@ -74,6 +75,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   coverPreviewUrl = signal('');
   cardPreviewUrl = signal('');
   galleryPreviewUrls = signal<string[]>([]);
+  galleryError = signal('');
   ownershipProofFileName = signal('');
   ownershipProofError = signal('');
   showMapPicker = signal(false);
@@ -176,7 +178,19 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     (e.target as HTMLInputElement).value = '';
     if (files.length === 0) return;
 
-    for (const file of files) {
+    this.galleryError.set('');
+    const availableSlots = Math.max(0, MAX_GALLERY_IMAGES - this.galleryPreviewUrls().length);
+    if (availableSlots === 0) {
+      this.galleryError.set(`You can add up to ${MAX_GALLERY_IMAGES} gallery images.`);
+      return;
+    }
+
+    const acceptedFiles = files.slice(0, availableSlots);
+    if (acceptedFiles.length < files.length) {
+      this.galleryError.set(`Only ${MAX_GALLERY_IMAGES} gallery images are allowed.`);
+    }
+
+    for (const file of acceptedFiles) {
       const reader = new FileReader();
       reader.onload = () => {
         const url = reader.result as string;
@@ -194,12 +208,22 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     const files = [...(this.form.galleryImageFiles ?? [])];
     files.splice(index, 1);
     this.form.galleryImageFiles = files;
+    this.galleryError.set('');
+    this.syncGalleryLightboxAfterRemoval(index);
   }
 
   changeGalleryImage(index: number, e: Event): void {
     const file = (e.target as HTMLInputElement).files?.[0];
     (e.target as HTMLInputElement).value = '';
     if (!file) return;
+    this.replaceGalleryImage(index, file);
+  }
+
+  changeGalleryLightboxImage(event: { index: number; file: File }): void {
+    this.replaceGalleryImage(event.index, event.file);
+  }
+
+  private replaceGalleryImage(index: number, file: File): void {
     const reader = new FileReader();
     reader.onload = () => {
       const url = reader.result as string;
@@ -213,8 +237,29 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
       while (files.length <= index) files.push(null);
       files[index] = file;
       this.form.galleryImageFiles = files;
+      this.galleryError.set('');
     };
     reader.readAsDataURL(file);
+  }
+
+  private syncGalleryLightboxAfterRemoval(removedIndex: number): void {
+    const activeIndex = this.galleryLightboxIndex();
+    if (activeIndex === null) return;
+
+    const total = this.galleryPreviewUrls().length;
+    if (total === 0) {
+      this.galleryLightboxIndex.set(null);
+      return;
+    }
+
+    if (activeIndex > removedIndex) {
+      this.galleryLightboxIndex.set(activeIndex - 1);
+      return;
+    }
+
+    if (activeIndex >= total) {
+      this.galleryLightboxIndex.set(total - 1);
+    }
   }
 
   galleryLightboxIndex = signal<number | null>(null);

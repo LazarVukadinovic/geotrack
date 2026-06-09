@@ -112,6 +112,34 @@ describe('StepBasicsComponent', () => {
     expect(component.form.ownershipProofOriginalFileName).toBe('existing-proof.pdf');
   });
 
+  it('blocks adding gallery images after the 10 image limit', () => {
+    const urls = Array.from({ length: 10 }, (_, index) => `/media/gallery-${index}.webp`);
+    component.galleryPreviewUrls.set(urls);
+    component.form.galleryImageUrls = [...urls];
+    component.form.galleryImageFiles = urls.map(() => null);
+
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: [makeImageFile()] });
+
+    component.onGalleryImagesSelected({ target: input } as unknown as Event);
+
+    expect(component.galleryPreviewUrls().length).toBe(10);
+    expect(component.galleryError()).toBe('You can add up to 10 gallery images.');
+  });
+
+  it('removes the active lightbox gallery image without removing previous images first', () => {
+    const urls = Array.from({ length: 8 }, (_, index) => `/media/gallery-${index}.webp`);
+    component.galleryPreviewUrls.set(urls);
+    component.form.galleryImageUrls = [...urls];
+    component.form.galleryImageFiles = urls.map(() => null);
+    component.openGalleryLightbox(7);
+
+    component.removeGalleryImage(7);
+
+    expect(component.form.galleryImageUrls).toEqual(urls.slice(0, 7));
+    expect(component.galleryLightboxIndex()).toBe(6);
+  });
+
   function fillValidLocation(): void {
     component.form.name = 'Validation Place';
     component.form.city = 'Dubrovnik';
@@ -124,6 +152,10 @@ describe('StepBasicsComponent', () => {
 
   function makePdfFile(): File {
     return new File(['%PDF-1.4\n% proof\n'], 'ownership-proof.pdf', { type: 'application/pdf' });
+  }
+
+  function makeImageFile(): File {
+    return new File(['image'], 'gallery.webp', { type: 'image/webp' });
   }
 
   function flushInitialCatalogRequests(): void {
