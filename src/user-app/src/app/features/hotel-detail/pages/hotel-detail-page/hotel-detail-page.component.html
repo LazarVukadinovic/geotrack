@@ -270,17 +270,19 @@
             <section class="hd__section hd__section--reviews">
               <app-section-header
                 title="Reviews"
-                [actionLabel]="reviewsMoreActionLabel(h.reviews)"
+                [actionLabel]="reviewMoreActionLabel(h.reviews)"
                 (action)="openReviews()"
               />
 
-              <app-review-entry
-                [isLoggedIn]="isLoggedIn()"
-                [entityName]="h.title"
-                [submitRequest]="submitReview"
-                (loginRequested)="goToLogin()"
-                (reviewSubmitted)="onReviewSubmitted($event)"
-              />
+              @if (!hasOwnReview()) {
+                <app-review-entry
+                  [isLoggedIn]="isLoggedIn()"
+                  [entityName]="h.title"
+                  [submitRequest]="submitReview"
+                  (loginRequested)="goToLogin()"
+                  (reviewSubmitted)="onReviewSubmitted($event)"
+                />
+              }
 
               @if (ri.reportMessage()) {
                 <p class="hd__review-notice hd__review-notice--success" role="status">{{ ri.reportMessage() }}</p>
@@ -291,7 +293,7 @@
 
               <!-- Review cards -->
               <div class="hd__reviews-list">
-                @for (review of h.reviews; track review.id) {
+                @for (review of visibleReviewPreview(h.reviews); track review.id) {
                   <div class="hd__review">
                     <div class="hd__review-top">
                       <button
@@ -325,7 +327,23 @@
                       </div>
                     </div>
 
-                    <p class="hd__review-body">{{ review.body }}</p>
+                    <p
+                      class="hd__review-body"
+                      [class.hd__review-body--collapsed]="hasLongReview(review.body) && !isReviewExpanded(review.id)"
+                      [style.--review-lines]="collapsedReviewLines"
+                    >
+                      {{ review.body }}
+                    </p>
+                    @if (hasLongReview(review.body)) {
+                      <button
+                        type="button"
+                        class="hd__review-toggle"
+                        [attr.aria-expanded]="isReviewExpanded(review.id)"
+                        (click)="toggleReviewExpanded(review.id)"
+                      >
+                        {{ isReviewExpanded(review.id) ? 'Show less' : 'Show more' }}
+                      </button>
+                    }
 
                     @if (review.isOwnReview) {
                       <div class="hd__review-actions">

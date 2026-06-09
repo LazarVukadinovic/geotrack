@@ -19,6 +19,8 @@ type ReviewsLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
   styleUrl: './reviews-page.component.scss',
 })
 export class ReviewsPageComponent {
+  private readonly collapsedReviewLength = 140;
+  protected readonly collapsedReviewLines = 3;
   private readonly pageSize = 10;
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
@@ -51,6 +53,7 @@ export class ReviewsPageComponent {
   protected readonly hasMore = signal(false);
   protected readonly nextSkip = signal(0);
   protected readonly loadingMore = signal(false);
+  protected readonly expandedReviewIds = signal<Set<string>>(new Set());
 
   protected readonly entityKindLabel = computed(() => {
     switch (this.normalizeEntityType(this.entityTypeParam())) {
@@ -144,6 +147,29 @@ export class ReviewsPageComponent {
     return review.id;
   }
 
+  protected hasLongReview(body: string | null | undefined): boolean {
+    const value = (body ?? '').trim();
+    const lineCount = value ? value.split(/\r\n|\r|\n/).length : 0;
+    return value.length > this.collapsedReviewLength || lineCount > this.collapsedReviewLines;
+  }
+
+  protected isReviewExpanded(reviewId: string | number): boolean {
+    return this.expandedReviewIds().has(String(reviewId));
+  }
+
+  protected toggleReviewExpanded(reviewId: string | number): void {
+    const key = String(reviewId);
+    this.expandedReviewIds.update(current => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
   private loadReviews(entityTypeParam: string | null, entityIdParam: string | null): void {
     const entityType = this.normalizeEntityType(entityTypeParam);
     const entityId = parseInt(entityIdParam ?? '', 10);
@@ -155,6 +181,7 @@ export class ReviewsPageComponent {
       this.nextSkip.set(0);
       this.hasMore.set(false);
       this.loadingMore.set(false);
+      this.expandedReviewIds.set(new Set());
       this.loadState.set('notFound');
       return;
     }
@@ -178,6 +205,7 @@ export class ReviewsPageComponent {
           this.reviewsCount.set(result.reviewsCount);
           this.nextSkip.set(result.nextSkip);
           this.hasMore.set(result.hasMore);
+          this.expandedReviewIds.set(new Set());
           this.loadState.set('loaded');
         },
         error: () => {
@@ -188,6 +216,7 @@ export class ReviewsPageComponent {
           this.nextSkip.set(0);
           this.hasMore.set(false);
           this.loadingMore.set(false);
+          this.expandedReviewIds.set(new Set());
           this.loadState.set('error');
         },
       });

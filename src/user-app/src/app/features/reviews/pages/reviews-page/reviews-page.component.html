@@ -100,7 +100,23 @@
               </div>
             </div>
 
-            <p class="reviews-page__review-body">{{ review.body }}</p>
+            <p
+              class="reviews-page__review-body"
+              [class.reviews-page__review-body--collapsed]="hasLongReview(review.body) && !isReviewExpanded(review.id)"
+              [style.--review-lines]="collapsedReviewLines"
+            >
+              {{ review.body }}
+            </p>
+            @if (hasLongReview(review.body)) {
+              <button
+                type="button"
+                class="reviews-page__review-toggle"
+                [attr.aria-expanded]="isReviewExpanded(review.id)"
+                (click)="toggleReviewExpanded(review.id)"
+              >
+                {{ isReviewExpanded(review.id) ? 'Show less' : 'Show more' }}
+              </button>
+            }
 
             <div class="reviews-page__review-actions">
               @if (review.isOwnReview) {

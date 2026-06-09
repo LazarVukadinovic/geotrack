@@ -13,6 +13,8 @@ import type { UserReviewItem } from '../../services/reviews.service';
   styleUrl: './user-reviews-page.component.css',
 })
 export class UserReviewsPageComponent implements OnInit {
+  private readonly collapsedReviewLength = 140;
+  protected readonly collapsedReviewLines = 3;
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
@@ -38,6 +40,7 @@ export class UserReviewsPageComponent implements OnInit {
   protected readonly nextSkip = signal(0);
   protected readonly isLoadingMore = signal(false);
   protected readonly totalCount = signal(0);
+  protected readonly expandedReviewIds = signal<Set<string>>(new Set());
 
   private readonly pageSize = 10;
 
@@ -88,6 +91,30 @@ export class UserReviewsPageComponent implements OnInit {
     return star <= rating;
   }
 
+  protected hasLongReview(body: string | null | undefined): boolean {
+    const value = (body ?? '').trim();
+    const lineCount = value ? value.split(/\r\n|\r|\n/).length : 0;
+    return value.length > this.collapsedReviewLength || lineCount > this.collapsedReviewLines;
+  }
+
+  protected isReviewExpanded(reviewId: string | number): boolean {
+    return this.expandedReviewIds().has(String(reviewId));
+  }
+
+  protected toggleReviewExpanded(event: Event, reviewId: string | number): void {
+    event.stopPropagation();
+    const key = String(reviewId);
+    this.expandedReviewIds.update(current => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
   private load(): void {
     const userId = parseInt(this.userIdParam() ?? '', 10);
     if (isNaN(userId) || userId <= 0) {
@@ -99,6 +126,7 @@ export class UserReviewsPageComponent implements OnInit {
     this.isLoading.set(true);
     this.loadError.set(null);
     this.items.set([]);
+    this.expandedReviewIds.set(new Set());
     this.hasMore.set(false);
     this.nextSkip.set(0);
 

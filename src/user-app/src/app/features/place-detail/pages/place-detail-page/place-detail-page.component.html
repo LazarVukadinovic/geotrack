@@ -465,17 +465,19 @@
         <section class="pd__section pd__section--reviews">
           <app-section-header
             title="Reviews"
-            [actionLabel]="reviewsMoreActionLabel(p.reviews)"
+            [actionLabel]="reviewMoreActionLabel(p.reviews)"
             (action)="openReviews()"
           />
 
-          <app-review-entry
-            [isLoggedIn]="isLoggedIn()"
-            [entityName]="p.title"
-            [submitRequest]="submitReview"
-            (loginRequested)="goToLogin()"
-            (reviewSubmitted)="onReviewSubmitted($event)"
-          />
+          @if (!hasOwnReview()) {
+            <app-review-entry
+              [isLoggedIn]="isLoggedIn()"
+              [entityName]="p.title"
+              [submitRequest]="submitReview"
+              (loginRequested)="goToLogin()"
+              (reviewSubmitted)="onReviewSubmitted($event)"
+            />
+          }
 
           @if (ri.reportMessage()) {
             <p class="pd__review-notice pd__review-notice--success" role="status">{{ ri.reportMessage() }}</p>
@@ -486,7 +488,7 @@
 
           <!-- Review cards -->
           <div class="pd__reviews-list">
-            @for (review of p.reviews; track review.id) {
+            @for (review of visibleReviewPreview(p.reviews); track review.id) {
               <div class="pd__review">
                 <div class="pd__review-top">
                   <button
@@ -520,7 +522,23 @@
                   </div>
                 </div>
 
-                <p class="pd__review-body">{{ review.body }}</p>
+                <p
+                  class="pd__review-body"
+                  [class.pd__review-body--collapsed]="hasLongReview(review.body) && !isReviewExpanded(review.id)"
+                  [style.--review-lines]="collapsedReviewLines"
+                >
+                  {{ review.body }}
+                </p>
+                @if (hasLongReview(review.body)) {
+                  <button
+                    type="button"
+                    class="pd__review-toggle"
+                    [attr.aria-expanded]="isReviewExpanded(review.id)"
+                    (click)="toggleReviewExpanded(review.id)"
+                  >
+                    {{ isReviewExpanded(review.id) ? 'Show less' : 'Show more' }}
+                  </button>
+                }
 
                 @if (review.isOwnReview) {
                   <div class="pd__review-actions">

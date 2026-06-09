@@ -86,7 +86,23 @@
 
               <!-- Review body -->
               @if (item.body) {
-                <p class="my-review-card__body-text text-sm text-slate-600 leading-relaxed line-clamp-3">{{ item.body }}</p>
+                <p
+                  class="my-review-card__body-text text-sm text-slate-600 leading-relaxed"
+                  [class.my-review-card__body-text--collapsed]="hasLongReview(item.body) && !isReviewExpanded(item.id)"
+                  [style.--review-lines]="collapsedReviewLines"
+                >
+                  {{ item.body }}
+                </p>
+                @if (hasLongReview(item.body)) {
+                  <button
+                    type="button"
+                    class="my-review-card__body-toggle"
+                    [attr.aria-expanded]="isReviewExpanded(item.id)"
+                    (click)="toggleReviewExpanded($event, item.id)"
+                  >
+                    {{ isReviewExpanded(item.id) ? 'Show less' : 'Show more' }}
+                  </button>
+                }
               }
 
               <!-- Navigate hint -->

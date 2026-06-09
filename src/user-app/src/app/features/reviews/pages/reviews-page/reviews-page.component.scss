@@ -238,13 +238,45 @@
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: pre-wrap;
+
+  &--collapsed {
+    display: -webkit-box;
+    -webkit-line-clamp: var(--review-lines, 3);
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+.reviews-page__review-toggle {
+  display: flex;
+  width: max-content;
+  align-items: center;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #e8570a;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 800;
+  cursor: pointer;
+
+  &:hover {
+    color: #c94a06;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
 }
 
 .reviews-page__report {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 12px;
+  gap: 3px;
+  margin-top: 0;
   padding: 0;
   border: none;
   background: none;

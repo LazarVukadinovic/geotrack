@@ -17,7 +17,6 @@ import { HotelDetailService } from '../../services/hotel-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
 import { ExploreService } from '../../../explore/services/explore.service';
 import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
-import { reviewsMoreActionLabel } from '../../../reviews/utils/review-section-ui';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { HotelAmenityIcon, HotelBookingPartner, HotelDetail } from '../../models/hotel-detail.model';
 import type { MapEntityMarker } from '../../../../core/services/map-api.service';
@@ -31,6 +30,9 @@ import type { MapEntityMarker } from '../../../../core/services/map-api.service'
   styleUrl: './hotel-detail-page.component.scss',
 })
 export class HotelDetailPageComponent {
+  private readonly collapsedReviewLength = 140;
+  protected readonly collapsedReviewLines = 3;
+  protected readonly reviewPreviewLimit = 3;
   private readonly route    = inject(ActivatedRoute);
   private readonly router   = inject(Router);
   private readonly service  = inject(HotelDetailService);
@@ -43,7 +45,6 @@ export class HotelDetailPageComponent {
 
   protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
-  protected readonly reviewsMoreActionLabel = reviewsMoreActionLabel;
 
   protected readonly hotelId = toSignal(
     this.route.paramMap.pipe(map((p) => p.get('id') ?? '')),
@@ -67,6 +68,7 @@ export class HotelDetailPageComponent {
   protected readonly ownershipClaimMessage = signal('');
   protected readonly ownershipClaimSubmitting = signal(false);
   protected readonly ownershipClaimSubmitted = signal(false);
+  protected readonly expandedReviewIds = signal<Set<string>>(new Set());
   protected readonly heroImage = computed(() => this.hotel()?.heroImage ?? '');
 
   protected readonly allGalleryImages = computed((): EntityImage[] => {
@@ -108,6 +110,10 @@ export class HotelDetailPageComponent {
     this.primaryBookingPartners().length > 0 || this.secondaryBookingPartners().length > 0,
   );
 
+  protected readonly hasOwnReview = computed(() =>
+    this.hotel()?.reviews.some(review => !!review.isOwnReview) ?? false,
+  );
+
   private readonly locationRequestKey = computed(() => {
     const loc = this.locationSvc.location();
     if (!loc) return 'none';
@@ -132,6 +138,7 @@ export class HotelDetailPageComponent {
     effect(() => {
       this.hotelId();
       this.scrollProgress.set(0);
+      this.expandedReviewIds.set(new Set());
       this.galleryOpen.set(false);
       const el = this.hdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
@@ -383,6 +390,43 @@ export class HotelDetailPageComponent {
       default:
         return 'M5 12.5 9.5 17 19 7';
     }
+  }
+
+  protected hasLongReview(body: string | null | undefined): boolean {
+    const value = (body ?? '').trim();
+    const lineCount = value ? value.split(/\r\n|\r|\n/).length : 0;
+    return value.length > this.collapsedReviewLength || lineCount > this.collapsedReviewLines;
+  }
+
+  protected isReviewExpanded(reviewId: string | number): boolean {
+    return this.expandedReviewIds().has(String(reviewId));
+  }
+
+  protected toggleReviewExpanded(reviewId: string | number): void {
+    const key = String(reviewId);
+    this.expandedReviewIds.update(current => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  protected reviewMoreActionLabel(reviews: readonly unknown[] | null | undefined): 'More' | null {
+    return (reviews?.length ?? 0) > this.reviewPreviewLimit ? 'More' : null;
+  }
+
+  protected visibleReviewPreview<T extends { isOwnReview?: boolean }>(reviews: readonly T[]): readonly T[] {
+    if (reviews.length <= this.reviewPreviewLimit) return reviews;
+    const ownReview = reviews.find(review => !!review.isOwnReview);
+    if (!ownReview) return reviews.slice(0, this.reviewPreviewLimit);
+    return [
+      ownReview,
+      ...reviews.filter(review => review !== ownReview).slice(0, this.reviewPreviewLimit - 1),
+    ];
   }
 
   private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {
