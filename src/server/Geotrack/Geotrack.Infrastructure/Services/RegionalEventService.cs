@@ -338,6 +338,8 @@ public class RegionalEventService : IRegionalEventService
 
         var @event = await _db.Events
             .Include(item => item.Destination)
+            .Include(item => item.Location)
+            .Include(item => item.Place)
             .Include(item => item.EventTags)
             .Include(item => item.Images)
             .SingleOrDefaultAsync(item => item.Id == eventId && item.Destination.RegionId == regionId)
