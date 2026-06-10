@@ -78,9 +78,13 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     return !!this.contribution && !this.contribution.locationId;
   }
 
-  /** Use CM approve endpoint whenever the assignment form has a region selected. */
+  /**
+   * Use the CM approve endpoint whenever the assignment form has a region selected.
+   * Ownership claims target an existing place (no assignment form is shown), so they always
+   * go through the plain approve endpoint even though a suggested region is auto-selected.
+   */
   get usesCmApprove(): boolean {
-    return !!this.selectedRegionId;
+    return !this.isOwnershipClaim && !!this.selectedRegionId;
   }
 
   get canApprove(): boolean {

@@ -117,8 +117,14 @@ export class CmContributionsComponent implements OnInit, OnDestroy {
     return list.slice(0, 8);
   }
 
+  /** Ownership claims target an existing place, so they skip the region/destination assignment. */
+  get isApproveModalOwnershipClaim(): boolean {
+    return (this.approveModal?.type ?? '').toLowerCase() === 'claimownership';
+  }
+
   get canConfirmApprove(): boolean {
     if (!this.approveModal) return false;
+    if (this.isApproveModalOwnershipClaim) return true; // existing place, no assignment needed
     if (!this.selectedRegionId) return true; // approve without region assignment
     if (!this.newLocationName.trim()) return false;
     if (this.destinationChoice === 'existing') return !!this.selectedDestinationId;
@@ -381,7 +387,7 @@ export class CmContributionsComponent implements OnInit, OnDestroy {
     const destImage = this.destinationImageFile;
     const locImage = this.locationImageFile;
 
-    const obs = this.selectedRegionId
+    const obs = this.selectedRegionId && !this.isApproveModalOwnershipClaim
       ? this.service.approveWithRegion(
           item.id,
           this.selectedRegionId,
