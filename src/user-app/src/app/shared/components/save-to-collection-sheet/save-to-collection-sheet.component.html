@@ -114,10 +114,16 @@
           <label class="sc__label" for="save-new-collection-name">Collection Name</label>
           <input
             id="save-new-collection-name"
+            name="collectionName"
             class="sc__input"
             type="text"
             maxlength="80"
             autocomplete="off"
+            inputmode="text"
+            enterkeyhint="done"
+            autocapitalize="words"
+            autocorrect="off"
+            spellcheck="false"
             placeholder="Weekend ideas"
             [value]="newCollectionName()"
             [disabled]="isBusy()"

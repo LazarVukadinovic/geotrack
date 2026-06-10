@@ -69,7 +69,7 @@ describe('NewPlaceComponent', () => {
 
     flushReverseGeocode(45.1234567, 16.7654321);
     flushRegions([{ id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' }]);
-    flushParentLocations(17);
+    flushParentDestinations(17);
     flushRegionViewport(17);
     flushPlaceTypes();
     flushPlaceTags();
@@ -84,9 +84,9 @@ describe('NewPlaceComponent', () => {
     request.flush(regions);
   }
 
-  function flushParentLocations(regionId: number): void {
+  function flushParentDestinations(regionId: number): void {
     const request = http.expectOne(req =>
-      req.url === '/api/admin/regional/place-parent-locations' &&
+      req.url === '/api/admin/regional/place-parent-destinations' &&
       req.params.get('regionId') === String(regionId),
     );
     expect(request.request.method).toBe('GET');

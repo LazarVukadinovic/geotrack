@@ -20,9 +20,15 @@
           d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" stroke="currentColor" />
       </svg>
       <input
-        type="text"
+        id="destination-discovery-search"
+        name="destinationSearch"
+        type="search"
         enterkeyhint="search"
         autocomplete="off"
+        inputmode="search"
+        autocapitalize="none"
+        autocorrect="off"
+        spellcheck="false"
         [value]="query()"
         placeholder="Search destinations..."
         aria-label="Search destinations"

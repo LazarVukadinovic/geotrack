@@ -34,9 +34,16 @@ public interface IRegionalPlaceService
 
     Task DeletePlaceAsync(int userId, int regionId, int placeId);
 
+    Task<List<RegionalPlaceParentDestinationDto>> GetParentDestinationsAsync(
+        int userId,
+        int regionId,
+        string? search,
+        int take);
+
     Task<List<RegionalPlaceParentLocationDto>> GetParentLocationsAsync(
         int userId,
         int regionId,
+        int? destinationId,
         string? search,
         int take);
 

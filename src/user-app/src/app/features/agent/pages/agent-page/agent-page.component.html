@@ -170,6 +170,10 @@
         name="agentMessage"
         class="agent__input"
         type="text"
+        autocomplete="off"
+        inputmode="text"
+        enterkeyhint="send"
+        autocapitalize="sentences"
         [placeholder]="inputPlaceholder()"
         [value]="inputValue()"
         [readonly]="!isAuthenticated()"
@@ -177,9 +181,8 @@
         (input)="onInputChange($event)"
         (keydown)="onInputKeydown($event)"
         (focus)="!isAuthenticated() && openAuthPrompt()"
-        autocomplete="off"
-        autocorrect="off"
-        spellcheck="false"
+        autocorrect="on"
+        spellcheck="true"
       />
 
       <button

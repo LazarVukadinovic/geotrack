@@ -45,7 +45,13 @@
           </label>
           <input
             id="support-subject"
+            name="supportSubject"
             type="text"
+            autocomplete="off"
+            inputmode="text"
+            enterkeyhint="next"
+            autocapitalize="sentences"
+            spellcheck="true"
             [value]="subject()"
             (input)="subject.set($any($event.target).value)"
             placeholder="Short summary of what happened"
@@ -64,7 +70,12 @@
           </label>
           <textarea
             id="support-message"
+            name="supportMessage"
             rows="6"
+            autocomplete="off"
+            inputmode="text"
+            autocapitalize="sentences"
+            spellcheck="true"
             [value]="message()"
             (input)="message.set($any($event.target).value)"
             placeholder="Tell us what city, page, or trip flow you were in and what felt wrong."
@@ -162,7 +173,13 @@
               [class.contact-support__input-shell--error]="subjectError()">
               <input
                 id="desktop-support-subject"
+                name="supportSubject"
                 type="text"
+                autocomplete="off"
+                inputmode="text"
+                enterkeyhint="next"
+                autocapitalize="sentences"
+                spellcheck="true"
                 [value]="subject()"
                 [attr.aria-invalid]="subjectError() ? 'true' : null"
                 [attr.aria-describedby]="subjectError() ? 'desktop-support-subject-error' : null"
@@ -181,7 +198,12 @@
               [class.contact-support__input-shell--error]="messageError()">
               <textarea
                 id="desktop-support-message"
+                name="supportMessage"
                 rows="6"
+                autocomplete="off"
+                inputmode="text"
+                autocapitalize="sentences"
+                spellcheck="true"
                 [value]="message()"
                 [attr.aria-invalid]="messageError() ? 'true' : null"
                 [attr.aria-describedby]="messageError() ? 'desktop-support-message-error' : null"

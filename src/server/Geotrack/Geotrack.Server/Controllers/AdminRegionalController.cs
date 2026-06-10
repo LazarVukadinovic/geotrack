@@ -901,9 +901,33 @@ public class AdminRegionalController : ControllerBase
         }
     }
 
+    [HttpGet("place-parent-destinations")]
+    public async Task<ActionResult<List<RegionalPlaceParentDestinationDto>>> GetPlaceParentDestinations(
+        [FromQuery] int regionId,
+        [FromQuery] string? search = null,
+        [FromQuery] int take = 50)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        try
+        {
+            return Ok(await _places.GetParentDestinationsAsync(
+                GetCurrentUserId(),
+                regionId,
+                search,
+                take));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("place-parent-locations")]
     public async Task<ActionResult<List<RegionalPlaceParentLocationDto>>> GetPlaceParentLocations(
         [FromQuery] int regionId,
+        [FromQuery] int? destinationId = null,
         [FromQuery] string? search = null,
         [FromQuery] int take = 50)
     {
@@ -915,6 +939,7 @@ public class AdminRegionalController : ControllerBase
             return Ok(await _places.GetParentLocationsAsync(
                 GetCurrentUserId(),
                 regionId,
+                destinationId,
                 search,
                 take));
         }
