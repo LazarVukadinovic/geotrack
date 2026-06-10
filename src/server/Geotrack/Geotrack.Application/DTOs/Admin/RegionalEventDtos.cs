@@ -52,6 +52,7 @@ public class RegionalEventListItemDto
 
 public class RegionalEventDetailDto : RegionalEventListItemDto
 {
+    public bool CanDelete { get; set; }
 }
 
 public class RegionalEventListResponseDto

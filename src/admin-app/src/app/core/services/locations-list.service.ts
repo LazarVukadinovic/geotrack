@@ -55,6 +55,7 @@ export interface LocationListItem {
   analyticsReviewAvg?: number;
   analyticsReviewCount?: number;
   analyticsTrend?: 'up' | 'stable' | 'down';
+  canDelete?: boolean;
 }
 
 export interface LocationsPage {
@@ -226,6 +227,7 @@ export class LocationsListService {
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
       detailRoute: dto.detailRoute ?? `/locations/detail/${dto.id}`,
       editRoute: dto.editRoute ?? `/locations/edit/${dto.id}`,
+      canDelete: detail.canDelete ?? true,
     };
 
     this.cache.set(id, item);

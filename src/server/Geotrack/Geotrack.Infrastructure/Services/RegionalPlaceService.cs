@@ -291,7 +291,9 @@ public class RegionalPlaceService : IRegionalPlaceService
             .SingleOrDefaultAsync()
             ?? throw new KeyNotFoundException("Place not found.");
 
-        return MapDetail(row);
+        var dto = MapDetail(row);
+        dto.CanDelete = !await HasBlockingDependenciesAsync(row.Id);
+        return dto;
     }
 
     public async Task<RegionalPlaceDetailDto> CreatePlaceAsync(
@@ -352,56 +354,60 @@ public class RegionalPlaceService : IRegionalPlaceService
         var operatingHours = NormalizeOperatingHours(request.OperatingHoursEnabled, request.OperatingHours);
         var now = DateTime.UtcNow;
 
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-
-        var place = new Place
+        Place? place = null;
+        await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            Name = name,
-            Subtitle = summary,
-            Description = description,
-            Status = status,
-            PlaceTypeId = placeType.Id,
-            LocationId = location.Id,
-            Address = NormalizeOptionalText(request.StreetAddress, 500, "Street address is too long."),
-            BestTimeToVisit = NormalizeOptionalText(request.BestTimeToVisit, 500, "Best time to visit is too long."),
-            VisitorTips = NormalizeOptionalText(request.VisitorTips, 1000, "Visitor tips are too long."),
-            AccessNotes = NormalizeOptionalText(request.AccessNotes, 1000, "Access notes are too long."),
-            AccessibilityNotes = NormalizeOptionalText(request.AccessibilityNotes, 1000, "Accessibility notes are too long."),
-            Website = NormalizeUrl(request.Website, "Website URL is invalid."),
-            Number = NormalizePhone(request.ContactPhone),
-            AdmissionPriceRange = NormalizeOptionalText(request.AdmissionPriceRange, 200, "Admission / price range is too long."),
-            BookingExternalLink = NormalizeUrl(request.BookingExternalLink, "Booking / external link is invalid."),
-            OperatingHoursEnabled = operatingHours.Enabled,
-            OperatingHoursJson = operatingHours.Json,
-            OpeningHours = operatingHours.Enabled ? BuildOpeningHoursSummary(operatingHours.Hours) : null,
-            Latitude = coordinates.Latitude,
-            Longitude = coordinates.Longitude,
-            CreatedByUserId = userId,
-            PublishedAt = status == PublishedStatus ? now : null,
-            CreatedAt = now,
-            PlaceTags = tagIds
-                .Select(tagId => new PlaceTag { TagId = tagId })
-                .ToList()
-        };
+            await using var transaction = await _db.Database.BeginTransactionAsync();
 
-        if (stayTypeId.HasValue)
-        {
-            place.Stay = new Stay
+            place = new Place
             {
-                StayTypeId = stayTypeId.Value
+                Name = name,
+                Subtitle = summary,
+                Description = description,
+                Status = status,
+                PlaceTypeId = placeType.Id,
+                LocationId = location.Id,
+                Address = NormalizeOptionalText(request.StreetAddress, 500, "Street address is too long."),
+                BestTimeToVisit = NormalizeOptionalText(request.BestTimeToVisit, 500, "Best time to visit is too long."),
+                VisitorTips = NormalizeOptionalText(request.VisitorTips, 1000, "Visitor tips are too long."),
+                AccessNotes = NormalizeOptionalText(request.AccessNotes, 1000, "Access notes are too long."),
+                AccessibilityNotes = NormalizeOptionalText(request.AccessibilityNotes, 1000, "Accessibility notes are too long."),
+                Website = NormalizeUrl(request.Website, "Website URL is invalid."),
+                Number = NormalizePhone(request.ContactPhone),
+                AdmissionPriceRange = NormalizeOptionalText(request.AdmissionPriceRange, 200, "Admission / price range is too long."),
+                BookingExternalLink = NormalizeUrl(request.BookingExternalLink, "Booking / external link is invalid."),
+                OperatingHoursEnabled = operatingHours.Enabled,
+                OperatingHoursJson = operatingHours.Json,
+                OpeningHours = operatingHours.Enabled ? BuildOpeningHoursSummary(operatingHours.Hours) : null,
+                Latitude = coordinates.Latitude,
+                Longitude = coordinates.Longitude,
+                CreatedByUserId = userId,
+                PublishedAt = status == PublishedStatus ? now : null,
+                CreatedAt = now,
+                PlaceTags = tagIds
+                    .Select(tagId => new PlaceTag { TagId = tagId })
+                    .ToList()
             };
-        }
 
-        _db.Places.Add(place);
-        await _db.SaveChangesAsync();
+            if (stayTypeId.HasValue)
+            {
+                place.Stay = new Stay
+                {
+                    StayTypeId = stayTypeId.Value
+                };
+            }
 
-        _db.EntityImages.AddRange(AddRequiredCreateImages(request, place.Id, place.Name, now));
+            _db.Places.Add(place);
+            await _db.SaveChangesAsync();
 
-        place.InternalReferenceId = BuildInternalReferenceId(place.Id);
-        await _db.SaveChangesAsync();
-        await transaction.CommitAsync();
+            _db.EntityImages.AddRange(AddRequiredCreateImages(request, place.Id, place.Name, now));
 
-        return await GetPlaceAsync(userId, request.RegionId, place.Id);
+            place.InternalReferenceId = BuildInternalReferenceId(place.Id);
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+        });
+
+        return await GetPlaceAsync(userId, request.RegionId, place!.Id);
     }
 
     public async Task<RegionalPlaceDetailDto> UpdatePlaceAsync(

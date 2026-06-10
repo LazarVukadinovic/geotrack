@@ -50,6 +50,7 @@ export interface DestinationListItem {
   analyticsReviewAvg?: number;
   analyticsReviewCount?: number;
   analyticsTrend?: 'up' | 'stable' | 'down';
+  canDelete?: boolean;
 }
 
 export interface DestinationsPage {
@@ -182,6 +183,7 @@ export class DestinationsListService {
       lat: (dto as RegionalDestinationDetailDto).latitude,
       lng: (dto as RegionalDestinationDetailDto).longitude,
       tags: (dto.tags ?? []).map(tag => tag.name),
+      canDelete: (dto as RegionalDestinationDetailDto).canDelete ?? true,
     };
 
     this.cache.set(id, item);

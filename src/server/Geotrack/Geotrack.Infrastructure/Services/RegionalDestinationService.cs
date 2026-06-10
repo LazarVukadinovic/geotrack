@@ -211,7 +211,9 @@ public class RegionalDestinationService : IRegionalDestinationService
             .SingleOrDefaultAsync()
             ?? throw new KeyNotFoundException("Destination not found.");
 
-        return MapDetail(row);
+        var dto = MapDetail(row);
+        dto.CanDelete = !await HasBlockingDependenciesAsync(row.Id);
+        return dto;
     }
 
     public async Task<RegionalDestinationDetailDto> CreateDestinationAsync(
@@ -249,43 +251,47 @@ public class RegionalDestinationService : IRegionalDestinationService
         var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
         var now = DateTime.UtcNow;
 
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-
-        var destination = new Destination
+        Destination? destination = null;
+        await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            Name = name,
-            Summary = summary,
-            Description = description,
-            Status = status,
-            RegionId = request.RegionId,
-            DestinationTypeId = destinationTypeId,
-            Latitude = coordinates.Latitude,
-            Longitude = coordinates.Longitude,
-            CreatedByUserId = userId,
-            PublishedAt = status == PublishedStatus ? now : null,
-            BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long."),
-            BoundaryShapeType = boundary?.ShapeType,
-            CreatedAt = now,
-            DestinationTags = tagIds
-                .Select(tagId => new DestinationTag { TagId = tagId })
-                .ToList()
-        };
+            await using var transaction = await _db.Database.BeginTransactionAsync();
 
-        _db.Destinations.Add(destination);
-        if (boundary is not null)
-        {
-            _db.Entry(destination).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = boundary.Geometry;
-        }
+            destination = new Destination
+            {
+                Name = name,
+                Summary = summary,
+                Description = description,
+                Status = status,
+                RegionId = request.RegionId,
+                DestinationTypeId = destinationTypeId,
+                Latitude = coordinates.Latitude,
+                Longitude = coordinates.Longitude,
+                CreatedByUserId = userId,
+                PublishedAt = status == PublishedStatus ? now : null,
+                BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long."),
+                BoundaryShapeType = boundary?.ShapeType,
+                CreatedAt = now,
+                DestinationTags = tagIds
+                    .Select(tagId => new DestinationTag { TagId = tagId })
+                    .ToList()
+            };
 
-        await _db.SaveChangesAsync();
+            _db.Destinations.Add(destination);
+            if (boundary is not null)
+            {
+                _db.Entry(destination).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = boundary.Geometry;
+            }
 
-        _db.EntityImages.AddRange(AddRequiredCreateImages(request, destination.Id, destination.Name, now));
+            await _db.SaveChangesAsync();
 
-        destination.InternalReferenceId = BuildInternalReferenceId(destination.Id);
-        await _db.SaveChangesAsync();
-        await transaction.CommitAsync();
+            _db.EntityImages.AddRange(AddRequiredCreateImages(request, destination.Id, destination.Name, now));
 
-        return await GetDestinationAsync(userId, request.RegionId, destination.Id);
+            destination.InternalReferenceId = BuildInternalReferenceId(destination.Id);
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+        });
+
+        return await GetDestinationAsync(userId, request.RegionId, destination!.Id);
     }
 
     public async Task<RegionalDestinationDetailDto> UpdateDestinationAsync(

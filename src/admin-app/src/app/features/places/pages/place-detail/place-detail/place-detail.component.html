@@ -311,8 +311,12 @@
               <p *ngIf="ownerSuccess" class="text-xs font-medium text-emerald-600">{{ ownerSuccess }}</p>
 
               <button (click)="promptDelete()"
+                      [disabled]="item.canDelete === false"
+                      [class.opacity-50]="item.canDelete === false"
+                      [class.cursor-not-allowed]="item.canDelete === false"
+                      [class.cursor-pointer]="item.canDelete !== false"
                       class="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold
-                             text-red-600 bg-white border border-red-200 hover:bg-red-50 transition-colors cursor-pointer">
+                             text-red-600 bg-white border border-red-200 hover:bg-red-50 transition-colors">
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3 6 5 6 21 6"/>
                   <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
@@ -321,6 +325,10 @@
                 </svg>
                 Delete Place
               </button>
+              <p *ngIf="item.canDelete === false"
+                 class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1 leading-relaxed">
+                Cannot delete: this place has related content.
+              </p>
             </div>
           </div>
 
@@ -341,7 +349,7 @@
                     {{ (item)['lat'] | number:'1.4-4' }}, {{ (item)['lng'] | number:'1.4-4' }}
                   </span>
                 </div>
-                <div *ngIf="(item)['lat']" class="relative w-full overflow-hidden rounded-lg" style="height: 200px;">
+                <div *ngIf="(item)['lat']" class="relative w-full overflow-hidden rounded-lg" style="height: 200px; isolation: isolate;">
                   <div #miniMapContainer
                        class="absolute inset-0 w-full h-full cursor-pointer"
                        (click)="openMapModal()"
@@ -478,6 +486,10 @@
             This action cannot be undone.
           </p>
         </div>
+      </div>
+      <div *ngIf="deleteError"
+           class="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {{ deleteError }}
       </div>
     </div>
     <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50/60">

@@ -31,6 +31,7 @@ public class RegionalDestinationDetailDto : RegionalDestinationListItemDto
 {
     public double Latitude { get; set; }
     public double Longitude { get; set; }
+    public bool CanDelete { get; set; }
 }
 
 public class RegionalDestinationListResponseDto

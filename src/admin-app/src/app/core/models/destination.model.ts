@@ -30,6 +30,7 @@ export interface RegionalDestinationListItemDto {
 export interface RegionalDestinationDetailDto extends RegionalDestinationListItemDto {
   latitude: number;
   longitude: number;
+  canDelete?: boolean;
 }
 
 export interface RegionalDestinationListResponse {

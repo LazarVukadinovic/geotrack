@@ -79,6 +79,7 @@ export interface PlaceListItem {
   analyticsReviewAvg?: number;
   analyticsReviewCount?: number;
   analyticsTrend?: 'up' | 'stable' | 'down';
+  canDelete?: boolean;
 }
 
 export interface PlacesPage {
@@ -327,6 +328,7 @@ export class PlacesListService {
       visitorTips: detail.visitorTips ?? undefined,
       accessNotes: detail.accessNotes ?? undefined,
       accessibilityNotes: detail.accessibilityNotes ?? undefined,
+      canDelete: detail.canDelete ?? true,
     };
 
     this.cache.set(id, item);

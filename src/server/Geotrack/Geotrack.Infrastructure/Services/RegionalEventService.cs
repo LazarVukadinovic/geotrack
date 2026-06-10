@@ -243,7 +243,9 @@ public class RegionalEventService : IRegionalEventService
             .SingleOrDefaultAsync()
             ?? throw new KeyNotFoundException("Event not found.");
 
-        return MapDetail(row);
+        var dto = MapDetail(row);
+        dto.CanDelete = !await HasBlockingDependenciesAsync(row.Id);
+        return dto;
     }
 
     public async Task<RegionalEventDetailDto> CreateEventAsync(
@@ -270,62 +272,66 @@ public class RegionalEventService : IRegionalEventService
         var images = RegionalEntityImageRequestNormalizer.Normalize(ResolveCreateImageRequests(request), name);
         var now = DateTime.UtcNow;
 
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-
-        var @event = new Event
+        Event? @event = null;
+        await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            Name = name,
-            Summary = summary,
-            Description = description,
-            Status = status,
-            ParentEntityType = parent.ParentEntityType,
-            DestinationId = parent.DestinationId,
-            Destination = parent.Destination,
-            LocationId = parent.LocationId,
-            Location = parent.Location,
-            PlaceId = parent.PlaceId,
-            Place = parent.Place,
-            EventTypeId = eventTypeId,
-            VenueName = NormalizeOptionalText(request.VenueName, 200, "Venue name is too long."),
-            IsAllDay = request.IsAllDay,
-            StartDate = schedule.StartsAt,
-            EndDate = schedule.EndsAt,
-            IsRecurring = request.IsRecurring,
-            IsFree = request.IsFree,
-            TicketPrice = ticketPrice,
-            ExternalTicketLink = NormalizeUrl(request.ExternalTicketLink, "External ticket link is invalid."),
-            HostedBy = NormalizeOptionalText(request.OrganizerName, 200, "Organizer name is too long."),
-            ContactEmail = NormalizeEmail(request.ContactEmail),
-            AttendanceLimit = NormalizeAttendanceLimit(request.AttendanceLimit),
-            AgeRestriction = NormalizeOptionalText(request.AgeRestriction, 100, "Age restriction is too long."),
-            CreatedByUserId = userId,
-            PublishedAt = status == PublishedStatus ? now : null,
-            CreatedAt = now,
-            Images = images
-                .Select(image => new EntityImage
-                {
-                    TargetType = EntityImageTargetType.Event,
-                    Url = image.Url,
-                    AltText = image.AltText,
-                    Caption = image.Caption,
-                    IsMain = image.IsMain,
-                    SortOrder = image.SortOrder,
-                    CreatedAt = now
-                })
-                .ToList(),
-            EventTags = tagIds
-                .Select(tagId => new EventTag { TagId = tagId })
-                .ToList()
-        };
+            await using var transaction = await _db.Database.BeginTransactionAsync();
 
-        _db.Events.Add(@event);
-        await _db.SaveChangesAsync();
+            @event = new Event
+            {
+                Name = name,
+                Summary = summary,
+                Description = description,
+                Status = status,
+                ParentEntityType = parent.ParentEntityType,
+                DestinationId = parent.DestinationId,
+                Destination = parent.Destination,
+                LocationId = parent.LocationId,
+                Location = parent.Location,
+                PlaceId = parent.PlaceId,
+                Place = parent.Place,
+                EventTypeId = eventTypeId,
+                VenueName = NormalizeOptionalText(request.VenueName, 200, "Venue name is too long."),
+                IsAllDay = request.IsAllDay,
+                StartDate = schedule.StartsAt,
+                EndDate = schedule.EndsAt,
+                IsRecurring = request.IsRecurring,
+                IsFree = request.IsFree,
+                TicketPrice = ticketPrice,
+                ExternalTicketLink = NormalizeUrl(request.ExternalTicketLink, "External ticket link is invalid."),
+                HostedBy = NormalizeOptionalText(request.OrganizerName, 200, "Organizer name is too long."),
+                ContactEmail = NormalizeEmail(request.ContactEmail),
+                AttendanceLimit = NormalizeAttendanceLimit(request.AttendanceLimit),
+                AgeRestriction = NormalizeOptionalText(request.AgeRestriction, 100, "Age restriction is too long."),
+                CreatedByUserId = userId,
+                PublishedAt = status == PublishedStatus ? now : null,
+                CreatedAt = now,
+                Images = images
+                    .Select(image => new EntityImage
+                    {
+                        TargetType = EntityImageTargetType.Event,
+                        Url = image.Url,
+                        AltText = image.AltText,
+                        Caption = image.Caption,
+                        IsMain = image.IsMain,
+                        SortOrder = image.SortOrder,
+                        CreatedAt = now
+                    })
+                    .ToList(),
+                EventTags = tagIds
+                    .Select(tagId => new EventTag { TagId = tagId })
+                    .ToList()
+            };
 
-        @event.InternalReferenceId = BuildInternalReferenceId(@event.Id);
-        await _db.SaveChangesAsync();
-        await transaction.CommitAsync();
+            _db.Events.Add(@event);
+            await _db.SaveChangesAsync();
 
-        return await GetEventAsync(userId, request.RegionId, @event.Id);
+            @event.InternalReferenceId = BuildInternalReferenceId(@event.Id);
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+        });
+
+        return await GetEventAsync(userId, request.RegionId, @event!.Id);
     }
 
     public async Task<RegionalEventDetailDto> UpdateEventAsync(

@@ -5,6 +5,7 @@ import {
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent }  from '../../../../../shared/components/topbar/topbar.component';
 import { EventsListService, EventListItem } from '../../../../../core/services/events-list.service';
@@ -46,6 +47,7 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   mapModalOpen  = false;
   deleteTarget: EventListItem | null = null;
   isDeleting    = false;
+  deleteError: string | null = null;
 
   private miniMap:        any = null;
   private modalMap:       any = null;
@@ -257,17 +259,28 @@ export class EventDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   cancelDelete(): void {
     this.deleteTarget = null;
+    this.deleteError  = null;
     this.cdr.markForCheck();
   }
 
   confirmDelete(): void {
     if (!this.deleteTarget) return;
-    this.isDeleting = true;
-    this.svc.delete$(this.deleteTarget.id)
-      .subscribe(() => {
-        this.isDeleting   = false;
-        this.deleteTarget = null;
-        this.router.navigate(['/events']);
+    this.isDeleting  = true;
+    this.deleteError = null;
+    this.svc.delete$(this.deleteTarget.id, this.deleteTarget.regionId)
+      .subscribe({
+        next: () => {
+          this.isDeleting   = false;
+          this.deleteTarget = null;
+          this.router.navigate(['/events']);
+        },
+        error: (err: unknown) => {
+          this.isDeleting = false;
+          this.deleteError = err instanceof HttpErrorResponse
+            ? (err.error?.message ?? 'Unable to delete this event.')
+            : 'Unable to delete this event.';
+          this.cdr.markForCheck();
+        },
       });
   }
 

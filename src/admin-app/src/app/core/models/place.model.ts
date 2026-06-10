@@ -41,6 +41,7 @@ export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
   hasOwner?: boolean;
   hasLinkedContribution?: boolean;
   owners: RegionalPlaceOwnerDto[];
+  canDelete?: boolean;
   latitude: number;
   longitude: number;
   openingHours?: string | null;

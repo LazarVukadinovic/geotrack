@@ -40,6 +40,7 @@ public class RegionalPlaceDetailDto : RegionalPlaceListItemDto
     public bool HasLinkedContribution { get; set; }
     public List<RegionalPlaceOwnerDto> Owners { get; set; } = new();
 
+    public bool CanDelete { get; set; }
     public double Latitude { get; set; }
     public double Longitude { get; set; }
     public string? OpeningHours { get; set; }

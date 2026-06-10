@@ -61,6 +61,7 @@ export interface RegionalEventImageDto {
 
 export interface RegionalEventDetailDto extends RegionalEventListItemDto {
   galleryImageUrls?: string[] | null;
+  canDelete?: boolean;
 }
 
 export interface RegionalEventListResponse {

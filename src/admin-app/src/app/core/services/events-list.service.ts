@@ -83,6 +83,7 @@ export interface EventListItem {
   analyticsReviewAvg?: number;
   analyticsReviewCount?: number;
   analyticsTrend?: 'up' | 'stable' | 'down';
+  canDelete?: boolean;
 }
 
 export interface EventsPage {
@@ -309,6 +310,7 @@ export class EventsListService {
       coverImageUrl,
       coverImageName: coverImageUrl ? 'Cover image' : undefined,
       galleryImages: [...galleryImages, ...fallbackGalleryImages],
+      canDelete: (dto as any).canDelete ?? true,
     };
 
     this.cache.set(id, item);
