@@ -113,6 +113,7 @@ public class PlaceContributionDetailDto : PlaceContributionListItemDto
     public string? Country { get; set; }
     public int? SuggestedRegionId { get; set; }
     public string? SuggestedRegionName { get; set; }
+    public string? RegionDisplayName { get; set; }
     public string? SuggestedDestinationName { get; set; }
     public string? SuggestedLocationName { get; set; }
     public string ImagePosition { get; set; } = "50% 50%";

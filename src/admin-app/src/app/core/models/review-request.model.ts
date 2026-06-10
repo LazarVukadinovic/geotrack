@@ -11,7 +11,9 @@ export type RequestQueueTypeFilter =
   | 'destination'
   | 'location'
   | 'place'
-  | 'event';
+  | 'event'
+  | 'ownership'
+  | 'contributions';
 export type RequestQueueStatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
 export type RequestQueueSort = 'newest' | 'oldest' | 'status' | 'type';
 
@@ -42,6 +44,8 @@ export interface RegionalRequestQueueCountsByType {
   locations: number;
   places: number;
   events: number;
+  ownership: number;
+  contributions: number;
 }
 
 export interface RegionalRequestQueueResponse {

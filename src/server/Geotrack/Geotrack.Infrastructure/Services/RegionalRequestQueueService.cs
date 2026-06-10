@@ -46,17 +46,25 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         var normalizedTake = Math.Clamp(take <= 0 ? DefaultTake : take, 1, MaxTake);
         var fetchLimit = normalizedSkip + normalizedTake;
 
-        var includeContributions = normalizedType is null or "all" or "place";
+        var includeContributions = normalizedType is "all" or "place" or null;
+        var includeOwnership = normalizedType is "ownership";
+        var includeContributionsOnly = normalizedType is "contributions";
 
         var contributionQuery = BuildContributionQuery(regionId);
         contributionQuery = ApplyContributionStatus(contributionQuery, normalizedStatus);
         contributionQuery = ApplyContributionSearch(contributionQuery, search);
-        if (!includeContributions)
+
+        if (includeOwnership)
+            contributionQuery = contributionQuery.Where(c => c.Type == PlaceContributionType.ClaimOwnership);
+        else if (includeContributionsOnly)
+            contributionQuery = contributionQuery.Where(c => c.Type != PlaceContributionType.ClaimOwnership);
+        else if (!includeContributions)
             contributionQuery = contributionQuery.Where(_ => false);
 
         var totalContributionCount = await contributionQuery.CountAsync();
 
-        var contributionRows = includeContributions
+        var runQuery = includeContributions || includeOwnership || includeContributionsOnly;
+        var contributionRows = runQuery
             ? await ProjectContributions(ApplyContributionSort(contributionQuery, normalizedSort), fetchLimit)
             : new List<RegionalRequestQueueItemDto>();
 
@@ -72,10 +80,7 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             PendingCount = await CountByStatusAsync(regionId, "pending", search),
             ApprovedCount = await CountByStatusAsync(regionId, "approved", search),
             RejectedCount = await CountByStatusAsync(regionId, "rejected", search),
-            CountsByType = new RegionalRequestQueueCountsByTypeDto
-            {
-                Places = await CountContributionsAsync(regionId, "pending", search)
-            },
+            CountsByType = await BuildCountsByTypeAsync(regionId, search),
             Skip = normalizedSkip,
             Take = normalizedTake
         };
@@ -492,6 +497,33 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         return await ApplyContributionSearch(query, search).CountAsync();
     }
 
+    private async Task<RegionalRequestQueueCountsByTypeDto> BuildCountsByTypeAsync(int regionId, string? search)
+    {
+        var (ownership, contributions) = await CountContributionsByOwnershipAsync(regionId, "pending", search);
+        return new RegionalRequestQueueCountsByTypeDto
+        {
+            Places = ownership + contributions,
+            Ownership = ownership,
+            Contributions = contributions
+        };
+    }
+
+    private async Task<(int Ownership, int Contributions)> CountContributionsByOwnershipAsync(int regionId, string status, string? search)
+    {
+        var query = ApplyContributionStatus(BuildContributionQuery(regionId), status);
+        query = ApplyContributionSearch(query, search);
+
+        // Single round-trip: group by whether the row is an ownership claim and count each bucket.
+        var grouped = await query
+            .GroupBy(c => c.Type == PlaceContributionType.ClaimOwnership)
+            .Select(g => new { IsOwnership = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var ownership = grouped.FirstOrDefault(g => g.IsOwnership)?.Count ?? 0;
+        var contributions = grouped.FirstOrDefault(g => !g.IsOwnership)?.Count ?? 0;
+        return (ownership, contributions);
+    }
+
     private static RegionalRequestQueueItemDto MapContributionRow(ContributionQueueRow row)
     {
         var displayName = BuildDisplayName(
@@ -586,6 +618,8 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             "location" or "locations" => "location",
             "place" or "places" => "place",
             "event" or "events" => "event",
+            "ownership" or "ownershipclaim" or "ownershipclaims" => "ownership",
+            "contribution" or "contributions" => "contributions",
             _ => throw new InvalidOperationException("Invalid type filter.")
         };
     }

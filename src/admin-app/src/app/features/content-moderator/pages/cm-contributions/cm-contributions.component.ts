@@ -14,7 +14,7 @@ import {
   CmLocationOption,
 } from '../../../../core/services/content-moderator/content-moderator-contributions.service';
 
-type TabKey = 'all' | 'pending' | 'approved' | 'rejected';
+type TabKey = 'all' | 'ownership' | 'contributions' | 'approved' | 'rejected';
 type SortKey = 'newest' | 'oldest' | 'name-asc' | 'name-desc';
 type DestinationChoice = 'existing' | 'new';
 
@@ -41,16 +41,17 @@ export class CmContributionsComponent implements OnInit, OnDestroy {
   private feedbackTimeout: ReturnType<typeof setTimeout> | null = null;
   private readonly failedImages = new Set<number>();
 
-  activeTab: TabKey = 'pending';
+  activeTab: TabKey = 'all';
   searchQuery = '';
   currentSort: SortKey = 'newest';
   sortOpen = false;
 
   readonly tabs: { key: TabKey; label: string }[] = [
-    { key: 'all',      label: 'All'      },
-    { key: 'pending',  label: 'Pending'  },
-    { key: 'approved', label: 'Approved' },
-    { key: 'rejected', label: 'Rejected' },
+    { key: 'all',           label: 'All Requests'     },
+    { key: 'ownership',     label: 'Ownership Claims' },
+    { key: 'contributions', label: 'Contributions'    },
+    { key: 'approved',      label: 'Approved'         },
+    { key: 'rejected',      label: 'Rejected'         },
   ];
 
   readonly sortOptions: { value: SortKey; label: string }[] = [
@@ -124,27 +125,41 @@ export class CmContributionsComponent implements OnInit, OnDestroy {
     return !!this.newDestinationName.trim();
   }
 
-  tabCount(key: TabKey): number {
-    if (key === 'all') return this.items.length;
-    const status = this.tabStatus(key);
-    return this.items.filter(i => i.status === status).length;
+  private tabCountsCache: { source: CmContributionListItem[]; counts: Record<TabKey, number> } | null = null;
+
+  private get tabCounts(): Record<TabKey, number> {
+    if (this.tabCountsCache?.source === this.items) {
+      return this.tabCountsCache.counts;
+    }
+
+    const counts: Record<TabKey, number> = { all: 0, ownership: 0, contributions: 0, approved: 0, rejected: 0 };
+    for (const i of this.items) {
+      if (i.status === 'Approved') counts.approved++;
+      else if (i.status === 'Rejected') counts.rejected++;
+      else if (i.status === 'PendingReview') {
+        counts.all++;
+        if (i.type.toLowerCase() === 'claimownership') counts.ownership++;
+        else counts.contributions++;
+      }
+    }
+
+    this.tabCountsCache = { source: this.items, counts };
+    return counts;
   }
 
-  private tabStatus(key: TabKey): string {
-    switch (key) {
-      case 'pending':  return 'PendingReview';
-      case 'approved': return 'Approved';
-      case 'rejected': return 'Rejected';
-      default:         return '';
-    }
+  tabCount(key: TabKey): number {
+    return this.tabCounts[key];
   }
 
   get filteredItems(): CmContributionListItem[] {
     let result = this.items;
 
-    if (this.activeTab !== 'all') {
-      const status = this.tabStatus(this.activeTab);
-      result = result.filter(i => i.status === status);
+    switch (this.activeTab) {
+      case 'all':           result = result.filter(i => i.status === 'PendingReview'); break;
+      case 'ownership':     result = result.filter(i => i.status === 'PendingReview' && i.type.toLowerCase() === 'claimownership'); break;
+      case 'contributions': result = result.filter(i => i.status === 'PendingReview' && i.type.toLowerCase() !== 'claimownership'); break;
+      case 'approved':      result = result.filter(i => i.status === 'Approved'); break;
+      case 'rejected':      result = result.filter(i => i.status === 'Rejected'); break;
     }
 
     const q = this.searchQuery.trim().toLowerCase();

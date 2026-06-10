@@ -104,12 +104,16 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     return 'Approve applies the submitted contribution. Reject closes it without applying changes.';
   }
 
+  get isOwnershipClaim(): boolean {
+    return this.request?.contributionType === 'ClaimOwnership';
+  }
+
   get approveButtonLabel(): string {
-    return 'Approve Contribution';
+    return this.isOwnershipClaim ? 'Approve Claim' : 'Approve Contribution';
   }
 
   get rejectButtonLabel(): string {
-    return 'Reject Contribution';
+    return this.isOwnershipClaim ? 'Reject Claim' : 'Reject Contribution';
   }
 
   get primaryImageUrl(): string | null {
@@ -144,6 +148,26 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     ];
 
     return [...new Set(values.filter(Boolean))];
+  }
+
+  get hasValidOperatingHours(): boolean {
+    return (this.request?.operatingHours ?? []).some(
+      h => !h.isOpen || (!!h.openTime && h.openTime !== '00:00' && h.openTime !== '0:00'),
+    );
+  }
+
+  get ownershipGalleryImages(): PlaceContributionImage[] {
+    return (this.request?.images ?? [])
+      .filter(image => !!image.url)
+      .sort((a, b) => this.imageRoleSort(a.imageRole) - this.imageRoleSort(b.imageRole) || a.sortOrder - b.sortOrder || a.id - b.id);
+  }
+
+  get ownershipGalleryPreviewImages(): PlaceContributionImage[] {
+    return this.ownershipGalleryImages.slice(0, 4);
+  }
+
+  get ownershipGalleryOverflowCount(): number {
+    return Math.max(0, this.ownershipGalleryImages.length - 4);
   }
 
   get ownershipProofHref(): string | null {
@@ -285,6 +309,17 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     const images = this.submittedMediaImages.map((image, imageIndex) => ({
       url: image.url,
       name: image.caption || image.altText || `Submitted photo ${imageIndex + 1}`,
+    }));
+
+    if (images.length === 0) return;
+
+    this.lightboxService.open(images, Math.min(index, images.length - 1));
+  }
+
+  openOwnershipGallery(index: number): void {
+    const images = this.ownershipGalleryImages.map((image, imageIndex) => ({
+      url: image.url,
+      name: image.caption || image.altText || `Photo ${imageIndex + 1}`,
     }));
 
     if (images.length === 0) return;
@@ -566,6 +601,9 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
   }
 
   private actionSuccessMessage(action: DecisionAction): string {
+    if (this.isOwnershipClaim) {
+      return action === 'approve' ? 'Ownership claim approved.' : 'Ownership claim rejected.';
+    }
     return action === 'approve' ? 'Contribution approved.' : 'Contribution rejected.';
   }
 

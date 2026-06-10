@@ -875,6 +875,7 @@ public class PlaceContributionService : IPlaceContributionService
 
         detail.SuggestedRegionId = suggestedRegion.Id;
         detail.SuggestedRegionName = suggestedRegion.Name;
+        detail.RegionDisplayName ??= BuildContributionRegionDisplayName(suggestedRegion.Name, suggestedRegion.TerritoryName);
     }
 
     public async Task<PlaceContributionDetailDto> ApproveForContentManagerAsync(
@@ -1137,12 +1138,15 @@ public class PlaceContributionService : IPlaceContributionService
             .Include(c => c.Location)
                 .ThenInclude(l => l!.Destination)
                     .ThenInclude(d => d.Region)
+                        .ThenInclude(r => r.Territory)
             .Include(c => c.StayType)
             .Include(c => c.Images)
             .Include(c => c.User)
             .Include(c => c.Place)
                 .ThenInclude(p => p!.Location)
                     .ThenInclude(l => l.Destination)
+                        .ThenInclude(d => d.Region)
+                            .ThenInclude(r => r.Territory)
             .Include(c => c.Place)
                 .ThenInclude(p => p!.Images)
             .AsSplitQuery();
@@ -2715,7 +2719,8 @@ public class PlaceContributionService : IPlaceContributionService
             CheckOutTime = contribution.CheckOutTime,
             City = contribution.City ?? contribution.Location?.Name,
             Region = contribution.Region ?? contribution.Location?.Destination?.Region?.Name,
-            Country = contribution.Country ?? contribution.Location?.Destination?.Name,
+            Country = contribution.Country ?? contribution.Location?.Destination?.Region?.Territory?.Name,
+            RegionDisplayName = BuildPlaceRegionDisplayName(contribution),
             ImagePosition = GetCoverImage(contribution)?.ImagePosition ?? "50% 50%",
             ImageSize = GetCoverImage(contribution)?.ImageSize ?? "cover",
             CardImagePosition = GetCardImage(contribution)?.ImagePosition,
@@ -2963,7 +2968,7 @@ public class PlaceContributionService : IPlaceContributionService
         detail.CheckOutTime = place.Stay?.CheckOutTime;
         detail.City = place.Location?.Name ?? detail.City;
         detail.Region = place.Location?.Destination?.Region?.Name ?? detail.Region;
-        detail.Country = place.Location?.Destination?.Name ?? detail.Country;
+        detail.Country = place.Location?.Destination?.Region?.Territory?.Name ?? detail.Country;
         detail.ImagePosition = coverImage?.ImagePosition ?? "50% 50%";
         detail.ImageSize = coverImage?.ImageSize ?? "cover";
         detail.CardImagePosition = cardImage?.ImagePosition;
@@ -3232,6 +3237,26 @@ public class PlaceContributionService : IPlaceContributionService
             .ToList();
     }
 
+    private static string? BuildPlaceRegionDisplayName(PlaceContribution contribution)
+    {
+        var region = contribution.Place?.Location?.Destination?.Region;
+        if (region != null)
+            return BuildContributionRegionDisplayName(region.Name, region.Territory?.Name);
+
+        var locationRegion = contribution.Location?.Destination?.Region;
+        if (locationRegion != null)
+            return BuildContributionRegionDisplayName(locationRegion.Name, locationRegion.Territory?.Name);
+
+        return null;
+    }
+
+    private static string BuildContributionRegionDisplayName(string regionName, string? territoryName)
+    {
+        return string.IsNullOrWhiteSpace(territoryName)
+            ? regionName
+            : regionName + ", " + territoryName;
+    }
+
     private static string NormalizeRequired(string? value, string fieldName)
     {
         var normalized = NormalizeOptional(value);
@@ -3390,7 +3415,8 @@ public class PlaceContributionService : IPlaceContributionService
 
             var openTime = NormalizeClockTime(input.OpenTime, "Opening time is invalid.");
             var closeTime = NormalizeClockTime(input.CloseTime, "Closing time is invalid.");
-            if (openTime == closeTime)
+            // 00:00 - 00:00 is the "open 24 hours" sentinel; any other equal pair is ambiguous.
+            if (openTime == closeTime && openTime != "00:00")
                 throw new InvalidOperationException("Opening time and closing time cannot be the same.");
 
             normalizedHours.Add(new ContributionOperatingHourDto

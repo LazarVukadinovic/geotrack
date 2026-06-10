@@ -96,6 +96,12 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     return isLongDescription(this.contribution?.description);
   }
 
+  get hasValidOperatingHours(): boolean {
+    return (this.contribution?.operatingHours ?? []).some(
+      h => !h.isOpen || (!!h.openTime && h.openTime !== '00:00' && h.openTime !== '0:00'),
+    );
+  }
+
   get locationDisplay(): string {
     if (!this.contribution) return '';
     const parts = [this.contribution.city, this.contribution.region, this.contribution.country].filter(Boolean);
@@ -404,6 +410,10 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   }
 
   goBack(): void { this.router.navigate(['/content-moderator/contributions']); }
+
+  get isOwnershipClaim(): boolean {
+    return (this.contribution?.type ?? '').toLowerCase() === 'claimownership';
+  }
 
   typeLabel(type: string): string {
     switch ((type ?? '').toLowerCase()) {

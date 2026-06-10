@@ -54,6 +54,7 @@ export interface CmContributionDetail extends CmContributionListItem {
   country: string | null;
   suggestedRegionId: number | null;
   suggestedRegionName: string | null;
+  regionDisplayName: string | null;
   suggestedDestinationName: string | null;
   suggestedLocationName: string | null;
   latitude: number | null;
@@ -120,6 +121,7 @@ interface ApiContributionItem {
   country?: string | null;
   suggestedRegionId?: number | null;
   suggestedRegionName?: string | null;
+  regionDisplayName?: string | null;
   suggestedDestinationName?: string | null;
   suggestedLocationName?: string | null;
   latitude?: number | null;
@@ -272,6 +274,7 @@ function mapDetail(item: ApiContributionItem): CmContributionDetail {
     country: item.country ?? null,
     suggestedRegionId: item.suggestedRegionId ?? null,
     suggestedRegionName: item.suggestedRegionName ?? null,
+    regionDisplayName: item.regionDisplayName ?? null,
     suggestedDestinationName: item.suggestedDestinationName ?? null,
     suggestedLocationName: item.suggestedLocationName ?? null,
     latitude: item.latitude ?? null,

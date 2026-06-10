@@ -197,7 +197,7 @@
                 </svg>
                 <p class="text-sm font-medium">
                   @if (searchQuery) { No results for "{{ searchQuery }}" }
-                  @else if (activeTab === 'pending') { No contributions pending review }
+                  @else if (activeTab === 'all' || activeTab === 'ownership' || activeTab === 'contributions') { No contributions pending review }
                   @else if (activeTab === 'approved') { No approved contributions }
                   @else if (activeTab === 'rejected') { No rejected contributions }
                   @else { No contributions found }

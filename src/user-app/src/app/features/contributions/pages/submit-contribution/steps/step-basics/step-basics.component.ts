@@ -68,6 +68,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   data = input<BasicsData | null>(null);
   locationLocked = input<boolean>(false);
   ownershipProofLocked = input<boolean>(false);
+  placeTypeLocked = input<boolean>(false);
   saved = output<BasicsData>();
 
   placeTypes = signal<ContributionPlaceTypeOption[]>(defaultPlaceTypes());
@@ -107,17 +108,12 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   }
 
   selectPlaceType(type: ContributionPlaceTypeOption): void {
+    if (this.placeTypeLocked()) return;
+
     this.form.placeType = type.name;
     this.form.placeTypeId = type.id;
     this.ownershipProofError.set('');
-
-    if (!this.requiresOwnershipProof() && !this.ownershipProofLocked()) {
-      this.form.ownershipProofFile = null;
-      this.form.ownershipProofDocumentUrl = null;
-      this.form.ownershipProofOriginalFileName = null;
-      this.ownershipProofFileName.set('');
     }
-  }
 
   isPlaceTypeSelected(type: ContributionPlaceTypeOption): boolean {
     return (this.form.placeTypeId !== null && this.form.placeTypeId > 0 && this.form.placeTypeId === type.id) ||
@@ -680,10 +676,17 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
         'card')
       : this.form.cardImageFile;
 
+    // The uploaded proof is preserved in-memory while the user cycles place types,
+    // but it must never be submitted for a type that doesn't support ownership claims.
+    const includeOwnershipProof = this.requiresOwnershipProof();
+
     this.saved.emit({
       ...this.form,
       coverImageFile: croppedCoverImageFile,
       cardImageFile: croppedCardImageFile,
+      ownershipProofFile: includeOwnershipProof ? this.form.ownershipProofFile : null,
+      ownershipProofDocumentUrl: includeOwnershipProof ? this.form.ownershipProofDocumentUrl : null,
+      ownershipProofOriginalFileName: includeOwnershipProof ? this.form.ownershipProofOriginalFileName : null,
     });
   }
   imgContainer = viewChild<ElementRef<HTMLDivElement>>('imgContainer');

@@ -24,10 +24,8 @@ import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model'
 
 type QueueTab =
   | 'all'
-  | 'destinations'
-  | 'locations'
-  | 'places'
-  | 'events'
+  | 'ownership'
+  | 'contributions'
   | 'approved'
   | 'rejected';
 
@@ -36,14 +34,14 @@ const EMPTY_COUNTS: RegionalRequestQueueCountsByType = {
   locations: 0,
   places: 0,
   events: 0,
+  ownership: 0,
+  contributions: 0,
 };
 
 const TAB_QUERY_MAP: Record<QueueTab, { type: RequestQueueTypeFilter; status: RequestQueueStatusFilter }> = {
   all: { type: 'all', status: 'pending' },
-  destinations: { type: 'destination', status: 'pending' },
-  locations: { type: 'location', status: 'pending' },
-  places: { type: 'place', status: 'pending' },
-  events: { type: 'event', status: 'pending' },
+  ownership: { type: 'ownership', status: 'pending' },
+  contributions: { type: 'contributions', status: 'pending' },
   approved: { type: 'all', status: 'approved' },
   rejected: { type: 'all', status: 'rejected' },
 };
@@ -92,7 +90,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
   selectedIds = new Set<string>();
   processingIds = new Set<string>();
   rejectModal: { requestKeys: string[]; item?: RegionalRequestQueueItem } | null = null;
-  rejectReason = '';
   rejectNote = '';
 
   pageSize = 10;
@@ -159,10 +156,8 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
     const counts = this.queue?.countsByType ?? this.lastCountsByType;
     return [
       { key: 'all', label: 'All Requests', count: this.queue?.pendingCount ?? this.lastPendingCount },
-      { key: 'destinations', label: 'Destinations', count: counts?.destinations ?? 0 },
-      { key: 'locations', label: 'Locations', count: counts?.locations ?? 0 },
-      { key: 'places', label: 'Places', count: counts?.places ?? 0 },
-      { key: 'events', label: 'Events', count: counts?.events ?? 0 },
+      { key: 'ownership', label: 'Ownership Claims', count: counts?.ownership ?? 0 },
+      { key: 'contributions', label: 'Contributions', count: counts?.contributions ?? 0 },
       { key: 'approved', label: 'Approved', count: this.queue?.approvedCount ?? this.lastApprovedCount },
       { key: 'rejected', label: 'Rejected', count: this.queue?.rejectedCount ?? this.lastRejectedCount },
     ];
@@ -347,7 +342,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
   openRejectSelected(): void {
     const requestKeys = this.selectedPendingRequestKeys();
     if (requestKeys.length === 0) return;
-    this.rejectReason = '';
     this.rejectNote = '';
     this.rejectModal = { requestKeys };
     this.notifyStateChanged();
@@ -374,7 +368,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
 
   openRejectRequest(request: RegionalRequestQueueItem): void {
     if (request.status !== 'Pending' || this.isProcessing(request)) return;
-    this.rejectReason = '';
     this.rejectNote = '';
     this.rejectModal = { requestKeys: [request.requestKey], item: request };
     this.notifyStateChanged();
@@ -384,7 +377,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
     if (!this.activeRegionId || !this.rejectModal) return;
 
     const modal = this.rejectModal;
-    const reason = this.rejectReason;
     const note = this.rejectNote;
     this.rejectModal = null;
     this.notifyStateChanged();
@@ -392,7 +384,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
     if (modal.item) {
       this.setProcessing(modal.item, true);
       this.requestsService
-        .reject(this.activeRegionId, modal.item, reason, note)
+        .reject(this.activeRegionId, modal.item, undefined, note)
         .pipe(finalize(() => this.setProcessing(modal.item!, false)))
         .subscribe({
           next: () => {
@@ -410,7 +402,7 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
     this.actionLoading = true;
     this.notifyStateChanged();
     this.requestsService
-      .bulkReject(this.activeRegionId, modal.requestKeys, reason, note)
+      .bulkReject(this.activeRegionId, modal.requestKeys, undefined, note)
       .pipe(
         finalize(() => {
           this.actionLoading = false;
@@ -430,7 +422,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
 
   cancelReject(): void {
     this.rejectModal = null;
-    this.rejectReason = '';
     this.rejectNote = '';
     this.notifyStateChanged();
   }
@@ -619,7 +610,6 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
   private clearSelectionState(): void {
     this.selectedIds.clear();
     this.rejectModal = null;
-    this.rejectReason = '';
     this.rejectNote = '';
   }
 
@@ -693,6 +683,8 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
       locations: this.toSafeCount(counts?.locations),
       places: this.toSafeCount(counts?.places),
       events: this.toSafeCount(counts?.events),
+      ownership: this.toSafeCount(counts?.ownership),
+      contributions: this.toSafeCount(counts?.contributions),
     };
   }
 

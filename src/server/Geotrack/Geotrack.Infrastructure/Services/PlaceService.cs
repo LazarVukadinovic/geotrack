@@ -1251,7 +1251,8 @@ public class PlaceService : IPlaceService
 
             var openTime = NormalizeOwnerUpdateClockTime(input.OpenTime, "Opening time is invalid.");
             var closeTime = NormalizeOwnerUpdateClockTime(input.CloseTime, "Closing time is invalid.");
-            if (openTime == closeTime)
+            // 00:00 - 00:00 is the "open 24 hours" sentinel; any other equal pair is ambiguous.
+            if (openTime == closeTime && openTime != "00:00")
                 throw new InvalidOperationException("Opening time and closing time cannot be the same.");
 
             normalizedHours.Add(new OwnerUpdateOperatingHourDto
@@ -1493,21 +1494,8 @@ public class PlaceService : IPlaceService
             changedFields.Add(nameof(request.AccessibilityNotes));
         }
 
-        if (request.PlaceTypeId.HasValue && request.PlaceTypeId.Value > 0)
-        {
-            var placeTypeExists = await _db.PlaceTypes.AnyAsync(pt => pt.Id == request.PlaceTypeId.Value);
-            if (!placeTypeExists)
-                throw new InvalidOperationException("Place type is invalid.");
-
-            place.PlaceTypeId = request.PlaceTypeId.Value;
-
-            var linkedContribution = await _db.PlaceContributions
-                .Where(c => c.PlaceId == place.Id && c.Status == PlaceContributionStatus.Approved)
-                .FirstOrDefaultAsync();
-
-            if (linkedContribution != null)
-                linkedContribution.PlaceTypeId = request.PlaceTypeId.Value;
-        }
+        if (request.PlaceTypeId.HasValue && request.PlaceTypeId.Value > 0 && request.PlaceTypeId.Value != place.PlaceTypeId)
+            throw new InvalidOperationException("Place type cannot be changed after the place is approved.");
 
         if (request.Tags is not null)
         {

@@ -482,16 +482,23 @@ export class StepDetailsComponent implements AfterViewInit {
     if (!this.form.openingHoursEnabled) return '';
 
     for (const day of this.days) {
-      if (day.open && day.openTime === day.closeTime) {
-        return `${day.name} opening time and closing time cannot be the same.`;
+      if (!day.open) continue;
+
+      if (!this.isValidClockTime(day.openTime) || !this.isValidClockTime(day.closeTime)) {
+        return `${day.name} opening hours must use 24-hour HH:mm format.`;
       }
 
-      if (day.open && (!this.isValidClockTime(day.openTime) || !this.isValidClockTime(day.closeTime))) {
-        return `${day.name} opening hours must use 24-hour HH:mm format.`;
+      // 00:00 - 00:00 is the "open 24 hours" sentinel; any other equal pair is ambiguous.
+      if (day.openTime === day.closeTime && !this.isAllDayRange(day.openTime, day.closeTime)) {
+        return `${day.name} opening time and closing time cannot be the same.`;
       }
     }
 
     return '';
+  }
+
+  private isAllDayRange(openTime: string, closeTime: string): boolean {
+    return openTime === '00:00' && closeTime === '00:00';
   }
 
   private applyOpeningHoursText(value: string): void {
