@@ -902,6 +902,11 @@ public class PlaceContributionService : IPlaceContributionService
         if (!isContentManager && !managesAll)
             throw new UnauthorizedAccessException("Only content managers can use this approval method.");
 
+        // Claim-ownership and update contributions reference an existing place that already has
+        // a location assigned, so they bypass the region/destination/location assignment flow.
+        if (contribution.Type is PlaceContributionType.ClaimOwnership or PlaceContributionType.UpdatePlace)
+            return await ApproveExistingPlaceForContentManagerAsync(contribution, reviewerUserId, note, DateTime.UtcNow);
+
         var region = await _db.Regions
             .AsNoTracking()
             .Where(r => r.Id == regionId)
@@ -1010,6 +1015,54 @@ public class PlaceContributionService : IPlaceContributionService
         if (locationIsNew)
             result.CreatedLocationId = location.Id;
         return result;
+    }
+
+    /// <summary>
+    /// Approves a contribution that targets an existing place (claim-ownership or update) on behalf
+    /// of a content manager. These contributions already carry a place and location, so the region/
+    /// destination/location assignment used for new places does not apply here.
+    /// </summary>
+    private async Task<PlaceContributionDetailDto> ApproveExistingPlaceForContentManagerAsync(
+        PlaceContribution contribution,
+        int reviewerUserId,
+        string? note,
+        DateTime now)
+    {
+        if (contribution.Type == PlaceContributionType.UpdatePlace)
+        {
+            if (!contribution.PlaceId.HasValue)
+                throw new InvalidOperationException("Update contribution is missing target place.");
+
+            await ApplyUpdateToExistingPlaceAsync(contribution, contribution.PlaceId.Value, now);
+        }
+        else if (contribution.Type == PlaceContributionType.ClaimOwnership)
+        {
+            if (!contribution.PlaceId.HasValue)
+                throw new InvalidOperationException("Ownership claim is missing target place.");
+
+            var targetPlace = await LoadOwnershipTargetPlaceAsync(contribution.PlaceId.Value)
+                ?? throw new InvalidOperationException("The place you are trying to claim does not exist.");
+
+            await BackfillMissingOwnershipSnapshotAsync(contribution, targetPlace, now);
+            await ApplyUpdateToExistingPlaceAsync(contribution, contribution.PlaceId.Value, now);
+            await EnsureUserPlaceAsync(contribution.UserId, contribution.PlaceId.Value, now);
+        }
+        else
+        {
+            throw new InvalidOperationException("Only claim-ownership and update contributions are supported here.");
+        }
+
+        contribution.Status = PlaceContributionStatus.Approved;
+        contribution.ReviewedByUserId = reviewerUserId;
+        contribution.ReviewedAt = now;
+        contribution.ReviewNote = NormalizeOptional(note);
+        contribution.UpdatedAt = now;
+
+        await _notificationService.AddContributionDecisionNotificationAsync(contribution);
+        await _db.SaveChangesAsync();
+
+        var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
+        return MapDetail(saved, includeReviewNote: true);
     }
 
     public async Task AddDestinationCardImageAsync(int destinationId, byte[] imageBytes)
