@@ -105,39 +105,60 @@
               </div>
             }
 
-            <!-- Contacts -->
-            @if (contribution.phone || contribution.contactEmail || contribution.website) {
-              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Contact</h3>
-                <div class="space-y-2 text-sm text-gray-700">
+            <!-- Contact -->
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Contact</h3>
+              <div class="space-y-2 text-sm text-gray-700">
+                <p>
+                  <span class="text-gray-400">Phone:</span>
                   @if (contribution.phone) {
-                    <p><span class="text-gray-400">Phone:</span> {{ contribution.phone }}</p>
+                    <span class="ml-1">{{ contribution.phone }}</span>
+                  } @else {
+                    <span class="ml-1 text-gray-400 italic">Not provided</span>
                   }
+                </p>
+                <p>
+                  <span class="text-gray-400">Email:</span>
                   @if (contribution.contactEmail) {
-                    <p><span class="text-gray-400">Email:</span> {{ contribution.contactEmail }}</p>
+                    <span class="ml-1">{{ contribution.contactEmail }}</span>
+                  } @else {
+                    <span class="ml-1 text-gray-400 italic">Not provided</span>
                   }
-                  @if (contribution.website) {
-                    <p><span class="text-gray-400">Website:</span>
-                      <a [href]="contribution.website" target="_blank" rel="noopener" class="text-blue-600 hover:underline">{{ contribution.website }}</a>
-                    </p>
-                  }
-                </div>
+                </p>
+                @if (!contribution.stayType) {
+                  <p>
+                    <span class="text-gray-400">Website:</span>
+                    @if (contribution.website) {
+                      <a [href]="contribution.website" target="_blank" rel="noopener" class="text-blue-600 hover:underline ml-1">{{ contribution.website }}</a>
+                    } @else {
+                      <span class="ml-1 text-gray-400 italic">Not provided</span>
+                    }
+                  </p>
+                }
               </div>
-            }
+            </div>
 
-            <!-- Booking Partners -->
-            @if (contribution.bookingPartners.length > 0) {
+            <!-- Booking Partners (accommodation only) -->
+            @if (contribution.stayType) {
               <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Booking Partners</h3>
-                <div class="flex flex-col gap-1.5">
-                  @for (bp of contribution.bookingPartners; track bp.id) {
-                    <div class="flex items-center gap-1.5 text-sm">
-                      <span class="font-medium text-gray-700 capitalize flex-none">{{ bp.id }}:</span>
-                      <a [href]="bp.url" target="_blank" rel="noopener noreferrer"
-                        class="text-blue-600 hover:underline truncate">{{ bp.url }}</a>
-                    </div>
-                  }
-                </div>
+                @if (contribution.bookingPartners.length > 0) {
+                  <div class="flex flex-col gap-1.5">
+                    @for (bp of contribution.bookingPartners; track bp.id) {
+                      <div class="flex items-center gap-1.5 text-sm">
+                        <span class="font-medium text-gray-700 flex-none">{{ partnerDisplayName(bp.id) }}:</span>
+                        @if (bp.url) {
+                          <a [href]="bp.url" target="_blank" rel="noopener noreferrer"
+                            class="text-blue-600 hover:underline truncate">{{ bp.url }}</a>
+                        } @else {
+                          <span class="text-gray-400 italic">Not provided</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <p class="text-sm text-gray-400 italic">Not provided</p>
+                }
               </div>
             }
 

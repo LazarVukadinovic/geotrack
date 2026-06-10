@@ -416,4 +416,13 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   regionDisplayName(region: CmRegionOption): string {
     return region.territoryName ? `${region.name} (${region.territoryName})` : region.name;
   }
+
+  partnerDisplayName(id: string): string {
+    switch (id.toLowerCase()) {
+      case 'booking': return 'Booking.com';
+      case 'airbnb': return 'Airbnb';
+      case 'hotel': return 'Official Website';
+      default: return id;
+    }
+  }
 }

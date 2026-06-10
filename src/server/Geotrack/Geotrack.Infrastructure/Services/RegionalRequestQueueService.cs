@@ -132,6 +132,7 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
         var normalizedSource = NormalizeSource(source);
         var publicReason = NormalizeDecisionText(reason);
         var internalNote = NormalizeDecisionText(note);
+        var reviewNote = internalNote ?? publicReason;
 
         if (normalizedSource == ContributionSource)
         {
@@ -139,8 +140,8 @@ public class RegionalRequestQueueService : IRegionalRequestQueueService
             await _placeContributionService.RejectAsync(
                 requestId,
                 userId,
-                publicReason,
-                internalNote,
+                reviewNote,
+                null,
                 "RegionalRequestQueue");
             return await BuildSuccessResultAsync(regionId, ContributionSource, requestId);
         }

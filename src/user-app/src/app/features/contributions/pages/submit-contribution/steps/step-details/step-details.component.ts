@@ -107,12 +107,18 @@ export class StepDetailsComponent implements AfterViewInit {
     this.writeDescriptionEditor();
   }
 
+  readonly descriptionMaxLength = 2000;
+
   get descriptionTextLength(): number {
-    return formatDescriptionPlainText(this.form.description).length;
+    return this.form.description.length;
   }
 
   get hasDescriptionText(): boolean {
-    return this.descriptionTextLength > 0;
+    return formatDescriptionPlainText(this.form.description).length > 0;
+  }
+
+  get descriptionAtLimit(): boolean {
+    return this.descriptionTextLength >= this.descriptionMaxLength;
   }
 
   onContinue(): void {
@@ -166,8 +172,19 @@ export class StepDetailsComponent implements AfterViewInit {
 
 
   onDescriptionBeforeInput(event: InputEvent): void {
+    if (
+      event.inputType !== 'deleteContentBackward' &&
+      event.inputType !== 'deleteContentForward' &&
+      event.inputType !== 'deleteByCut' &&
+      !event.inputType.startsWith('delete') &&
+      this.descriptionAtLimit
+    ) {
+      event.preventDefault();
+      return;
+    }
     if (event.inputType === 'insertParagraph' || event.inputType === 'insertLineBreak') {
       event.preventDefault();
+      if (this.descriptionAtLimit) return;
       this.insertDescriptionHtml('<br>');
       const editor = this.descriptionEditor?.nativeElement;
       if (editor) {
@@ -200,7 +217,18 @@ export class StepDetailsComponent implements AfterViewInit {
     event.preventDefault();
     const html = clipboard.getData('text/html');
     const text = clipboard.getData('text/plain');
-    document.execCommand('insertHTML', false, normalizeEditorDescriptionHtml(html || text));
+    const normalized = normalizeEditorDescriptionHtml(html || text);
+    const currentLength = this.descriptionTextLength;
+    const remaining = this.descriptionMaxLength - currentLength;
+    if (remaining <= 0) return;
+
+    const pastedPlain = formatDescriptionPlainText(normalized);
+    if (pastedPlain.length > remaining) {
+      const trimmedText = pastedPlain.slice(0, remaining);
+      document.execCommand('insertHTML', false, normalizeEditorDescriptionHtml(trimmedText));
+    } else {
+      document.execCommand('insertHTML', false, normalized);
+    }
     this.onDescriptionChanged(false);
   }
 

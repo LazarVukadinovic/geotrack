@@ -41,6 +41,14 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
   authRequired = false;
   reviewerNotes = '';
   processing = false;
+  descriptionExpanded = false;
+
+  private static readonly descriptionCollapseThreshold = 300;
+
+  get isDescriptionLong(): boolean {
+    const text = this.request?.description || this.request?.previewText || '';
+    return text.length > RequestDetailComponent.descriptionCollapseThreshold;
+  }
 
   private detailRequestSequence = 0;
   private regionSubscription: Subscription | null = null;
@@ -261,6 +269,15 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
         return 'bg-yellow-50 text-yellow-700 border border-yellow-100';
       default:
         return 'bg-blue-50 text-blue-700 border border-blue-100';
+    }
+  }
+
+  partnerDisplayName(id: string): string {
+    switch (id.toLowerCase()) {
+      case 'booking': return 'Booking.com';
+      case 'airbnb': return 'Airbnb';
+      case 'hotel': return 'Official Website';
+      default: return id;
     }
   }
 
