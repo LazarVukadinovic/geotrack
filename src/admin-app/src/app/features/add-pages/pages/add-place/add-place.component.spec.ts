@@ -51,6 +51,17 @@ describe('NewPlaceComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('builds a seven-day midnight schedule when open 24 hours is enabled', () => {
+    component.opsEnabled = true;
+    component.open24Hours = true;
+
+    const hours = component['buildOperatingHoursPayload']();
+
+    expect(hours).toHaveLength(7);
+    expect(hours?.every(hour =>
+      hour.isOpen && hour.openTime === '00:00' && hour.closeTime === '00:00')).toBe(true);
+  });
+
   it('reads map coordinates from query params and requests the active region viewport', () => {
     route.snapshot.queryParamMap = convertToParamMap({
       regionId: '17',

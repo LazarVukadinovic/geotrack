@@ -13,6 +13,12 @@ import { RegionalManagerSidebarStateService } from '../../../../core/services/re
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { PlaceContributionImage, ReviewRequestDetail } from '../../../../core/models/review-request.model';
+import {
+  OPEN_24_HOURS_LABEL,
+  hasDisplayableOperatingHours,
+  isOpen24HoursSchedule,
+  isOpen24HoursText,
+} from '../../../../shared/utils/opening-hours';
 
 interface DetailLoadOptions {
   allowRegionFallback: boolean;
@@ -150,11 +156,16 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     return [...new Set(values.filter(Boolean))];
   }
 
-  get hasValidOperatingHours(): boolean {
-    return (this.request?.operatingHours ?? []).some(
-      h => !h.isOpen || (!!h.openTime && h.openTime !== '00:00' && h.openTime !== '0:00'),
-    );
+  get hasDisplayableOperatingHours(): boolean {
+    return hasDisplayableOperatingHours(this.request?.operatingHours ?? []);
   }
+
+  get showsOpen24Hours(): boolean {
+    const hours = this.request?.operatingHours ?? [];
+    return isOpen24HoursSchedule(hours) || isOpen24HoursText(this.request?.openingHours);
+  }
+
+  readonly open24HoursLabel = OPEN_24_HOURS_LABEL;
 
   get ownershipGalleryImages(): PlaceContributionImage[] {
     return (this.request?.images ?? [])

@@ -50,6 +50,30 @@ public sealed class OperatingHoursStatusCalculatorTests
             OperatingHoursStatusCalculator.Evaluate(true, json, Utc(2026, 6, 8, 23)));
     }
 
+    [Fact]
+    public void Uses_inclusive_opening_and_exclusive_closing_boundaries()
+    {
+        var json = Hours(("Monday", true, "09:00", "17:00"));
+
+        Assert.Equal(OperatingHoursStatus.Open,
+            OperatingHoursStatusCalculator.Evaluate(true, json, Utc(2026, 6, 8, 7)));
+        Assert.Equal(OperatingHoursStatus.Closed,
+            OperatingHoursStatusCalculator.Evaluate(true, json, Utc(2026, 6, 8, 15)));
+    }
+
+    [Fact]
+    public void Treats_midnight_as_the_end_of_an_overnight_window()
+    {
+        var json = Hours(
+            ("Monday", true, "20:00", "00:00"),
+            ("Tuesday", false, null, null));
+
+        Assert.Equal(OperatingHoursStatus.Open,
+            OperatingHoursStatusCalculator.Evaluate(true, json, Utc(2026, 6, 8, 21)));
+        Assert.Equal(OperatingHoursStatus.Closed,
+            OperatingHoursStatusCalculator.Evaluate(true, json, Utc(2026, 6, 8, 22)));
+    }
+
     private static DateTime Utc(int year, int month, int day, int hour) =>
         new(year, month, day, hour, 0, 0, DateTimeKind.Utc);
 

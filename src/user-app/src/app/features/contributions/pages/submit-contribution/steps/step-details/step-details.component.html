@@ -101,6 +101,29 @@
       </button>
     </div>
 
+    @if (form.openingHoursEnabled) {
+      <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 mb-3">
+        <div>
+          <p class="text-sm font-semibold text-slate-800">Open 24 hours</p>
+          <p class="text-xs text-slate-500">The place is open all day, every day.</p>
+        </div>
+        <button type="button" class="relative flex-none border-none bg-transparent cursor-pointer"
+          style="width: 46px; height: 26px;"
+          (click)="toggleOpen24Hours()"
+          [title]="form.open24Hours ? 'Disable 24-hour opening' : 'Enable 24-hour opening'">
+          <span class="absolute inset-0 rounded-full transition-colors duration-200"
+            [class.bg-[#e8722a]]="form.open24Hours" [class.bg-slate-300]="!form.open24Hours"></span>
+          <span class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200"
+            style="width: 22px; height: 22px;" [style.left]="form.open24Hours ? '22px' : '2px'"></span>
+        </button>
+      </div>
+    }
+
+    @if (form.openingHoursEnabled && form.open24Hours) {
+      <div class="rounded-xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm font-semibold text-[#c85f20]">
+        Open 24 hours, seven days a week
+      </div>
+    } @else {
     <div
       class="border border-slate-200 rounded-xl overflow-hidden transition-all duration-200"
       [class.opacity-40]="!form.openingHoursEnabled"
@@ -191,6 +214,7 @@
         </div>
       }
     </div>
+    }
     @if (activeTimePicker) {
       <div
         class="fixed inset-0 z-50 flex items-center justify-center"

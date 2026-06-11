@@ -13,6 +13,7 @@ import { ExploreSectionListingService } from '../../../explore/services/explore-
 import { PlaceDetailService } from '../../../place-detail/services/place-detail.service';
 import { HotelDetailService } from '../../../hotel-detail/services/hotel-detail.service';
 import { normalizeContributionAmenityIds } from '../../services/contribution-amenities';
+import { isOpen24HoursSchedule } from '../../../../shared/utils/opening-hours';
 
 export interface ContributionDraft {
   basics: BasicsData | null;
@@ -80,7 +81,7 @@ export class SubmitContributionComponent implements OnInit {
   protected readonly draft = signal<ContributionDraft>({
     basics: null,
     features: { tags: [], amenities: [] },
-    details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, openingHours: '', operatingHours: [], bookingPartners: [] },
+    details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, open24Hours: false, openingHours: '', operatingHours: [], bookingPartners: [] },
   });
 
   ngOnInit(): void {
@@ -235,6 +236,7 @@ export class SubmitContributionComponent implements OnInit {
           details: {
             description: place.about ?? (typeof navState['placeAbout'] === 'string' ? navState['placeAbout'] : ''),
             openingHoursEnabled,
+            open24Hours: isOpen24HoursSchedule(operatingHours),
             openingHours: place.openingHours ?? '',
             operatingHours,
             phone: place.phoneNumber ?? '',
@@ -376,7 +378,7 @@ export class SubmitContributionComponent implements OnInit {
     this.draft.set({
       basics: null,
       features: { tags: [], amenities: [] },
-      details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, openingHours: '', operatingHours: [], bookingPartners: [] },
+      details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, open24Hours: false, openingHours: '', operatingHours: [], bookingPartners: [] },
     });
     this.editId.set(null);
     this.entityType.set('Place');

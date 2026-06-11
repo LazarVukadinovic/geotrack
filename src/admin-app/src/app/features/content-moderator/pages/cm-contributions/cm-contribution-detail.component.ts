@@ -16,6 +16,12 @@ import {
 } from '../../../../core/services/content-moderator/content-moderator-contributions.service';
 import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 import { isLongDescription } from '../../../../shared/utils/description-formatting';
+import {
+  OPEN_24_HOURS_LABEL,
+  hasDisplayableOperatingHours,
+  isOpen24HoursSchedule,
+  isOpen24HoursText,
+} from '../../../../shared/utils/opening-hours';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import { AdminMapViewport, AdminMapZone } from '../../../../core/models/admin-map.model';
 import {
@@ -144,11 +150,16 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     return isLongDescription(this.contribution?.description);
   }
 
-  get hasValidOperatingHours(): boolean {
-    return (this.contribution?.operatingHours ?? []).some(
-      h => !h.isOpen || (!!h.openTime && h.openTime !== '00:00' && h.openTime !== '0:00'),
-    );
+  get hasDisplayableOperatingHours(): boolean {
+    return hasDisplayableOperatingHours(this.contribution?.operatingHours ?? []);
   }
+
+  get showsOpen24Hours(): boolean {
+    const hours = this.contribution?.operatingHours ?? [];
+    return isOpen24HoursSchedule(hours) || isOpen24HoursText(this.contribution?.openingHours);
+  }
+
+  readonly open24HoursLabel = OPEN_24_HOURS_LABEL;
 
   get locationDisplay(): string {
     if (!this.contribution) return '';

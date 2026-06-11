@@ -159,18 +159,22 @@
                     </div>
                   }
 
-                  @if (contribution.operatingHoursEnabled && hasValidOperatingHours && contribution.operatingHours.length) {
+                  @if (contribution.operatingHoursEnabled && hasDisplayableOperatingHours && contribution.operatingHours.length) {
                     <div class="px-5">
                       <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Opening Hours</h4>
-                      <div class="flex flex-col">
-                        @for (hour of contribution.operatingHours; track hour.dayOfWeek) {
-                          <div class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
-                            <span class="text-sm font-medium text-gray-700 w-28 flex-none">{{ hour.dayOfWeek }}</span>
-                            @if (hour.isOpen) { <span class="text-sm text-gray-600">{{ hour.openTime }} – {{ hour.closeTime }}</span> }
-                            @else { <span class="text-xs font-semibold text-red-500">Closed</span> }
-                          </div>
-                        }
-                      </div>
+                      @if (showsOpen24Hours) {
+                        <p class="text-sm text-gray-700 leading-relaxed">{{ open24HoursLabel }}</p>
+                      } @else {
+                        <div class="flex flex-col">
+                          @for (hour of contribution.operatingHours; track hour.dayOfWeek) {
+                            <div class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                              <span class="text-sm font-medium text-gray-700 w-28 flex-none">{{ hour.dayOfWeek }}</span>
+                              @if (hour.isOpen) { <span class="text-sm text-gray-600">{{ hour.openTime }} – {{ hour.closeTime }}</span> }
+                              @else { <span class="text-xs font-semibold text-red-500">Closed</span> }
+                            </div>
+                          }
+                        </div>
+                      }
                     </div>
                   } @else if (!contribution.operatingHoursEnabled && contribution.openingHours) {
                     <div class="px-5">
@@ -372,21 +376,25 @@
             }
 
             <!-- Opening Hours -->
-            @if (contribution.operatingHoursEnabled && hasValidOperatingHours && contribution.operatingHours.length) {
+            @if (contribution.operatingHoursEnabled && hasDisplayableOperatingHours && contribution.operatingHours.length) {
               <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Opening Hours</h3>
-                <div class="flex flex-col">
-                  @for (hour of contribution.operatingHours; track hour.dayOfWeek) {
-                    <div class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
-                      <span class="text-sm font-medium text-gray-700 w-28 flex-none">{{ hour.dayOfWeek }}</span>
-                      @if (hour.isOpen) {
-                        <span class="text-sm text-gray-600 text-right">{{ hour.openTime }} – {{ hour.closeTime }}</span>
-                      } @else {
-                        <span class="text-xs font-semibold text-red-500 text-right">Closed</span>
-                      }
-                    </div>
-                  }
-                </div>
+                @if (showsOpen24Hours) {
+                  <p class="text-sm text-gray-700 leading-relaxed">{{ open24HoursLabel }}</p>
+                } @else {
+                  <div class="flex flex-col">
+                    @for (hour of contribution.operatingHours; track hour.dayOfWeek) {
+                      <div class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                        <span class="text-sm font-medium text-gray-700 w-28 flex-none">{{ hour.dayOfWeek }}</span>
+                        @if (hour.isOpen) {
+                          <span class="text-sm text-gray-600 text-right">{{ hour.openTime }} – {{ hour.closeTime }}</span>
+                        } @else {
+                          <span class="text-xs font-semibold text-red-500 text-right">Closed</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
               </div>
             } @else if (!contribution.operatingHoursEnabled && contribution.openingHours) {
               <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">

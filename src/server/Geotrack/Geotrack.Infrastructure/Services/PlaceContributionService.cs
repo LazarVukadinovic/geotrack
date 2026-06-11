@@ -3592,6 +3592,10 @@ public class PlaceContributionService : IPlaceContributionService
 
     private static string? BuildOpeningHoursSummary(IReadOnlyCollection<ContributionOperatingHourDto> hours)
     {
+        if (hours.Count == 7 && hours.All(h =>
+                h.IsOpen && h.OpenTime == "00:00" && h.CloseTime == "00:00"))
+            return "Open 24 hours";
+
         if (!hours.Any(h => h.IsOpen))
             return null;
 

@@ -330,6 +330,32 @@
               </button>
             </div>
 
+            @if (opsEnabled) {
+              <div class="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3 mb-3 bg-gray-50">
+                <div>
+                  <p class="text-sm font-semibold text-gray-800">Open 24 hours</p>
+                  <p class="text-xs text-gray-500">The place is open all day, every day.</p>
+                </div>
+                <button
+                  type="button"
+                  class="relative flex-shrink-0 border-none bg-transparent cursor-pointer"
+                  style="width: 44px; height: 24px;"
+                  (click)="open24Hours = !open24Hours"
+                  [title]="open24Hours ? 'Disable 24-hour opening' : 'Enable 24-hour opening'"
+                >
+                  <span class="absolute inset-0 rounded-full transition-colors duration-200"
+                    [class.bg-blue-600]="open24Hours" [class.bg-gray-300]="!open24Hours"></span>
+                  <span class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200"
+                    style="width: 20px; height: 20px;" [style.left]="open24Hours ? '22px' : '2px'"></span>
+                </button>
+              </div>
+            }
+
+            @if (opsEnabled && open24Hours) {
+              <div class="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
+                Open 24 hours, seven days a week
+              </div>
+            } @else {
             <div
               class="border border-gray-200 rounded-lg overflow-hidden transition-all duration-200"
               [class.opacity-40]="!opsEnabled"
@@ -408,6 +434,7 @@
                 </div>
               }
             </div>
+            }
             @if (activeTimePicker) {
               <div
                 class="fixed inset-0 z-50 flex items-center justify-center"

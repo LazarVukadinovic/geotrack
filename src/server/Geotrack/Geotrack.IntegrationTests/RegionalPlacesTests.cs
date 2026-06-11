@@ -100,6 +100,49 @@ public sealed class RegionalPlacesTests
     }
 
     [Fact]
+    public async Task Regional_manager_creates_open_24_hours_place()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreatePlacesFixtureAsync(app);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var placeTypeId = await db.PlaceTypes.OrderBy(type => type.Id).Select(type => type.Id).FirstAsync();
+
+        var request = BuildCreateRequest(
+            fixture.AssignedRegionId,
+            fixture.AssignedLocationId,
+            placeTypeId,
+            name: $"Open 24 Hours Place {Guid.NewGuid():N}");
+        request.CardImageUrl = "https://example.com/images/place-card.jpg";
+        request.CoverImageUrl = "https://example.com/images/place-cover.jpg";
+        request.OperatingHours = Enum.GetNames<DayOfWeek>()
+            .Select(day => new RegionalPlaceOperatingHourDto
+            {
+                DayOfWeek = day,
+                IsOpen = true,
+                OpenTime = "00:00",
+                CloseTime = "00:00"
+            })
+            .ToList();
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        var response = await manager.PostAsJsonAsync("/api/admin/regional/places", request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        Assert.True(response.StatusCode == HttpStatusCode.Created, responseBody);
+        var created = await response.Content.ReadFromJsonAsync<RegionalPlaceDetailDto>();
+        Assert.NotNull(created);
+        Assert.Equal("Open 24 hours", created!.OpeningHours);
+        Assert.All(created.OperatingHours, hour =>
+        {
+            Assert.True(hour.IsOpen);
+            Assert.Equal("00:00", hour.OpenTime);
+            Assert.Equal("00:00", hour.CloseTime);
+        });
+    }
+
+    [Fact]
     public async Task Create_place_requires_regional_manager_assigned_region_and_in_region_parent_location()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();

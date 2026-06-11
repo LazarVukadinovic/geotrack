@@ -19,6 +19,9 @@ import {
   AnalyticsTooltipDirective,
 } from '../../../../../shared/directives/analytics-tooltip.directive';
 import { AuthService } from '../../../../../core/services/auth.service';
+import { OPEN_24_HOURS_LABEL, isOpen24HoursSchedule, isOpen24HoursText } from '../../../../../shared/utils/opening-hours';
+import { DescriptionRichHtmlPipe } from '../../../../../shared/pipes/description-rich-html.pipe';
+import { isLongDescription } from '../../../../../shared/utils/description-formatting';
 import { DashboardService } from '../../../../../core/services/dashboard.service';
 import { RegionalAnalyticsService } from '../../../../../core/services/regional-analytics';
 import { RegionalAssignedRegion } from '../../../../../core/models/dashboard.model';
@@ -159,7 +162,7 @@ interface DetailInfoItem {
 @Component({
   selector: 'app-analytics-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent, AnalyticsTooltipDirective],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent, AnalyticsTooltipDirective, DescriptionRichHtmlPipe],
   templateUrl: './analytics-page.component.html',
 })
 export class AnalyticsPageComponent implements OnInit, OnDestroy {
@@ -385,6 +388,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
   readonly selectedEntityDetailSig = signal<RegionalAnalyticsEntityDetail | null>(null);
   entityDetailLoading = false;
   entityDetailErrorMessage: string | null = null;
+  entityDetailDescriptionExpanded = false;
   readonly selectedExternalPartnerClickChart = computed(() => {
     const detail = this.selectedEntityDetailSig();
     if (!detail || !this.isStayDetail(detail)) {
@@ -850,6 +854,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.selectedEntityRowSig.set(row);
     this.selectedEntityDetailSig.set(null);
     this.entityDetailErrorMessage = null;
+    this.entityDetailDescriptionExpanded = false;
     this.entityDetailLoading = true;
     this.lockBodyScroll();
     this.notifyStateChanged();
@@ -887,6 +892,7 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     this.selectedEntityRowSig.set(null);
     this.selectedEntityDetailSig.set(null);
     this.entityDetailErrorMessage = null;
+    this.entityDetailDescriptionExpanded = false;
     this.entityDetailLoading = false;
     this.unlockBodyScroll();
     this.notifyStateChanged();
@@ -1260,7 +1266,6 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
           { label: 'Contact phone', value: typeSpecific.contactPhone ?? '' },
           { label: 'Contact email', value: typeSpecific.contactEmail ?? '' },
           { label: 'Price range', value: typeSpecific.priceRange ?? '' },
-          { label: 'Opening hours', value: typeSpecific.openingHours ?? '' },
           { label: 'Best time', value: typeSpecific.bestTimeToVisit ?? '' },
           { label: 'Visitor tips', value: typeSpecific.visitorTips ?? '' },
           { label: 'Access notes', value: typeSpecific.accessNotes ?? '' },
@@ -1294,12 +1299,36 @@ export class AnalyticsPageComponent implements OnInit, OnDestroy {
     }
   }
 
-  operatingHoursLabel(hour: RegionalPlaceOperatingHour): string {
+  readonly open24HoursLabel = OPEN_24_HOURS_LABEL;
+
+  showsOpen24Hours(hours: RegionalPlaceOperatingHour[]): boolean {
+    return isOpen24HoursSchedule(hours);
+  }
+
+  showsOpen24HoursForDetail(detail: RegionalAnalyticsEntityDetail): boolean {
+    const typeSpecific = detail.typeSpecific ?? this.emptyTypeSpecific();
+    return this.showsOpen24Hours(typeSpecific.operatingHours) || isOpen24HoursText(typeSpecific.openingHours);
+  }
+
+  hasDisplayableOpeningHours(detail: RegionalAnalyticsEntityDetail): boolean {
+    const typeSpecific = detail.typeSpecific ?? this.emptyTypeSpecific();
+    return typeSpecific.operatingHours.length > 0 || !!typeSpecific.openingHours?.trim();
+  }
+
+  entityDetailDescription(detail: RegionalAnalyticsEntityDetail): string {
+    return detail.description || detail.summary || '';
+  }
+
+  isEntityDetailDescriptionLong(detail: RegionalAnalyticsEntityDetail): boolean {
+    return isLongDescription(this.entityDetailDescription(detail));
+  }
+
+  openingHourTimeRange(hour: RegionalPlaceOperatingHour): string {
     if (!hour.isOpen) {
-      return `${hour.dayOfWeek}: Closed`;
+      return 'Closed';
     }
 
-    return `${hour.dayOfWeek}: ${hour.openTime ?? ''} - ${hour.closeTime ?? ''}`.trim();
+    return `${hour.openTime ?? ''} – ${hour.closeTime ?? ''}`.trim();
   }
 
   trendLabel(trend: EntityRow['trend']): string {

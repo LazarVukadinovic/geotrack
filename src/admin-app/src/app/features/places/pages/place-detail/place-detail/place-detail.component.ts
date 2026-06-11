@@ -12,6 +12,11 @@ import { PlacesListService, PlaceListItem } from '../../../../../core/services/p
 import { LightboxService } from '../../../../../core/services/lightbox.service';
 import { MapTileLayerService } from '../../../../../core/services/map-tile-layer.service';
 import { DescriptionRichHtmlPipe } from '../../../../../shared/pipes/description-rich-html.pipe';
+import {
+  OPEN_24_HOURS_LABEL,
+  isOpen24HoursSchedule,
+  isOpen24HoursText,
+} from '../../../../../shared/utils/opening-hours';
 declare const L: any;
 
 @Component({
@@ -184,6 +189,13 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   get parentLocationName(): string {
     return this.item?.locationName || (this.item as any)?.parentLocation || '';
   }
+
+  get showsOpen24Hours(): boolean {
+    const hours = this.item?.hours ?? [];
+    return isOpen24HoursSchedule(hours) || isOpen24HoursText(this.item?.openingHours);
+  }
+
+  readonly open24HoursLabel = OPEN_24_HOURS_LABEL;
 
   goToParentLocation(event?: Event): void {
     event?.preventDefault();

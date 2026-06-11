@@ -79,6 +79,7 @@ interface PlaceFormDraft {
   admissionPrice: string;
   bookingLink: string;
   opsEnabled: boolean;
+  open24Hours: boolean;
   days: DayHours[];
   streetAddress: string;
   pinLat: string;
@@ -172,6 +173,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   admissionPrice = '';
   bookingLink = '';
   opsEnabled = false;
+  open24Hours = false;
   tagInput = '';
   tagFilter = '';
 
@@ -1526,6 +1528,15 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private buildOperatingHoursPayload(): RegionalPlaceOperatingHourDto[] | null {
     if (!this.opsEnabled) return [];
 
+    if (this.open24Hours) {
+      return this.days.map(day => ({
+        dayOfWeek: day.name,
+        isOpen: true,
+        openTime: '00:00',
+        closeTime: '00:00',
+      }));
+    }
+
     const hours: RegionalPlaceOperatingHourDto[] = [];
     for (const day of this.days) {
       if (!day.open) {
@@ -1556,8 +1567,11 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private applyOperatingHours(hours: RegionalPlaceOperatingHourDto[]): void {
     if (!hours.length) {
+      this.open24Hours = false;
       return;
     }
+
+    this.open24Hours = this.isOpen24HoursSchedule(hours);
 
     const byDay = new Map(hours.map(hour => [hour.dayOfWeek.toLowerCase(), hour]));
     this.days = this.days.map(day => {
@@ -1570,6 +1584,16 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         openTime: incoming.openTime ?? day.openTime,
         closeTime: incoming.closeTime ?? day.closeTime,
       };
+    });
+  }
+
+  private isOpen24HoursSchedule(hours: RegionalPlaceOperatingHourDto[]): boolean {
+    if (hours.length !== this.days.length) return false;
+
+    const byDay = new Map(hours.map(hour => [hour.dayOfWeek.toLowerCase(), hour]));
+    return this.days.every(day => {
+      const hour = byDay.get(day.name.toLowerCase());
+      return hour?.isOpen === true && hour.openTime === '00:00' && hour.closeTime === '00:00';
     });
   }
 
@@ -2386,6 +2410,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       admissionPrice: this.admissionPrice,
       bookingLink: this.bookingLink,
       opsEnabled: this.opsEnabled,
+      open24Hours: this.open24Hours,
       days: this.days.map(day => ({ ...day })),
       streetAddress: this.streetAddress,
       pinLat: this.pinLat,
@@ -2430,6 +2455,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.admissionPrice = payload.admissionPrice ?? this.admissionPrice;
     this.bookingLink = payload.bookingLink ?? this.bookingLink;
     this.opsEnabled = Boolean(payload.opsEnabled);
+    this.open24Hours = Boolean(payload.open24Hours);
     this.days = Array.isArray(payload.days) ? payload.days.map(day => ({ ...day })) : this.days;
     this.streetAddress = payload.streetAddress ?? this.streetAddress;
     this.pinLat = payload.pinLat ?? this.pinLat;

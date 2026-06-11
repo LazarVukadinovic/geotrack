@@ -9,6 +9,8 @@ import { PhotoGalleryComponent } from '../../../../shared/components/photo-galle
 import type { EntityImage } from '../../../../core/models/entity-image.model';
 import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 import { isLongDescription } from '../../../../shared/utils/description-formatting';
+import { OPEN_24_HOURS_LABEL, isOpen24HoursSchedule, isOpen24HoursText } from '../../../../shared/utils/opening-hours';
+import type { ContributionOperatingHour } from '../submit-contribution/steps/step-details/step-details.component';
 
 const MAX_PROOF_BYTES = 10 * 1024 * 1024;
 
@@ -128,6 +130,12 @@ export class ContributionDetailPageComponent implements OnInit {
   protected hasLongAbout(description: string | null | undefined): boolean {
     return isLongDescription(description);
   }
+
+  protected showsOpen24Hours(operatingHours: ContributionOperatingHour[], openingHours: string | null | undefined): boolean {
+    return isOpen24HoursSchedule(operatingHours) || isOpen24HoursText(openingHours);
+  }
+
+  protected readonly open24HoursLabel = OPEN_24_HOURS_LABEL;
 
   protected openSingleImage(url: string, caption: string): void {
     this.mediaLightboxImages.set([this.toGalleryImage(url, 0, caption)]);

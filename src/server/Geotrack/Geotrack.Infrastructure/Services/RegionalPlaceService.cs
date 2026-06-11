@@ -1200,7 +1200,8 @@ public class RegionalPlaceService : IRegionalPlaceService
 
             var openTime = NormalizeClockTime(input.OpenTime, "Opening time is invalid.");
             var closeTime = NormalizeClockTime(input.CloseTime, "Closing time is invalid.");
-            if (openTime == closeTime)
+            // 00:00 - 00:00 is the explicit "open 24 hours" sentinel.
+            if (openTime == closeTime && openTime != "00:00")
                 throw new InvalidOperationException("Opening time and closing time cannot be the same.");
 
             normalizedHours.Add(new RegionalPlaceOperatingHourDto
@@ -1249,10 +1250,24 @@ public class RegionalPlaceService : IRegionalPlaceService
 
     private static string? BuildOpeningHoursSummary(IReadOnlyCollection<RegionalPlaceOperatingHourDto> hours)
     {
+        if (IsOpen24HoursSchedule(hours))
+            return "Open 24 hours";
+
         var firstOpen = hours.FirstOrDefault(hour => hour.IsOpen);
         return firstOpen is null
             ? "Closed"
             : $"{firstOpen.DayOfWeek} {firstOpen.OpenTime} - {firstOpen.CloseTime}";
+    }
+
+    private static bool IsOpen24HoursSchedule(IReadOnlyCollection<RegionalPlaceOperatingHourDto> hours)
+    {
+        var requiredDays = Enum.GetNames<DayOfWeek>();
+        return hours.Count == requiredDays.Length && requiredDays.All(day =>
+            hours.Any(hour =>
+                string.Equals(hour.DayOfWeek, day, StringComparison.OrdinalIgnoreCase) &&
+                hour.IsOpen &&
+                hour.OpenTime == "00:00" &&
+                hour.CloseTime == "00:00"));
     }
 
     private static List<RegionalPlaceOperatingHourDto> DeserializeOperatingHours(string? json)

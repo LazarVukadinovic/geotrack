@@ -205,17 +205,19 @@
                 <h3 class="text-sm font-bold text-gray-800">Operating Hours</h3>
               </div>
               <div class="px-6 py-5">
-                <div *ngIf="(item)['hours']?.length; else openingHoursText" class="flex flex-col gap-2">
-                  <div *ngFor="let day of (item)['hours']"
-                       class="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-                    <span class="text-sm font-medium text-gray-700 w-28">{{ day.name }}</span>
-                    <span *ngIf="day.open" class="text-sm text-gray-600">{{ day.openTime }} – {{ day.closeTime }}</span>
-                    <span *ngIf="!day.open" class="text-xs font-semibold text-red-500">Closed</span>
+                <p *ngIf="showsOpen24Hours" class="text-sm text-gray-700 leading-relaxed">{{ open24HoursLabel }}</p>
+                <ng-container *ngIf="!showsOpen24Hours">
+                  <div *ngIf="(item)['hours']?.length" class="flex flex-col gap-2">
+                    <div *ngFor="let day of (item)['hours']"
+                         class="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+                      <span class="text-sm font-medium text-gray-700 w-28">{{ day.name }}</span>
+                      <span *ngIf="day.open" class="text-sm text-gray-600">{{ day.openTime }} – {{ day.closeTime }}</span>
+                      <span *ngIf="!day.open" class="text-xs font-semibold text-red-500">Closed</span>
+                    </div>
                   </div>
-                </div>
-                <ng-template #openingHoursText>
-                  <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ (item)['openingHours'] }}</p>
-                </ng-template>
+                  <p *ngIf="!(item)['hours']?.length && (item)['openingHours']"
+                     class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ (item)['openingHours'] }}</p>
+                </ng-container>
               </div>
             </div>
           </ng-container>

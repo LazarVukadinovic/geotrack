@@ -1320,6 +1320,10 @@ public class PlaceService : IPlaceService
 
     private static string? BuildOwnerUpdateOpeningHoursSummary(IReadOnlyCollection<OwnerUpdateOperatingHourDto> hours)
     {
+        if (hours.Count == 7 && hours.All(hour =>
+                hour.IsOpen && hour.OpenTime == "00:00" && hour.CloseTime == "00:00"))
+            return "Open 24 hours";
+
         var firstOpen = hours.FirstOrDefault(hour => hour.IsOpen);
         return firstOpen is null
             ? "Closed"
