@@ -10,6 +10,10 @@ using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
+using Coordinate = NetTopologySuite.Geometries.Coordinate;
+using Geometry = NetTopologySuite.Geometries.Geometry;
+using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -25,8 +29,10 @@ public class PlaceContributionService : IPlaceContributionService
     private const double MaxContributionLocationMatchDistanceKm = 15d;
     private const double MaxContributionDestinationMatchDistanceKm = 40d;
     private const string ManagedContributionMediaPrefix = "/media/uploads/contributions/";
+    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
     private static readonly HashSet<string> LegacyOwnershipProofRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "stay",
@@ -810,6 +816,48 @@ public class PlaceContributionService : IPlaceContributionService
         return new ContributionRegionOptionsDto { Regions = regions };
     }
 
+    public async Task<ContentManagerDestinationCenterValidationResultDto> ValidateDestinationCenterAsync(
+        int regionId,
+        double latitude,
+        double longitude)
+    {
+        if (!HasUsableCoordinates(latitude, longitude))
+        {
+            return new ContentManagerDestinationCenterValidationResultDto
+            {
+                IsAllowed = false,
+                Message = "Select a valid destination centre on the map."
+            };
+        }
+
+        var boundary = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.Id == regionId)
+            .Select(region => EF.Property<Geometry?>(region, BoundaryGeometryPropertyName))
+            .SingleOrDefaultAsync();
+
+        if (boundary is null || boundary.IsEmpty || !boundary.IsValid)
+        {
+            return new ContentManagerDestinationCenterValidationResultDto
+            {
+                IsAllowed = false,
+                Message = "The selected region does not have a valid boundary. Contact an administrator."
+            };
+        }
+
+        var point = Wgs84GeometryFactory.CreatePoint(new Coordinate(longitude, latitude));
+        point.SRID = 4326;
+        var isAllowed = boundary.Covers(point);
+
+        return new ContentManagerDestinationCenterValidationResultDto
+        {
+            IsAllowed = isAllowed,
+            Message = isAllowed
+                ? "Destination centre is inside the selected region."
+                : "Destination centre must be inside the selected region."
+        };
+    }
+
     public async Task<ContributionLocationOptionsDto> GetDestinationLocationOptionsAsync(int destinationId)
     {
         var destination = await _db.Destinations
@@ -945,6 +993,13 @@ public class PlaceContributionService : IPlaceContributionService
             {
                 throw new InvalidOperationException("Confirm the new destination centre on the map before approving.");
             }
+
+            var centreValidation = await ValidateDestinationCenterAsync(
+                regionId,
+                newDestinationLatitude.Value,
+                newDestinationLongitude.Value);
+            if (!centreValidation.IsAllowed)
+                throw new InvalidOperationException(centreValidation.Message);
 
             var destinationType = await ResolveDestinationTypeAsync();
             destination = new Destination

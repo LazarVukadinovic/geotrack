@@ -224,6 +224,18 @@ public class ContentManagerApproveContributionDto
     public string? Note { get; set; }
 }
 
+public class ContentManagerDestinationCenterValidationDto
+{
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+}
+
+public class ContentManagerDestinationCenterValidationResultDto
+{
+    public bool IsAllowed { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
 public class ContributionRegionOptionsDto
 {
     public List<ContributionRegionOptionDto> Regions { get; set; } = new();

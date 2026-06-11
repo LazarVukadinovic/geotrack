@@ -33,6 +33,29 @@ public class RegionalMapService : IRegionalMapService
         _db = db;
     }
 
+    public async Task<RegionalMapAssignedRegionBoundaryDto> GetRegionBoundaryAsync(
+        int regionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (regionId <= 0)
+            throw new InvalidOperationException("regionId is required.");
+
+        var region = await _db.Regions
+            .AsNoTracking()
+            .Where(item => item.Id == regionId)
+            .Select(item => new RegionMapProjection
+            {
+                Id = item.Id,
+                Name = item.Name,
+                TerritoryName = item.Territory.Name,
+                BoundaryGeometry = EF.Property<Geometry?>(item, BoundaryGeometryPropertyName)
+            })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new KeyNotFoundException("Region not found.");
+
+        return BuildAssignedRegionBoundary(region);
+    }
+
     public async Task<RegionalMapResponseDto> GetMapAsync(
         int userId,
         int regionId,

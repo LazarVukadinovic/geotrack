@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
+import { AdminMapAssignedRegionBoundary } from '../../models/admin-map.model';
 
 export interface CmRegionOption {
   id: number;
@@ -20,6 +21,11 @@ export interface CmLocationOption {
   destinationId: number;
   destinationName: string;
   status: string;
+}
+
+export interface CmDestinationCenterValidationResult {
+  isAllowed: boolean;
+  message: string;
 }
 
 export interface CmContributionListItem {
@@ -228,6 +234,23 @@ export class ContentModeratorContributionsService {
         ...region,
         isSuggested: region.isSuggested ?? false,
       }))));
+  }
+
+  getRegionMapContext(regionId: number): Observable<AdminMapAssignedRegionBoundary> {
+    return this.http.get<AdminMapAssignedRegionBoundary>(
+      `/api/contributions/content-manager/regions/${regionId}/map-context`,
+    );
+  }
+
+  validateDestinationCenter(
+    regionId: number,
+    latitude: number,
+    longitude: number,
+  ): Observable<CmDestinationCenterValidationResult> {
+    return this.http.post<CmDestinationCenterValidationResult>(
+      `/api/contributions/content-manager/regions/${regionId}/validate-destination-center`,
+      { latitude, longitude },
+    );
   }
 
   uploadDestinationCardImage(destinationId: number, imageFile: File): Observable<void> {

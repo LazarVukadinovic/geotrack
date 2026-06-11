@@ -620,6 +620,18 @@ public sealed class ContributionPublicationTests
             });
         Assert.Equal(HttpStatusCode.BadRequest, missingCentreResponse.StatusCode);
 
+        var outsideRegionResponse = await moderatorClient.PostAsJsonAsync(
+            $"/api/contributions/content-manager/{created.Contribution.Id}/approve",
+            new ContentManagerApproveContributionDto
+            {
+                RegionId = regionId,
+                NewDestinationName = "Valjevo",
+                NewDestinationLatitude = 42.0,
+                NewDestinationLongitude = 18.0,
+                NewLocationName = "Tesnjar"
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, outsideRegionResponse.StatusCode);
+
         var approvalResponse = await moderatorClient.PostAsJsonAsync(
             $"/api/contributions/content-manager/{created.Contribution.Id}/approve",
             new ContentManagerApproveContributionDto
@@ -929,6 +941,14 @@ public sealed class ContributionPublicationTests
         };
 
         db.Regions.Add(region);
+        await db.SaveChangesAsync();
+        db.Entry(region)
+            .Property<Geometry?>(BoundaryGeometryPropertyName)
+            .CurrentValue = Polygon(
+                (43.5, 19.0),
+                (45.0, 19.0),
+                (45.0, 21.0),
+                (43.5, 21.0));
         await db.SaveChangesAsync();
         return region.Id;
     }
