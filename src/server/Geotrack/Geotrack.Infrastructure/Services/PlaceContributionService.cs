@@ -884,6 +884,8 @@ public class PlaceContributionService : IPlaceContributionService
         int regionId,
         int? existingDestinationId,
         string? newDestinationName,
+        double? newDestinationLatitude,
+        double? newDestinationLongitude,
         string? newLocationName,
         string? note)
     {
@@ -938,14 +940,20 @@ public class PlaceContributionService : IPlaceContributionService
                 ?? NormalizeOptional(contribution.City)
                 ?? region.Name;
 
+            if (!newDestinationLatitude.HasValue || !newDestinationLongitude.HasValue ||
+                !HasUsableCoordinates(newDestinationLatitude.Value, newDestinationLongitude.Value))
+            {
+                throw new InvalidOperationException("Confirm the new destination centre on the map before approving.");
+            }
+
             var destinationType = await ResolveDestinationTypeAsync();
             destination = new Destination
             {
                 Name = destName,
                 SearchText = destName.ToLowerInvariant(),
                 Description = string.Empty,
-                Latitude = contribution.Latitude.Value,
-                Longitude = contribution.Longitude.Value,
+                Latitude = newDestinationLatitude.Value,
+                Longitude = newDestinationLongitude.Value,
                 RegionId = regionId,
                 DestinationTypeId = destinationType.Id,
                 Status = "Published",

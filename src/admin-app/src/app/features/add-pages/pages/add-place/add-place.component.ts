@@ -31,6 +31,7 @@ import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model'
 import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
 import {
   RegionalPlaceCreateRequest,
+  RegionalPlaceDetailDto,
   RegionalPlaceOperatingHourDto,
   RegionalPlaceParentDestinationDto,
   RegionalPlaceParentLocationDto,
@@ -153,6 +154,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   isEditMode = false;
   editPlaceId: string | null = null;
+  private editLoadedDestination: RegionalPlaceParentDestinationDto | null = null;
+  private editLoadedLocation: RegionalPlaceParentLocationDto | null = null;
 
   placeName = '';
   summary = '';
@@ -488,6 +491,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   onRegionSelected(regionId: number): void {
     if (regionId === this.activeRegionId) return;
 
+    this.editLoadedDestination = null;
+    this.editLoadedLocation = null;
     this.setActiveRegion(regionId, true);
     this.parentDestinationId = null;
     this.parentLocationId = null;
@@ -525,6 +530,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe({
         next: destinations => {
           this.parentDestinations = this.normalizeParentDestinations(destinations);
+          this.ensureLoadedParentSelectionsPresent();
           if (
             this.parentDestinationId &&
             !this.parentDestinations.some(destination => destination.id === this.parentDestinationId)
@@ -562,6 +568,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         next: locations => {
           this.parentLocations = this.normalizeParentLocations(locations)
             .filter(location => location.destinationId === this.parentDestinationId);
+          this.ensureLoadedParentSelectionsPresent();
           if (
             this.parentLocationId &&
             !this.parentLocations.some(location => location.id === this.parentLocationId)
@@ -690,6 +697,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         this.summary = dto.summary ?? dto.subtitle ?? '';
         this.parentDestinationId = dto.destinationId ?? null;
         this.parentLocationId = dto.locationId ?? null;
+        this.captureLoadedParentSelections(dto);
+        this.ensureLoadedParentSelectionsPresent();
         if (this.parentDestinationId) {
           this.loadParentLocations();
         }
@@ -750,6 +759,10 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onParentDestinationChanged(): void {
+    this.editLoadedLocation = null;
+    if (this.editLoadedDestination && this.editLoadedDestination.id !== this.parentDestinationId) {
+      this.editLoadedDestination = null;
+    }
     this.parentLocationId = null;
     this.parentLocations = [];
     this.loadParentLocations();
@@ -1773,6 +1786,56 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       tag => tag.name.trim().toLocaleLowerCase() === query && !this.selectedTagIds.has(tag.id),
     );
     return exactMatch ?? null;
+  }
+
+  private captureLoadedParentSelections(dto: RegionalPlaceDetailDto): void {
+    this.editLoadedDestination = dto.destinationId
+      ? {
+          id: dto.destinationId,
+          name: dto.destinationName ?? '',
+          displayName: dto.destinationName ?? '',
+          status: '',
+        }
+      : null;
+    this.editLoadedLocation = dto.locationId
+      ? {
+          id: dto.locationId,
+          name: dto.locationName ?? '',
+          displayName: dto.locationName ?? '',
+          destinationId: dto.destinationId ?? 0,
+          destinationName: dto.destinationName ?? '',
+          status: '',
+        }
+      : null;
+  }
+
+  // The parent destination/location selectors are populated from the region's
+  // catalogue, which may not yet list the entity attached to a place that was
+  // approved through the contribution flow. Inject the place's own parent
+  // selections so the edit form and its preview always reflect them.
+  private ensureLoadedParentSelectionsPresent(): void {
+    if (
+      this.editLoadedDestination &&
+      this.editLoadedDestination.id === this.parentDestinationId &&
+      !this.parentDestinations.some(destination => destination.id === this.editLoadedDestination!.id)
+    ) {
+      this.parentDestinations = this.normalizeParentDestinations([
+        ...this.parentDestinations,
+        this.editLoadedDestination,
+      ]);
+    }
+
+    if (
+      this.editLoadedLocation &&
+      this.editLoadedLocation.id === this.parentLocationId &&
+      this.editLoadedLocation.destinationId === this.parentDestinationId &&
+      !this.parentLocations.some(location => location.id === this.editLoadedLocation!.id)
+    ) {
+      this.parentLocations = this.normalizeParentLocations([
+        ...this.parentLocations,
+        this.editLoadedLocation,
+      ]);
+    }
   }
 
   private normalizeParentDestinations(

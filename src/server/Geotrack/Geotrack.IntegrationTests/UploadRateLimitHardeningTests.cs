@@ -401,6 +401,8 @@ public sealed class UploadRateLimitHardeningTests
             int regionId,
             int? existingDestinationId,
             string? newDestinationName,
+            double? newDestinationLatitude,
+            double? newDestinationLongitude,
             string? newLocationName,
             string? note) =>
             Task.FromResult(new PlaceContributionDetailDto { Id = contributionId });

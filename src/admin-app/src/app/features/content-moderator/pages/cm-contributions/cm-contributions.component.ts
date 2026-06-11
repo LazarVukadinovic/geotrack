@@ -223,6 +223,10 @@ export class CmContributionsComponent implements OnInit, OnDestroy {
   // ── Approve modal ─────────────────────────────────────────────
   openApprove(item: CmContributionListItem, event: Event): void {
     event.stopPropagation();
+    if ((item.type ?? '').toLowerCase() !== 'claimownership') {
+      this.viewDetail(item);
+      return;
+    }
     this.approveModal = item;
     this.approveNote = '';
     this.approveModalLoading = true;
@@ -393,6 +397,8 @@ export class CmContributionsComponent implements OnInit, OnDestroy {
           this.selectedRegionId,
           this.destinationChoice === 'existing' ? this.selectedDestinationId : null,
           this.destinationChoice === 'new' ? this.newDestinationName.trim() : null,
+          null,
+          null,
           this.newLocationName.trim(),
           this.approveNote,
         )

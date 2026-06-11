@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -16,6 +16,10 @@ import {
 } from '../../../../core/services/content-moderator/content-moderator-contributions.service';
 import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 import { isLongDescription } from '../../../../shared/utils/description-formatting';
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
+import { createRegionalMapPinIcon } from '../../../add-pages/shared/regional-creation-map';
+
+declare const L: any;
 
 type DestinationChoice = 'existing' | 'new';
 
@@ -33,6 +37,8 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly lightbox = inject(LightboxService);
+  private readonly mapTileLayer = inject(MapTileLayerService);
+  private readonly zone = inject(NgZone);
   private readonly destroy$ = new Subject<void>();
 
   contribution: CmContributionDetail | null = null;
@@ -55,6 +61,9 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   destinationChoice: DestinationChoice = 'new';
   selectedDestinationId: number | null = null;
   newDestinationName = '';
+  newDestinationLatitude: number | null = null;
+  newDestinationLongitude: number | null = null;
+  destinationCenterConfirmed = false;
   locations: CmLocationOption[] = [];
   locationsLoading = false;
   newLocationName = '';
@@ -68,6 +77,18 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   locationImageFile: File | null = null;
   locationImagePreview: string | null = null;
   locationImageError = '';
+
+  private destinationCenterMap: any = null;
+  private destinationCenterMarker: any = null;
+
+  @ViewChild('destinationCenterMap')
+  set destinationCenterMapElement(element: ElementRef<HTMLDivElement> | undefined) {
+    if (!element) {
+      this.destroyDestinationCenterMap();
+      return;
+    }
+    setTimeout(() => this.initDestinationCenterMap(element.nativeElement), 0);
+  }
 
   readonly galleryLimit = 8;
   get userName(): string { return this.auth.fullName || 'Content Moderator'; }
@@ -93,7 +114,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     if (!this.selectedRegionId) return false;
     if (!this.newLocationName.trim()) return false;
     if (this.destinationChoice === 'existing') return !!this.selectedDestinationId;
-    return !!this.newDestinationName.trim();
+    return !!this.newDestinationName.trim() && this.destinationCenterConfirmed;
   }
 
   get isDescriptionLong(): boolean {
@@ -170,6 +191,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyDestinationCenterMap();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -224,6 +246,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     this.destinations = [];
     this.locations = [];
     this.destinationChoice = 'new';
+    this.clearDestinationCenter();
     this.cdr.markForCheck();
 
     if (!this.selectedRegionId) return;
@@ -256,6 +279,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     this.locations = [];
     this.selectedDestinationId = null;
     this.destinationChoice = 'new';
+    this.clearDestinationCenter();
     this.cdr.markForCheck();
   }
 
@@ -266,6 +290,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     if (choice === 'existing') {
       this.destinationImageFile = null;
       this.destinationImagePreview = null;
+      this.clearDestinationCenter();
     }
     this.locationImageFile = null;
     this.locationImagePreview = null;
@@ -351,6 +376,8 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
           this.selectedRegionId!,
           this.destinationChoice === 'existing' ? this.selectedDestinationId : null,
           this.destinationChoice === 'new' ? this.newDestinationName.trim() : null,
+          this.destinationChoice === 'new' ? this.newDestinationLatitude : null,
+          this.destinationChoice === 'new' ? this.newDestinationLongitude : null,
           this.newLocationName.trim(),
           this.reviewerNote,
         )
@@ -417,6 +444,55 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
 
   get isOwnershipClaim(): boolean {
     return (this.contribution?.type ?? '').toLowerCase() === 'claimownership';
+  }
+
+  clearDestinationCenter(): void {
+    this.newDestinationLatitude = null;
+    this.newDestinationLongitude = null;
+    this.destinationCenterConfirmed = false;
+    if (this.destinationCenterMarker && this.destinationCenterMap) {
+      this.destinationCenterMap.removeLayer(this.destinationCenterMarker);
+      this.destinationCenterMarker = null;
+    }
+    this.cdr.markForCheck();
+  }
+
+  private initDestinationCenterMap(element: HTMLDivElement): void {
+    if (this.destinationCenterMap || typeof L === 'undefined') return;
+
+    const fallbackLatitude = this.contribution?.latitude ?? 44.0165;
+    const fallbackLongitude = this.contribution?.longitude ?? 21.0059;
+    this.destinationCenterMap = L.map(element, { zoomControl: true, attributionControl: false })
+      .setView([fallbackLatitude, fallbackLongitude], this.contribution?.latitude != null ? 13 : 7);
+    this.mapTileLayer.addTo(L, this.destinationCenterMap);
+    this.destinationCenterMap.on('click', (event: any) => {
+      this.zone.run(() => {
+        this.newDestinationLatitude = event.latlng.lat;
+        this.newDestinationLongitude = event.latlng.lng;
+        this.destinationCenterConfirmed = true;
+        this.showDestinationCenterMarker();
+        this.cdr.markForCheck();
+      });
+    });
+    setTimeout(() => this.destinationCenterMap?.invalidateSize(), 100);
+  }
+
+  private showDestinationCenterMarker(): void {
+    if (!this.destinationCenterMap || this.newDestinationLatitude == null || this.newDestinationLongitude == null) return;
+    const point: [number, number] = [this.newDestinationLatitude, this.newDestinationLongitude];
+    if (this.destinationCenterMarker) {
+      this.destinationCenterMarker.setLatLng(point);
+    } else {
+      this.destinationCenterMarker = L.marker(point, {
+        icon: createRegionalMapPinIcon(L),
+      }).addTo(this.destinationCenterMap);
+    }
+  }
+
+  private destroyDestinationCenterMap(): void {
+    this.destinationCenterMap?.remove();
+    this.destinationCenterMap = null;
+    this.destinationCenterMarker = null;
   }
 
   typeLabel(type: string): string {

@@ -137,6 +137,8 @@ public class ContributionsController : ControllerBase
                 request.RegionId,
                 request.ExistingDestinationId,
                 request.NewDestinationName,
+                request.NewDestinationLatitude,
+                request.NewDestinationLongitude,
                 request.NewLocationName,
                 request.Note);
 

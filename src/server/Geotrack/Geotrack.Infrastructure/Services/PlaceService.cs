@@ -259,7 +259,7 @@ public class PlaceService : IPlaceService
             Rating = averageRating,
             ReviewCount = FormatReviewCountLabel(reviewCount),
             Distance = detailDistance,
-            OpenStatus = DeriveOpenStatus(place.OpeningHours),
+            OpenStatus = DeriveOpenStatus(place.OperatingHoursEnabled, place.OperatingHoursJson),
             OpeningHours = DisplayTextSafety.CleanOptional(place.OpeningHours),
             OperatingHoursEnabled = place.OperatingHoursEnabled,
             OperatingHours = ParseStructuredOperatingHours(place.OperatingHoursJson),
@@ -1103,8 +1103,13 @@ public class PlaceService : IPlaceService
         return Math.Round(reviews.Average(r => r.Rating), 1);
     }
 
-    private static string? DeriveOpenStatus(string? hours) =>
-        string.IsNullOrWhiteSpace(hours) ? null : "Open";
+    private static string? DeriveOpenStatus(bool enabled, string? operatingHoursJson) =>
+        OperatingHoursStatusCalculator.Evaluate(enabled, operatingHoursJson) switch
+        {
+            OperatingHoursStatus.Open => "Open now",
+            OperatingHoursStatus.Closed => "Closed now",
+            _ => null
+        };
 
     private static List<PlaceOperatingHourDto>? ParseStructuredOperatingHours(string? json)
     {
@@ -1632,7 +1637,7 @@ public class PlaceService : IPlaceService
                 .ToList(),
             Rating = reviewStats.AverageRating,
             ReviewCount = FormatReviewCountLabel(reviewStats.Count),
-            OpenStatus = DeriveOpenStatus(refreshedPlace.OpeningHours),
+            OpenStatus = DeriveOpenStatus(refreshedPlace.OperatingHoursEnabled, refreshedPlace.OperatingHoursJson),
             OpeningHours = DisplayTextSafety.CleanOptional(refreshedPlace.OpeningHours),
             OperatingHoursEnabled = refreshedPlace.OperatingHoursEnabled,
             OperatingHours = ParseStructuredOperatingHours(refreshedPlace.OperatingHoursJson),

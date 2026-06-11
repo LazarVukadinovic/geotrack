@@ -130,10 +130,7 @@ export class PlaceDetailPageComponent {
   protected readonly computedOpenStatus = computed(() => {
     const p = this.place();
     if (!p) return '';
-    if (this.is24Hours()) return 'Open now';
-    const schedule = (p.openingHoursSchedule ?? []).filter(day => !!day.day?.trim());
-    if (!schedule || schedule.length === 0) return p.openStatus ?? '';
-    return this.calculateCurrentOpenStatus(schedule, p.openStatus ?? '');
+    return p.openStatus ?? '';
   });
 
   private readonly locationRequestKey = computed(() => {
@@ -535,54 +532,5 @@ export class PlaceDetailPageComponent {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? value as Record<string, unknown>
       : undefined;
-  }
-
-  private calculateCurrentOpenStatus(schedule: { day: string; hours: string }[], fallback: string): string {
-    const now = new Date();
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const todayName = dayNames[now.getDay()];
-    const yesterdayName = dayNames[(now.getDay() + 6) % 7];
-    const currentMins = now.getHours() * 60 + now.getMinutes();
-
-    const todayEntry = schedule.find(d =>
-      d.day.toLowerCase() === todayName.toLowerCase() ||
-      d.day.toLowerCase().startsWith(todayName.toLowerCase().slice(0, 3)),
-    );
-    const yesterdayEntry = schedule.find(d =>
-      d.day.toLowerCase() === yesterdayName.toLowerCase() ||
-      d.day.toLowerCase().startsWith(yesterdayName.toLowerCase().slice(0, 3)),
-    );
-
-    if (!todayEntry) return fallback;
-
-    const yesterdayMatch = yesterdayEntry?.hours.toLowerCase().match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
-    if (yesterdayMatch) {
-      const yesterdayOpenMins = parseInt(yesterdayMatch[1], 10) * 60 + parseInt(yesterdayMatch[2], 10);
-      const yesterdayCloseMins = parseInt(yesterdayMatch[3], 10) * 60 + parseInt(yesterdayMatch[4], 10);
-      if (yesterdayCloseMins <= yesterdayOpenMins && currentMins < yesterdayCloseMins) {
-        return 'Open now';
-      }
-    }
-
-    const hoursStr = todayEntry.hours.toLowerCase();
-    if (hoursStr.includes('closed')) return 'Closed now';
-    if (hoursStr.includes('24') || hoursStr === 'always open') return 'Open now';
-
-    const timeMatch = hoursStr.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
-    if (!timeMatch) return fallback;
-
-    const openH = parseInt(timeMatch[1], 10);
-    const openM = parseInt(timeMatch[2], 10);
-    const closeH = parseInt(timeMatch[3], 10);
-    const closeM = parseInt(timeMatch[4], 10);
-
-    const openMins = openH * 60 + openM;
-    const closeMins = closeH * 60 + closeM;
-
-    const isOpen = closeMins <= openMins
-      ? currentMins >= openMins || currentMins < closeMins
-      : currentMins >= openMins && currentMins < closeMins;
-
-    return isOpen ? 'Open now' : 'Closed now';
   }
 }

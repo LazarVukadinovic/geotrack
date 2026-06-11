@@ -610,12 +610,24 @@ public sealed class ContributionPublicationTests
         Assert.Equal("Kolubarski", detail.Contribution.SuggestedRegionName);
         Assert.Equal("Valjevo", detail.Contribution.SuggestedDestinationName);
 
+        var missingCentreResponse = await moderatorClient.PostAsJsonAsync(
+            $"/api/contributions/content-manager/{created.Contribution.Id}/approve",
+            new ContentManagerApproveContributionDto
+            {
+                RegionId = regionId,
+                NewDestinationName = "Valjevo",
+                NewLocationName = "Tesnjar"
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, missingCentreResponse.StatusCode);
+
         var approvalResponse = await moderatorClient.PostAsJsonAsync(
             $"/api/contributions/content-manager/{created.Contribution.Id}/approve",
             new ContentManagerApproveContributionDto
             {
                 RegionId = regionId,
                 NewDestinationName = "Valjevo",
+                NewDestinationLatitude = 44.2740,
+                NewDestinationLongitude = 19.8900,
                 NewLocationName = "Tesnjar",
                 Note = "Approved into new destination."
             });
@@ -637,6 +649,8 @@ public sealed class ContributionPublicationTests
         Assert.Equal("Tesnjar", publishedPlace.Location.Name);
         Assert.Equal("Valjevo", publishedPlace.Location.Destination.Name);
         Assert.Equal(regionId, publishedPlace.Location.Destination.RegionId);
+        Assert.Equal(44.2740, publishedPlace.Location.Destination.Latitude, precision: 4);
+        Assert.Equal(19.8900, publishedPlace.Location.Destination.Longitude, precision: 4);
 
         var search = await contributorClient.GetFromJsonAsync<ExploreSearchResponseDto>(
             $"/api/explore/search?destinationId={publishedPlace.Location.DestinationId}&q=hidden");

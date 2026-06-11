@@ -179,6 +179,8 @@ export class ContentModeratorContributionsService {
     regionId: number,
     existingDestinationId: number | null,
     newDestinationName: string | null,
+    newDestinationLatitude: number | null,
+    newDestinationLongitude: number | null,
     newLocationName: string | null,
     note?: string,
   ): Observable<CmContributionDetail> {
@@ -187,6 +189,8 @@ export class ContentModeratorContributionsService {
         regionId,
         existingDestinationId: existingDestinationId ?? undefined,
         newDestinationName: newDestinationName?.trim() || undefined,
+        newDestinationLatitude: newDestinationLatitude ?? undefined,
+        newDestinationLongitude: newDestinationLongitude ?? undefined,
         newLocationName: newLocationName?.trim() || undefined,
         note: note?.trim() || undefined,
       })
