@@ -3,15 +3,11 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { catchError, finalize, of, switchMap } from 'rxjs';
-import { AuthService } from '../../../../core/services/auth.service';
-import { UserService } from '../../../../core/services/user.service';
+import { finalize } from 'rxjs';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
 
-interface AuthResponse {
-  accessToken: string;
-  expiresIn: number;
-  sessionPersistent: boolean;
+interface RegisterResponse {
+  message: string;
 }
 
 @Component({
@@ -42,8 +38,6 @@ export class RegisterPageComponent {
   constructor(
     private router: Router,
     private http: HttpClient,
-    private authService: AuthService,
-    private userService: UserService,
     private analytics: AnalyticsService,
     private cdr: ChangeDetectorRef,
   ) {}
@@ -100,27 +94,15 @@ export class RegisterPageComponent {
 
     this.isLoading = true;
 
+    const email = this.email.trim();
+
     this.http
-      .post<AuthResponse>('/api/auth/register', {
+      .post<RegisterResponse>('/api/auth/register', {
         fullName: this.fullName.trim(),
-        email: this.email.trim(),
+        email,
         password: this.password,
       })
       .pipe(
-        switchMap((res) => {
-          if (res.accessToken) {
-            // Registration always defaults to Remember Me = true so the new
-            // session survives a browser restart (the user can adjust in settings).
-            this.authService.login(res.accessToken, res.sessionPersistent);
-            this.analytics.track('register_completed');
-          }
-
-          // Hydrate UserService so /register/interests and downstream screens
-          // read canonical current-user state without a hard refresh.
-          return this.userService.load().pipe(
-            catchError(() => of(null)),
-          );
-        }),
         finalize(() => {
           this.isLoading = false;
           this.cdr.markForCheck();
@@ -128,7 +110,8 @@ export class RegisterPageComponent {
       )
       .subscribe({
         next: () => {
-          this.router.navigate(['/register/interests']);
+          this.analytics.track('register_completed');
+          this.router.navigate(['/verify-email-sent'], { queryParams: { email } });
         },
         error: (err: HttpErrorResponse) => {
           this.applyServerError(err);
@@ -142,11 +125,11 @@ export class RegisterPageComponent {
   }
 
   goBack(): void {
-    this.router.navigate(['/profile']);
+    this.router.navigate(['/login']);
   }
 
   goToLogin(): void {
-    this.router.navigate(['/profile']);
+    this.router.navigate(['/login']);
   }
 
   private clearServerErrors(): void {

@@ -205,6 +205,9 @@ public class UserService : IUserService
             throw new InvalidOperationException("Choose a password you are not already using");
 
         user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
+        user.PasswordResetTokenHash = null;
+        user.PasswordResetTokenExpiresAt = null;
+        user.PasswordResetRequestedAt = null;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _userRepository.SaveChangesAsync();

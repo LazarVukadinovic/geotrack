@@ -237,6 +237,32 @@ export const routes: Routes = [
         data: { hideBottomNav: true, desktopLayout: 'wide' },
       },
       {
+        path: 'forgot-password',
+        canActivate: [guestGuard],
+        loadComponent: () =>
+          import('./features/auth/pages/forgot-password-page/forgot-password-page.component').then(m => m.ForgotPasswordPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
+        path: 'reset-password',
+        loadComponent: () =>
+          import('./features/auth/pages/reset-password-page/reset-password-page.component').then(m => m.ResetPasswordPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
+        path: 'verify-email',
+        loadComponent: () =>
+          import('./features/auth/pages/verify-email-page/verify-email-page.component').then(m => m.VerifyEmailPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
+        path: 'verify-email-sent',
+        canActivate: [guestGuard],
+        loadComponent: () =>
+          import('./features/auth/pages/email-verification-sent-page/email-verification-sent-page.component').then(m => m.EmailVerificationSentPageComponent),
+        data: { hideBottomNav: true, desktopLayout: 'wide' },
+      },
+      {
         path: 'register',
         canActivate: [guestGuard],
         loadComponent: () =>

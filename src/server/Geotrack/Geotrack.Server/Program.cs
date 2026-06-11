@@ -130,6 +130,7 @@ builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection("Mcp"));
 builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notifications"));
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.Configure<BoundaryImportOptions>(builder.Configuration.GetSection("BoundaryImport"));
 builder.Services.Configure<RegionBoundaryBackfillOptions>(builder.Configuration.GetSection("RegionBoundaryBackfill"));
 builder.Services.Configure<RegionalScopeValidationOptions>(builder.Configuration.GetSection("RegionalScopeValidation"));
@@ -286,6 +287,8 @@ builder.Services.AddScoped<IUserAvatarStorageService, LocalUserAvatarStorageServ
 builder.Services.AddScoped<IContributionMediaStorageService, LocalContributionMediaStorageService>();
 builder.Services.AddScoped<IRegionalEntityImageStorageService, LocalRegionalEntityImageStorageService>();
 
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<IAuthEmailService, AuthEmailService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();

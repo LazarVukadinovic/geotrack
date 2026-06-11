@@ -2,11 +2,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { RegisterPageComponent } from './register-page.component';
-import { AuthService } from '../../../../core/services/auth.service';
-import { UserService } from '../../../../core/services/user.service';
 
 describe('RegisterPageComponent', () => {
   let component: RegisterPageComponent;
@@ -15,14 +12,6 @@ describe('RegisterPageComponent', () => {
 
   const router = {
     navigate: vi.fn(),
-  };
-
-  const authService = {
-    login: vi.fn(),
-  };
-
-  const userService = {
-    load: vi.fn(() => of({})),
   };
 
   beforeEach(async () => {
@@ -34,8 +23,6 @@ describe('RegisterPageComponent', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: Router, useValue: router },
-        { provide: AuthService, useValue: authService },
-        { provide: UserService, useValue: userService },
       ],
     }).compileComponents();
 
@@ -77,14 +64,12 @@ describe('RegisterPageComponent', () => {
     expect(component.submitErrorMessage).toBe(
       'An account with this email already exists. Try signing in or use a different email.',
     );
-    expect(authService.login).not.toHaveBeenCalled();
-    expect(userService.load).not.toHaveBeenCalled();
     expect(router.navigate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('An account with this email already exists.');
     expect(fixture.nativeElement.textContent).toContain('Continue');
   });
 
-  it('navigates to interests after a successful registration and profile load', () => {
+  it('navigates to email verification sent page after successful registration', () => {
     component.fullName = 'Test Traveler';
     component.email = 'new@example.com';
     component.password = 'Password123!';
@@ -100,14 +85,12 @@ describe('RegisterPageComponent', () => {
     });
 
     req.flush({
-      accessToken: 'access-token',
-      expiresIn: 900,
-      sessionPersistent: true,
+      message: 'Registration successful. Please check your email to verify your account before signing in.',
     });
 
-    expect(authService.login).toHaveBeenCalledWith('access-token', true);
-    expect(userService.load).toHaveBeenCalled();
-    expect(router.navigate).toHaveBeenCalledWith(['/register/interests']);
+    expect(router.navigate).toHaveBeenCalledWith(['/verify-email-sent'], {
+      queryParams: { email: 'new@example.com' },
+    });
     expect(component.isLoading).toBe(false);
   });
 });

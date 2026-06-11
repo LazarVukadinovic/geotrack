@@ -29,6 +29,14 @@ public class User
     public string LastName { get; set; } = string.Empty;
 
     public string PasswordHash { get; set; } = string.Empty;
+    public bool IsEmailConfirmed { get; set; } = true;
+    public DateTime? EmailConfirmedAt { get; set; }
+    public string? EmailVerificationTokenHash { get; set; }
+    public DateTime? EmailVerificationTokenExpiresAt { get; set; }
+    public DateTime? EmailVerificationSentAt { get; set; }
+    public string? PasswordResetTokenHash { get; set; }
+    public DateTime? PasswordResetTokenExpiresAt { get; set; }
+    public DateTime? PasswordResetRequestedAt { get; set; }
     public string PhoneNumber { get; set; } = string.Empty;
 
     // Profile fields

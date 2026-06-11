@@ -6,6 +6,10 @@ namespace Geotrack.Application.Interfaces.Service;
 public interface IAuthService
 {
     Task<RegisterResponseDto> RegisterAsync(RegisterRequestDto request);
+    Task<AuthActionResponseDto> VerifyEmailAsync(VerifyEmailRequestDto request);
+    Task<AuthMessageResponseDto> ResendEmailVerificationAsync(ResendEmailVerificationRequestDto request);
+    Task<AuthMessageResponseDto> RequestPasswordResetAsync(ForgotPasswordRequestDto request);
+    Task<AuthActionResponseDto> ResetPasswordAsync(ResetPasswordRequestDto request);
     Task<LoginResponseDto> LoginAsync(LoginRequestDto request);
     Task<RefreshResponseDto> RefreshAsync(RefreshRequestDto request);
     Task<AuthSessionDto> GetSessionAsync(RefreshRequestDto request);
