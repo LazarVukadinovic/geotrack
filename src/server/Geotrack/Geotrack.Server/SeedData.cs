@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Geotrack.Application.Services;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Analytics;
@@ -157,6 +159,101 @@ public static class SeedData
     // Koristi se za slike konvertovane Sharp skriptom (scripts/convert-images.mjs)
     // Primer: SeedWebp("kopaonik-vrh")  →  /media/seed/kopaonik-vrh.webp
     private static string SeedWebp(string fileName) => $"/media/seed/{fileName}.webp";
+
+
+    private static readonly JsonSerializerOptions SeedOperatingHoursJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    private sealed record SeedOperatingHourEntry(
+        string DayOfWeek,
+        bool IsOpen,
+        string? OpenTime,
+        string? CloseTime);
+
+    private static string BuildDailyHoursJson(string hours)
+        => BuildHoursJson(
+            ("Monday", hours),
+            ("Tuesday", hours),
+            ("Wednesday", hours),
+            ("Thursday", hours),
+            ("Friday", hours),
+            ("Saturday", hours),
+            ("Sunday", hours));
+
+    private static string BuildHoursJson(params (string days, string hours)[] schedule)
+    {
+        var entries = new List<SeedOperatingHourEntry>();
+
+        foreach (var (days, rawHours) in schedule)
+        {
+            var day = NormalizeSeedOpeningHoursDay(days);
+            var hours = NormalizeSeedOpeningHoursText(rawHours);
+
+            if (string.IsNullOrWhiteSpace(hours) ||
+                string.Equals(hours, "Closed", StringComparison.OrdinalIgnoreCase))
+            {
+                entries.Add(new SeedOperatingHourEntry(day, false, null, null));
+                continue;
+            }
+
+            if (IsSeedOpen24Hours(hours))
+            {
+                entries.Add(new SeedOperatingHourEntry(day, true, "00:00", "00:00"));
+                continue;
+            }
+
+            var addedSlot = false;
+            foreach (var slot in hours.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var parts = slot.Split(" - ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (parts.Length == 2 && IsSeedClock(parts[0]) && IsSeedClock(parts[1]))
+                {
+                    entries.Add(new SeedOperatingHourEntry(day, true, parts[0], parts[1]));
+                    addedSlot = true;
+                }
+            }
+
+            if (!addedSlot)
+            {
+                entries.Add(new SeedOperatingHourEntry(day, false, null, null));
+            }
+        }
+
+        return JsonSerializer.Serialize(entries, SeedOperatingHoursJsonOptions);
+    }
+
+    private static string NormalizeSeedOpeningHoursDay(string value)
+        => value.Trim().ToLowerInvariant() switch
+        {
+            "mon" or "monday" => "Monday",
+            "tue" or "tuesday" => "Tuesday",
+            "wed" or "wednesday" => "Wednesday",
+            "thu" or "thursday" => "Thursday",
+            "fri" or "friday" => "Friday",
+            "sat" or "saturday" => "Saturday",
+            "sun" or "sunday" => "Sunday",
+            var other => CultureInfo.InvariantCulture.TextInfo.ToTitleCase(other)
+        };
+
+    private static string NormalizeSeedOpeningHoursText(string value)
+    {
+        var normalized = value.Trim()
+            .Replace('–', '-')
+            .Replace('—', '-');
+
+        normalized = Regex.Replace(normalized, @"\s*-\s*", " - ");
+        normalized = Regex.Replace(normalized, @"\s*,\s*", ", ");
+        return normalized;
+    }
+
+    private static bool IsSeedOpen24Hours(string value)
+        => value.Contains("24", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(value, "00:00 - 00:00", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSeedClock(string value)
+        => TimeSpan.TryParseExact(value, @"hh\:mm", CultureInfo.InvariantCulture, out _);
 
     public static async Task InitializeAsync(AppDbContext db)
     {
@@ -913,28 +1010,6 @@ public static class SeedData
             if (place.OperatingHoursEnabled != shouldBeEnabled) { place.OperatingHoursEnabled = shouldBeEnabled; changed = true; }
             if (changed) await db.SaveChangesAsync();
         }
-
-        static string BuildHoursJson(params (string days, string hours)[] schedule)
-        {
-            var entries = schedule.Select(s =>
-            {
-                var h = s.hours.Trim();
-                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
-                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
-                var norm = h.Replace("–", " - ");
-                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
-                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
-                if (parts.Length >= 2)
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
-                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
-            });
-            return "[" + string.Join(",", entries) + "]";
-        }
-
-        static string BuildDailyHoursJson(string hours)
-            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
 
         await UpdatePlaceHoursAsync(banjeBeach, "06:00 - 22:00", BuildDailyHoursJson("06:00 - 22:00"));
         await UpdatePlaceHoursAsync(nautika, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
@@ -1783,27 +1858,6 @@ public static class SeedData
 
     private static async Task EnsureInitialDubrovnikPlaceHoursAsync(AppDbContext db)
     {
-        static string BuildHoursJson(params (string day, string hours)[] schedule)
-        {
-            var entries = schedule.Select(s =>
-            {
-                var h = s.hours.Trim();
-                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
-                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
-                var norm = h.Replace("–", " - ");
-                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
-                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
-                if (parts.Length >= 2)
-                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
-                return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
-            });
-            return "[" + string.Join(",", entries) + "]";
-        }
-
-        static string BuildDailyHoursJson(string hours)
-            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
 
         var placeHours = new[]
         {
@@ -4598,28 +4652,6 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
-        static string BuildHoursJson(params (string days, string hours)[] schedule)
-        {
-            var entries = schedule.Select(s =>
-            {
-                var h = s.hours.Trim();
-                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
-                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
-                var norm = h.Replace("–", " - ");
-                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
-                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
-                if (parts.Length >= 2)
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
-                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
-            });
-            return "[" + string.Join(",", entries) + "]";
-        }
-
-        static string BuildDailyHoursJson(string hours)
-            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
-
         async Task AddEntityImagesIfMissingAsync(EntityImageTargetType targetType, string title, int? destinationId = null, int? placeId = null, int? eventId = null, params string[] urls)
         {
             var exists = await db.EntityImages.AnyAsync(x =>
@@ -5006,8 +5038,8 @@ public static class SeedData
         await UpdatePlaceHoursAsync(toroRestoran, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
         await UpdatePlaceHoursAsync(prvaGimnazija, "Mon–Fri 07:00–20:00",
             BuildHoursJson(("Monday", "07:00–20:00"), ("Tuesday", "07:00–20:00"), ("Wednesday", "07:00–20:00"), ("Thursday", "07:00–20:00"), ("Friday", "07:00–20:00"), ("Saturday", "Closed"), ("Sunday", "Closed")));
-        await UpdatePlaceHoursAsync(knjazTeatar, "Mon–Sat 10:00–14:00, 18:00–20:00",
-            BuildHoursJson(("Monday", "10:00–14:00, 18:00–20:00"), ("Tuesday", "10:00–14:00, 18:00–20:00"), ("Wednesday", "10:00–14:00, 18:00–20:00"), ("Thursday", "10:00–14:00, 18:00–20:00"), ("Friday", "10:00–14:00, 18:00–20:00"), ("Saturday", "10:00–14:00, 18:00–20:00"), ("Sunday", "Closed")));
+        await UpdatePlaceHoursAsync(knjazTeatar, "Mon–Sat 10:00–20:00",
+            BuildHoursJson(("Monday", "10:00–20:00"), ("Tuesday", "10:00–20:00"), ("Wednesday", "10:00–20:00"), ("Thursday", "10:00–20:00"), ("Friday", "10:00–20:00"), ("Saturday", "10:00–20:00"), ("Sunday", "Closed")));
         await ForceSetDestinationImageAsync(kragujevac, SeedWebp("kg"));
         await ForceSetDestinationImageAsync(beograd, SeedWebp("bg"));
         await ForceSetDestinationImageAsync(noviSad, SeedWebp("ns"));
@@ -5937,28 +5969,6 @@ public static class SeedData
             if (place.OperatingHoursEnabled != shouldBeEnabled) { place.OperatingHoursEnabled = shouldBeEnabled; changed = true; }
             if (changed) await db.SaveChangesAsync();
         }
-
-        static string BuildHoursJson(params (string days, string hours)[] schedule)
-        {
-            var entries = schedule.Select(s =>
-            {
-                var h = s.hours.Trim();
-                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
-                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
-                var norm = h.Replace("–", " - ");
-                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
-                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
-                if (parts.Length >= 2)
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
-                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
-            });
-            return "[" + string.Join(",", entries) + "]";
-        }
-
-        static string BuildDailyHoursJson(string hours)
-            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
 
         var neighborhoodType = await EnsureLocationTypeAsync("Neighborhood", "City neighborhood");
         var districtType = await EnsureLocationTypeAsync("District", "City district");

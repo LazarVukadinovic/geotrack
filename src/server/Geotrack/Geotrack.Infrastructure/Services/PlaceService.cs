@@ -1154,18 +1154,18 @@ public class PlaceService : IPlaceService
             if (document.RootElement.ValueKind != JsonValueKind.Array)
                 return null;
 
-            var schedule = new List<OpeningHoursDayDto>();
+            var groupedSchedule = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var item in document.RootElement.EnumerateArray())
             {
                 var legacyDay = ReadJsonString(item, "day");
                 var legacyHours = ReadJsonString(item, "hours");
                 if (!string.IsNullOrWhiteSpace(legacyDay))
                 {
-                    schedule.Add(new OpeningHoursDayDto
-                    {
-                        Day = NormalizeOpeningHoursDayLabel(legacyDay),
-                        Hours = NormalizeOpeningHoursText(legacyHours)
-                    });
+                    AddOpeningHoursScheduleEntry(
+                        groupedSchedule,
+                        NormalizeOpeningHoursDayLabel(legacyDay),
+                        NormalizeOpeningHoursText(legacyHours));
                     continue;
                 }
 
@@ -1173,15 +1173,33 @@ public class PlaceService : IPlaceService
                 if (string.IsNullOrWhiteSpace(dayOfWeek))
                     continue;
 
+                var dayLabel = NormalizeOpeningHoursDayLabel(dayOfWeek);
                 var isOpen = ReadJsonBoolean(item, "isOpen");
                 var openTime = ReadJsonString(item, "openTime");
                 var closeTime = ReadJsonString(item, "closeTime");
+
+                var displayHours = isOpen && !string.IsNullOrWhiteSpace(openTime) && !string.IsNullOrWhiteSpace(closeTime)
+                    ? FormatOpeningHoursSlot(openTime, closeTime)
+                    : "Closed";
+
+                AddOpeningHoursScheduleEntry(groupedSchedule, dayLabel, displayHours);
+            }
+
+            var schedule = DayOrder
+                .Where(groupedSchedule.ContainsKey)
+                .Select(day => new OpeningHoursDayDto
+                {
+                    Day = day,
+                    Hours = FormatOpeningHoursDay(groupedSchedule[day])
+                })
+                .ToList();
+
+            foreach (var entry in groupedSchedule.Where(entry => !DayOrder.Contains(entry.Key, StringComparer.OrdinalIgnoreCase)))
+            {
                 schedule.Add(new OpeningHoursDayDto
                 {
-                    Day = NormalizeOpeningHoursDayLabel(dayOfWeek),
-                    Hours = isOpen && !string.IsNullOrWhiteSpace(openTime) && !string.IsNullOrWhiteSpace(closeTime)
-                        ? $"{openTime.Trim()} - {closeTime.Trim()}"
-                        : "Closed"
+                    Day = entry.Key,
+                    Hours = FormatOpeningHoursDay(entry.Value)
                 });
             }
 
@@ -1191,6 +1209,54 @@ public class PlaceService : IPlaceService
         {
             return null;
         }
+    }
+
+    private static readonly string[] DayOrder =
+    [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday"
+    ];
+
+    private static void AddOpeningHoursScheduleEntry(
+        IDictionary<string, List<string>> schedule,
+        string day,
+        string hours)
+    {
+        if (!schedule.TryGetValue(day, out var dayHours))
+        {
+            dayHours = new List<string>();
+            schedule[day] = dayHours;
+        }
+
+        if (!string.IsNullOrWhiteSpace(hours))
+            dayHours.Add(hours);
+    }
+
+    private static string FormatOpeningHoursSlot(string openTime, string closeTime)
+    {
+        var open = openTime.Trim();
+        var close = closeTime.Trim();
+        return open == "00:00" && close == "00:00"
+            ? "Open 24 hours"
+            : $"{open} - {close}";
+    }
+
+    private static string FormatOpeningHoursDay(IReadOnlyCollection<string> values)
+    {
+        var nonEmpty = values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .ToList();
+
+        if (nonEmpty.Count == 0 || nonEmpty.All(value => string.Equals(value, "Closed", StringComparison.OrdinalIgnoreCase)))
+            return "Closed";
+
+        return string.Join(", ", nonEmpty.Where(value => !string.Equals(value, "Closed", StringComparison.OrdinalIgnoreCase)));
     }
 
     private static string? ReadJsonString(JsonElement element, string propertyName)
@@ -1225,7 +1291,13 @@ public class PlaceService : IPlaceService
         if (string.IsNullOrWhiteSpace(value))
             return "Closed";
 
-        return value.Trim().Replace('–', '-').Replace(" - ", " - ").Replace("-", " - ");
+        var normalized = value.Trim()
+            .Replace('–', '-')
+            .Replace('—', '-');
+
+        normalized = Regex.Replace(normalized, @"\s*-\s*", " - ");
+        normalized = Regex.Replace(normalized, @"\s*,\s*", ", ");
+        return normalized;
     }
 
     private static OwnerUpdateOperatingHoursResult NormalizeOwnerUpdateOperatingHours(

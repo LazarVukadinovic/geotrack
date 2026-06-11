@@ -38,36 +38,39 @@ public static class OperatingHoursStatusCalculator
 
         var localNow = TimeZoneInfo.ConvertTimeFromUtc(effectiveUtc, AppTimeZone);
         var now = localNow.TimeOfDay;
-        var yesterdayHours = FindDay(hours, localNow.AddDays(-1).DayOfWeek);
 
-        if (yesterdayHours is { IsOpen: true } &&
-            TryReadTimes(yesterdayHours, out var yesterdayOpen, out var yesterdayClose) &&
-            yesterdayClose < yesterdayOpen &&
-            now < yesterdayClose)
-        {
+        var yesterdayHours = FindDay(hours, localNow.AddDays(-1).DayOfWeek).ToList();
+        if (yesterdayHours.Any(entry => IsOpenAt(entry, now, fromPreviousDay: true)))
             return OperatingHoursStatus.Open;
-        }
 
-        var todayHours = FindDay(hours, localNow.DayOfWeek);
-        if (todayHours is null)
+        var todayHours = FindDay(hours, localNow.DayOfWeek).ToList();
+        if (todayHours.Count == 0)
             return null;
-        if (!todayHours.IsOpen)
+        if (todayHours.All(hour => !hour.IsOpen))
             return OperatingHoursStatus.Closed;
-        if (!TryReadTimes(todayHours, out var openTime, out var closeTime))
-            return null;
 
-        if (openTime == closeTime)
-            return openTime == TimeSpan.Zero ? OperatingHoursStatus.Open : OperatingHoursStatus.Closed;
-
-        var isOpen = closeTime < openTime
-            ? now >= openTime
-            : now >= openTime && now < closeTime;
-
+        var isOpen = todayHours.Any(entry => IsOpenAt(entry, now, fromPreviousDay: false));
         return isOpen ? OperatingHoursStatus.Open : OperatingHoursStatus.Closed;
     }
 
-    private static OperatingHourEntry? FindDay(IEnumerable<OperatingHourEntry> hours, DayOfWeek day) =>
-        hours.FirstOrDefault(hour =>
+    private static bool IsOpenAt(OperatingHourEntry entry, TimeSpan now, bool fromPreviousDay)
+    {
+        if (!entry.IsOpen || !TryReadTimes(entry, out var openTime, out var closeTime))
+            return false;
+
+        if (openTime == closeTime)
+            return openTime == TimeSpan.Zero;
+
+        if (closeTime < openTime)
+            return fromPreviousDay
+                ? now < closeTime
+                : now >= openTime;
+
+        return !fromPreviousDay && now >= openTime && now < closeTime;
+    }
+
+    private static IEnumerable<OperatingHourEntry> FindDay(IEnumerable<OperatingHourEntry> hours, DayOfWeek day) =>
+        hours.Where(hour =>
             string.Equals(hour.DayOfWeek, day.ToString(), StringComparison.OrdinalIgnoreCase));
 
     private static bool TryReadTimes(OperatingHourEntry entry, out TimeSpan openTime, out TimeSpan closeTime)
