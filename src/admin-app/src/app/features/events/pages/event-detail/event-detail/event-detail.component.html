@@ -209,6 +209,10 @@
                     <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Contact Email</span>
                     <a [href]="'mailto:' + (item)['contactEmail']" class="text-sm text-blue-700 hover:underline">{{ (item)['contactEmail'] }}</a>
                   </div>
+                  <div *ngIf="(item)['contactPhone']" class="flex flex-col gap-1">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Contact Phone</span>
+                    <a [href]="'tel:' + (item)['contactPhone']" class="text-sm text-blue-700 hover:underline">{{ (item)['contactPhone'] }}</a>
+                  </div>
                   <div *ngIf="(item)['attendanceLimit']" class="flex flex-col gap-1">
                     <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Attendance Limit</span>
                     <span class="text-sm font-medium text-gray-700">{{ (item)['attendanceLimit'] }}</span>
@@ -222,6 +226,28 @@
             </div>
           </ng-container>
 
+          <ng-container *ngIf="(item)['venueDescription'] || (item)['arrivalTips'] || (item)['accessibility']">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="text-sm font-bold text-gray-800">Venue Info</h3>
+              </div>
+              <div class="px-6 py-5 grid grid-cols-2 gap-4">
+                <div *ngIf="(item)['venueDescription']" class="flex flex-col gap-1 col-span-2">
+                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Description</span>
+                  <div class="text-sm text-gray-700 leading-relaxed" [innerHTML]="(item)['venueDescription'] | descriptionRichHtml"></div>
+                </div>
+                <div *ngIf="(item)['arrivalTips']" class="flex flex-col gap-1">
+                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Arrival Tips</span>
+                  <span class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ (item)['arrivalTips'] }}</span>
+                </div>
+                <div *ngIf="(item)['accessibility']" class="flex flex-col gap-1">
+                  <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parking &amp; Accessibility</span>
+                  <span class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ (item)['accessibility'] }}</span>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+
           <!-- Description -->
           <ng-container *ngIf="(item)['description']">
             <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
@@ -229,8 +255,14 @@
                 <h3 class="text-sm font-bold text-gray-800">Description</h3>
               </div>
               <div class="px-6 py-5">
-                <div class="text-sm text-gray-600 leading-relaxed whitespace-pre-line"
+                <div class="gt-rich-description text-sm text-gray-600 leading-relaxed whitespace-pre-line overflow-hidden"
+                     [class.max-h-40]="isDescriptionLong((item)['description']) && !descriptionExpanded"
                      [innerHTML]="(item)['description'] | descriptionRichHtml"></div>
+                <button *ngIf="isDescriptionLong((item)['description'])" type="button"
+                        class="mt-3 border-0 bg-transparent p-0 text-sm font-semibold text-blue-700 hover:text-blue-800 cursor-pointer"
+                        (click)="descriptionExpanded = !descriptionExpanded">
+                  {{ descriptionExpanded ? 'Show less' : 'Show more' }}
+                </button>
               </div>
             </div>
           </ng-container>

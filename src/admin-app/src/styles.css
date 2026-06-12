@@ -150,3 +150,6 @@
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
   outline: none;
 }
+.gt-rich-description strong { font-weight: 700; }
+.gt-rich-description em { font-style: italic; }
+.gt-rich-description u { text-decoration: underline; }

@@ -1005,6 +1005,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       latitude: this.centerLat,
       longitude: this.centerLng,
       tagIds: this.selectedTagIdList(),
+      galleryImageUrls: this.galleryImages.filter(image => !image.file).map(image => image.url),
+      galleryImageFiles: this.galleryImages.filter(image => image.file).map(image => image.file),
     };
   }
 

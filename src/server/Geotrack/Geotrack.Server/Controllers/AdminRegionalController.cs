@@ -381,7 +381,7 @@ public class AdminRegionalController : ControllerBase
     [HttpPost("media/images")]
     [EnableRateLimiting("uploads")]
     [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
-    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.ImageMaxFileSizeBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
     public async Task<ActionResult<RegionalImageUploadResponseDto>> UploadImages(
         [FromQuery] int regionId,
         [FromForm] List<IFormFile>? files,
@@ -528,19 +528,22 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPut("destinations/{id:int}")]
+    [EnableRateLimiting("uploads")]
+    [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
     public async Task<ActionResult<RegionalDestinationDetailDto>> UpdateDestination(
         [FromRoute] int id,
-        [FromQuery] int regionId,
-        [FromBody] RegionalDestinationUpdateRequestDto? request)
+        [FromQuery] int regionId)
     {
         if (regionId <= 0)
             return BadRequest(new { message = "regionId is required." });
 
-        if (request is null)
-            return BadRequest(new { message = "Request body is required." });
-
         try
         {
+            var request = await ReadUpdateRequestAsync<RegionalDestinationUpdateRequestDto>();
+            if (request is null)
+                return BadRequest(new { message = "Request body is required." });
+
             return Ok(await _destinations.UpdateDestinationAsync(GetCurrentUserId(), regionId, id, request));
         }
         catch (Exception ex)
@@ -674,19 +677,22 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPut("locations/{id:int}")]
+    [EnableRateLimiting("uploads")]
+    [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
     public async Task<ActionResult<RegionalLocationDetailDto>> UpdateLocation(
         [FromRoute] int id,
-        [FromQuery] int regionId,
-        [FromBody] RegionalLocationUpdateRequestDto? request)
+        [FromQuery] int regionId)
     {
         if (regionId <= 0)
             return BadRequest(new { message = "regionId is required." });
 
-        if (request is null)
-            return BadRequest(new { message = "Request body is required." });
-
         try
         {
+            var request = await ReadUpdateRequestAsync<RegionalLocationUpdateRequestDto>();
+            if (request is null)
+                return BadRequest(new { message = "Request body is required." });
+
             return Ok(await _locations.UpdateLocationAsync(GetCurrentUserId(), regionId, id, request));
         }
         catch (Exception ex)
@@ -833,7 +839,7 @@ public class AdminRegionalController : ControllerBase
     [HttpPost("places")]
     [EnableRateLimiting("uploads")]
     [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
-    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.ImageMaxFileSizeBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
     public async Task<ActionResult<RegionalPlaceDetailDto>> CreatePlace()
     {
         try
@@ -858,19 +864,22 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPut("places/{id:int}")]
+    [EnableRateLimiting("uploads")]
+    [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
     public async Task<ActionResult<RegionalPlaceDetailDto>> UpdatePlace(
         [FromRoute] int id,
-        [FromQuery] int regionId,
-        [FromBody] RegionalPlaceUpdateRequestDto? request)
+        [FromQuery] int regionId)
     {
         if (regionId <= 0)
             return BadRequest(new { message = "regionId is required." });
 
-        if (request is null)
-            return BadRequest(new { message = "Request body is required." });
-
         try
         {
+            var request = await ReadUpdateRequestAsync<RegionalPlaceUpdateRequestDto>();
+            if (request is null)
+                return BadRequest(new { message = "Request body is required." });
+
             return Ok(await _places.UpdatePlaceAsync(GetCurrentUserId(), regionId, id, request));
         }
         catch (Exception ex)
@@ -1077,7 +1086,7 @@ public class AdminRegionalController : ControllerBase
     [HttpPost("events")]
     [EnableRateLimiting("uploads")]
     [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
-    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.ImageMaxFileSizeBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
     public async Task<ActionResult<RegionalEventDetailDto>> CreateEvent()
     {
         try
@@ -1399,6 +1408,37 @@ public class AdminRegionalController : ControllerBase
     }
 
 
+
+    private async Task<T?> ReadUpdateRequestAsync<T>() where T : class
+    {
+        if (!Request.HasFormContentType)
+        {
+            return await JsonSerializer.DeserializeAsync<T>(Request.Body, JsonOptions);
+        }
+
+        var form = await Request.ReadFormAsync();
+        var payload = form["payload"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(payload))
+            return null;
+
+        var request = JsonSerializer.Deserialize<T>(payload, JsonOptions);
+        if (request is null)
+            return null;
+
+        var galleryImages = form.Files.GetFiles("galleryImages");
+        var filesToValidate = galleryImages.Where(file => file is { Length: > 0 }).ToList();
+        await UploadValidation.ValidateRegionalImageUploadAsync(filesToValidate, _uploadLimits, HttpContext.RequestAborted);
+
+        var galleryUrls = new List<string>();
+        foreach (var file in galleryImages.Where(file => file is { Length: > 0 }))
+        {
+            galleryUrls.Add(await StoreOptionalFormImageAsync(file));
+        }
+
+        AppendGalleryImageUrls(request, galleryUrls);
+        return request;
+    }
+
     private async Task<T?> ReadCreateRequestAsync<T>() where T : class
     {
         if (!Request.HasFormContentType)
@@ -1461,6 +1501,35 @@ public class AdminRegionalController : ControllerBase
             file.ContentType,
             HttpContext.RequestAborted);
         return stored.MediaUrl;
+    }
+
+
+    private static void AppendGalleryImageUrls<T>(T request, List<string> uploadedGalleryUrls)
+    {
+        if (uploadedGalleryUrls.Count == 0)
+            return;
+
+        switch (request)
+        {
+            case RegionalDestinationUpdateRequestDto destination:
+                destination.GalleryImageUrls = (destination.GalleryImageUrls ?? new List<string>())
+                    .Concat(uploadedGalleryUrls)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                break;
+            case RegionalLocationUpdateRequestDto location:
+                location.GalleryImageUrls = (location.GalleryImageUrls ?? new List<string>())
+                    .Concat(uploadedGalleryUrls)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                break;
+            case RegionalPlaceUpdateRequestDto place:
+                place.GalleryImageUrls = (place.GalleryImageUrls ?? new List<string>())
+                    .Concat(uploadedGalleryUrls)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                break;
+        }
     }
 
     private static void ApplyImageUrls<T>(T request, string cardUrl, string coverUrl, List<string> galleryUrls)

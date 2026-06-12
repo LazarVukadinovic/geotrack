@@ -92,4 +92,6 @@ export interface RegionalDestinationUpdateRequest {
   tagIds?: number[] | null;
   cardImageUrl?: string | null;
   coverImageUrl?: string | null;
+  galleryImageUrls?: string[] | null;
+  galleryImageFiles?: File[];
 }

@@ -108,6 +108,7 @@ public class RegionalPlaceUpdateRequestDto
     public List<int>? TagIds { get; set; }
     public string? CardImageUrl { get; set; }
     public string? CoverImageUrl { get; set; }
+    public List<string>? GalleryImageUrls { get; set; }
 }
 
 public class RegionalPlaceCreateRequestDto

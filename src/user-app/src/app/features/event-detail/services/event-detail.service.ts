@@ -15,6 +15,8 @@ interface ApiEventDetail {
   id: number;
   title: string;
   destinationId?: number | null;
+  destinationName?: string | null;
+  parentEntityType?: string | null;
   location?: string;
   locationId?: number | null;
   locationName?: string | null;
@@ -32,6 +34,14 @@ interface ApiEventDetail {
   similar: { id: number; title: string; subtitle?: string; image?: string; isSaved: boolean }[];
   isSaved: boolean;
   externalTicketLink?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+  isAllDay?: boolean;
+  isRecurring?: boolean;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  attendanceLimit?: number | null;
+  ageRestriction?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -85,6 +95,9 @@ export class EventDetailService {
           id: String(dto.id),
           title: dto.title,
           location: dto.location ?? '',
+          destinationId: dto.destinationId != null ? String(dto.destinationId) : null,
+          destinationName: dto.destinationName ?? null,
+          parentEntityType: dto.parentEntityType ?? 'Location',
           locationId: dto.locationId != null ? String(dto.locationId) : null,
           locationName: dto.locationName ?? null,
           placeId: dto.placeId != null ? String(dto.placeId) : null,
@@ -118,6 +131,14 @@ export class EventDetailService {
           })),
           isSaved: dto.isSaved,
           ticketUrl: dto.externalTicketLink ?? null,
+          startsAt: dto.startsAt ?? '',
+          endsAt: dto.endsAt ?? '',
+          isAllDay: dto.isAllDay ?? false,
+          isRecurring: dto.isRecurring ?? false,
+          contactEmail: dto.contactEmail ?? null,
+          contactPhone: dto.contactPhone ?? null,
+          attendanceLimit: dto.attendanceLimit ?? null,
+          ageRestriction: dto.ageRestriction ?? null,
         };
         this._cache.update(c => ({ ...c, [String(dto.id)]: detail }));
         this.setLoadState(id, 'loaded');

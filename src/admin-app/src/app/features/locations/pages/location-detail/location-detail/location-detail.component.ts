@@ -272,6 +272,25 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
       });
   }
 
+  descriptionExpanded = false;
+  readonly descriptionPreviewLength = 420;
+
+  isDescriptionLong(description: string | null | undefined): boolean {
+    return this.descriptionPlainText(description).length > this.descriptionPreviewLength;
+  }
+
+  isDescriptionCollapsed(description: string | null | undefined): boolean {
+    return this.isDescriptionLong(description) && !this.descriptionExpanded;
+  }
+
+  toggleDescription(): void {
+    this.descriptionExpanded = !this.descriptionExpanded;
+  }
+
+  private descriptionPlainText(description: string | null | undefined): string {
+    return (description ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
   readonly galleryLimit = 6;
 
   galleryPreview(images: { url: string; name: string }[]): { url: string; name: string }[] {

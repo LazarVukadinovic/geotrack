@@ -330,10 +330,12 @@
 .ed__section--about { order: 2; }
 .ed__divider--details { order: 3; }
 .ed__section--details { order: 4; }
-.ed__divider--venue { order: 5; }
-.ed__section--venue { order: 6; }
-.ed__divider--similar { order: 7; }
-.ed__section--similar { order: 8; }
+.ed__divider--contact { order: 5; }
+.ed__section--contact { order: 6; }
+.ed__divider--venue { order: 7; }
+.ed__section--venue { order: 8; }
+.ed__divider--similar { order: 9; }
+.ed__section--similar { order: 10; }
 
 .ed__section-title {
   font-size: 18px;
@@ -711,4 +713,69 @@
   &:focus-visible {
     color: #ff7a2f;
   }
+}
+
+.ed__about-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.ed__about-wrap--collapsed {
+  max-height: 138px;
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 44px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #ffffff);
+  }
+}
+
+.ed__about-toggle {
+  display: inline-flex;
+  align-items: center;
+  margin: 2px 0 10px;
+  border: 0;
+  background: transparent;
+  color: #e8570a;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 800;
+  padding: 0;
+  cursor: pointer;
+
+  &:hover { color: #c94a06; }
+
+  &:focus-visible {
+    outline: 2px solid #e8570a;
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+}
+
+:host ::ng-deep .ed__about strong { font-weight: 700; }
+:host ::ng-deep .ed__about em { font-style: italic; }
+:host ::ng-deep .ed__about u { text-decoration: underline; }
+
+.ed__contact-row {
+  text-decoration: none;
+  color: inherit;
+
+  &:hover .ed__info-value,
+  &:focus-visible .ed__info-value { color: #e8570a; }
+}
+
+.ed__event-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 14px 16px;
+  color: #4b5563;
+  font-size: 13px;
+
+  a { color: #e8570a; font-weight: 700; }
 }

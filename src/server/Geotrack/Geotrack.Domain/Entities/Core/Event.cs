@@ -49,6 +49,7 @@ public class Event
     public string? Duration { get; set; }
     public string? HostedBy { get; set; }
     public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
     public int? AttendanceLimit { get; set; }
     public string? AgeRestriction { get; set; }
     public string? VenueDescription { get; set; }

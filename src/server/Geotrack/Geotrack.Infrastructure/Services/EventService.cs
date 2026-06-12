@@ -1,3 +1,4 @@
+using System.Globalization;
 using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Events;
 using Geotrack.Application.DTOs.Images;
@@ -276,6 +277,9 @@ public class EventService : IEventService
             Id = evt.Id,
             Title = evt.Name,
             Location = evt.VenueName ?? evt.Place?.Name ?? evt.Location?.Name ?? evt.Destination.Name,
+            DestinationId = evt.DestinationId,
+            DestinationName = evt.Destination.Name,
+            ParentEntityType = evt.ParentEntityType,
             LocationId = evt.LocationId,
             LocationName = evt.Location?.Name,
             PlaceId = evt.PlaceId,
@@ -295,8 +299,8 @@ public class EventService : IEventService
             Info = new EventDetailInfoDto
             {
                 Date = evt.StartDate.Date == evt.EndDate.Date
-                    ? evt.StartDate.ToString("d MMMM yyyy")
-                    : $"{evt.StartDate:d MMM} – {evt.EndDate:d MMM yyyy}",
+                    ? evt.StartDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)
+                    : $"{evt.StartDate.ToString("MMM d", CultureInfo.InvariantCulture)} - {evt.EndDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}",
                 TimeRange = evt.IsAllDay ? "All day"
                     : string.Equals(evt.EventType?.Name, "Festival", StringComparison.OrdinalIgnoreCase)
                         ? $"From {evt.StartDate:HH:mm}"
@@ -321,7 +325,15 @@ public class EventService : IEventService
                 IsSaved = favoriteIds.Contains(s.Id)
             }).ToList(),
             IsSaved = isSaved,
-            ExternalTicketLink = evt.ExternalTicketLink
+            ExternalTicketLink = evt.ExternalTicketLink,
+            StartsAt = evt.StartDate,
+            EndsAt = evt.EndDate,
+            IsAllDay = evt.IsAllDay,
+            IsRecurring = evt.IsRecurring,
+            ContactEmail = evt.ContactEmail,
+            ContactPhone = evt.ContactPhone,
+            AttendanceLimit = evt.AttendanceLimit,
+            AgeRestriction = evt.AgeRestriction
         };
     }
 
@@ -574,8 +586,8 @@ public class EventService : IEventService
 
     private static string FormatDateLabel(DateTime start, DateTime end)
     {
-        if (start.Date == end.Date) return start.ToString("d MMM yyyy");
-        return $"{start:d MMM} - {end:d MMM yyyy}";
+        if (start.Date == end.Date) return start.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
+        return $"{start.ToString("MMM d", CultureInfo.InvariantCulture)} - {end.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}";
     }
 
     private static string FormatDuration(DateTime start, DateTime end)

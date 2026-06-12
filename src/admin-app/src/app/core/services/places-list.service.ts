@@ -165,12 +165,24 @@ export class PlacesListService {
     payload: RegionalPlaceUpdateRequest,
   ): Observable<RegionalPlaceDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, payload, { params }).pipe(
+    return this.http.put<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, this.buildUpdateFormData(payload), { params }).pipe(
       map(dto => {
         this.toListItem(dto);
         return dto;
       }),
     );
+  }
+
+  private buildUpdateFormData(payload: RegionalPlaceUpdateRequest): FormData {
+    const { galleryImageFiles, ...request } = payload;
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+
+    for (const file of galleryImageFiles ?? []) {
+      if (file) formData.append('galleryImages', file);
+    }
+
+    return formData;
   }
 
   getParentDestinations(

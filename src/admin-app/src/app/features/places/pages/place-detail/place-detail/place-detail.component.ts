@@ -43,6 +43,7 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   item:      PlaceListItem | null = null;
   isLoading  = true;
   notFound   = false;
+  descriptionExpanded = false;
 
   region   = 'Šumadija, Srbija';
   userName = '';
@@ -99,11 +100,16 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private setItem(item: PlaceListItem): void {
     this.item      = { ...item };
+    this.descriptionExpanded = false;
     this.region    = this.item.regionDisplayName || this.item.region;
     this.isLoading = false;
     this.notFound  = false;
     this.cdr.markForCheck();
     setTimeout(() => this.initMiniMap(), 100);
+  }
+
+  isDescriptionLong(value: string | null | undefined): boolean {
+    return (value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().length > 420;
   }
 
   private loadFromBackend(regionId: number, id: string): void {

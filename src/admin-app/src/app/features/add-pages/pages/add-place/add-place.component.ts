@@ -191,6 +191,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   isItalic = false;
   isUnderline = false;
   editorIsEmpty = true;
+  readonly descriptionMaxLength = 2000;
+  descriptionLimitReached = false;
 
   cardImageUrl: string | null = null;
   cardImageName = '';
@@ -1008,9 +1010,28 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   onEditorKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter') {
       event.preventDefault();
+      if (this.editorTextLength() - this.selectedEditorTextLength() >= this.descriptionMaxLength) {
+        this.descriptionLimitReached = true;
+        this.notifyStateChanged();
+        return;
+      }
       document.execCommand('insertLineBreak');
       this.syncToolbarState();
       this.syncEmptyState();
+    }
+  }
+
+  onEditorBeforeInput(event: InputEvent): void {
+    if (event.inputType.startsWith('delete') || event.inputType.startsWith('format')) return;
+
+    const insertionLength = event.data?.length ??
+      (event.inputType === 'insertParagraph' || event.inputType === 'insertLineBreak' ? 1 : 0);
+    if (insertionLength === 0) return;
+
+    if (this.editorTextLength() - this.selectedEditorTextLength() + insertionLength > this.descriptionMaxLength) {
+      event.preventDefault();
+      this.descriptionLimitReached = true;
+      this.notifyStateChanged();
     }
   }
 
@@ -1022,6 +1043,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onEditorChange(): void {
     this.syncToolbarState();
+    this.syncDescriptionLimitState();
     this.syncEmptyState();
   }
 
@@ -1032,9 +1054,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     event.preventDefault();
     const html = clipboard.getData('text/html');
     const text = clipboard.getData('text/plain');
-    const content = html || this.escapeHtml(text).replace(/\r\n|\r|\n/g, '<br>');
-    document.execCommand('insertHTML', false, this.normalizeEditorHtml(content));
+    const remaining = Math.max(0, this.descriptionMaxLength - (this.editorTextLength() - this.selectedEditorTextLength()));
+    const allowedText = text.slice(0, remaining);
+    const content = normalizeEditorDescriptionHtml(html || this.escapeHtml(allowedText).replace(/\r\n|\r|\n/g, '<br>'));
+    document.execCommand('insertHTML', false, content);
+    this.descriptionLimitReached = text.length > remaining || this.editorTextLength() >= this.descriptionMaxLength;
     this.syncToolbarState();
+    this.syncDescriptionLimitState();
     this.syncEmptyState();
   }
 
@@ -1051,6 +1077,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     } else if (el) {
       el.innerHTML = this.normalizeEditorHtml(el.innerHTML);
     }
+    this.syncDescriptionLimitState();
     this.syncEmptyState();
   }
 
@@ -1431,7 +1458,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       tagIds: this.selectedTagIdList(),
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
-      galleryImageFiles: this.galleryImages.map(image => image.file),
+      galleryImageFiles: this.galleryImages.filter(image => image.file).map(image => image.file),
     };
   }
 
@@ -1522,6 +1549,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       operatingHoursEnabled: this.opsEnabled,
       operatingHours,
       tagIds: this.selectedTagIdList(),
+      galleryImageUrls: this.galleryImages.filter(image => !image.file).map(image => image.url),
+      galleryImageFiles: this.galleryImages.filter(image => image.file).map(image => image.file),
     };
   }
 
@@ -2273,11 +2302,29 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.notifyStateChanged();
   }
 
+  private syncDescriptionLimitState(): void {
+    this.descriptionLimitReached = this.editorTextLength() >= this.descriptionMaxLength;
+  }
+
+  private editorTextLength(): number {
+    return (this.editorRef?.nativeElement?.innerText ?? this.editorRef?.nativeElement?.textContent ?? '').length;
+  }
+
+  private selectedEditorTextLength(): number {
+    const editor = this.editorRef?.nativeElement;
+    const selection = globalThis.getSelection?.();
+    if (!editor || !selection || selection.rangeCount === 0) return 0;
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.commonAncestorContainer)) return 0;
+    return selection.toString().length;
+  }
+
   private setEditorHtml(value: string | null | undefined): void {
     const el = this.editorRef?.nativeElement;
     if (!el) return;
 
     el.innerHTML = this.normalizeEditorHtml(value ?? '');
+    this.syncDescriptionLimitState();
   }
 
   private getEditorHtml(): string {
@@ -2369,7 +2416,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private buildDraftSnapshot(): PlaceFormDraft | null {
-    const descriptionHtml = this.editorRef?.nativeElement?.innerHTML?.trim() ?? '';
+    const descriptionHtml = normalizeEditorDescriptionHtml(this.editorRef?.nativeElement?.innerHTML ?? '');
     const hasDraft =
       Boolean(this.placeName.trim()) ||
       Boolean(this.summary.trim()) ||
@@ -2471,7 +2518,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     }));
 
     if (this.editorRef?.nativeElement) {
-      this.editorRef.nativeElement.innerHTML = payload.descriptionHtml ?? '';
+      this.editorRef.nativeElement.innerHTML = normalizeEditorDescriptionHtml(payload.descriptionHtml ?? '');
       this.syncEmptyState();
     }
 

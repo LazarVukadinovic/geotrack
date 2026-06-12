@@ -70,6 +70,7 @@ export interface EventListItem {
   zone?: [number, number][];
   venueType?: string;
   contactEmail?: string;
+  contactPhone?: string;
   attendanceLimit?: string;
   ageRestriction?: string;
   internalRefId?: string;
@@ -304,6 +305,7 @@ export class EventsListService {
       classification: dto.tags?.map(tag => tag.name) ?? [],
       duration: dto.duration ?? null,
       organizerName: dto.hostedBy ?? undefined,
+      contactPhone: dto.contactPhone ?? undefined,
       venueDescription: dto.venueDescription ?? null,
       arrivalTips: dto.arrivalTips ?? null,
       accessibility: dto.accessibility ?? null,

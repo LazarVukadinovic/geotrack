@@ -73,8 +73,12 @@ interface EventFormDraft {
   externalTicketLink: string;
   organizerName: string;
   contactEmail: string;
+  contactPhone: string;
   attendanceLimit: string;
   ageRestriction: string;
+  venueDescription: string;
+  arrivalTips: string;
+  accessibility: string;
   descriptionHtml: string;
   selectedTagIds: number[];
   cardImageName: string;
@@ -163,8 +167,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   externalTicketLink = '';
   organizerName = '';
   contactEmail = '';
+  contactPhone = '';
   attendanceLimit = '';
   ageRestriction = '';
+  venueDescription = '';
+  arrivalTips = '';
+  accessibility = '';
 
   isBold = false;
   isItalic = false;
@@ -888,8 +896,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
         this.externalTicketLink = dto.externalTicketLink ?? '';
         this.organizerName = dto.hostedBy ?? '';
         this.contactEmail = dto.contactEmail ?? '';
+        this.contactPhone = dto.contactPhone ?? '';
         this.attendanceLimit = dto.attendanceLimit != null ? String(dto.attendanceLimit) : '';
         this.ageRestriction = dto.ageRestriction ?? '';
+        this.venueDescription = dto.venueDescription ?? '';
+        this.arrivalTips = dto.arrivalTips ?? '';
+        this.accessibility = dto.accessibility ?? '';
 
         const parentType = (dto.parentEntityType ?? '').toLowerCase();
         if (parentType === 'place') {
@@ -1299,11 +1311,15 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       isRecurring: this.recurring,
       isFree: this.freeEvent,
       ticketPrice: this.freeEvent ? null : this.ticketPrice.trim() || null,
-      externalTicketLink: externalTicketLink || null,
+      externalTicketLink: this.freeEvent ? null : externalTicketLink || null,
       organizerName: this.organizerName.trim() || null,
       contactEmail: contactEmail || null,
+      contactPhone: this.contactPhone.trim() || null,
       attendanceLimit,
       ageRestriction: this.ageRestriction.trim() || null,
+      venueDescription: this.venueDescription.trim() || null,
+      arrivalTips: this.arrivalTips.trim() || null,
+      accessibility: this.accessibility.trim() || null,
       tagIds: this.selectedTagIdList(),
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
@@ -1685,12 +1701,16 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       isRecurring: this.recurring,
       isFree: this.freeEvent,
       ticketPrice: this.freeEvent ? '' : this.ticketPrice.trim(),
-      externalTicketLink,
+      externalTicketLink: this.freeEvent ? '' : externalTicketLink,
       organizerName: this.organizerName.trim(),
       contactEmail,
+      contactPhone: this.contactPhone.trim(),
       attendanceLimit,
       clearAttendanceLimit: attendanceLimit === null,
       ageRestriction: this.ageRestriction.trim(),
+      venueDescription: this.venueDescription.trim(),
+      arrivalTips: this.arrivalTips.trim(),
+      accessibility: this.accessibility.trim(),
       tagIds: this.selectedTagIdList(),
     };
   }
@@ -1736,8 +1756,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       Boolean(this.externalTicketLink.trim()) ||
       Boolean(this.organizerName.trim()) ||
       Boolean(this.contactEmail.trim()) ||
+      Boolean(this.contactPhone.trim()) ||
       Boolean(this.attendanceLimit.trim()) ||
       Boolean(this.ageRestriction.trim()) ||
+      Boolean(this.venueDescription.trim()) ||
+      Boolean(this.arrivalTips.trim()) ||
+      Boolean(this.accessibility.trim()) ||
       Boolean(descriptionHtml) ||
       Boolean(this.eventTypeId) ||
       this.hasSelectedParent() ||
@@ -1769,8 +1793,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       externalTicketLink: this.externalTicketLink,
       organizerName: this.organizerName,
       contactEmail: this.contactEmail,
+      contactPhone: this.contactPhone,
       attendanceLimit: this.attendanceLimit,
       ageRestriction: this.ageRestriction,
+      venueDescription: this.venueDescription,
+      arrivalTips: this.arrivalTips,
+      accessibility: this.accessibility,
       descriptionHtml,
       selectedTagIds: [...this.selectedTagIds],
       cardImageName: this.cardImageName,
@@ -1811,8 +1839,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.externalTicketLink = payload.externalTicketLink ?? this.externalTicketLink;
     this.organizerName = payload.organizerName ?? this.organizerName;
     this.contactEmail = payload.contactEmail ?? this.contactEmail;
+    this.contactPhone = payload.contactPhone ?? this.contactPhone;
     this.attendanceLimit = payload.attendanceLimit ?? this.attendanceLimit;
     this.ageRestriction = payload.ageRestriction ?? this.ageRestriction;
+    this.venueDescription = payload.venueDescription ?? this.venueDescription;
+    this.arrivalTips = payload.arrivalTips ?? this.arrivalTips;
+    this.accessibility = payload.accessibility ?? this.accessibility;
     this.selectedTagIds = new Set(payload.selectedTagIds ?? []);
     this.syncSelectedTagsWithAvailableTags();
     this.classItems = this.classItems.map(item => ({

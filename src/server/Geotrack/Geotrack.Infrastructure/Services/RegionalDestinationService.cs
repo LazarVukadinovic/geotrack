@@ -839,6 +839,41 @@ public class RegionalDestinationService : IRegionalDestinationService
                 sortOrder: 1,
                 now);
         }
+
+        if (request.GalleryImageUrls is not null)
+        {
+            var existingGalleryImages = destination.Images
+                .Where(item => item.TargetType == EntityImageTargetType.Destination &&
+                               item.DestinationId == destination.Id &&
+                               item.ImageRole == EntityImageRole.Gallery)
+                .ToList();
+
+            foreach (var image in existingGalleryImages)
+            {
+                destination.Images.Remove(image);
+            }
+
+            var galleryUrls = request.GalleryImageUrls
+                .Select(NormalizeOptionalImageUrl)
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            for (var i = 0; i < galleryUrls.Count; i++)
+            {
+                destination.Images.Add(new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Destination,
+                    DestinationId = destination.Id,
+                    Url = galleryUrls[i]!,
+                    AltText = destination.Name,
+                    IsMain = false,
+                    ImageRole = EntityImageRole.Gallery,
+                    SortOrder = i + 2,
+                    CreatedAt = now
+                });
+            }
+        }
     }
 
     private static void UpsertImage(

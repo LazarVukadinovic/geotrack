@@ -130,6 +130,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   isItalic = false;
   isUnderline = false;
   editorIsEmpty = true;
+  readonly descriptionMaxLength = 8000;
+  descriptionLimitReached = false;
 
   cardImageUrl: string | null = null;
   cardImageName = '';
@@ -527,6 +529,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   onEditorChange(): void {
     this.syncToolbarState();
+    this.syncDescriptionLimitState();
     this.syncEmptyState();
   }
 
@@ -544,11 +547,13 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     const text = clipboard.getData('text/plain');
     document.execCommand('insertHTML', false, normalizeEditorDescriptionHtml(html || text));
     this.syncToolbarState();
+    this.syncDescriptionLimitState();
     this.syncEmptyState();
   }
 
   onEditorBlur(): void {
     this.syncToolbarState();
+    this.syncDescriptionLimitState();
     const el = this.editorRef?.nativeElement;
     if (
       el &&
@@ -907,6 +912,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       latitude: this.centerLat,
       longitude: this.centerLng,
       tagIds: this.selectedTagIdList(),
+      galleryImageUrls: this.galleryImages.filter(image => !image.file).map(image => image.url),
+      galleryImageFiles: this.galleryImages.filter(image => image.file).map(image => image.file),
     };
   }
 
@@ -1330,6 +1337,11 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
     this.errorMessage = null;
     return true;
+  }
+
+  private syncDescriptionLimitState(): void {
+    const text = this.editorRef?.nativeElement?.innerText ?? this.editorRef?.nativeElement?.textContent ?? '';
+    this.descriptionLimitReached = text.length >= this.descriptionMaxLength;
   }
 
   private syncEmptyState(): void {

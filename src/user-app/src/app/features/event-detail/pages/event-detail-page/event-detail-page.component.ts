@@ -12,6 +12,7 @@ import { EventDetailService } from '../../services/event-detail.service';
 import type { EventDetail } from '../../models/event-detail.model';
 import type { MapEntityMarker } from '../../../../core/services/map-api.service';
 import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
+import { isLongDescription } from '../../../../shared/utils/description-formatting';
 
 @Component({
   selector: 'app-event-detail-page',
@@ -43,6 +44,7 @@ export class EventDetailPageComponent {
   protected readonly scrollProgress = signal(0);
   protected readonly galleryOpen = signal(false);
   protected readonly galleryStartIndex = signal(0);
+  protected readonly aboutExpanded = signal(false);
   protected readonly heroImage = computed(() => this.event()?.heroImage ?? '');
 
   protected readonly allGalleryImages = computed((): EntityImage[] => {
@@ -99,6 +101,7 @@ export class EventDetailPageComponent {
       this.eventId();
       this.scrollProgress.set(0);
       this.galleryOpen.set(false);
+      this.aboutExpanded.set(false);
       const el = this.edScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
     });
@@ -145,6 +148,43 @@ export class EventDetailPageComponent {
 
   protected closeGallery(): void {
     this.galleryOpen.set(false);
+  }
+
+  protected isAboutLong(value: string | null | undefined): boolean {
+    return isLongDescription(value);
+  }
+
+  protected isAboutCollapsed(value: string | null | undefined): boolean {
+    return this.isAboutLong(value) && !this.aboutExpanded();
+  }
+
+  protected toggleAbout(): void {
+    this.aboutExpanded.update(value => !value);
+  }
+
+  protected eventDate(event: EventDetail): string {
+    const start = this.parseEventDate(event.startsAt);
+    const end = this.parseEventDate(event.endsAt);
+    if (!start || !end) return event.info.date;
+    const full = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    if (start.toDateString() === end.toDateString()) return full.format(start);
+    const short = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+    return `${short.format(start)} - ${full.format(end)}`;
+  }
+
+  protected eventTime(event: EventDetail): string {
+    if (event.isAllDay) return 'All day';
+    const start = this.parseEventDate(event.startsAt);
+    const end = this.parseEventDate(event.endsAt);
+    if (!start || !end) return event.info.timeRange;
+    const time = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return `${time.format(start)} - ${time.format(end)}`;
+  }
+
+  private parseEventDate(value: string): Date | null {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
   protected viewOnMap(): void {

@@ -1,4 +1,6 @@
 ﻿using System.Text.Json;
+using System.Net;
+using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Application.Security;
@@ -1361,7 +1363,9 @@ public class RegionalPlaceService : IRegionalPlaceService
     private string NormalizeRichDescription(string? value, int maxLength, string tooLongMessage)
     {
         var normalized = _htmlSanitizer.SanitizeRichText(value);
-        if (normalized.Length > maxLength)
+        var withLineBreaks = Regex.Replace(normalized, "<br\\s*/?>", "\n", RegexOptions.IgnoreCase);
+        var plainText = WebUtility.HtmlDecode(Regex.Replace(withLineBreaks, "<[^>]+>", string.Empty));
+        if (plainText.Length > maxLength)
             throw new InvalidOperationException(tooLongMessage);
 
         return normalized;
@@ -1578,6 +1582,39 @@ public class RegionalPlaceService : IRegionalPlaceService
                 isMain: false,
                 sortOrder: 1,
                 now);
+        }
+
+        if (request.GalleryImageUrls is not null)
+        {
+            var existingGalleryImages = place.Images
+                .Where(image => image.TargetType == EntityImageTargetType.Place &&
+                                image.PlaceId == place.Id &&
+                                image.ImageRole == EntityImageRole.Gallery)
+                .ToList();
+
+            foreach (var image in existingGalleryImages)
+                place.Images.Remove(image);
+
+            var galleryUrls = request.GalleryImageUrls
+                .Select(NormalizeOptionalImageUrl)
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            for (var index = 0; index < galleryUrls.Count; index++)
+            {
+                place.Images.Add(new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Place,
+                    PlaceId = place.Id,
+                    Url = galleryUrls[index]!,
+                    AltText = place.Name,
+                    IsMain = false,
+                    ImageRole = EntityImageRole.Gallery,
+                    SortOrder = index + 2,
+                    CreatedAt = now
+                });
+            }
         }
     }
 

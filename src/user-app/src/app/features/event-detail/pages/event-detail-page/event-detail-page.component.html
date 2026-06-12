@@ -90,6 +90,9 @@
             @if (ev.locationId && ev.locationName) {
               <a class="ed__parent-link" [routerLink]="['/locations', ev.locationId]">{{ ev.locationName }}</a>
             }
+            @if (!(ev.locationId && ev.locationName) && ev.destinationId && ev.destinationName) {
+              <a class="ed__parent-link" [routerLink]="['/destinations', ev.destinationId]">{{ ev.destinationName }}</a>
+            }
             @if (ev.placeId && ev.placeName) {
               @if (ev.locationId && ev.locationName) {
                 <span class="ed__parent-separator">·</span>
@@ -163,7 +166,14 @@
 
             <section class="ed__section ed__section--about">
               <h2 class="ed__section-title">About the Event</h2>
-              <p class="ed__about" [innerHTML]="ev.about | descriptionRichHtml"></p>
+              <div class="ed__about-wrap" [class.ed__about-wrap--collapsed]="isAboutCollapsed(ev.about)">
+                <div class="ed__about" [innerHTML]="ev.about | descriptionRichHtml"></div>
+              </div>
+              @if (isAboutLong(ev.about)) {
+                <button type="button" class="ed__about-toggle" [attr.aria-expanded]="aboutExpanded()" (click)="toggleAbout()">
+                  {{ aboutExpanded() ? 'Show less' : 'Show more' }}
+                </button>
+              }
               @if (allGalleryImages().length > 0) {
                 <button type="button" class="ed__view-photos" (click)="openGallery(0)">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -242,7 +252,7 @@
                   </span>
                   <div class="ed__info-text">
                     <span class="ed__info-label">Date</span>
-                    <span class="ed__info-value">{{ ev.info.date }}</span>
+                    <span class="ed__info-value">{{ eventDate(ev) }}</span>
                   </div>
                 </div>
 
@@ -256,7 +266,7 @@
                   </span>
                   <div class="ed__info-text">
                     <span class="ed__info-label">Start &amp; End Time</span>
-                    <span class="ed__info-value">{{ ev.info.timeRange }}</span>
+                    <span class="ed__info-value">{{ eventTime(ev) }}</span>
                   </div>
                 </div>
 
@@ -273,6 +283,10 @@
                     <span class="ed__info-label">Venue</span>
                     @if (ev.placeId && ev.placeName) {
                       <a class="ed__info-value ed__info-link" [routerLink]="['/places', ev.placeId]">{{ ev.placeName }}</a>
+                    } @else if (ev.locationId && ev.locationName) {
+                      <a class="ed__info-value ed__info-link" [routerLink]="['/locations', ev.locationId]">{{ ev.info.venue }}</a>
+                    } @else if (ev.destinationId) {
+                      <a class="ed__info-value ed__info-link" [routerLink]="['/destinations', ev.destinationId]">{{ ev.info.venue }}</a>
                     } @else {
                       <span class="ed__info-value">{{ ev.info.venue }}</span>
                     }
@@ -343,19 +357,52 @@
                     <span class="ed__info-value">{{ ev.info.hostedBy }}</span>
                   </div>
                 </div>
+                @if (ev.isRecurring || ev.attendanceLimit || ev.ageRestriction) {
+                  <div class="ed__event-extra">
+                    @if (ev.isRecurring) { <span><strong>Recurring event</strong></span> }
+                    @if (ev.attendanceLimit) { <span><strong>Capacity:</strong> {{ ev.attendanceLimit }}</span> }
+                    @if (ev.ageRestriction) { <span><strong>Age restriction:</strong> {{ ev.ageRestriction }}</span> }
+                  </div>
+                }
               </div>
             </section>
+
+            @if (ev.contactEmail || ev.contactPhone) {
+              <div class="ed__divider ed__divider--contact"></div>
+              <section class="ed__section ed__section--contact">
+                <h2 class="ed__section-title">Contact</h2>
+                <div class="ed__info-card">
+                  @if (ev.contactEmail) {
+                    <a class="ed__info-row ed__contact-row" [class.ed__info-row--last]="!ev.contactPhone" [href]="'mailto:' + ev.contactEmail">
+                      <span class="ed__info-text">
+                        <span class="ed__info-label">Email</span>
+                        <span class="ed__info-value">{{ ev.contactEmail }}</span>
+                      </span>
+                    </a>
+                  }
+                  @if (ev.contactPhone) {
+                    <a class="ed__info-row ed__info-row--last ed__contact-row" [href]="'tel:' + ev.contactPhone">
+                      <span class="ed__info-text">
+                        <span class="ed__info-label">Phone</span>
+                        <span class="ed__info-value">{{ ev.contactPhone }}</span>
+                      </span>
+                    </a>
+                  }
+                </div>
+              </section>
+            }
 
             <!-- ── Venue Info ──────────────────────────────────────────────── -->
             <div class="ed__divider ed__divider--venue"></div>
 
+            @if (ev.venueInfo.description || ev.venueInfo.arrivalTips || ev.venueInfo.accessibility) {
             <section class="ed__section ed__section--venue">
               <h2 class="ed__section-title">Venue Info</h2>
 
               <div class="ed__venue-card">
-                <p class="ed__venue-desc">{{ ev.venueInfo.description }}</p>
+                @if (ev.venueInfo.description) { <p class="ed__venue-desc">{{ ev.venueInfo.description }}</p> }
 
-                <div class="ed__venue-row">
+                @if (ev.venueInfo.arrivalTips) { <div class="ed__venue-row">
                   <span class="ed__venue-icon" aria-hidden="true">
                     <!-- Navigation arrow -->
                     <svg viewBox="0 0 24 24" fill="none">
@@ -368,9 +415,9 @@
                     <span class="ed__venue-label">Arrival Tips</span>
                     <span class="ed__venue-value">{{ ev.venueInfo.arrivalTips }}</span>
                   </div>
-                </div>
+                </div> }
 
-                <div class="ed__venue-row">
+                @if (ev.venueInfo.accessibility) { <div class="ed__venue-row">
                   <span class="ed__venue-icon" aria-hidden="true">
                     <!-- Info circle -->
                     <svg viewBox="0 0 24 24" fill="none">
@@ -382,9 +429,10 @@
                     <span class="ed__venue-label">Parking &amp; Accessibility</span>
                     <span class="ed__venue-value">{{ ev.venueInfo.accessibility }}</span>
                   </div>
-                </div>
+                </div> }
               </div>
             </section>
+            }
           </div>
         </div>
 

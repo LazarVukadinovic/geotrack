@@ -112,7 +112,7 @@ export class DestinationsListService {
     payload: RegionalDestinationUpdateRequest,
   ): Observable<RegionalDestinationDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalDestinationDetailDto>(`${this.endpoint}/${destinationId}`, payload, { params });
+    return this.http.put<RegionalDestinationDetailDto>(`${this.endpoint}/${destinationId}`, this.buildUpdateFormData(payload), { params });
   }
 
   getDestinationTags(): Observable<RegionalDestinationTagDto[]> {
@@ -133,6 +133,19 @@ export class DestinationsListService {
     return this.http.delete<void>(`${this.endpoint}/${destinationId}`, { params });
   }
 
+  private buildUpdateFormData(payload: RegionalDestinationUpdateRequest): FormData {
+    const { galleryImageFiles, ...request } = payload;
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+
+    for (const file of galleryImageFiles ?? []) {
+      if (file) {
+        formData.append('galleryImages', file);
+      }
+    }
+
+    return formData;
+  }
 
   private buildCreateFormData(payload: RegionalDestinationCreateRequest): FormData {
     const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;

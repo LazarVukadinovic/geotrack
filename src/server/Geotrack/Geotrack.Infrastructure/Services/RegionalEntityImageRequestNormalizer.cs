@@ -4,7 +4,6 @@ namespace Geotrack.Infrastructure.Services;
 
 internal static class RegionalEntityImageRequestNormalizer
 {
-    private const int MaxImages = 12;
     private const string ManagedRegionalMediaPrefix = "/media/uploads/regional/";
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -22,11 +21,7 @@ internal static class RegionalEntityImageRequestNormalizer
         var inputs = (images ?? Enumerable.Empty<RegionalEntityImageInputDto>())
             .Select((image, index) => new { Image = image, Index = index })
             .Where(item => !string.IsNullOrWhiteSpace(item.Image.Url))
-            .Take(MaxImages + 1)
             .ToList();
-
-        if (inputs.Count > MaxImages)
-            throw new InvalidOperationException($"A maximum of {MaxImages} images can be attached.");
 
         if (inputs.Count == 0)
             return new List<PreparedRegionalEntityImage>();

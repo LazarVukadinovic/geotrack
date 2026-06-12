@@ -122,7 +122,7 @@ export class LocationsListService {
     payload: RegionalLocationUpdateRequest,
   ): Observable<RegionalLocationDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalLocationDetailDto>(`${this.endpoint}/${locationId}`, payload, { params }).pipe(
+    return this.http.put<RegionalLocationDetailDto>(`${this.endpoint}/${locationId}`, this.buildUpdateFormData(payload), { params }).pipe(
       map(dto => {
         this.toListItem(dto);
         return dto;
@@ -172,6 +172,19 @@ export class LocationsListService {
     return this.http.delete<void>(`${this.endpoint}/${locationId}`, { params });
   }
 
+  private buildUpdateFormData(payload: RegionalLocationUpdateRequest): FormData {
+    const { galleryImageFiles, ...request } = payload;
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+
+    for (const file of galleryImageFiles ?? []) {
+      if (file) {
+        formData.append('galleryImages', file);
+      }
+    }
+
+    return formData;
+  }
 
   private buildCreateFormData(payload: RegionalLocationCreateRequest): FormData {
     const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
