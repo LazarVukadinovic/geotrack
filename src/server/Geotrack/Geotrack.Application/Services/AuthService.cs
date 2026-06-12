@@ -16,22 +16,29 @@ public class AuthService : IAuthService
 {
     private const int PersistentRefreshTokenLifetimeDays  = 7;
     private const int SessionOnlyRefreshTokenLifetimeDays = 1;
+    private const int EmailVerificationTokenLifetimeHours = 24;
+    private const int PasswordResetTokenLifetimeMinutes = 30;
+    private const int EmailVerificationResendCooldownSeconds = 60;
+    private const int PasswordResetRequestCooldownSeconds = 60;
     private const string InvalidCredentialsMessage = "Invalid email or password.";
     private const string AdminAccessDeniedMessage = "You do not have access to the admin app.";
 
     private readonly IUserRepository _userRepository;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly IJwtService _jwtService;
+    private readonly IAuthEmailService _authEmailService;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public AuthService(
         IUserRepository userRepository,
         IRefreshTokenRepository refreshTokenRepository,
-        IJwtService jwtService)
+        IJwtService jwtService,
+        IAuthEmailService authEmailService)
     {
         _userRepository = userRepository;
         _refreshTokenRepository = refreshTokenRepository;
         _jwtService = jwtService;
+        _authEmailService = authEmailService;
     }
 
     public async Task<RegisterResponseDto> RegisterAsync(RegisterRequestDto request)
@@ -56,24 +63,193 @@ public class AuthService : IAuthService
         var nameParts = request.FullName.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
         var firstName = nameParts.Length > 0 ? nameParts[0] : string.Empty;
         var lastName  = nameParts.Length > 1 ? nameParts[1] : string.Empty;
+        var verificationToken = GenerateUrlSafeToken();
+        var now = DateTime.UtcNow;
 
         var user = new User
         {
-            Username                 = normalizedEmail,
-            Email                    = normalizedEmail,
-            FirstName                = firstName,
-            LastName                 = lastName,
-            PhoneNumber              = string.Empty,
-            NeedsInterestsOnboarding = true,
-            CreatedAt                = DateTime.UtcNow
+            Username                         = normalizedEmail,
+            Email                            = normalizedEmail,
+            FirstName                        = firstName,
+            LastName                         = lastName,
+            PhoneNumber                      = string.Empty,
+            NeedsInterestsOnboarding         = true,
+            IsEmailConfirmed                 = false,
+            EmailVerificationTokenHash       = HashToken(verificationToken),
+            EmailVerificationTokenExpiresAt  = now.AddHours(EmailVerificationTokenLifetimeHours),
+            EmailVerificationSentAt          = now,
+            CreatedAt                        = now
         };
 
         user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
 
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();
+        await _authEmailService.SendEmailVerificationAsync(user, verificationToken);
 
-        return new RegisterResponseDto { Message = "User registered successfully" };
+        return new RegisterResponseDto
+        {
+            Message = "Registration successful. Please check your email to verify your account before signing in."
+        };
+    }
+
+    public async Task<AuthActionResponseDto> VerifyEmailAsync(VerifyEmailRequestDto request)
+    {
+        var normalizedEmail = (request.Email ?? string.Empty).Trim().ToLowerInvariant();
+        var token = request.Token?.Trim() ?? string.Empty;
+
+        if (!IsValidEmail(normalizedEmail) || string.IsNullOrWhiteSpace(token))
+            throw new InvalidOperationException("Invalid verification link.");
+
+        var user = await _userRepository.GetByEmailAsync(normalizedEmail);
+        if (user == null || user.IsDeleted)
+            throw new InvalidOperationException("Invalid verification link.");
+
+        if (user.IsEmailConfirmed)
+        {
+            return new AuthActionResponseDto { Message = "Email address is already verified. You can sign in." };
+        }
+
+        if (user.EmailVerificationTokenExpiresAt == null ||
+            user.EmailVerificationTokenExpiresAt < DateTime.UtcNow ||
+            !TokenMatches(user.EmailVerificationTokenHash, token))
+        {
+            throw new InvalidOperationException("Verification link is invalid or expired.");
+        }
+
+        user.IsEmailConfirmed = true;
+        user.EmailConfirmedAt = DateTime.UtcNow;
+        user.EmailVerificationTokenHash = null;
+        user.EmailVerificationTokenExpiresAt = null;
+        user.EmailVerificationSentAt = null;
+        MarkSuccessfulLogin(user);
+
+        await _userRepository.SaveChangesAsync();
+
+        var auth = await IssueTokenPairAsync(user.Id, isPersistent: false);
+        return ToAuthActionResponse("Email verified successfully. Signing you in...", auth);
+    }
+
+    public async Task<AuthMessageResponseDto> ResendEmailVerificationAsync(ResendEmailVerificationRequestDto request)
+    {
+        var normalizedEmail = (request.Email ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (!IsValidEmail(normalizedEmail))
+        {
+            return new AuthMessageResponseDto
+            {
+                Message = "If this account needs verification, a new verification email will be sent."
+            };
+        }
+
+        var user = await _userRepository.GetByEmailAsync(normalizedEmail);
+        if (user is { IsDeleted: false, IsEmailConfirmed: false })
+        {
+            var now = DateTime.UtcNow;
+            var retryAfterSeconds = GetRetryAfterSeconds(user.EmailVerificationSentAt, EmailVerificationResendCooldownSeconds, now);
+            if (retryAfterSeconds > 0)
+            {
+                return new AuthMessageResponseDto
+                {
+                    Message = $"A verification email was sent recently. Please wait {retryAfterSeconds} seconds before requesting another one.",
+                    RetryAfterSeconds = retryAfterSeconds
+                };
+            }
+
+            var token = GenerateUrlSafeToken();
+            user.EmailVerificationTokenHash = HashToken(token);
+            user.EmailVerificationTokenExpiresAt = now.AddHours(EmailVerificationTokenLifetimeHours);
+            user.EmailVerificationSentAt = now;
+            user.UpdatedAt = now;
+
+            await _userRepository.SaveChangesAsync();
+            await _authEmailService.SendEmailVerificationAsync(user, token);
+        }
+
+        return new AuthMessageResponseDto
+        {
+            Message = "If this account needs verification, a new verification email will be sent."
+        };
+    }
+
+    public async Task<AuthMessageResponseDto> RequestPasswordResetAsync(ForgotPasswordRequestDto request)
+    {
+        var normalizedEmail = (request.Email ?? string.Empty).Trim().ToLowerInvariant();
+        var genericResponse = new AuthMessageResponseDto
+        {
+            Message = "If an account with this email exists, a password reset link has been sent."
+        };
+
+        if (!IsValidEmail(normalizedEmail))
+            return genericResponse;
+
+        var user = await _userRepository.GetByEmailAsync(normalizedEmail);
+        if (user is null || user.IsDeleted || user.IsSuspended)
+            return genericResponse;
+
+        var now = DateTime.UtcNow;
+        var retryAfterSeconds = GetRetryAfterSeconds(user.PasswordResetRequestedAt, PasswordResetRequestCooldownSeconds, now);
+        if (retryAfterSeconds > 0)
+        {
+            genericResponse.RetryAfterSeconds = retryAfterSeconds;
+            return genericResponse;
+        }
+
+        var token = GenerateUrlSafeToken();
+        user.PasswordResetTokenHash = HashToken(token);
+        user.PasswordResetTokenExpiresAt = now.AddMinutes(PasswordResetTokenLifetimeMinutes);
+        user.PasswordResetRequestedAt = now;
+        user.UpdatedAt = now;
+
+        await _userRepository.SaveChangesAsync();
+        await _authEmailService.SendPasswordResetAsync(user, token);
+
+        return genericResponse;
+    }
+
+    public async Task<AuthActionResponseDto> ResetPasswordAsync(ResetPasswordRequestDto request)
+    {
+        var normalizedEmail = (request.Email ?? string.Empty).Trim().ToLowerInvariant();
+        var token = request.Token?.Trim() ?? string.Empty;
+
+        if (!IsValidEmail(normalizedEmail) || string.IsNullOrWhiteSpace(token))
+            throw new InvalidOperationException("Invalid or expired password reset link.");
+
+        if (!IsStrongPassword(request.NewPassword))
+            throw new InvalidOperationException("Password must be at least 8 characters long and include a number and a special character.");
+
+        var user = await _userRepository.GetByEmailAsync(normalizedEmail);
+        if (user == null || user.IsDeleted || user.IsSuspended)
+            throw new InvalidOperationException("Invalid or expired password reset link.");
+
+        if (user.PasswordResetTokenExpiresAt == null ||
+            user.PasswordResetTokenExpiresAt < DateTime.UtcNow ||
+            !TokenMatches(user.PasswordResetTokenHash, token))
+        {
+            throw new InvalidOperationException("Invalid or expired password reset link.");
+        }
+
+        user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
+        user.PasswordResetTokenHash = null;
+        user.PasswordResetTokenExpiresAt = null;
+        user.PasswordResetRequestedAt = null;
+
+        // A successful email-link reset proves the user controls the mailbox.
+        if (!user.IsEmailConfirmed)
+        {
+            user.IsEmailConfirmed = true;
+            user.EmailConfirmedAt = DateTime.UtcNow;
+            user.EmailVerificationTokenHash = null;
+            user.EmailVerificationTokenExpiresAt = null;
+            user.EmailVerificationSentAt = null;
+        }
+
+        MarkSuccessfulLogin(user);
+        await _userRepository.SaveChangesAsync();
+        await _refreshTokenRepository.RevokeActiveForUserAsync(user.Id, DateTime.UtcNow);
+
+        var auth = await IssueTokenPairAsync(user.Id, isPersistent: false);
+        return ToAuthActionResponse("Password has been reset successfully. Signing you in...", auth);
     }
 
     public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request)
@@ -237,15 +413,14 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException(missingFieldsMessage);
 
         var user = await _userRepository.GetByEmailAsync(normalizedEmail);
-        if (user == null)
+        if (user == null || user.IsDeleted)
             throw new UnauthorizedAccessException(invalidCredentialsMessage);
-
-        EnsureAccountCanAuthenticate(user);
 
         var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
         if (result == PasswordVerificationResult.Failed)
             throw new UnauthorizedAccessException(invalidCredentialsMessage);
 
+        EnsureAccountCanAuthenticate(user);
         return user;
     }
 
@@ -401,6 +576,32 @@ public class AuthService : IAuthService
         };
     }
 
+
+    private static AuthActionResponseDto ToAuthActionResponse(string message, LoginResponseDto auth)
+    {
+        return new AuthActionResponseDto
+        {
+            Message = message,
+            AccessToken = auth.AccessToken,
+            RefreshToken = auth.RefreshToken,
+            ExpiresIn = auth.ExpiresIn,
+            SessionPersistent = auth.SessionPersistent,
+            Session = auth.Session
+        };
+    }
+
+    private static int GetRetryAfterSeconds(DateTime? lastSentAt, int cooldownSeconds, DateTime now)
+    {
+        if (lastSentAt == null)
+            return 0;
+
+        var allowedAt = lastSentAt.Value.AddSeconds(cooldownSeconds);
+        if (allowedAt <= now)
+            return 0;
+
+        return Math.Max(1, (int)Math.Ceiling((allowedAt - now).TotalSeconds));
+    }
+
     /// <summary>
     /// SHA-256 hex digest. No per-row salt — 64-byte CSPRNG refresh tokens
     /// already carry enough entropy that rainbow-table / brute-force attacks
@@ -409,6 +610,26 @@ public class AuthService : IAuthService
     /// </summary>
     private static string HashToken(string raw)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
+
+    private static string GenerateUrlSafeToken()
+    {
+        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        return Convert.ToBase64String(tokenBytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
+    private static bool TokenMatches(string? storedHash, string rawToken)
+    {
+        if (string.IsNullOrWhiteSpace(storedHash) || string.IsNullOrWhiteSpace(rawToken))
+            return false;
+
+        var expected = Encoding.UTF8.GetBytes(storedHash);
+        var actual = Encoding.UTF8.GetBytes(HashToken(rawToken));
+
+        return expected.Length == actual.Length && CryptographicOperations.FixedTimeEquals(expected, actual);
+    }
 
     private static List<string> NormalizeRoles(IEnumerable<string?> roles)
     {
@@ -449,14 +670,18 @@ public class AuthService : IAuthService
 
         if (user.IsSuspended)
             throw new ForbiddenAccessException("Account is suspended.");
+
+        if (!user.IsEmailConfirmed)
+            throw new UnauthorizedAccessException("Please verify your email address before signing in.");
     }
 
     private static bool IsValidEmail(string email)
         => Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
 
-    private static bool IsStrongPassword(string password)
+    private static bool IsStrongPassword(string? password)
     {
-        return password.Length >= 8 &&
+        return !string.IsNullOrEmpty(password) &&
+               password.Length >= 8 &&
                password.Any(char.IsDigit) &&
                Regex.IsMatch(password, @"[!@#$%^&*(),.?""{}|<>]");
     }

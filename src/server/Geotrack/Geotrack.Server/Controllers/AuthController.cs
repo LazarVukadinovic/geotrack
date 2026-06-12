@@ -20,23 +20,13 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult<LoginResponseDto>> Register([FromBody] RegisterRequestDto request)
+    public async Task<ActionResult<RegisterResponseDto>> Register([FromBody] RegisterRequestDto request)
     {
         try
         {
-            await _authService.RegisterAsync(request);
-
-            // Auto-login after registration so the interests page can save tags.
-            var loginDto = new LoginRequestDto
-            {
-                Email      = request.Email,
-                Password   = request.Password,
-                RememberMe = true
-            };
-            var loginResponse = await _authService.LoginAsync(loginDto);
-            WriteRefreshTokenCookie(loginResponse.RefreshToken, loginResponse.SessionPersistent);
-
-            return Ok(Sanitize(loginResponse));
+            var response = await _authService.RegisterAsync(request);
+            DeleteRefreshTokenCookie();
+            return Ok(response);
         }
         catch (InvalidOperationException ex)
         {
@@ -50,6 +40,52 @@ public class AuthController : ControllerBase
         catch (UnauthorizedAccessException ex)
         {
             return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("verify-email")]
+    public async Task<ActionResult<AuthActionResponseDto>> VerifyEmail([FromBody] VerifyEmailRequestDto request)
+    {
+        try
+        {
+            var response = await _authService.VerifyEmailAsync(request);
+            if (!string.IsNullOrWhiteSpace(response.RefreshToken))
+                WriteRefreshTokenCookie(response.RefreshToken, response.SessionPersistent);
+
+            return Ok(Sanitize(response));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("resend-verification")]
+    public async Task<ActionResult<AuthMessageResponseDto>> ResendEmailVerification([FromBody] ResendEmailVerificationRequestDto request)
+    {
+        return Ok(await _authService.ResendEmailVerificationAsync(request));
+    }
+
+    [HttpPost("forgot-password")]
+    public async Task<ActionResult<AuthMessageResponseDto>> ForgotPassword([FromBody] ForgotPasswordRequestDto request)
+    {
+        return Ok(await _authService.RequestPasswordResetAsync(request));
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<ActionResult<AuthActionResponseDto>> ResetPassword([FromBody] ResetPasswordRequestDto request)
+    {
+        try
+        {
+            var response = await _authService.ResetPasswordAsync(request);
+            if (!string.IsNullOrWhiteSpace(response.RefreshToken))
+                WriteRefreshTokenCookie(response.RefreshToken, response.SessionPersistent);
+
+            return Ok(Sanitize(response));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 
@@ -171,6 +207,12 @@ public class AuthController : ControllerBase
     }
 
     private static LoginResponseDto Sanitize(LoginResponseDto response)
+    {
+        response.RefreshToken = string.Empty;
+        return response;
+    }
+
+    private static AuthActionResponseDto Sanitize(AuthActionResponseDto response)
     {
         response.RefreshToken = string.Empty;
         return response;

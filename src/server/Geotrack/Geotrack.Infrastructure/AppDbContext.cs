@@ -1133,6 +1133,24 @@ public class AppDbContext : DbContext
             entity.Property(x => x.PasswordHash)
                 .HasMaxLength(500);
 
+            entity.Property(x => x.IsEmailConfirmed);
+
+            entity.Property(x => x.EmailConfirmedAt);
+
+            entity.Property(x => x.EmailVerificationTokenHash)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.EmailVerificationTokenExpiresAt);
+
+            entity.Property(x => x.EmailVerificationSentAt);
+
+            entity.Property(x => x.PasswordResetTokenHash)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.PasswordResetTokenExpiresAt);
+
+            entity.Property(x => x.PasswordResetRequestedAt);
+
             entity.Property(x => x.PhoneNumber)
                 .HasMaxLength(50);
 
@@ -1209,6 +1227,10 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.Email)
                 .IsUnique();
+
+            entity.HasIndex(x => x.EmailVerificationTokenHash);
+
+            entity.HasIndex(x => x.PasswordResetTokenHash);
 
             entity.HasIndex(x => new { x.IsDeleted, x.IsSuspended });
         });

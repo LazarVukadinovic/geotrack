@@ -61,9 +61,9 @@ export class LoginPageComponent {
           // Profile page already has fullName/email on first render —
           // no manual refresh needed.
           this.userService.load().subscribe({
-            next: () => {
+            next: (profile) => {
               this.isLoading = false;
-              this.router.navigate(['/profile']);
+              this.router.navigate([profile.needsInterestsOnboarding ? '/register/interests' : '/profile']);
             },
             error: () => {
               // Profile fetch failed but the user is logged in; navigate anyway.
@@ -75,8 +75,14 @@ export class LoginPageComponent {
         error: (err: HttpErrorResponse) => {
           this.isLoading = false;
 
+          const serverMessage = err.error?.message || '';
+          if (err.status === 401 && this.isEmailVerificationRequired(serverMessage)) {
+            this.router.navigate(['/verify-email-sent'], { queryParams: { email: this.email.trim() } });
+            return;
+          }
+
           if (err.status === 401) {
-            this.errorMessage = err.error?.message || 'Invalid email or password.';
+            this.errorMessage = serverMessage || 'Invalid email or password.';
           } else if (err.status === 0) {
             this.errorMessage = 'Unable to reach the server. Please check your connection.';
           } else {
@@ -90,5 +96,13 @@ export class LoginPageComponent {
 
   goToRegister(): void {
     this.router.navigate(['/register']);
+  }
+
+  goToForgotPassword(): void {
+    this.router.navigate(['/forgot-password']);
+  }
+
+  private isEmailVerificationRequired(message: string): boolean {
+    return message.toLowerCase().includes('verify your email');
   }
 }
