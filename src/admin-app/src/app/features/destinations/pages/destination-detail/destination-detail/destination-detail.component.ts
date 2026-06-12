@@ -204,6 +204,22 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
     });
   }
 
+  addEvent(): void {
+    const it = this.item!;
+    this.router.navigate(['/events/new'], {
+      state: {
+        regionId: it.regionId,
+        eventPrefill: {
+          venueType: 'destination',
+          destinationId: Number(it.id),
+          locationId: null,
+          placeId: null,
+        },
+        returnTo: `/destinations/detail/${it.id}`,
+      }
+    });
+  }
+
   promptDelete(): void {
     this.deleteTarget = this.item;
     this.cdr.markForCheck();

@@ -290,17 +290,12 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     const it = this.item!;
     this.router.navigate(['/events/new'], {
       state: {
-        place: {
-          id:          it.id,
-          name:        it.name,
-          type:        'Place',
-          category:    (it as any).category ?? 'Place',
-          description: (it as any).description ?? '',
-          status:      'Active',
-          eventsToday: 0,
-          lat:         (it as any).lat,
-          lng:         (it as any).lng,
-          address:     (it as any).address,
+        regionId: it.regionId,
+        eventPrefill: {
+          venueType: 'place',
+          destinationId: it.destinationId ?? null,
+          locationId: it.locationId ?? null,
+          placeId: Number(it.id),
         },
         returnTo: `/places/detail/${it.id}`,
       }

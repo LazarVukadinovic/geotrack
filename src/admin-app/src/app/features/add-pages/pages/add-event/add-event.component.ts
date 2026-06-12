@@ -52,6 +52,13 @@ declare const L: any;
 
 type EventParentType = 'location' | 'place' | 'destination';
 
+interface EventParentPrefillState {
+  venueType: EventParentType;
+  destinationId: number | null;
+  locationId: number | null;
+  placeId: number | null;
+}
+
 interface EventFormDraft {
   activeRegionId: number | null;
   eventTitle: string;
@@ -218,6 +225,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   private regionBoundaryZone: AdminMapZone | null = null;
   private scopeValidationResult: RegionalScopeValidationResult | null = null;
   private unregisterDraftSource: (() => void) | null = null;
+  private navigationPrefillApplied = false;
 
   constructor(
     private readonly zone: NgZone,
@@ -243,7 +251,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     setTimeout(() => this.initMiniMap(), 0);
-    setTimeout(() => this.restoreSavedDraftIfPresent(), 0);
+    setTimeout(() => {
+      const appliedPrefill = this.applyNavigationPrefill();
+      if (!appliedPrefill) {
+        this.restoreSavedDraftIfPresent();
+      }
+    }, 0);
   }
 
   ngOnDestroy(): void {
@@ -383,7 +396,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       Boolean(this.eventTitle.trim()) &&
       Boolean(this.summary.trim()) &&
       Boolean(this.eventTypeId) &&
-      Boolean(this.parentDestination) &&
+      Boolean(this.resolveDestinationId()) &&
       Boolean(this.cardImageFile) &&
       Boolean(this.coverImageFile) &&
       !this.regionBoundaryMissingMessage &&
@@ -861,6 +874,10 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
           this.assignedRegions = Array.isArray(regions) ? regions : [];
           this.activeRegionId = this.resolveInitialRegionId(this.assignedRegions);
           if (this.activeRegionId) {
+            const prefill = this.getNavigationPrefill();
+            if (!this.isEditMode && prefill) {
+              this.venueType = prefill.venueType;
+            }
             sessionStorage.setItem(NewEventComponent.activeRegionStorageKey, String(this.activeRegionId));
             this.loadAssignedRegionMap(this.activeRegionId);
             this.loadParentOptions();
@@ -1089,7 +1106,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
           this.loadDestinationsForDerivation();
           this.updateMiniMapFromSelection();
-          if (this.isEditMode && this.hasSelectedParent()) {
+          if (this.hasSelectedParent()) {
             this.validateSelectedParentLocation();
           }
           this.cdr.markForCheck();
@@ -1228,8 +1245,14 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
-    if (!this.hasSelectedParent() || !this.parentDestination) {
+    if (!this.hasSelectedParent()) {
       this.errorMessage = 'Select a valid event parent in the active region.';
+      return null;
+    }
+
+    const destinationId = this.resolveDestinationId();
+    if (!destinationId) {
+      this.errorMessage = 'Could not determine destination for the selected parent. Please re-select.';
       return null;
     }
 
@@ -1292,7 +1315,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     return {
       regionId: this.activeRegionId,
       parentEntityType: this.toBackendParentType(this.venueType),
-      destinationId: this.parentDestination.id,
+      destinationId,
       locationId: this.venueType === 'location'
         ? this.selectedLocationId
         : this.venueType === 'place'
@@ -1343,6 +1366,44 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     if (regions.some(region => region.id === storedRegion)) return storedRegion;
 
     return regions[0].id;
+  }
+
+  private getNavigationPrefill(): EventParentPrefillState | null {
+    const state = history.state as {
+      eventPrefill?: Partial<EventParentPrefillState> | null;
+    } | null;
+    const prefill = state?.eventPrefill;
+    const venueType = prefill?.venueType;
+    if (venueType !== 'location' && venueType !== 'place' && venueType !== 'destination') {
+      return null;
+    }
+
+    return {
+      venueType,
+      destinationId: prefill?.destinationId ?? null,
+      locationId: prefill?.locationId ?? null,
+      placeId: prefill?.placeId ?? null,
+    };
+  }
+
+  private applyNavigationPrefill(): boolean {
+    if (this.isEditMode || this.navigationPrefillApplied) return false;
+
+    const prefill = this.getNavigationPrefill();
+    if (!prefill) return false;
+
+    this.navigationPrefillApplied = true;
+    this.venueType = prefill.venueType;
+    this.selectedDestinationId = prefill.destinationId ?? null;
+    this.selectedLocationId = prefill.locationId ?? null;
+    this.selectedPlaceId = prefill.placeId ?? null;
+    if (this.activeRegionId) {
+      this.loadParentOptions();
+    }
+    this.updateMiniMapFromSelection();
+    this.validateSelectedParentLocation();
+    this.cdr.markForCheck();
+    return true;
   }
 
   private resetParentSelection(): void {
@@ -1577,6 +1638,14 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.validationSubscription = null;
   }
 
+  private resolveDestinationId(): number | null {
+    return this.parentDestination?.id ??
+      this.selectedDestinationId ??
+      this.selectedLocation?.destinationId ??
+      this.selectedPlace?.destinationId ??
+      null;
+  }
+
   private buildUpdatePayload(): RegionalEventUpdateRequest | null {
     this.errorMessage = null;
 
@@ -1618,12 +1687,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     // Derive destinationId without requiring parentDestination to be fully resolved (lists may still be loading).
-    const destinationId =
-      this.parentDestination?.id ??
-      this.selectedDestinationId ??
-      this.selectedLocation?.destinationId ??
-      this.selectedPlace?.destinationId ??
-      null;
+    const destinationId = this.resolveDestinationId();
 
     if (!destinationId) {
       this.errorMessage = 'Could not determine destination for the selected parent. Please re-select.';

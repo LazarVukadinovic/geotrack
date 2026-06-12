@@ -222,18 +222,12 @@ export class LocationDetailComponent implements OnInit, AfterViewInit, OnDestroy
     const it = this.item!;
     this.router.navigate(['/events/new'], {
       state: {
-        place: {
-          id:          it.id,
-          name:        it.name,
-          type:        'Location',
-          category:    (it as any).category ?? 'Location',
-          description: (it as any).description ?? '',
-          status:      'Active',
-          eventsToday: 0,
-          lat:         (it as any).lat,
-          lng:         (it as any).lng,
-          zone:        (it as any).zone,
-          address:     (it as any).address,
+        regionId: it.regionId,
+        eventPrefill: {
+          venueType: 'location',
+          destinationId: it.destinationId ?? null,
+          locationId: Number(it.id),
+          placeId: null,
         },
         returnTo: `/locations/detail/${it.id}`,
       }
