@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
@@ -28,6 +28,7 @@ class EmptyRouteComponent {}
 describe('NewLocationComponent', () => {
   let component: NewLocationComponent;
   let fixture: ComponentFixture<NewLocationComponent>;
+  let router: Router;
   let locationsService: {
     getParentDestinations: ReturnType<typeof vi.fn>;
     getLocationTypes: ReturnType<typeof vi.fn>;
@@ -154,6 +155,7 @@ describe('NewLocationComponent', () => {
 
     fixture = TestBed.createComponent(NewLocationComponent);
     component = fixture.componentInstance;
+    router = TestBed.inject(Router);
     fixture.detectChanges();
   });
 
@@ -288,6 +290,38 @@ describe('NewLocationComponent', () => {
 
     expect(component.isSaving).toBe(false);
     expect(component.errorMessage).toBe('Validation failed.');
+  });
+
+  it('returns to add place with the restored draft after creating a location from place flow', () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    component.locationName = 'Inline location';
+    component.summary = 'A short summary';
+    component.parentDestinationId = 11;
+    component.locationTypeId = 3;
+    component.zoneConfirmed = true;
+    setPublishReadyMediaAndCenter();
+    (component as any).confirmedLayer = {};
+    (component as any).confirmedShapeType = 'Polygon';
+    setParentDestinationZone();
+    (component as any).addPlaceFlowState = {
+      returnUrl: '/places/new',
+      placeDraft: { placeName: 'Draft place' },
+    };
+    (component as any).isAddPlaceReturnFlow = () => true;
+
+    component.publish();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/places/new'], {
+      state: {
+        restoredDraft: { placeName: 'Draft place' },
+        newlyCreatedLocation: {
+          id: 44,
+          name: 'Created',
+          destinationId: 11,
+        },
+      },
+    });
   });
 
   function setPublishReadyMediaAndCenter(): void {

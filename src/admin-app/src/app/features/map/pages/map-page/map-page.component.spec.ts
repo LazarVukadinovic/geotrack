@@ -5,7 +5,7 @@ import { provideRouter, Router } from '@angular/router';
 import { vi } from 'vitest';
 import { MapPageComponent } from './map-page.component';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
-import { AdminMapResponse } from '../../../../core/models/admin-map.model';
+import { AdminMapResponse, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 
 describe('MapPageComponent', () => {
@@ -217,7 +217,7 @@ describe('MapPageComponent', () => {
     expect(component.searchResults[0].title).toBe('Museum');
   });
 
-  it('passes dropped pin coordinates and active region to New Place', () => {
+  it('validates dropped pin coordinates before navigating to New Place', () => {
     const router = TestBed.inject(Router);
     const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
@@ -228,6 +228,17 @@ describe('MapPageComponent', () => {
     };
 
     component.navigateToNewPlaceWithPin();
+
+    const request = http.expectOne('/api/admin/regional/validate-entity-location');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      regionId: 17,
+      entityType: 'Place',
+      operationType: 'Create',
+      latitude: 45.1234567,
+      longitude: 16.7654321,
+    });
+    request.flush(validationResult());
 
     expect(navigateSpy).toHaveBeenCalledWith(['/places/new'], {
       queryParams: {
@@ -245,6 +256,58 @@ describe('MapPageComponent', () => {
         returnTo: '/map',
       },
     });
+  });
+
+  it('shows a validation message and stays on the map when dropped pin is outside the region', () => {
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    component.activeRegionId = 17;
+    component['droppedPin'] = {
+      latitude: 45.7,
+      longitude: 16.9,
+    };
+
+    component.navigateToNewPlaceWithPin();
+
+    const request = http.expectOne('/api/admin/regional/validate-entity-location');
+    request.flush(validationResult({
+      isAllowed: false,
+      validationMode: 'RejectedTooFarOutsideRegion',
+      message: 'Place cannot be created outside your assigned region.',
+    }));
+
+    expect(navigateSpy).not.toHaveBeenCalled();
+    expect(component.pinValidationMessage).toBe('Place cannot be created outside your assigned region.');
+    expect(component.pinValidationTone).toBe('error');
+    expect(component.pinValidationPending).toBe(false);
+  });
+
+  it('filters rendered search results by the active entity filter', () => {
+    fixture.detectChanges();
+    flushRegions([{ id: 17, name: 'North', displayName: 'North Region', territoryName: 'Testland' }]);
+    flushMap(17, mapResponse(17));
+
+    component.searchQuery = 'a';
+    component['searchResultsCache'] = [
+      { id: 1, entityType: 'Place', title: 'Alpha', latitude: 45.1, longitude: 16.1 },
+      { id: 2, entityType: 'Location', title: 'Beta', latitude: 45.2, longitude: 16.2 },
+      { id: 3, entityType: 'Destination', title: 'Gamma', latitude: 45.3, longitude: 16.3 },
+    ];
+
+    component.setEntityFilter('location');
+
+    expect(component.searchResults).toHaveLength(1);
+    expect(component.searchResults[0].entityType).toBe('Location');
+    expect(component.searchPlaceholder).toBe('Search locations or coordinates...');
+  });
+
+  it('renders the compact filter trigger instead of standalone filter pills', () => {
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Filter');
+    expect(text).not.toContain('AllPlacesLocationsDestinations');
   });
 
   it('navigates add actions with active region context', () => {
@@ -475,5 +538,23 @@ describe('MapPageComponent', () => {
     });
 
     return { map, geoJSON, marker, geoJsonLayers, layerGroups };
+  }
+
+  function validationResult(
+    overrides: Partial<RegionalScopeValidationResult> = {},
+  ): RegionalScopeValidationResult {
+    return {
+      isAllowed: true,
+      validationMode: 'InsideAssignedRegion',
+      assignedRegionId: 17,
+      assignedRegionName: 'North Region',
+      assignedCountryOrTerritoryId: 1,
+      assignedCountryOrTerritoryName: 'Testland',
+      matchedOtherRegionId: null,
+      matchedOtherRegionName: null,
+      distanceFromAssignedRegionMeters: 0,
+      message: 'Allowed.',
+      ...overrides,
+    };
   }
 });

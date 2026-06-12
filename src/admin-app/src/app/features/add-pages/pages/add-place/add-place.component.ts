@@ -26,6 +26,10 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
 import { AdminFormDraftService } from '../../../../core/services/admin-form-draft.service';
+import {
+  AdminFormTransientFileStoreService,
+  AdminTransientFileItem,
+} from '../../../../core/services/admin-form-transient-media.service';
 import { COVER_IMAGE_ASPECT_RATIO } from '../../../../core/constants/cover-image.constants';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
@@ -70,6 +74,7 @@ interface PlaceFormDraft {
   summary: string;
   parentLocationId: number | null;
   placeTypeId: number | null;
+  stayTypeId: number | null;
   bestTimeToVisit: string;
   visitorTips: string;
   accessNotes: string;
@@ -92,6 +97,23 @@ interface PlaceFormDraft {
   cardImageName: string;
   coverImageName: string;
   galleryImageNames: string[];
+}
+
+interface CreateDestinationReturnState {
+  id: number;
+  name: string;
+}
+
+interface CreateLocationReturnState {
+  id: number;
+  name: string;
+  destinationId: number | null;
+}
+
+interface AddPlaceReturnFlowState {
+  restoredDraft?: PlaceFormDraft | null;
+  newlyCreatedDestination?: CreateDestinationReturnState | null;
+  newlyCreatedLocation?: CreateLocationReturnState | null;
 }
 
 type TimeField = 'openTime' | 'closeTime';
@@ -130,6 +152,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly mapTileLayer = inject(MapTileLayerService);
   readonly coverImageAspectRatio = COVER_IMAGE_ASPECT_RATIO;
   readonly coverImageAspectRatioCss = `${COVER_IMAGE_ASPECT_RATIO} / 1`;
+  readonly createDestinationOptionValue = '__create_new_destination__';
+  readonly createLocationOptionValue = '__create_new_location__';
 
   @ViewChild('editorRef') editorRef!: ElementRef<HTMLDivElement>;
   @ViewChild('miniMapContainer') miniMapContainer!: ElementRef<HTMLDivElement>;
@@ -199,11 +223,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   coverImageUrl: string | null = null;
   coverImageName = '';
   coverCropFile: File | null = null;
-  galleryImages: { url: string; name: string; file: File }[] = [];
+  galleryImages: { url: string; name: string; file?: File }[] = [];
 
   private cardImageFile: File | null = null;
   private coverImageFile: File | null = null;
+  private cardPreviewObjectUrl: string | null = null;
   private coverPreviewObjectUrl: string | null = null;
+  private galleryPreviewObjectUrls: string[] = [];
 
   days: DayHours[] = [
     { name: 'Monday', open: true, openTime: '09:00', closeTime: '17:00' },
@@ -251,7 +277,11 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private regionViewport: AdminMapViewport | null = null;
   private regionBoundaryZone: AdminMapZone | null = null;
   private scopeValidationResult: RegionalScopeValidationResult | null = null;
+  private lastScopeValidationKey: string | null = null;
   private unregisterDraftSource: (() => void) | null = null;
+  private restoredDraftFromNavigation: PlaceFormDraft | null = null;
+  private pendingNewlyCreatedDestination: CreateDestinationReturnState | null = null;
+  private pendingNewlyCreatedLocation: CreateLocationReturnState | null = null;
 
   constructor(
     private readonly zone: NgZone,
@@ -266,11 +296,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly http: HttpClient,
     private readonly adminMapService: AdminMapService,
     private readonly formDrafts: AdminFormDraftService,
+    private readonly transientMedia: AdminFormTransientFileStoreService,
   ) {}
 
   ngOnInit(): void {
     this.editPlaceId = this.route.snapshot.paramMap.get('id');
     this.isEditMode = Boolean(this.editPlaceId);
+    this.captureReturnFlowState();
 
     this.loadAssignedRegions();
     this.applyInitialCoordinatesFromRoute();
@@ -287,7 +319,10 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       if (coordinates && this.pinConfirmed) {
         this.updateMiniMapPin(coordinates.latitude, coordinates.longitude);
       }
-      this.restoreSavedDraftIfPresent();
+      const restoredFromNavigation = this.restoreDraftFromNavigationIfPresent();
+      if (!restoredFromNavigation) {
+        this.restoreSavedDraftIfPresent();
+      }
     }, 0);
   }
 
@@ -312,7 +347,9 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.destroyModalMap();
+    this.revokeCardPreviewObjectUrl();
     this.revokeCoverPreviewObjectUrl();
+    this.revokeGalleryPreviewObjectUrls();
     this.lightboxService.close();
     if (this.miniMap) {
       this.miniMap.remove();
@@ -421,6 +458,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       !this.regionBoundaryMissingMessage &&
       !this.scopeValidationPending &&
       !this.isScopeValidationRejected &&
+      this.scopeValidationResult?.isAllowed === true &&
       mediaReady &&
       !this.regionLoading &&
       !this.parentDestinationsLoading &&
@@ -534,6 +572,19 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe({
         next: destinations => {
           this.parentDestinations = this.normalizeParentDestinations(destinations);
+          if (this.pendingNewlyCreatedDestination) {
+            this.parentDestinations = this.normalizeParentDestinations([
+              ...this.parentDestinations,
+              {
+                id: this.pendingNewlyCreatedDestination.id,
+                name: this.pendingNewlyCreatedDestination.name,
+                displayName: this.pendingNewlyCreatedDestination.name,
+                status: 'Published',
+              },
+            ]);
+            this.parentDestinationId = this.pendingNewlyCreatedDestination.id;
+            this.pendingNewlyCreatedDestination = null;
+          }
           this.ensureLoadedParentSelectionsPresent();
           if (
             this.parentDestinationId &&
@@ -572,10 +623,30 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         next: locations => {
           this.parentLocations = this.normalizeParentLocations(locations)
             .filter(location => location.destinationId === this.parentDestinationId);
+          if (
+            this.pendingNewlyCreatedLocation &&
+            this.pendingNewlyCreatedLocation.destinationId === this.parentDestinationId
+          ) {
+            this.parentLocations = this.normalizeParentLocations([
+              ...this.parentLocations,
+              {
+                id: this.pendingNewlyCreatedLocation.id,
+                name: this.pendingNewlyCreatedLocation.name,
+                displayName: this.pendingNewlyCreatedLocation.name,
+                destinationId: this.pendingNewlyCreatedLocation.destinationId ?? this.parentDestinationId ?? 0,
+                destinationName: this.selectedParentDestinationName,
+                status: 'Published',
+              },
+            ]);
+            this.parentLocationId = this.pendingNewlyCreatedLocation.id;
+            this.pendingNewlyCreatedLocation = null;
+            setTimeout(() => this.revalidatePinnedCoordinatesIfPresent(), 0);
+          }
           this.ensureLoadedParentSelectionsPresent();
           if (
             this.parentLocationId &&
-            !this.parentLocations.some(location => location.id === this.parentLocationId)
+            !this.parentLocations.some(location => location.id === this.parentLocationId) &&
+            !this.pendingNewlyCreatedLocation
           ) {
             this.parentLocationId = null;
           }
@@ -737,7 +808,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         this.galleryImages = (dto.galleryImageUrls ?? []).map((url, index) => ({
           url,
           name: `Existing gallery image ${index + 1}`,
-          file: null as unknown as File,
         }));
 
         this.selectedTagIds = new Set((dto.tags ?? []).map(tag => tag.id));
@@ -767,14 +837,44 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.editLoadedDestination && this.editLoadedDestination.id !== this.parentDestinationId) {
       this.editLoadedDestination = null;
     }
+    this.clearScopeValidation();
     this.parentLocationId = null;
     this.parentLocations = [];
+    this.errorMessage = null;
     this.loadParentLocations();
     this.notifyStateChanged();
   }
 
   onParentLocationChanged(): void {
+    this.errorMessage = null;
     this.notifyStateChanged();
+  }
+
+  onParentDestinationSelection(value: number | string | null): void {
+    if (value === this.createDestinationOptionValue) {
+      this.openCreateDestinationFlow();
+      return;
+    }
+
+    this.parentDestinationId = typeof value === 'number' ? value : null;
+    this.onParentDestinationChanged();
+  }
+
+  onParentLocationSelection(value: number | string | null): void {
+    if (value === this.createLocationOptionValue) {
+      if (!this.parentDestinationId) {
+        this.errorMessage = 'Please select a destination before creating a new location.';
+        this.notifyStateChanged();
+        return;
+      }
+
+      this.openCreateLocationFlow();
+      return;
+    }
+
+    this.parentLocationId = typeof value === 'number' ? value : null;
+    this.onParentLocationChanged();
+    this.revalidatePinnedCoordinatesIfPresent();
   }
 
   onClassItemChange(item: ClassItem): void {
@@ -1089,20 +1189,17 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.zone.run(() => {
-        this.cardImageUrl = reader.result as string;
-        this.cardImageName = file.name;
-        this.cardImageFile = file;
-        this.notifyStateChanged();
-      });
-    };
-    reader.readAsDataURL(file);
+    this.revokeCardPreviewObjectUrl();
+    this.cardPreviewObjectUrl = URL.createObjectURL(file);
+    this.cardImageUrl = this.cardPreviewObjectUrl;
+    this.cardImageName = file.name;
+    this.cardImageFile = file;
     input.value = '';
+    this.notifyStateChanged();
   }
 
   removeCardImage(): void {
+    this.revokeCardPreviewObjectUrl();
     this.cardImageUrl = null;
     this.cardImageName = '';
     this.cardImageFile = null;
@@ -1151,19 +1248,18 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []).filter(file => this.isAllowedImage(file));
     for (const file of files) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        this.zone.run(() => {
-          this.galleryImages = [...this.galleryImages, { url: reader.result as string, name: file.name, file }];
-          this.notifyStateChanged();
-        });
-      };
-      reader.readAsDataURL(file);
+      const previewUrl = URL.createObjectURL(file);
+      this.galleryPreviewObjectUrls = [...this.galleryPreviewObjectUrls, previewUrl];
+      this.galleryImages = [...this.galleryImages, { url: previewUrl, name: file.name, file }];
+      this.notifyStateChanged();
     }
     input.value = '';
   }
 
   removeGalleryImage(index: number): void {
+    const removed = this.galleryImages[index];
+    this.revokeObjectUrlIfNeeded(removed?.url ?? null);
+    this.galleryPreviewObjectUrls = this.galleryPreviewObjectUrls.filter(url => url !== removed?.url);
     this.galleryImages = this.galleryImages.filter((_, currentIndex) => currentIndex !== index);
     this.notifyStateChanged();
   }
@@ -1285,6 +1381,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe({
         next: created => {
           this.formDrafts.clearDraft(this.draftFormType());
+          this.transientMedia.clear(this.draftFormType());
           this.feedbackMessage = 'Place published.';
           this.router.navigate(['/places'], {
             queryParams: { regionId: created.regionId },
@@ -1369,7 +1466,14 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
-    if (this.selectedParentLocation?.destinationId !== this.parentDestinationId) {
+    const selectedLocation = this.selectedParentLocation;
+
+    if (!selectedLocation) {
+      this.errorMessage = 'Selected parent location is still loading. Please wait and try again.';
+      return null;
+    }
+
+    if (selectedLocation.destinationId !== this.parentDestinationId) {
       this.errorMessage = 'Parent location must belong to the selected destination.';
       return null;
     }
@@ -1399,6 +1503,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const coordinates = this.readPinnedCoordinates();
     if (!coordinates || !this.pinConfirmed) {
       this.errorMessage = 'Pin the place on the map before publishing.';
+      return null;
+    }
+
+    const currentValidationKey = this.scopeValidationKey(coordinates.latitude, coordinates.longitude);
+    if (this.lastScopeValidationKey !== currentValidationKey) {
+      this.validateSelectedPoint(coordinates.latitude, coordinates.longitude);
+      this.errorMessage = 'Location validation is still running.';
       return null;
     }
 
@@ -1458,7 +1569,9 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       tagIds: this.selectedTagIdList(),
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
-      galleryImageFiles: this.galleryImages.filter(image => image.file).map(image => image.file),
+      galleryImageFiles: this.galleryImages
+        .filter((image): image is { url: string; name: string; file: File } => image.file != null)
+        .map(image => image.file),
     };
   }
 
@@ -1474,10 +1587,17 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
-    if (this.selectedParentLocation?.destinationId !== this.parentDestinationId) {
-      this.errorMessage = 'Parent location must belong to the selected destination.';
-      return null;
-    }
+  const selectedLocation = this.selectedParentLocation;
+
+  if (!selectedLocation) {
+    this.errorMessage = 'Selected parent location is still loading. Please wait and try again.';
+    return null;
+  }
+
+  if (selectedLocation.destinationId !== this.parentDestinationId) {
+    this.errorMessage = 'Parent location must belong to the selected destination.';
+    return null;
+  }
 
     const placeTypeId = this.placeTypeId;
     if (!placeTypeId) {
@@ -1507,10 +1627,17 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
-    if (this.scopeValidationPending || this.isScopeValidationRejected) {
+    const currentValidationKey = this.scopeValidationKey(coordinates.latitude, coordinates.longitude);
+    if (this.lastScopeValidationKey !== currentValidationKey) {
+      this.validateSelectedPoint(coordinates.latitude, coordinates.longitude);
+      this.errorMessage = 'Location validation is still running.';
+      return null;
+    }
+
+    if (this.scopeValidationPending || this.scopeValidationResult?.isAllowed !== true) {
       this.errorMessage = this.scopeValidationPending
         ? 'Location validation is still running.'
-        : this.scopeValidationMessage ?? 'Selected location is outside your allowed regional scope.';
+        : this.scopeValidationMessage ?? 'Selected location could not be validated against your assigned regional scope.';
       return null;
     }
 
@@ -1550,7 +1677,9 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       operatingHours,
       tagIds: this.selectedTagIdList(),
       galleryImageUrls: this.galleryImages.filter(image => !image.file).map(image => image.url),
-      galleryImageFiles: this.galleryImages.filter(image => image.file).map(image => image.file),
+      galleryImageFiles: this.galleryImages
+        .filter((image): image is { url: string; name: string; file: File } => image.file != null)
+        .map(image => image.file),
     };
   }
 
@@ -1917,6 +2046,41 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
+  private openCreateDestinationFlow(): void {
+    this.captureTransientMedia();
+    this.router.navigate(['/destinations/new'], {
+      queryParams: {
+        source: 'add-place',
+        returnFlow: 'create-place',
+        regionId: this.activeRegionId,
+      },
+      state: {
+        regionId: this.activeRegionId,
+        returnUrl: '/places/new',
+        placeDraft: this.buildPlaceDraftPayload(),
+        coordinates: this.readPinnedCoordinates(),
+      },
+    });
+  }
+
+  private openCreateLocationFlow(): void {
+    this.captureTransientMedia();
+    this.router.navigate(['/locations/new'], {
+      queryParams: {
+        source: 'add-place',
+        returnFlow: 'create-place',
+        regionId: this.activeRegionId,
+      },
+      state: {
+        regionId: this.activeRegionId,
+        returnUrl: '/places/new',
+        placeDraft: this.buildPlaceDraftPayload(),
+        selectedDestinationId: this.parentDestinationId,
+        coordinates: this.readPinnedCoordinates(),
+      },
+    });
+  }
+
   private static readonly CONTRIBUTION_INELIGIBLE_PLACE_TYPES = new Set(['beach', 'nature', 'shopping']);
 
   private normalizePlaceTypes(types: RegionalPlaceTypeDto[] | null | undefined): RegionalPlaceTypeDto[] {
@@ -2024,6 +2188,26 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     return { latitude, longitude };
   }
 
+  private revalidatePinnedCoordinatesIfPresent(): void {
+    const coordinates = this.readPinnedCoordinates();
+
+    if (!coordinates || !this.pinConfirmed || !this.activeRegionId || !this.parentLocationId) {
+      return;
+    }
+
+    this.validateSelectedPoint(coordinates.latitude, coordinates.longitude);
+  }
+
+  private scopeValidationKey(latitude: number, longitude: number): string {
+    return [
+      this.activeRegionId ?? 'none',
+      this.parentLocationId ?? 'none',
+      latitude.toFixed(6),
+      longitude.toFixed(6),
+      this.isEditMode ? 'Update' : 'Create',
+    ].join('|');
+  }
+
   private hasValidCoordinates(latitude: number, longitude: number): boolean {
     return Number.isFinite(latitude) &&
       Number.isFinite(longitude) &&
@@ -2094,12 +2278,14 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private validateSelectedPoint(latitude: number, longitude: number): void {
-    if (!this.activeRegionId || !this.hasValidCoordinates(latitude, longitude)) {
+    if (!this.activeRegionId || !this.parentLocationId || !this.hasValidCoordinates(latitude, longitude)) {
       this.clearScopeValidation();
       return;
     }
 
+    const validationKey = this.scopeValidationKey(latitude, longitude);
     this.validationSubscription?.unsubscribe();
+    this.lastScopeValidationKey = validationKey;
     this.scopeValidationResult = null;
     this.scopeValidationTone = null;
     this.scopeValidationMessage = null;
@@ -2117,11 +2303,17 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       locationId: this.parentLocationId,
     }).subscribe({
       next: result => {
+        if (this.lastScopeValidationKey !== validationKey) {
+          return;
+        }
         this.scopeValidationPending = false;
         this.applyScopeValidationResult(result);
         this.notifyStateChanged();
       },
       error: error => {
+        if (this.lastScopeValidationKey !== validationKey) {
+          return;
+        }
         this.scopeValidationPending = false;
         if (!this.pinModalOpen) {
           this.pinConfirmed = false;
@@ -2192,6 +2384,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.scopeValidationMessage = null;
     this.scopeValidationTone = null;
     this.scopeValidationPending = false;
+    this.lastScopeValidationKey = null;
     this.validationSubscription?.unsubscribe();
     this.validationSubscription = null;
   }
@@ -2400,6 +2593,29 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.coverPreviewObjectUrl = null;
   }
 
+  private revokeCardPreviewObjectUrl(): void {
+    if (!this.cardPreviewObjectUrl) return;
+
+    URL.revokeObjectURL(this.cardPreviewObjectUrl);
+    this.cardPreviewObjectUrl = null;
+  }
+
+  private revokeGalleryPreviewObjectUrls(): void {
+    for (const url of this.galleryPreviewObjectUrls) {
+      this.revokeObjectUrlIfNeeded(url);
+    }
+
+    this.galleryPreviewObjectUrls = [];
+  }
+
+  private revokeObjectUrlIfNeeded(url: string | null | undefined): void {
+    if (!url || !url.startsWith('blob:')) {
+      return;
+    }
+
+    URL.revokeObjectURL(url);
+  }
+
   private notifyStateChanged(): void {
     this.cdr.markForCheck();
   }
@@ -2416,31 +2632,36 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private buildDraftSnapshot(): PlaceFormDraft | null {
-    const descriptionHtml = normalizeEditorDescriptionHtml(this.editorRef?.nativeElement?.innerHTML ?? '');
+    const snapshot = this.buildPlaceDraftPayload();
     const hasDraft =
-      Boolean(this.placeName.trim()) ||
-      Boolean(this.summary.trim()) ||
-      Boolean(this.bestTimeToVisit.trim()) ||
-      Boolean(this.visitorTips.trim()) ||
-      Boolean(this.accessNotes.trim()) ||
-      Boolean(this.accessibilityNotes.trim()) ||
-      Boolean(this.website.trim()) ||
-      Boolean(this.contactPhone.trim()) ||
-      Boolean(this.admissionPrice.trim()) ||
-      Boolean(this.bookingLink.trim()) ||
-      Boolean(this.streetAddress.trim()) ||
-      Boolean(descriptionHtml) ||
-      Boolean(this.parentDestinationId) ||
-      Boolean(this.parentLocationId) ||
-      Boolean(this.placeTypeId) ||
-      this.selectedTagIds.size > 0 ||
-      this.pinConfirmed ||
-      Boolean(this.cardImageName) ||
-      Boolean(this.coverImageName) ||
-      this.galleryImages.length > 0;
+      Boolean(snapshot.placeName.trim()) ||
+      Boolean(snapshot.summary.trim()) ||
+      Boolean(snapshot.bestTimeToVisit.trim()) ||
+      Boolean(snapshot.visitorTips.trim()) ||
+      Boolean(snapshot.accessNotes.trim()) ||
+      Boolean(snapshot.accessibilityNotes.trim()) ||
+      Boolean(snapshot.website.trim()) ||
+      Boolean(snapshot.contactPhone.trim()) ||
+      Boolean(snapshot.admissionPrice.trim()) ||
+      Boolean(snapshot.bookingLink.trim()) ||
+      Boolean(snapshot.streetAddress.trim()) ||
+      Boolean(snapshot.descriptionHtml) ||
+      Boolean(snapshot.parentDestinationId) ||
+      Boolean(snapshot.parentLocationId) ||
+      Boolean(snapshot.placeTypeId) ||
+      Boolean(snapshot.stayTypeId) ||
+      snapshot.selectedTagIds.length > 0 ||
+      snapshot.pinConfirmed ||
+      Boolean(snapshot.cardImageName) ||
+      Boolean(snapshot.coverImageName) ||
+      snapshot.galleryImageNames.length > 0;
 
     if (!hasDraft) return null;
 
+    return snapshot;
+  }
+
+  private buildPlaceDraftPayload(): PlaceFormDraft {
     return {
       activeRegionId: this.activeRegionId,
       parentDestinationId: this.parentDestinationId,
@@ -2448,6 +2669,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       summary: this.summary,
       parentLocationId: this.parentLocationId,
       placeTypeId: this.placeTypeId,
+      stayTypeId: this.stayTypeId,
       bestTimeToVisit: this.bestTimeToVisit,
       visitorTips: this.visitorTips,
       accessNotes: this.accessNotes,
@@ -2465,7 +2687,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       modalPinLat: this.modalPinLat,
       modalPinLng: this.modalPinLng,
       pinConfirmed: this.pinConfirmed,
-      descriptionHtml,
+      descriptionHtml: normalizeEditorDescriptionHtml(this.editorRef?.nativeElement?.innerHTML ?? ''),
       selectedTagIds: [...this.selectedTagIds],
       cardImageName: this.cardImageName,
       coverImageName: this.coverImageName,
@@ -2478,6 +2700,85 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const payload = draft?.payload;
     if (!payload) return;
 
+    this.applyDraftPayload(payload);
+    const restoredTransientMedia = this.restoreTransientMediaIfPresent();
+    this.feedbackMessage = restoredTransientMedia
+      ? 'Recovered a saved draft.'
+      : 'Recovered a saved draft. Image files must be selected again.';
+
+    const coordinates = this.readPinnedCoordinates();
+    if (coordinates && this.pinConfirmed && this.activeRegionId && this.parentLocationId) {
+      setTimeout(() => this.revalidatePinnedCoordinatesIfPresent(), 0);
+    }
+
+    this.notifyStateChanged();
+  }
+
+  private captureReturnFlowState(): void {
+    const state = history.state as AddPlaceReturnFlowState | null;
+    this.restoredDraftFromNavigation = state?.restoredDraft ?? null;
+    this.pendingNewlyCreatedDestination = state?.newlyCreatedDestination ?? null;
+    this.pendingNewlyCreatedLocation = state?.newlyCreatedLocation ?? null;
+  }
+
+  private restoreDraftFromNavigationIfPresent(): boolean {
+    if (!this.restoredDraftFromNavigation && !this.pendingNewlyCreatedDestination && !this.pendingNewlyCreatedLocation) {
+      return false;
+    }
+
+    if (this.restoredDraftFromNavigation) {
+      this.applyDraftPayload(this.restoredDraftFromNavigation);
+    }
+
+    if (this.pendingNewlyCreatedDestination) {
+      this.parentDestinationId = this.pendingNewlyCreatedDestination.id;
+      this.parentLocationId = null;
+      this.feedbackMessage = `Destination "${this.pendingNewlyCreatedDestination.name}" selected.`;
+    }
+
+    if (this.pendingNewlyCreatedLocation) {
+      this.parentDestinationId = this.pendingNewlyCreatedLocation.destinationId ?? this.parentDestinationId;
+      this.parentLocationId = this.pendingNewlyCreatedLocation.id;
+      this.feedbackMessage = `Location "${this.pendingNewlyCreatedLocation.name}" selected.`;
+    }
+
+    if (this.activeRegionId) {
+      this.loadParentDestinations();
+      if (this.parentDestinationId) {
+        this.loadParentLocations();
+      }
+      this.loadRegionViewport(this.activeRegionId);
+    }
+
+    const restoredTransientMedia = this.restoreTransientMediaIfPresent();
+
+    const coordinates = this.readPinnedCoordinates();
+    if (coordinates && this.pinConfirmed && this.activeRegionId && this.parentLocationId) {
+      setTimeout(() => this.revalidatePinnedCoordinatesIfPresent(), 0);
+    }
+
+    if (restoredTransientMedia) {
+      this.feedbackMessage = this.feedbackMessage
+        ? `${this.feedbackMessage} Gallery images restored.`
+        : 'Draft restored from previous step.';
+    }
+
+    this.notifyStateChanged();
+    return true;
+  }
+
+  private applyDraftPayload(payload: PlaceFormDraft): void {
+    this.clearScopeValidation();
+    this.revokeCardPreviewObjectUrl();
+    this.revokeCoverPreviewObjectUrl();
+    this.revokeGalleryPreviewObjectUrls();
+    this.cardImageFile = null;
+    this.cardImageUrl = null;
+    this.cardImageName = '';
+    this.coverImageFile = null;
+    this.coverImageUrl = null;
+    this.coverImageName = '';
+    this.galleryImages = [];
     this.parentDestinationId = typeof payload.parentDestinationId === 'number' ? payload.parentDestinationId : null;
     this.parentLocationId = payload.parentLocationId ?? null;
 
@@ -2493,6 +2794,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.placeName = payload.placeName ?? this.placeName;
     this.summary = payload.summary ?? this.summary;
     this.placeTypeId = payload.placeTypeId;
+    this.stayTypeId = payload.stayTypeId ?? null;
     this.bestTimeToVisit = payload.bestTimeToVisit ?? this.bestTimeToVisit;
     this.visitorTips = payload.visitorTips ?? this.visitorTips;
     this.accessNotes = payload.accessNotes ?? this.accessNotes;
@@ -2526,8 +2828,67 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     if (coordinates && this.pinConfirmed) {
       setTimeout(() => this.updateMiniMapPin(coordinates.latitude, coordinates.longitude), 0);
     }
+  }
 
-    this.feedbackMessage = 'Recovered a saved draft. Image files must be selected again.';
-    this.notifyStateChanged();
+  private captureTransientMedia(): void {
+    const galleryImages = this.galleryImages
+      .filter((image): image is { url: string; name: string; file: File } => image.file != null)
+      .map(image => ({
+        file: image.file,
+        name: image.name,
+      }));
+
+    this.transientMedia.save(this.draftFormType(), {
+      cardImage: this.cardImageFile && this.cardImageUrl
+        ? {
+            file: this.cardImageFile,
+            name: this.cardImageName || this.cardImageFile.name,
+          }
+        : null,
+      coverImage: this.coverImageFile
+        ? {
+            file: this.coverImageFile,
+            name: this.coverImageName || this.coverImageFile.name,
+          }
+        : null,
+      galleryImages,
+    });
+  }
+
+  private restoreTransientMediaIfPresent(): boolean {
+    const media = this.transientMedia.peek(this.draftFormType());
+    if (!media) {
+      return false;
+    }
+
+    this.revokeCardPreviewObjectUrl();
+    this.revokeCoverPreviewObjectUrl();
+    this.revokeGalleryPreviewObjectUrls();
+
+    if (media.cardImage) {
+      this.cardImageFile = media.cardImage.file;
+      this.cardImageName = media.cardImage.name;
+      this.cardPreviewObjectUrl = URL.createObjectURL(media.cardImage.file);
+      this.cardImageUrl = this.cardPreviewObjectUrl;
+    }
+
+    if (media.coverImage) {
+      this.coverImageFile = media.coverImage.file;
+      this.coverImageName = media.coverImage.name;
+      this.coverPreviewObjectUrl = URL.createObjectURL(media.coverImage.file);
+      this.coverImageUrl = this.coverPreviewObjectUrl;
+    }
+
+    if (media.galleryImages?.length) {
+      this.galleryImages = media.galleryImages.map((image: AdminTransientFileItem) => ({
+        url: URL.createObjectURL(image.file),
+        name: image.name,
+        file: image.file,
+      }));
+      this.galleryPreviewObjectUrls = this.galleryImages.map(image => image.url);
+    }
+
+    this.transientMedia.clear(this.draftFormType());
+    return true;
   }
 }

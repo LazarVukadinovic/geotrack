@@ -11,6 +11,8 @@ public interface IRegionalScopeValidationService
         double latitude,
         double longitude,
         string operationType,
+        int? destinationId = null,
+        int? locationId = null,
         CancellationToken cancellationToken = default);
 
     Task EnsurePointAllowedAsync(
@@ -20,5 +22,7 @@ public interface IRegionalScopeValidationService
         double latitude,
         double longitude,
         string operationType,
+        int? destinationId = null,
+        int? locationId = null,
         CancellationToken cancellationToken = default);
 }

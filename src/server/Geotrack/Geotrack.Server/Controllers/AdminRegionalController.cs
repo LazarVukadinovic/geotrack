@@ -370,6 +370,8 @@ public class AdminRegionalController : ControllerBase
                 request.Latitude.Value,
                 request.Longitude.Value,
                 request.OperationType ?? "Create",
+                request.DestinationId,
+                request.LocationId,
                 cancellationToken));
         }
         catch (Exception ex)

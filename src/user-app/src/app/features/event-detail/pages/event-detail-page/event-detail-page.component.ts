@@ -162,6 +162,64 @@ export class EventDetailPageComponent {
     this.aboutExpanded.update(value => !value);
   }
 
+
+  protected parentLink(event: EventDetail): string[] | null {
+    const parentType = (event.parentEntityType ?? '').trim().toLowerCase();
+
+    if (parentType === 'place' && event.placeId && event.placeName) {
+      return ['/places', event.placeId];
+    }
+
+    if (parentType === 'location' && event.locationId && event.locationName) {
+      return ['/locations', event.locationId];
+    }
+
+    if (parentType === 'destination' && event.destinationId && event.destinationName) {
+      return ['/destinations', event.destinationId];
+    }
+
+    if (event.placeId && event.placeName) {
+      return ['/places', event.placeId];
+    }
+
+    if (event.locationId && event.locationName) {
+      return ['/locations', event.locationId];
+    }
+
+    if (event.destinationId && event.destinationName) {
+      return ['/destinations', event.destinationId];
+    }
+
+    return null;
+  }
+
+  protected parentDisplayName(event: EventDetail): string {
+    const parentType = (event.parentEntityType ?? '').trim().toLowerCase();
+
+    if (parentType === 'place' && event.placeName) {
+      return event.placeName;
+    }
+
+    if (parentType === 'location' && event.locationName) {
+      return event.locationName;
+    }
+
+    if (parentType === 'destination' && event.destinationName) {
+      return event.destinationName;
+    }
+
+    return event.placeName
+      ?? event.locationName
+      ?? event.destinationName
+      ?? event.location
+      ?? '';
+  }
+
+  protected venueDisplayName(event: EventDetail): string {
+    const venue = event.info.venue?.trim();
+    return venue || this.parentDisplayName(event);
+  }
+
   protected eventDate(event: EventDetail): string {
     const start = this.parseEventDate(event.startsAt);
     const end = this.parseEventDate(event.endsAt);

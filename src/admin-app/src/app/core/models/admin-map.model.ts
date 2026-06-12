@@ -1,4 +1,24 @@
-export type AdminMapEntityType = 'Region' | 'Destination' | 'Location' | 'Place';
+export type AdminMapEntityType = 'Region' | 'Destination' | 'Location' | 'Place' | 'Event';
+
+export function buildPlaceReturnQueryParams(draft: unknown): Record<string, string> {
+  const placeDraft = draft as {
+    activeRegionId?: number | null;
+    pinLat?: string;
+    pinLng?: string;
+  } | null | undefined;
+
+  const queryParams: Record<string, string> = {};
+  if (placeDraft?.activeRegionId) {
+    queryParams['regionId'] = String(placeDraft.activeRegionId);
+  }
+  if (placeDraft?.pinLat && placeDraft?.pinLng) {
+    queryParams['latitude'] = placeDraft.pinLat;
+    queryParams['longitude'] = placeDraft.pinLng;
+    queryParams['source'] = 'map';
+  }
+
+  return queryParams;
+}
 
 export interface AdminMapBounds {
   north: number;

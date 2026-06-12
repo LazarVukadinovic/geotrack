@@ -159,7 +159,7 @@ export class DestinationsListService {
     formData.append('coverImage', coverImageFile);
 
     for (const file of galleryImageFiles ?? []) {
-      formData.append('galleryImages', file);
+      if (file) formData.append('galleryImages', file);
     }
 
     return formData;

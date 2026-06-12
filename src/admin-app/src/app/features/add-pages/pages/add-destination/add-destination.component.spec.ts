@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { vi } from 'vitest';
@@ -23,6 +23,7 @@ class EmptyRouteComponent {}
 describe('AddDestinationComponent', () => {
   let component: AddDestinationComponent;
   let fixture: ComponentFixture<AddDestinationComponent>;
+  let router: Router;
   let destinationsService: {
     getDestinationTags: ReturnType<typeof vi.fn>;
     searchDestinationTags: ReturnType<typeof vi.fn>;
@@ -132,6 +133,7 @@ describe('AddDestinationComponent', () => {
 
     fixture = TestBed.createComponent(AddDestinationComponent);
     component = fixture.componentInstance;
+    router = TestBed.inject(Router);
     fixture.detectChanges();
   });
 
@@ -282,6 +284,34 @@ describe('AddDestinationComponent', () => {
 
     expect(component.isSaving).toBe(false);
     expect(component.errorMessage).toBe('Validation failed.');
+  });
+
+  it('returns to add place with the restored draft after creating a destination from place flow', () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    component.destinationName = 'Inline destination';
+    component.summary = 'A short summary';
+    component.zoneConfirmed = true;
+    setPublishReadyMediaAndCenter();
+    (component as any).confirmedLayer = {};
+    (component as any).confirmedShapeType = 'Polygon';
+    (component as any).addPlaceFlowState = {
+      returnUrl: '/places/new',
+      placeDraft: { placeName: 'Draft place' },
+    };
+    (component as any).isAddPlaceReturnFlow = () => true;
+
+    component.publish();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/places/new'], {
+      state: {
+        restoredDraft: { placeName: 'Draft place' },
+        newlyCreatedDestination: {
+          id: 44,
+          name: 'Created',
+        },
+      },
+    });
   });
 
   function setPublishReadyMediaAndCenter(): void {
