@@ -1,4 +1,5 @@
-﻿using Geotrack.Application.DTOs.Locations;
+﻿using Geotrack.Application.DTOs.Common;
+using Geotrack.Application.DTOs.Locations;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
@@ -40,6 +41,9 @@ public class LocationService : ILocationService
             savedCollectionIds = await _locationRepository.GetSavedCollectionIdsByUserAsync(locationId, userId.Value);
         }
 
+        var similarLocations = await _locationRepository.GetSimilarPublishedLocationsInTerritoryAsync(locationId, 6);
+        var relatedEvents = await _locationRepository.GetPublishedEventsForLocationAsync(locationId, 6);
+
         return new GetLocationDetailsResponseDto
         {
             Id = location.Id,
@@ -56,7 +60,10 @@ public class LocationService : ILocationService
             ReviewsCount = reviewsCount,
             IsSaved = isSaved,
             SavedCollectionIds = savedCollectionIds,
-            Sections = BuildLocationPreviewSections(location)
+            Images = MapImages(location.Images),
+            Sections = BuildLocationPreviewSections(location),
+            SimilarLocations = similarLocations.Select(MapRelatedLocationItem).ToList(),
+            RelatedEvents = relatedEvents.Select(MapEventItem).ToList()
         };
     }
 
@@ -290,6 +297,7 @@ public class LocationService : ILocationService
         {
             Id = place.Id,
             Name = place.Name,
+            Image = PickCardImage(place.Images),
             LocationId = place.LocationId
         };
     }
@@ -300,10 +308,64 @@ public class LocationService : ILocationService
         {
             Id = @event.Id,
             Name = @event.Name,
+            Image = PickCardImage(@event.Images),
             LocationId = @event.LocationId,
             PlaceId = @event.PlaceId,
             StartDate = @event.StartDate,
             EndDate = @event.EndDate
+        };
+    }
+
+    private static LocationRelatedItemDto MapRelatedLocationItem(Location location)
+    {
+        return new LocationRelatedItemDto
+        {
+            Id = location.Id,
+            Name = location.Name,
+            Description = string.IsNullOrWhiteSpace(location.Summary) ? location.Description : location.Summary,
+            Image = PickCardImage(location.Images)
+        };
+    }
+
+    private static List<PublicEntityImageDto> MapImages(IEnumerable<EntityImage> images)
+    {
+        return images
+            .Where(image => !string.IsNullOrWhiteSpace(image.Url))
+            .OrderBy(image => ImageRoleSort(image.ImageRole))
+            .ThenBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .Select(image => new PublicEntityImageDto
+            {
+                Id = image.Id,
+                Url = image.Url,
+                AltText = image.AltText,
+                Caption = image.Caption,
+                IsMain = image.IsMain,
+                ImageRole = image.ImageRole,
+                SortOrder = image.SortOrder,
+                ImagePosition = string.IsNullOrWhiteSpace(image.ImagePosition) ? "50% 50%" : image.ImagePosition,
+                ImageSize = string.IsNullOrWhiteSpace(image.ImageSize) ? "cover" : image.ImageSize
+            })
+            .ToList();
+    }
+
+    private static string? PickCardImage(IEnumerable<EntityImage> images)
+    {
+        return images
+            .Where(image => !string.IsNullOrWhiteSpace(image.Url))
+            .OrderBy(image => image.ImageRole == "cover" ? 0 : image.ImageRole == "card" ? 1 : 2)
+            .ThenBy(image => image.SortOrder)
+            .Select(image => image.Url)
+            .FirstOrDefault();
+    }
+
+    private static int ImageRoleSort(string? role)
+    {
+        return role?.Trim().ToLowerInvariant() switch
+        {
+            "cover" => 0,
+            "card" => 1,
+            _ => 2
         };
     }
 

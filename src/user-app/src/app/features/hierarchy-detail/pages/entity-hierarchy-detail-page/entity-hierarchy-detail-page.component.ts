@@ -1,11 +1,18 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { CommonModule, Location as BrowserLocation } from '@angular/common';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { combineLatest } from 'rxjs';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { combineLatest, Observable, throwError } from 'rxjs';
+import { AuthService } from '../../../../core/services/auth.service';
 import { AnalyticsService } from '../../../../core/services/analytics.service';
+import { ImageFallbackDirective } from '../../../../shared/directives/image-fallback.directive';
+import { PhotoGalleryComponent } from '../../../../shared/components/photo-gallery/photo-gallery.component';
+import { ReviewEntryComponent, type ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
+import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
+import { ReviewsService, type ReviewReportTargetType } from '../../../reviews/services/reviews.service';
+import { normalizeEntityImages, getCoverImageUrl, getGalleryImages, type ApiEntityImage, type EntityImage } from '../../../../core/models/entity-image.model';
 
 interface DetailParentLink {
   label: string;
@@ -13,39 +20,71 @@ interface DetailParentLink {
   route: string;
 }
 
+interface DetailItem {
+  id: string;
+  name: string;
+  description?: string;
+  route: string;
+  image?: string;
+  meta?: string;
+}
+
 interface DetailSectionPreview {
   sectionKey?: string;
   sectionTitle?: string;
   title?: string;
   name?: string;
-  places?: unknown[];
-  events?: unknown[];
-  locations?: unknown[];
+  places?: Record<string, unknown>[];
+  events?: Record<string, unknown>[];
+  locations?: Record<string, unknown>[];
+}
 
+interface ReviewItem {
+  id: string;
+  authorUserId: number;
+  authorName: string;
+  avatarUrl: string;
+  rating: number;
+  body: string;
+  timeAgo: string;
+  reportedByCurrentUser: boolean;
+  isOwnReview: boolean;
 }
 
 interface HierarchyDetail {
   id: string;
   title: string;
+  type: EntityType;
   typeLabel: string;
   description?: string;
-  latitude?: number | null;
-  longitude?: number | null;
   rating?: number | null;
   reviewsCount?: number | null;
   parent?: DetailParentLink | null;
+  images: EntityImage[];
   sections: DetailSectionPreview[];
+  relatedEvents: DetailItem[];
+  similarDestinations: DetailItem[];
+  similarLocations: DetailItem[];
+  reviews: ReviewItem[];
+  hasMoreReviews: boolean;
+  totalReviewsCount: number;
 }
 
 type EntityType = 'location' | 'destination' | 'region' | 'territory';
 type LoadState = 'loading' | 'loaded' | 'notFound' | 'error';
 
-
-
 @Component({
   selector: 'app-entity-hierarchy-detail-page',
   standalone: true,
-  imports: [CommonModule, RouterLink, DescriptionRichHtmlPipe],
+  imports: [
+    CommonModule,
+    RouterLink,
+    ImageFallbackDirective,
+    PhotoGalleryComponent,
+    ReviewEntryComponent,
+    DescriptionRichHtmlPipe,
+  ],
+  providers: [ReviewInteractionsService],
   templateUrl: './entity-hierarchy-detail-page.component.html',
   styleUrl: './entity-hierarchy-detail-page.component.scss',
 })
@@ -54,62 +93,85 @@ export class EntityHierarchyDetailPageComponent {
   private readonly http = inject(HttpClient);
   private readonly destroyRef = inject(DestroyRef);
   private readonly browserLocation = inject(BrowserLocation);
+  private readonly router = inject(Router);
   private readonly analytics = inject(AnalyticsService);
+  private readonly auth = inject(AuthService);
+  private readonly reviewsService = inject(ReviewsService);
 
+  protected readonly ri = inject(ReviewInteractionsService);
   protected readonly detail = signal<HierarchyDetail | null>(null);
   protected readonly loadState = signal<LoadState>('loading');
-
-  protected readonly expandedSectionIndex = signal<number | null>(null);
   protected readonly descriptionExpanded = signal(false);
+  protected readonly galleryOpen = signal(false);
+  protected readonly galleryStartIndex = signal(0);
+  protected readonly currentType = signal<EntityType | null>(null);
+  protected readonly visibleReviewsCount = signal(3);
+  protected readonly expandedReviewIds = signal<Set<string>>(new Set());
+  protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
 
-  protected toggleSection(index: number): void {
-    this.expandedSectionIndex.update(current => current === index ? null : index);
-  }
+  protected readonly canReview = computed(() => {
+    const d = this.detail();
+    return !!d && this.isReviewableType(d.type) && !d.reviews.some(r => r.isOwnReview);
+  });
 
-  protected sectionCount(section: DetailSectionPreview): number {
-    return (section.places?.length ?? 0) +
-          (section.events?.length ?? 0) +
-          (section.locations?.length ?? 0);
-  }
+  protected readonly heroImage = computed(() => {
+    const d = this.detail();
+    if (!d) return '';
+    return getCoverImageUrl(d.images, d.images[0]?.url ?? '');
+  });
 
-  protected sectionItems(section: DetailSectionPreview): { name: string; description?: string; route?: string }[] {
-    const all = [
-    ...(section.places ?? []),
-    ...(section.events ?? []),
-    ...(section.locations ?? []),
-  ] as Record<string, unknown>[];
-    return all.map(item => ({
-    name: String(item['name'] ?? item['title'] ?? 'Item'),
-    description: item['description'] ? String(item['description']) : undefined,
-    route: item['route'] ? String(item['route']) : undefined,
-  }));
-  }
+  protected readonly galleryImages = computed(() => {
+    const d = this.detail();
+    if (!d) return [];
+    const gallery = getGalleryImages(d.images);
+    return gallery.length ? gallery : d.images;
+  });
 
-  protected readonly fullExpandedSections = signal<Set<number>>(new Set());
+  protected readonly locationPlaces = computed(() => {
+    const d = this.detail();
+    if (!d || d.type !== 'location') return [];
+    return this.uniqueItems(
+      d.sections.flatMap(section => (section.places ?? []).map(item => this.mapItem(item, 'place'))),
+    );
+  });
 
-  protected toggleFullExpand(index: number, event: Event): void {
-    event.stopPropagation();
-    this.fullExpandedSections.update(current => {
-      const next = new Set(current);
-      if (next.has(index)) {
-        next.delete(index);
-      } else {
-        next.add(index);
-      }
-      return next;
-    });
-  }
+  protected readonly visibleReviews = computed(() => {
+    const d = this.detail();
+    if (!d) return [];
+    const reviews = d.reviews;
+    const limit = this.visibleReviewsCount();
+    const ownReview = reviews.find(review => review.isOwnReview);
+    const ordered = ownReview
+      ? [ownReview, ...reviews.filter(review => review !== ownReview)]
+      : reviews;
+    return ordered.slice(0, limit);
+  });
 
-  protected isFullExpanded(index: number): boolean {
-    return this.fullExpandedSections().has(index);
-  }
+  protected readonly hiddenReviewsCount = computed(() => {
+    const d = this.detail();
+    if (!d) return 0;
+    return Math.max(0, d.totalReviewsCount - this.visibleReviews().length);
+  });
 
   constructor() {
+    this.ri.configure({
+      targetType: () => this.resolveReviewTargetType(),
+      onEditSuccess: () => this.reloadCurrentDetail(),
+      onDeleteSuccess: () => this.reloadCurrentDetail(),
+      onReportSuccess: (reviewId) => this.markReviewReported(reviewId),
+    });
+
     combineLatest([this.route.paramMap, this.route.data])
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(([params, data]) => {
         const id = params.get('id') ?? '';
         const type = data['entityType'] as EntityType | undefined;
+        this.currentType.set(type ?? null);
+        this.galleryOpen.set(false);
+        this.descriptionExpanded.set(false);
+        this.visibleReviewsCount.set(3);
+        this.expandedReviewIds.set(new Set());
+
         if (!type || !id || Number.isNaN(Number(id))) {
           this.loadState.set('notFound');
           this.detail.set(null);
@@ -124,6 +186,87 @@ export class EntityHierarchyDetailPageComponent {
     this.browserLocation.back();
   }
 
+  protected openGallery(startIndex = 0): void {
+    this.galleryStartIndex.set(startIndex);
+    this.galleryOpen.set(true);
+  }
+
+  protected closeGallery(): void {
+    this.galleryOpen.set(false);
+  }
+
+  protected submitReview = (draft: ReviewDraft): Observable<unknown> => {
+    const d = this.detail();
+    if (!d || !this.isReviewableType(d.type)) {
+      return throwError(() => new Error('Reviews are available only for destinations and locations.'));
+    }
+
+    const numId = Number(d.id);
+    if (!Number.isFinite(numId)) return throwError(() => new Error('Invalid id.'));
+
+    const collection = d.type === 'destination' ? 'destinations' : 'locations';
+    return this.http.post(`/api/${collection}/${numId}/reviews`, {
+      rating: draft.rating,
+      comment: draft.body,
+    });
+  };
+
+  protected onReviewSubmitted(_draft: ReviewDraft): void {
+    const d = this.detail();
+    if (!d) return;
+
+    if (this.isReviewableType(d.type)) {
+      this.analytics.track('review_created', {
+        entityType: d.type,
+        entityId: Number(d.id),
+      });
+    }
+
+    this.load(d.type, d.id);
+  }
+
+  protected goToLogin(): void {
+    void this.router.navigate(['/profile']);
+  }
+
+  protected showMoreReviews(): void {
+    this.visibleReviewsCount.update(current => current + 3);
+  }
+
+  protected showLessReviews(): void {
+    this.visibleReviewsCount.set(3);
+    this.expandedReviewIds.set(new Set());
+  }
+
+  protected hasLongReview(body: string | null | undefined): boolean {
+    const value = (body ?? '').trim();
+    return value.length > 180 || value.split(/\r\n|\r|\n/).length > 3;
+  }
+
+  protected isReviewExpanded(reviewId: string): boolean {
+    return this.expandedReviewIds().has(reviewId);
+  }
+
+  protected toggleReviewExpanded(reviewId: string): void {
+    this.expandedReviewIds.update(current => {
+      const next = new Set(current);
+      if (next.has(reviewId)) next.delete(reviewId);
+      else next.add(reviewId);
+      return next;
+    });
+  }
+
+  protected navigateToAuthorReviews(review: ReviewItem): void {
+    this.ri.goToAuthorReviews(review);
+  }
+
+  protected sectionItems(section: DetailSectionPreview): DetailItem[] {
+    const locations = (section.locations ?? []).map(item => this.mapItem(item, 'location'));
+    const places = (section.places ?? []).map(item => this.mapItem(item, 'place'));
+    const events = (section.events ?? []).map(item => this.mapItem(item, 'event'));
+    return [...locations, ...places, ...events];
+  }
+
   private load(type: EntityType, id: string): void {
     this.loadState.set('loading');
     this.detail.set(null);
@@ -131,6 +274,7 @@ export class EntityHierarchyDetailPageComponent {
     this.http.get<Record<string, unknown>>(this.endpoint(type, id)).subscribe({
       next: (dto) => {
         this.detail.set(this.mapDto(type, dto));
+        this.loadReviews(type, id);
         this.trackDetailView(type, dto);
         this.loadState.set('loaded');
       },
@@ -141,137 +285,246 @@ export class EntityHierarchyDetailPageComponent {
     });
   }
 
+  private loadReviews(type: EntityType, id: string): void {
+    if (!this.isReviewableType(type)) return;
+
+    const entityId = Number(id);
+    if (!Number.isFinite(entityId)) return;
+
+    this.reviewsService.getReviews(type, entityId, 0, 50)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          const reviews = result.reviews.map(review => ({
+            id: review.id,
+            authorUserId: review.authorUserId,
+            authorName: review.authorName || 'GeoTrack traveler',
+            avatarUrl: review.avatarUrl ?? '',
+            rating: review.rating,
+            body: review.body ?? '',
+            timeAgo: review.timeAgo ?? '',
+            reportedByCurrentUser: review.reportedByCurrentUser,
+            isOwnReview: review.isOwnReview,
+          }));
+
+          this.detail.update(current => current && current.type === type && current.id === id
+            ? {
+                ...current,
+                reviews,
+                rating: result.averageRating,
+                reviewsCount: result.reviewsCount,
+                totalReviewsCount: result.reviewsCount,
+                hasMoreReviews: result.hasMore,
+              }
+            : current);
+        },
+        error: () => {},
+      });
+  }
+
   private endpoint(type: EntityType, id: string): string {
     switch (type) {
-      case 'location':
-        return `/api/locations/${id}`;
-      case 'destination':
-        return `/api/destinations/${id}`;
-      case 'region':
-        return `/api/regions/${id}`;
-      case 'territory':
-        return `/api/Territory/${id}`;
+      case 'location': return `/api/locations/${id}`;
+      case 'destination': return `/api/destinations/${id}`;
+      case 'region': return `/api/regions/${id}`;
+      case 'territory': return `/api/Territory/${id}`;
     }
   }
 
   private trackDetailView(type: EntityType, dto: Record<string, unknown>): void {
-    if (type !== 'destination' && type !== 'location') {
-      return;
-    }
+    if (!this.isReviewableType(type)) return;
 
     const entityId = this.toNullableNumber(dto['id']);
-    if (entityId == null || entityId <= 0) {
-      return;
-    }
-
-    const destinationId = type === 'destination'
-      ? entityId
-      : this.toNullableNumber(dto['destinationId']) ?? undefined;
+    if (entityId == null || entityId <= 0) return;
 
     this.analytics.track('detail_view', {
       entityType: type,
       entityId,
-      destinationId,
+      destinationId: type === 'destination' ? entityId : this.toNullableNumber(dto['destinationId']) ?? undefined,
     });
   }
 
   private mapDto(type: EntityType, dto: Record<string, unknown>): HierarchyDetail {
-  const id = this.toStringValue(dto['id']);
-  const title = this.toStringValue(dto['name']) || 'Untitled';
+    const id = this.toStringValue(dto['id']);
+    const title = this.toStringValue(dto['name']) || 'Untitled';
+    const images = normalizeEntityImages(dto['images'] as ApiEntityImage[] | null | undefined);
+    const base = {
+      id,
+      title,
+      description: this.toNullableString(dto['description']) ?? undefined,
+      rating: this.toNullableNumber(dto['averageRating']),
+      reviewsCount: this.toNullableNumber(dto['reviewsCount']),
+      images,
+      reviews: [],
+      hasMoreReviews: false,
+      totalReviewsCount: this.toNullableNumber(dto['reviewsCount']) ?? 0,
+    };
 
-  switch (type) {
-    case 'location': {
+    if (type === 'location') {
       const destinationId = this.toNullableString(dto['destinationId']);
       const destinationName = this.toNullableString(dto['destinationName']);
       return {
-        id,
-        title,
+        ...base,
+        type,
         typeLabel: 'Location',
-        description: this.toNullableString(dto['description']) ?? undefined,
-        latitude: this.toNullableNumber(dto['latitude']),
-        longitude: this.toNullableNumber(dto['longitude']),
-        rating: this.toNullableNumber(dto['averageRating']),
-        reviewsCount: this.toNullableNumber(dto['reviewsCount']),
-        parent: destinationId
-          ? { label: 'Destination', name: destinationName ?? `Destination #${destinationId}`, route: `/destinations/${destinationId}` }
-          : null,
-        sections: this.mapSectionsWithRoutes(dto),
+        parent: destinationId ? { label: 'Destination', name: destinationName ?? `Destination #${destinationId}`, route: `/destinations/${destinationId}` } : null,
+        sections: this.mapLocationSections(dto),
+        relatedEvents: this.mapRelated(dto['relatedEvents'], 'event'),
+        similarLocations: this.mapRelated(dto['similarLocations'], 'location'),
+        similarDestinations: [],
       };
     }
-    case 'destination': {
+
+    if (type === 'destination') {
       const regionId = this.toNullableString(dto['regionId']);
       const regionName = this.toNullableString(dto['regionName']);
       return {
-        id,
-        title,
+        ...base,
+        type,
         typeLabel: 'Destination',
-        description: this.toNullableString(dto['description']) ?? undefined,
-        latitude: this.toNullableNumber(dto['latitude']),
-        longitude: this.toNullableNumber(dto['longitude']),
-        rating: this.toNullableNumber(dto['averageRating']),
-        reviewsCount: this.toNullableNumber(dto['reviewsCount']),
-        parent: regionId
-          ? { label: 'Region', name: regionName ?? `Region #${regionId}`, route: `/regions/${regionId}` }
-          : null,
+        parent: regionId ? { label: 'Region', name: regionName ?? `Region #${regionId}`, route: `/regions/${regionId}` } : null,
         sections: this.mapSectionsWithRoutes(dto, false),
+        relatedEvents: [],
+        similarDestinations: this.mapRelated(dto['similarDestinations'], 'destination'),
+        similarLocations: [],
       };
     }
-    case 'region': {
+
+    if (type === 'region') {
       const territoryId = this.toNullableString(dto['territoryId']);
       const territoryName = this.toNullableString(dto['territoryName']);
       const destinations = Array.isArray(dto['destinations']) ? dto['destinations'] as Record<string, unknown>[] : [];
       return {
-        id,
-        title,
+        ...base,
+        type,
         typeLabel: 'Region',
-        description: this.toNullableString(dto['description']) ?? undefined,
-        parent: territoryId
-          ? { label: 'Territory', name: territoryName ?? `Territory #${territoryId}`, route: `/territories/${territoryId}` }
-          : null,
-        sections: destinations.length > 0 ? [{
-          sectionTitle: 'Destinations',
-          locations: destinations.map(d => ({
-            id: d['id'],
-            name: d['name'],
-            route: `/destinations/${d['id']}`,
-          })) as unknown[],
+        parent: territoryId ? { label: 'Territory', name: territoryName ?? `Territory #${territoryId}`, route: `/territories/${territoryId}` } : null,
+        sections: destinations.length ? [{
+          sectionTitle: 'Destinations in this region',
+          locations: destinations.map(d => ({ ...d, route: `/destinations/${d['id']}` })),
         }] : [],
+        relatedEvents: [],
+        similarDestinations: [],
+        similarLocations: [],
       };
     }
-    case 'territory': {
-      const regions = Array.isArray(dto['regions']) ? dto['regions'] as Record<string, unknown>[] : [];
-      return {
-        id,
-        title,
-        typeLabel: 'Territory',
-        description: this.toNullableString(dto['description']) ?? undefined,
-        parent: null,
-        sections: regions.length > 0 ? [{
-          sectionTitle: 'Regions',
-          locations: regions.map(r => ({
-            id: r['id'],
-            name: r['name'],
-            route: `/regions/${r['id']}`,
-          })) as unknown[],
-        }] : [],
-      };
-    }
-  }
-}
 
-private mapSectionsWithRoutes(dto: Record<string, unknown>, includePlaces = true): DetailSectionPreview[] {
-  const sections = Array.isArray(dto['sections']) ? dto['sections'] as Record<string, unknown>[] : [];
-  return sections.map(section => ({
-    sectionKey: this.toStringValue(section['key']),
-    sectionTitle: this.toStringValue(section['title']),
-    locations: (Array.isArray(section['locations']) ? section['locations'] as Record<string, unknown>[] : [])
-      .map(l => ({ id: l['id'], name: l['name'], description: l['description'] ?? null, route: `/locations/${l['id']}` })),
-    places: includePlaces
-      ? (Array.isArray(section['places']) ? section['places'] as Record<string, unknown>[] : [])
-          .map(p => ({ id: p['id'], name: p['name'], route: `/places/${p['id']}` }))
-      : [],
-  }));
-}
+    const regions = Array.isArray(dto['regions']) ? dto['regions'] as Record<string, unknown>[] : [];
+    return {
+      ...base,
+      type,
+      typeLabel: 'Territory',
+      parent: null,
+      sections: regions.length ? [{
+        sectionTitle: 'Active regions',
+        locations: regions.map(r => ({ ...r, route: `/regions/${r['id']}` })),
+      }] : [],
+      relatedEvents: [],
+      similarDestinations: [],
+      similarLocations: [],
+    };
+  }
+
+  private mapSectionsWithRoutes(dto: Record<string, unknown>, includePlaces = true): DetailSectionPreview[] {
+    const sections = Array.isArray(dto['sections']) ? dto['sections'] as Record<string, unknown>[] : [];
+    return sections
+      .map(section => ({
+        sectionKey: this.toStringValue(section['key']),
+        sectionTitle: this.toStringValue(section['title']),
+        locations: (Array.isArray(section['locations']) ? section['locations'] as Record<string, unknown>[] : [])
+          .map(l => ({ ...l, route: `/locations/${l['id']}` })),
+        places: includePlaces
+          ? (Array.isArray(section['places']) ? section['places'] as Record<string, unknown>[] : [])
+              .map(p => ({ ...p, route: `/places/${p['id']}` }))
+          : [],
+        events: (Array.isArray(section['events']) ? section['events'] as Record<string, unknown>[] : [])
+          .map(e => ({ ...e, route: `/events/${e['id']}` })),
+      }))
+      .filter(section => this.sectionCount(section) > 0);
+  }
+
+  private mapLocationSections(dto: Record<string, unknown>): DetailSectionPreview[] {
+    return this.mapSectionsWithRoutes(dto, true).map(section => ({
+      ...section,
+      sectionTitle: (section.sectionKey ?? '').toLowerCase() === 'places'
+        ? 'Places in this location'
+        : section.sectionTitle,
+    }));
+  }
+
+  private sectionCount(section: DetailSectionPreview): number {
+    return (section.places?.length ?? 0) + (section.events?.length ?? 0) + (section.locations?.length ?? 0);
+  }
+
+  private mapItem(item: Record<string, unknown>, fallbackType: 'location' | 'place' | 'event' | 'destination'): DetailItem {
+    const id = this.toStringValue(item['id']);
+    const route = this.toNullableString(item['route'])
+      ?? `/${fallbackType === 'event' ? 'events' : `${fallbackType}s`}/${id}`;
+
+    return {
+      id,
+      name: this.toStringValue(item['name'] ?? item['title']) || 'Item',
+      description: this.toNullableString(item['description']) ?? undefined,
+      image: this.toNullableString(item['image']) ?? undefined,
+      route,
+      meta: fallbackType === 'event' ? this.formatEventDate(item['startDate']) : undefined,
+    };
+  }
+
+  private mapRelated(value: unknown, type: 'destination' | 'location' | 'event'): DetailItem[] {
+    if (!Array.isArray(value)) return [];
+    return (value as Record<string, unknown>[]).map(item => this.mapItem(item, type));
+  }
+
+  private uniqueItems(items: DetailItem[]): DetailItem[] {
+    const seen = new Set<string>();
+    const result: DetailItem[] = [];
+    for (const item of items) {
+      const key = item.route || item.id;
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      result.push(item);
+    }
+    return result;
+  }
+
+  private reloadCurrentDetail(): void {
+    const d = this.detail();
+    if (!d) return;
+    this.load(d.type, d.id);
+  }
+
+  private markReviewReported(reviewId: string): void {
+    this.detail.update(current => current
+      ? {
+          ...current,
+          reviews: current.reviews.map(review => review.id === reviewId
+            ? { ...review, reportedByCurrentUser: true }
+            : review),
+        }
+      : current);
+  }
+
+  private resolveReviewTargetType(): ReviewReportTargetType | null {
+    const type = this.currentType();
+    return type === 'destination' || type === 'location' ? type : null;
+  }
+
+  private isReviewableType(type: EntityType): type is 'destination' | 'location' {
+    return type === 'destination' || type === 'location';
+  }
+
+  private formatEventDate(value: unknown): string | undefined {
+    const date = this.formatDate(value);
+    return date || undefined;
+  }
+
+  private formatDate(value: unknown): string {
+    if (!value) return '';
+    const date = new Date(String(value));
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
 
   private toStringValue(value: unknown): string {
     return value == null ? '' : String(value);
@@ -290,9 +543,5 @@ private mapSectionsWithRoutes(dto: Record<string, unknown>, includePlaces = true
       return Number.isFinite(parsed) ? parsed : null;
     }
     return null;
-  }
-
-  private toSections(value: unknown): DetailSectionPreview[] {
-    return Array.isArray(value) ? value as DetailSectionPreview[] : [];
   }
 }

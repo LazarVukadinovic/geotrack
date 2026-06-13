@@ -18,15 +18,21 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .AsNoTracking()
             .Include(d => d.DestinationType)
             .Include(d => d.Region)
+            .Include(d => d.Images)
             .Include(d => d.DestinationTags)
                 .ThenInclude(dt => dt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
             .Include(d => d.Locations)
+                .ThenInclude(l => l.Images)
+            .Include(d => d.Locations)
                 .ThenInclude(l => l.LocationTags)
                 .ThenInclude(lt => lt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
+            .Include(d => d.Locations)
+                .ThenInclude(l => l.Places)
+                    .ThenInclude(p => p.Images)
             .Include(d => d.Locations)
                 .ThenInclude(l => l.Places)
                 .ThenInclude(p => p.PlaceTags)
@@ -36,6 +42,31 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .AsSplitQuery()
             .FirstOrDefaultAsync(d => d.Id == destinationId);
     }
+
+    public async Task<List<Destination>> GetSimilarPublishedDestinationsInTerritoryAsync(int destinationId, int take)
+    {
+        var territoryId = await _context.Destinations
+            .AsNoTracking()
+            .Where(d => d.Id == destinationId)
+            .Select(d => (int?)d.Region.TerritoryId)
+            .FirstOrDefaultAsync();
+
+        if (!territoryId.HasValue)
+        {
+            return new List<Destination>();
+        }
+
+        return await _context.Destinations
+            .AsNoTracking()
+            .Include(d => d.Images)
+            .Where(d => d.Id != destinationId &&
+                        d.Status == "Published" &&
+                        d.Region.TerritoryId == territoryId.Value)
+            .OrderBy(d => d.Name)
+            .Take(take)
+            .ToListAsync();
+    }
+
     public async Task<bool> IsDestinationSavedByUserAsync(int destinationId, int userId)
     {
         return await _context.CollectionItems

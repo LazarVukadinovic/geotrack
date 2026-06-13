@@ -44,12 +44,16 @@ public class TerritoryService : ITerritoryService
             Id = territory.Id,
             Name = territory.Name,
             Description = territory.Description,
-            Regions = territory.Regions.Select(r => new TerritoryRegionItemDto
-            {
-                Id = r.Id,
-                Name = r.Name,
-                Description = r.Description
-            }).ToList()
+            Regions = territory.Regions
+                .Where(r => r.RegionalManagerRegions.Any(ror => ror.IsActive) ||
+                            r.Destinations.Any(d => d.Status == "Published"))
+                .OrderBy(r => r.Name)
+                .Select(r => new TerritoryRegionItemDto
+                {
+                    Id = r.Id,
+                    Name = r.Name,
+                    Description = r.Description
+                }).ToList()
         };
     }
 

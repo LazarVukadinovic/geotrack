@@ -9,7 +9,6 @@
 </header>
 
 <article class="ehd">
-
   @if (loadState() === 'loading') {
     <section class="ehd__panel">
       <p class="ehd__muted">Loading...</p>
@@ -59,62 +58,334 @@
         @if (d.reviewsCount != null) {
           <span>{{ d.reviewsCount }} reviews</span>
         }
-        @if (d.latitude != null && d.longitude != null) {
-          <span>{{ d.latitude | number: '1.4-4' }}, {{ d.longitude | number: '1.4-4' }}</span>
-        }
       </div>
     </section>
 
-    @if (d.sections.length > 0) {
+    @if ((d.type === 'destination' || d.type === 'location') && galleryImages().length > 0) {
       <section class="ehd__panel">
-      <h2 class="ehd__section-title">
-  {{ d.sections.length === 1 && d.sections[0].sectionTitle ? d.sections[0].sectionTitle : 'Related content' }}
-    </h2>
-      <div class="ehd__section-list">
-        @for (section of d.sections; track $index) {
-          <div
-            class="ehd__section-card"
-            [class.ehd__section-card--open]="expandedSectionIndex() === $index"
-            (click)="toggleSection($index)"
-          >
-            <div class="ehd__section-card-header">
-              <h3>{{ section.sectionTitle || section.title || section.name || 'Section' }}</h3>
-              <div class="ehd__section-card-right">
-                @if (sectionCount(section) > 0) {
-                  <span class="ehd__section-count">{{ sectionCount(section) }}</span>
-                }
-                <svg class="ehd__section-chevron" viewBox="0 0 24 24" fill="none">
-                  <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </div>
-            </div>
+        <h2 class="ehd__section-title">Photos</h2>
+        <div class="ehd__photo-grid">
+          @for (image of galleryImages().slice(0, 6); track image.id) {
+            <button type="button" class="ehd__photo-card" (click)="openGallery($index)">
+              <img [src]="image.url" [alt]="image.altText || d.title" appImageFallback>
+              @if (image.caption) {
+                <span>{{ image.caption }}</span>
+              }
+            </button>
+          }
+        </div>
+      </section>
+    }
 
-            @if (expandedSectionIndex() === $index && sectionCount(section) > 0) {
-              <div class="ehd__section-items">
-                @for (item of (isFullExpanded($index) ? sectionItems(section) : sectionItems(section).slice(0, 5)); track $index) {
-                  @if (item.route) {
-                    <a class="ehd__section-item" [routerLink]="item.route" (click)="expandedSectionIndex.set(null)">{{ item.name }}</a>
-                  } @else {
-                    <div class="ehd__section-item">{{ item.name }}</div>
-                  }
+    @if (d.type === 'location' && locationPlaces().length > 0) {
+      <section class="ehd__panel">
+        <h2 class="ehd__section-title">Places in this location</h2>
+        <div class="ehd__card-track" role="list">
+          @for (place of locationPlaces(); track place.route) {
+            <a class="ehd__content-card" [routerLink]="place.route" role="listitem">
+              <div class="ehd__content-media">
+                @if (place.image) {
+                  <img [src]="place.image" [alt]="place.name" appImageFallback>
                 }
-                @if (sectionCount(section) > 5) {
-                  <button class="ehd__section-see-all" (click)="toggleFullExpand($index, $event)">
-                    {{ isFullExpanded($index) ? 'See less' : 'See more (' + (sectionCount(section) - 5) + ' more)' }}
+              </div>
+              <div class="ehd__content-body">
+                <strong>{{ place.name }}</strong>
+                @if (place.description) { <small>{{ place.description }}</small> }
+              </div>
+            </a>
+          }
+        </div>
+      </section>
+    }
+
+    @if (d.type !== 'location' && d.sections.length > 0) {
+      <section class="ehd__panel">
+        <h2 class="ehd__section-title">
+          {{ d.sections.length === 1 && d.sections[0].sectionTitle ? d.sections[0].sectionTitle : 'Explore nearby' }}
+        </h2>
+        <div class="ehd__card-track" role="list">
+          @for (section of d.sections; track $index) {
+            @for (item of sectionItems(section); track item.route) {
+              <a class="ehd__content-card" [routerLink]="item.route" role="listitem">
+                <div class="ehd__content-media">
+                  @if (item.image) {
+                    <img [src]="item.image" [alt]="item.name" appImageFallback>
+                  }
+                </div>
+                <div class="ehd__content-body">
+                  <strong>{{ item.name }}</strong>
+                  @if (item.description) { <small>{{ item.description }}</small> }
+                </div>
+              </a>
+            }
+          }
+        </div>
+      </section>
+    }
+
+    @if (d.relatedEvents.length > 0) {
+      <section class="ehd__panel">
+        <h2 class="ehd__section-title">Upcoming events</h2>
+        <div class="ehd__card-track" role="list">
+          @for (event of d.relatedEvents; track event.route) {
+            <a class="ehd__content-card" [routerLink]="event.route" role="listitem">
+              <div class="ehd__content-media">
+                @if (event.image) {
+                  <img [src]="event.image" [alt]="event.name" appImageFallback>
+                }
+              </div>
+              <div class="ehd__content-body">
+                <strong>{{ event.name }}</strong>
+                @if (event.meta) { <small>{{ event.meta }}</small> }
+              </div>
+            </a>
+          }
+        </div>
+      </section>
+    }
+
+    @if (d.type === 'destination' || d.type === 'location') {
+      <section class="ehd__panel">
+        <h2 class="ehd__section-title">Reviews</h2>
+
+        @if (canReview()) {
+          <app-review-entry
+            [isLoggedIn]="isLoggedIn()"
+            [entityName]="d.title"
+            [submitRequest]="submitReview"
+            (loginRequested)="goToLogin()"
+            (reviewSubmitted)="onReviewSubmitted($event)"
+          />
+        }
+
+        @if (ri.reportMessage()) {
+          <p class="ehd__review-notice ehd__review-notice--success" role="status">{{ ri.reportMessage() }}</p>
+        }
+        @if (ri.reportError()) {
+          <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.reportError() }}</p>
+        }
+
+        @if (d.reviews.length > 0) {
+          <div class="ehd__reviews">
+            @for (review of visibleReviews(); track review.id) {
+              <article class="ehd__review-card">
+                <div class="ehd__review-top">
+                  <button
+                    type="button"
+                    class="ehd__review-author"
+                    [attr.aria-label]="'View ' + review.authorName + ' reviews'"
+                    (click)="navigateToAuthorReviews(review)"
+                  >
+                    {{ review.authorName }}
+                  </button>
+                  <span class="ehd__review-rating">★ {{ review.rating | number: '1.1-1' }}</span>
+                </div>
+
+                @if (review.timeAgo) { <small class="ehd__review-time">{{ review.timeAgo }}</small> }
+
+                @if (review.body) {
+                  <p
+                    class="ehd__review-body"
+                    [class.ehd__review-body--collapsed]="hasLongReview(review.body) && !isReviewExpanded(review.id)"
+                  >{{ review.body }}</p>
+                }
+
+                @if (hasLongReview(review.body)) {
+                  <button type="button" class="ehd__review-toggle" (click)="toggleReviewExpanded(review.id)">
+                    {{ isReviewExpanded(review.id) ? 'Show less' : 'Show more' }}
                   </button>
                 }
-            </div>
-            }
 
-            @if (expandedSectionIndex() === $index && sectionCount(section) === 0) {
-              <div class="ehd__section-items">
-                <p class="ehd__section-empty">No items yet.</p>
-              </div>
+                @if (review.isOwnReview) {
+                  <div class="ehd__review-actions">
+                    <button type="button" class="ehd__review-action" (click)="ri.openEditModal(review)">Edit</button>
+                    <button type="button" class="ehd__review-action ehd__review-action--danger" (click)="ri.openDeleteConfirm(review)">Delete</button>
+                  </div>
+                } @else {
+                  <button
+                    type="button"
+                    class="ehd__review-report"
+                    [class.ehd__review-report--reported]="ri.isReviewReported(review)"
+                    [disabled]="ri.isReviewReported(review) || ri.isReviewReporting(review.id)"
+                    (click)="ri.openReportModal(review, isLoggedIn())"
+                  >
+                    @if (ri.isReviewReporting(review.id)) {
+                      Reporting...
+                    } @else if (ri.isReviewReported(review)) {
+                      Reported
+                    } @else {
+                      Report
+                    }
+                  </button>
+                }
+              </article>
             }
           </div>
+
+          @if (hiddenReviewsCount() > 0) {
+            <button type="button" class="ehd__reviews-more" (click)="showMoreReviews()">
+              Show more ({{ hiddenReviewsCount() }})
+            </button>
+          }
+          @if (visibleReviews().length > 3) {
+            <button type="button" class="ehd__reviews-more ehd__reviews-more--secondary" (click)="showLessReviews()">
+              Show less
+            </button>
+          }
+        } @else {
+          <p class="ehd__muted">No reviews yet.</p>
         }
-      </div>
-    </section>
+      </section>
+    }
+
+    @if (d.similarLocations.length > 0) {
+      <section class="ehd__panel">
+        <h2 class="ehd__section-title">Similar places nearby</h2>
+        <div class="ehd__card-track" role="list">
+          @for (item of d.similarLocations; track item.route) {
+            <a class="ehd__content-card" [routerLink]="item.route" role="listitem">
+              <div class="ehd__content-media">
+                @if (item.image) {
+                  <img [src]="item.image" [alt]="item.name" appImageFallback>
+                }
+              </div>
+              <div class="ehd__content-body">
+                <strong>{{ item.name }}</strong>
+                @if (item.description) { <small>{{ item.description }}</small> }
+              </div>
+            </a>
+          }
+        </div>
+      </section>
+    }
+
+    @if (d.similarDestinations.length > 0) {
+      <section class="ehd__panel">
+        <h2 class="ehd__section-title">Similar destinations</h2>
+        <div class="ehd__card-track" role="list">
+          @for (item of d.similarDestinations; track item.route) {
+            <a class="ehd__content-card" [routerLink]="item.route" role="listitem">
+              <div class="ehd__content-media">
+                @if (item.image) {
+                  <img [src]="item.image" [alt]="item.name" appImageFallback>
+                }
+              </div>
+              <div class="ehd__content-body">
+                <strong>{{ item.name }}</strong>
+                @if (item.description) { <small>{{ item.description }}</small> }
+              </div>
+            </a>
+          }
+        </div>
+      </section>
+    }
+
+    @if (galleryOpen()) {
+      <app-photo-gallery
+        [images]="galleryImages()"
+        [title]="d.title"
+        [startIndex]="galleryStartIndex()"
+        (closed)="closeGallery()"
+      />
     }
   }
 </article>
+
+@if (ri.reportingReview(); as review) {
+  <div class="ehd__overlay" (click)="ri.closeReportModal()"></div>
+  <div class="ehd__sheet" role="dialog" aria-modal="true" aria-label="Report review">
+    <h2 class="ehd__sheet-title">Report review</h2>
+    <p class="ehd__sheet-sub">Why are you reporting this review?</p>
+
+    <div class="ehd__reasons">
+      @for (reason of ri.reportReasons(); track reason.value) {
+        <button
+          type="button"
+          class="ehd__reason-btn"
+          [class.ehd__reason-btn--selected]="ri.selectedReason() === reason.value"
+          (click)="ri.selectedReason.set(reason.value)"
+        >
+          {{ reason.label }}
+        </button>
+      }
+    </div>
+
+    @if (ri.isReportReasonOther()) {
+      <textarea
+        class="ehd__reason-text"
+        placeholder="Please describe the issue..."
+        rows="3"
+        [value]="ri.customReason()"
+        (input)="ri.customReason.set($any($event.target).value)"
+      ></textarea>
+    }
+
+    <div class="ehd__sheet-actions">
+      <button type="button" class="ehd__sheet-cancel" (click)="ri.closeReportModal()">Cancel</button>
+      <button
+        type="button"
+        class="ehd__sheet-submit"
+        [disabled]="!ri.selectedReason() || ri.isReviewReporting(review.id) || (ri.isReportReasonOther() && !ri.customReason().trim())"
+        (click)="ri.submitReport()"
+      >
+        @if (ri.isReviewReporting(review.id)) { Submitting... } @else { Submit report }
+      </button>
+    </div>
+  </div>
+}
+
+@if (ri.editingReview(); as review) {
+  <div class="ehd__overlay" (click)="ri.closeEditModal()"></div>
+  <div class="ehd__sheet" role="dialog" aria-modal="true" aria-label="Edit review">
+    <h2 class="ehd__sheet-title">Edit review</h2>
+
+    <div class="ehd__edit-stars">
+      @for (star of [1,2,3,4,5]; track star) {
+        <button
+          type="button"
+          class="ehd__edit-star-btn"
+          [class.ehd__edit-star-btn--active]="ri.editRating() >= star"
+          (click)="ri.setEditRating(star)"
+        >★</button>
+      }
+    </div>
+
+    <textarea
+      class="ehd__reason-text"
+      rows="4"
+      maxlength="1000"
+      [value]="ri.editBody()"
+      (input)="ri.editBody.set($any($event.target).value)"
+    ></textarea>
+
+    @if (ri.editError()) {
+      <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.editError() }}</p>
+    }
+
+    <div class="ehd__sheet-actions">
+      <button type="button" class="ehd__sheet-cancel" [disabled]="ri.isSavingEdit()" (click)="ri.closeEditModal()">Cancel</button>
+      <button type="button" class="ehd__sheet-submit" [disabled]="ri.isSavingEdit() || ri.editRating() < 1" (click)="ri.saveEdit()">
+        @if (ri.isSavingEdit()) { Saving... } @else { Save }
+      </button>
+    </div>
+  </div>
+}
+
+@if (ri.deletingReview(); as review) {
+  <div class="ehd__overlay" (click)="ri.cancelDelete()"></div>
+  <div class="ehd__sheet" role="dialog" aria-modal="true" aria-label="Delete review">
+    <h2 class="ehd__sheet-title">Delete review?</h2>
+    <p class="ehd__sheet-sub">This action cannot be undone.</p>
+
+    @if (ri.deleteError()) {
+      <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.deleteError() }}</p>
+    }
+
+    <div class="ehd__sheet-actions">
+      <button type="button" class="ehd__sheet-cancel" [disabled]="ri.isDeleting()" (click)="ri.cancelDelete()">Cancel</button>
+      <button type="button" class="ehd__sheet-submit ehd__sheet-submit--danger" [disabled]="ri.isDeleting()" (click)="ri.confirmDelete()">
+        @if (ri.isDeleting()) { Deleting... } @else { Delete }
+      </button>
+    </div>
+  </div>
+}

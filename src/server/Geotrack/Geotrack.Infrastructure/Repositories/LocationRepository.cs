@@ -19,11 +19,16 @@ public class LocationRepository : Repository<Location>, ILocationRepository
         return await _context.Locations
             .AsNoTracking()
             .Include(l => l.Destination)
+            .Include(l => l.Images)
+            .Include(l => l.Places)
+                .ThenInclude(p => p.Images)
             .Include(l => l.Places)
                 .ThenInclude(p => p.PlaceTags)
                     .ThenInclude(pt => pt.Tag)
                         .ThenInclude(tag => tag.TagType)
                             .ThenInclude(tagType => tagType!.PlaceTypes)
+            .Include(l => l.Events)
+                .ThenInclude(e => e.Images)
             .Include(l => l.Events)
                 .ThenInclude(e => e.EventTags)
                     .ThenInclude(et => et.Tag)
@@ -35,6 +40,42 @@ public class LocationRepository : Repository<Location>, ILocationRepository
                         .ThenInclude(tagType => tagType!.PlaceTypes)
             .AsSplitQuery()
             .FirstOrDefaultAsync(l => l.Id == locationId);
+    }
+
+    public async Task<List<Location>> GetSimilarPublishedLocationsInTerritoryAsync(int locationId, int take)
+    {
+        var territoryId = await _context.Locations
+            .AsNoTracking()
+            .Where(l => l.Id == locationId)
+            .Select(l => (int?)l.Destination.Region.TerritoryId)
+            .FirstOrDefaultAsync();
+
+        if (!territoryId.HasValue)
+        {
+            return new List<Location>();
+        }
+
+        return await _context.Locations
+            .AsNoTracking()
+            .Include(l => l.Images)
+            .Where(l => l.Id != locationId &&
+                        l.Status == "Published" &&
+                        l.Destination.Status == "Published" &&
+                        l.Destination.Region.TerritoryId == territoryId.Value)
+            .OrderBy(l => l.Name)
+            .Take(take)
+            .ToListAsync();
+    }
+
+    public async Task<List<Event>> GetPublishedEventsForLocationAsync(int locationId, int take)
+    {
+        return await _context.Events
+            .AsNoTracking()
+            .Include(e => e.Images)
+            .Where(e => e.LocationId == locationId && e.Status == "Published")
+            .OrderBy(e => e.StartDate)
+            .Take(take)
+            .ToListAsync();
     }
 
     public async Task<bool> IsLocationSavedByUserAsync(int locationId, int userId)

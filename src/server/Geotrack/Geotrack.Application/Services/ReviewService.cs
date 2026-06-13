@@ -81,6 +81,59 @@ public class ReviewService : IReviewService
         return BuildPage(items, averageRating, totalCount, normalizedSkip, normalizedTake);
     }
 
+
+    public async Task<PagedReviewsResponseDto> GetDestinationReviewsAsync(
+        int destinationId,
+        int skip = 0,
+        int take = ReviewPaging.DefaultTake,
+        int? currentUserId = null)
+    {
+        var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
+        var normalizedTake = ReviewPaging.NormalizeTake(take);
+
+        var totalCount = await _reviewRepository.CountDestinationReviewsAsync(destinationId);
+        var averageRating = totalCount > 0
+            ? await _reviewRepository.GetDestinationAverageRatingAsync(destinationId)
+            : null;
+
+        var reviews = await _reviewRepository.GetDestinationReviewsPageAsync(
+            destinationId,
+            normalizedSkip,
+            normalizedTake);
+
+        var items = reviews
+            .Select(review => MapReview(review, false, currentUserId))
+            .ToList();
+
+        return BuildPage(items, averageRating, totalCount, normalizedSkip, normalizedTake);
+    }
+
+    public async Task<PagedReviewsResponseDto> GetLocationReviewsAsync(
+        int locationId,
+        int skip = 0,
+        int take = ReviewPaging.DefaultTake,
+        int? currentUserId = null)
+    {
+        var normalizedSkip = ReviewPaging.NormalizeSkip(skip);
+        var normalizedTake = ReviewPaging.NormalizeTake(take);
+
+        var totalCount = await _reviewRepository.CountLocationReviewsAsync(locationId);
+        var averageRating = totalCount > 0
+            ? await _reviewRepository.GetLocationAverageRatingAsync(locationId)
+            : null;
+
+        var reviews = await _reviewRepository.GetLocationReviewsPageAsync(
+            locationId,
+            normalizedSkip,
+            normalizedTake);
+
+        var items = reviews
+            .Select(review => MapReview(review, false, currentUserId))
+            .ToList();
+
+        return BuildPage(items, averageRating, totalCount, normalizedSkip, normalizedTake);
+    }
+
     public async Task<ReviewDto> CreatePlaceReviewAsync(int placeId, int userId, CreateReviewDto dto)
     {
         await ValidateReviewAsync(dto);
@@ -88,6 +141,11 @@ public class ReviewService : IReviewService
         if (!await _reviewRepository.PlaceExistsAsync(placeId))
         {
             throw new KeyNotFoundException("Place not found");
+        }
+
+        if (await _reviewRepository.IsPlaceOwnedByUserAsync(placeId, userId))
+        {
+            throw new InvalidOperationException("You cannot review a place that you own.");
         }
 
         if (await _reviewRepository.HasUserReviewedPlaceAsync(placeId, userId))
@@ -152,6 +210,77 @@ public class ReviewService : IReviewService
         return MapReview(review, false, userId);
     }
 
+
+    public async Task<ReviewDto> CreateDestinationReviewAsync(int destinationId, int userId, CreateReviewDto dto)
+    {
+        await ValidateReviewAsync(dto);
+
+        if (!await _reviewRepository.DestinationExistsAsync(destinationId))
+        {
+            throw new KeyNotFoundException("Destination not found");
+        }
+
+        if (await _reviewRepository.HasUserReviewedDestinationAsync(destinationId, userId))
+        {
+            throw new InvalidOperationException("User has already reviewed this destination");
+        }
+
+        var review = new DestinationReview
+        {
+            DestinationId = destinationId,
+            UserId = userId,
+            Rating = dto.Rating,
+            Comment = dto.Comment?.Trim() ?? string.Empty,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        _reviewRepository.AddDestinationReview(review);
+        await _reviewRepository.SaveChangesAsync();
+
+        var user = await _reviewRepository.GetUserByIdAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        review.User = user;
+
+        return MapReview(review, false, userId);
+    }
+
+    public async Task<ReviewDto> CreateLocationReviewAsync(int locationId, int userId, CreateReviewDto dto)
+    {
+        await ValidateReviewAsync(dto);
+
+        if (!await _reviewRepository.LocationExistsAsync(locationId))
+        {
+            throw new KeyNotFoundException("Location not found");
+        }
+
+        if (await _reviewRepository.HasUserReviewedLocationAsync(locationId, userId))
+        {
+            throw new InvalidOperationException("User has already reviewed this location");
+        }
+
+        var review = new LocationReview
+        {
+            LocationId = locationId,
+            UserId = userId,
+            Rating = dto.Rating,
+            Comment = dto.Comment?.Trim() ?? string.Empty,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        _reviewRepository.AddLocationReview(review);
+        await _reviewRepository.SaveChangesAsync();
+
+        var user = await _reviewRepository.GetUserByIdAsync(userId)
+            ?? throw new KeyNotFoundException("User not found");
+
+        review.User = user;
+
+        return MapReview(review, false, userId);
+    }
+
     // --- User review history ---
 
     public async Task<PagedUserReviewsResponseDto> GetMyReviewsAsync(int userId, int skip = 0, int take = ReviewPaging.DefaultTake)
@@ -166,12 +295,14 @@ public class ReviewService : IReviewService
 
         var placeCount = await _reviewRepository.CountPlaceReviewsByUserAsync(userId);
         var eventCount = await _reviewRepository.CountEventReviewsByUserAsync(userId);
-        var totalCount = placeCount + eventCount;
+        var destinationCount = await _reviewRepository.CountDestinationReviewsByUserAsync(userId);
+        var locationCount = await _reviewRepository.CountLocationReviewsByUserAsync(userId);
+        var totalCount = placeCount + eventCount + destinationCount + locationCount;
 
-        // Pull all place and event reviews, then merge/sort in memory (paged from combined total)
-        // We fetch enough from each source to cover the page, then merge by date
         var placeReviews = await _reviewRepository.GetPlaceReviewsByUserPageAsync(userId, 0, placeCount);
         var eventReviews = await _reviewRepository.GetEventReviewsByUserPageAsync(userId, 0, eventCount);
+        var destinationReviews = await _reviewRepository.GetDestinationReviewsByUserPageAsync(userId, 0, destinationCount);
+        var locationReviews = await _reviewRepository.GetLocationReviewsByUserPageAsync(userId, 0, locationCount);
 
         var mergedItems = MergeByDate(
             placeReviews.Select(r => (Item: new UserReviewListItemDto
@@ -190,6 +321,26 @@ public class ReviewService : IReviewService
                 EntityType = "event",
                 EntityId = r.EventId,
                 EntityName = r.Event?.Name ?? string.Empty,
+                Rating = (int)r.Rating,
+                Body = r.Comment,
+                TimeAgo = FormatTimeAgo(r.CreatedAt)
+            }, Date: r.CreatedAt)),
+            destinationReviews.Select(r => (Item: new UserReviewListItemDto
+            {
+                Id = r.Id,
+                EntityType = "destination",
+                EntityId = r.DestinationId,
+                EntityName = r.Destination?.Name ?? string.Empty,
+                Rating = (int)r.Rating,
+                Body = r.Comment,
+                TimeAgo = FormatTimeAgo(r.CreatedAt)
+            }, Date: r.CreatedAt)),
+            locationReviews.Select(r => (Item: new UserReviewListItemDto
+            {
+                Id = r.Id,
+                EntityType = "location",
+                EntityId = r.LocationId,
+                EntityName = r.Location?.Name ?? string.Empty,
                 Rating = (int)r.Rating,
                 Body = r.Comment,
                 TimeAgo = FormatTimeAgo(r.CreatedAt)
@@ -238,6 +389,31 @@ public class ReviewService : IReviewService
         await _reviewRepository.SaveChangesAsync();
     }
 
+
+    public async Task DeleteDestinationReviewAsync(int reviewId, int userId)
+    {
+        var review = await _reviewRepository.GetDestinationReviewByIdAsync(reviewId)
+            ?? throw new KeyNotFoundException("Review not found.");
+
+        if (review.UserId != userId)
+            throw new UnauthorizedAccessException("You can only delete your own reviews.");
+
+        _reviewRepository.RemoveDestinationReview(review);
+        await _reviewRepository.SaveChangesAsync();
+    }
+
+    public async Task DeleteLocationReviewAsync(int reviewId, int userId)
+    {
+        var review = await _reviewRepository.GetLocationReviewByIdAsync(reviewId)
+            ?? throw new KeyNotFoundException("Review not found.");
+
+        if (review.UserId != userId)
+            throw new UnauthorizedAccessException("You can only delete your own reviews.");
+
+        _reviewRepository.RemoveLocationReview(review);
+        await _reviewRepository.SaveChangesAsync();
+    }
+
     // --- Update ---
 
     public async Task<ReviewDto> UpdatePlaceReviewAsync(int reviewId, int userId, CreateReviewDto dto)
@@ -266,6 +442,45 @@ public class ReviewService : IReviewService
         await ValidateReviewAsync(dto);
 
         var review = await _reviewRepository.GetEventReviewByIdAsync(reviewId)
+            ?? throw new KeyNotFoundException("Review not found.");
+
+        if (review.UserId != userId)
+            throw new UnauthorizedAccessException("You can only edit your own reviews.");
+
+        review.Rating = dto.Rating;
+        review.Comment = dto.Comment?.Trim() ?? string.Empty;
+        review.UpdatedAt = DateTime.UtcNow;
+
+        await _reviewRepository.SaveChangesAsync();
+
+        return MapReview(review, false, userId);
+    }
+
+
+    public async Task<ReviewDto> UpdateDestinationReviewAsync(int reviewId, int userId, CreateReviewDto dto)
+    {
+        await ValidateReviewAsync(dto);
+
+        var review = await _reviewRepository.GetDestinationReviewByIdAsync(reviewId)
+            ?? throw new KeyNotFoundException("Review not found.");
+
+        if (review.UserId != userId)
+            throw new UnauthorizedAccessException("You can only edit your own reviews.");
+
+        review.Rating = dto.Rating;
+        review.Comment = dto.Comment?.Trim() ?? string.Empty;
+        review.UpdatedAt = DateTime.UtcNow;
+
+        await _reviewRepository.SaveChangesAsync();
+
+        return MapReview(review, false, userId);
+    }
+
+    public async Task<ReviewDto> UpdateLocationReviewAsync(int reviewId, int userId, CreateReviewDto dto)
+    {
+        await ValidateReviewAsync(dto);
+
+        var review = await _reviewRepository.GetLocationReviewByIdAsync(reviewId)
             ?? throw new KeyNotFoundException("Review not found.");
 
         if (review.UserId != userId)
@@ -352,28 +567,56 @@ public class ReviewService : IReviewService
         IsOwnReview = currentUserId.HasValue && review.UserId == currentUserId.Value
     };
 
+
+    private static ReviewDto MapReview(DestinationReview review, bool reportedByCurrentUser, int? currentUserId) => new()
+    {
+        Id = review.Id,
+        AuthorUserId = review.UserId,
+        AuthorName = GetAuthorName(review.User),
+        AvatarUrl = review.User.AvatarUrl,
+        Rating = (int)review.Rating,
+        TimeAgo = FormatTimeAgo(review.CreatedAt),
+        Body = review.Comment,
+        HelpfulCount = 0,
+        ReportedByCurrentUser = reportedByCurrentUser,
+        IsOwnReview = currentUserId.HasValue && review.UserId == currentUserId.Value
+    };
+
+    private static ReviewDto MapReview(LocationReview review, bool reportedByCurrentUser, int? currentUserId) => new()
+    {
+        Id = review.Id,
+        AuthorUserId = review.UserId,
+        AuthorName = GetAuthorName(review.User),
+        AvatarUrl = review.User.AvatarUrl,
+        Rating = (int)review.Rating,
+        TimeAgo = FormatTimeAgo(review.CreatedAt),
+        Body = review.Comment,
+        HelpfulCount = 0,
+        ReportedByCurrentUser = reportedByCurrentUser,
+        IsOwnReview = currentUserId.HasValue && review.UserId == currentUserId.Value
+    };
+
     private static PagedReviewsResponseDto BuildPage(
         List<ReviewDto> items,
         double? averageRating,
         int totalCount,
         int skip,
         int take) => new()
-    {
-        Items = items,
-        AverageRating = averageRating.HasValue ? Math.Round(averageRating.Value, 1) : null,
-        TotalCount = totalCount,
-        Skip = skip,
-        Take = take,
-        NextSkip = skip + items.Count,
-        HasMore = totalCount > skip + items.Count
-    };
+        {
+            Items = items,
+            AverageRating = averageRating.HasValue ? Math.Round(averageRating.Value, 1) : null,
+            TotalCount = totalCount,
+            Skip = skip,
+            Take = take,
+            NextSkip = skip + items.Count,
+            HasMore = totalCount > skip + items.Count
+        };
 
     private static List<UserReviewListItemDto> MergeByDate(
-        IEnumerable<(UserReviewListItemDto Item, DateTime Date)> placeReviews,
-        IEnumerable<(UserReviewListItemDto Item, DateTime Date)> eventReviews)
+        params IEnumerable<(UserReviewListItemDto Item, DateTime Date)>[] reviewGroups)
     {
-        return placeReviews
-            .Concat(eventReviews)
+        return reviewGroups
+            .SelectMany(group => group)
             .OrderByDescending(x => x.Date)
             .Select(x => x.Item)
             .ToList();

@@ -4,10 +4,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 namespace Geotrack.Application.DTOs.Destinations;
+
 public class DestinationSectionLocationItemDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? Image { get; set; }
     public string? Description { get; set; }
     public double Latitude { get; set; }
     public double Longitude { get; set; }

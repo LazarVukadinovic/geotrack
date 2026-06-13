@@ -61,8 +61,34 @@ export class MyReviewsPageComponent implements OnInit {
   }
 
   protected openDetail(item: UserReviewItem): void {
-    const route = item.entityType === 'event' ? '/events' : '/places';
+    const route = this.detailRouteFor(item.entityType);
     void this.router.navigate([route, item.entityId]);
+  }
+
+  protected detailLabel(item: UserReviewItem): string {
+    switch (item.entityType) {
+      case 'event':
+        return 'event';
+      case 'destination':
+        return 'destination';
+      case 'location':
+        return 'location';
+      default:
+        return 'place';
+    }
+  }
+
+  private detailRouteFor(entityType: UserReviewItem['entityType']): string {
+    switch (entityType) {
+      case 'event':
+        return '/events';
+      case 'destination':
+        return '/destinations';
+      case 'location':
+        return '/locations';
+      default:
+        return '/places';
+    }
   }
 
   protected starArray(rating: number): number[] {

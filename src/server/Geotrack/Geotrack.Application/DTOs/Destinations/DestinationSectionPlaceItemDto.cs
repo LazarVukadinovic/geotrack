@@ -5,9 +5,11 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Geotrack.Application.DTOs.Destinations;
+
 public class DestinationSectionPlaceItemDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? Image { get; set; }
     public int LocationId { get; set; }
 }

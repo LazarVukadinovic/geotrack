@@ -23,6 +23,9 @@ public class TerritoryRepository : Repository<Territory>, ITerritoryRepository
     {
         return await _context.Set<Territory>()
             .Include(t => t.Regions)
+                .ThenInclude(r => r.RegionalManagerRegions)
+            .Include(t => t.Regions)
+                .ThenInclude(r => r.Destinations)
             .FirstOrDefaultAsync(t => t.Id == territoryId);
     }
 
