@@ -6,7 +6,7 @@ import {
   OnDestroy,
   OnInit,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -90,6 +90,7 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   constructor(
     private readonly route: ActivatedRoute,
     private readonly router: Router,
+    private readonly location: Location,
     private readonly svc: RegionsService,
     private readonly auth: AuthService,
     private readonly userAppLinks: UserAppLinkService,
@@ -159,7 +160,7 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   }
 
   goBack(): void {
-    this.router.navigate(['/territory/regions']);
+    this.location.back();
   }
 
   onTerritoryChange(territoryId: number): void {

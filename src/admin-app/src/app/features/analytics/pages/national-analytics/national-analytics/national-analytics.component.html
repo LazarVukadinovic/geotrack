@@ -298,11 +298,12 @@
               <div class="px-6 py-5">
                 <ng-container *ngIf="contentQualityChartData as cq">
                   <ng-container *ngIf="!cq.isEmpty; else noQualityData">
-                    <svg viewBox="0 0 640 160" class="w-full" style="height:160px;">
-                      <line x1="60" y1="10" x2="630" y2="10" stroke="#f1f5f9" stroke-width="1"/>
-                      <line x1="60" y1="50" x2="630" y2="50" stroke="#f1f5f9" stroke-width="1"/>
-                      <line x1="60" y1="90" x2="630" y2="90" stroke="#f1f5f9" stroke-width="1"/>
-                      <line x1="60" y1="130" x2="630" y2="130" stroke="#f1f5f9" stroke-width="1"/>
+                    <div style="overflow-x: auto;">
+                    <svg [attr.viewBox]="'0 0 ' + cq.svgWidth + ' 160'" [style.min-width.px]="cq.svgWidth" style="height:160px; display:block;">
+                      <line x1="60" [attr.x2]="cq.svgWidth - 10" y1="10" [attr.x2]="cq.svgWidth - 10" y2="10" stroke="#f1f5f9" stroke-width="1"/>
+                      <line x1="60" [attr.x2]="cq.svgWidth - 10" y1="50" [attr.x2]="cq.svgWidth - 10" y2="50" stroke="#f1f5f9" stroke-width="1"/>
+                      <line x1="60" [attr.x2]="cq.svgWidth - 10" y1="90" [attr.x2]="cq.svgWidth - 10" y2="90" stroke="#f1f5f9" stroke-width="1"/>
+                      <line x1="60" [attr.x2]="cq.svgWidth - 10" y1="130" [attr.x2]="cq.svgWidth - 10" y2="130" stroke="#f1f5f9" stroke-width="1"/>
                       <text *ngFor="let label of cq.yLabels" x="54" [attr.y]="label.y" text-anchor="end" font-size="10" fill="#94a3b8">{{ label.text }}</text>
                       <rect *ngFor="let bar of cq.bars" [attr.x]="bar.x" [attr.y]="bar.y" width="40" [attr.height]="bar.height" rx="3" fill="#dbeafe">
                         <title>{{ bar.label }}: {{ bar.value }} reviews</title>
@@ -313,6 +314,7 @@
                       </circle>
                       <text *ngFor="let label of cq.labels" [attr.x]="label.x" y="150" text-anchor="middle" font-size="9" fill="#94a3b8">{{ label.text }}</text>
                     </svg>
+                    </div>
                     <div class="flex items-center gap-6 mt-1">
                       <div class="flex items-center gap-2">
                         <span class="w-4 h-3 rounded inline-block" style="background:#dbeafe;"></span>
