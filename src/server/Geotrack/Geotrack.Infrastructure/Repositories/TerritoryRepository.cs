@@ -22,10 +22,10 @@ public class TerritoryRepository : Repository<Territory>, ITerritoryRepository
     public async Task<Territory?> GetByIdWithRegionsAsync(int territoryId)
     {
         return await _context.Set<Territory>()
+            .Include(t => t.Images)
             .Include(t => t.Regions)
                 .ThenInclude(r => r.RegionalManagerRegions)
-            .Include(t => t.Regions)
-                .ThenInclude(r => r.Destinations)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.Id == territoryId);
     }
 

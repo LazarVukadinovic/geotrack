@@ -59,9 +59,9 @@ public class DestinationService : IDestinationService
             ReviewsCount = reviewsCount,
             IsSaved = isSaved,
             SavedCollectionIds = savedCollectionIds,
-            Images = MapImages(destination.Images),
+            Images = destination.Images.ToPublicEntityImageDtos(),
             Sections = BuildDestinationPreviewSections(destination),
-            SimilarDestinations = similarDestinations.Select(MapRelatedDestinationItem).ToList()
+            SimilarDestinations = similarDestinations
         };
     }
 
@@ -310,39 +310,6 @@ public class DestinationService : IDestinationService
         };
     }
 
-    private static DestinationRelatedItemDto MapRelatedDestinationItem(Destination destination)
-    {
-        return new DestinationRelatedItemDto
-        {
-            Id = destination.Id,
-            Name = destination.Name,
-            Description = string.IsNullOrWhiteSpace(destination.Summary) ? destination.Description : destination.Summary,
-            Image = PickCardImage(destination.Images)
-        };
-    }
-
-    private static List<PublicEntityImageDto> MapImages(IEnumerable<EntityImage> images)
-    {
-        return images
-            .Where(image => !string.IsNullOrWhiteSpace(image.Url))
-            .OrderBy(image => ImageRoleSort(image.ImageRole))
-            .ThenBy(image => image.SortOrder)
-            .ThenBy(image => image.Id)
-            .Select(image => new PublicEntityImageDto
-            {
-                Id = image.Id,
-                Url = image.Url,
-                AltText = image.AltText,
-                Caption = image.Caption,
-                IsMain = image.IsMain,
-                ImageRole = image.ImageRole,
-                SortOrder = image.SortOrder,
-                ImagePosition = string.IsNullOrWhiteSpace(image.ImagePosition) ? "50% 50%" : image.ImagePosition,
-                ImageSize = string.IsNullOrWhiteSpace(image.ImageSize) ? "cover" : image.ImageSize
-            })
-            .ToList();
-    }
-
     private static string? PickCardImage(IEnumerable<EntityImage> images)
     {
         return images
@@ -351,16 +318,6 @@ public class DestinationService : IDestinationService
             .ThenBy(image => image.SortOrder)
             .Select(image => image.Url)
             .FirstOrDefault();
-    }
-
-    private static int ImageRoleSort(string? role)
-    {
-        return role?.Trim().ToLowerInvariant() switch
-        {
-            "cover" => 0,
-            "card" => 1,
-            _ => 2
-        };
     }
 
     public async Task<List<DestinationSearchResultDto>> SearchAsync(string query)

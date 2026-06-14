@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Locations;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
@@ -42,7 +43,7 @@ public class LocationRepository : Repository<Location>, ILocationRepository
             .FirstOrDefaultAsync(l => l.Id == locationId);
     }
 
-    public async Task<List<Location>> GetSimilarPublishedLocationsInTerritoryAsync(int locationId, int take)
+    public async Task<List<LocationRelatedItemDto>> GetSimilarPublishedLocationsInTerritoryAsync(int locationId, int take)
     {
         var territoryId = await _context.Locations
             .AsNoTracking()
@@ -52,18 +53,31 @@ public class LocationRepository : Repository<Location>, ILocationRepository
 
         if (!territoryId.HasValue)
         {
-            return new List<Location>();
+            return new List<LocationRelatedItemDto>();
         }
 
         return await _context.Locations
             .AsNoTracking()
-            .Include(l => l.Images)
             .Where(l => l.Id != locationId &&
                         l.Status == "Published" &&
                         l.Destination.Status == "Published" &&
                         l.Destination.Region.TerritoryId == territoryId.Value)
             .OrderBy(l => l.Name)
             .Take(take)
+            .Select(l => new LocationRelatedItemDto
+            {
+                Id = l.Id,
+                Name = l.Name,
+                Description = string.IsNullOrWhiteSpace(l.Summary) ? l.Description : l.Summary,
+                Image = l.Images
+                    .OrderBy(image => image.ImageRole == "cover" ? 0 : image.ImageRole == "card" ? 1 : 2)
+                    .ThenBy(image => image.SortOrder)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = l.LocationReviews
+                    .Select(review => (double?)review.Rating)
+                    .Average() ?? 0
+            })
             .ToListAsync();
     }
 

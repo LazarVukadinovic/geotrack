@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
@@ -8,10 +9,12 @@ namespace Geotrack.Infrastructure.Repositories;
 public class DestinationRepository : Repository<Destination>, IDestinationRepository
 {
     private readonly AppDbContext _context;
+
     public DestinationRepository(AppDbContext context) : base(context)
     {
         _context = context;
     }
+
     public async Task<Destination?> GetWithDetailsAsync(int destinationId)
     {
         return await _context.Destinations
@@ -43,7 +46,7 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .FirstOrDefaultAsync(d => d.Id == destinationId);
     }
 
-    public async Task<List<Destination>> GetSimilarPublishedDestinationsInTerritoryAsync(int destinationId, int take)
+    public async Task<List<DestinationRelatedItemDto>> GetSimilarPublishedDestinationsInTerritoryAsync(int destinationId, int take)
     {
         var territoryId = await _context.Destinations
             .AsNoTracking()
@@ -53,17 +56,30 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
 
         if (!territoryId.HasValue)
         {
-            return new List<Destination>();
+            return new List<DestinationRelatedItemDto>();
         }
 
         return await _context.Destinations
             .AsNoTracking()
-            .Include(d => d.Images)
             .Where(d => d.Id != destinationId &&
                         d.Status == "Published" &&
                         d.Region.TerritoryId == territoryId.Value)
             .OrderBy(d => d.Name)
             .Take(take)
+            .Select(d => new DestinationRelatedItemDto
+            {
+                Id = d.Id,
+                Name = d.Name,
+                Description = string.IsNullOrWhiteSpace(d.Summary) ? d.Description : d.Summary,
+                Image = d.Images
+                    .OrderBy(image => image.ImageRole == "cover" ? 0 : image.ImageRole == "card" ? 1 : 2)
+                    .ThenBy(image => image.SortOrder)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = d.DestinationReviews
+                    .Select(review => (double?)review.Rating)
+                    .Average() ?? 0
+            })
             .ToListAsync();
     }
 
@@ -73,6 +89,7 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .AnyAsync(ci => ci.DestinationId == destinationId &&
             ci.Collection.UserId == userId);
     }
+
     public async Task<List<int>> GetSavedCollectionIdsByUserAsync(int destinationId, int userId)
     {
         return await _context.CollectionItems
@@ -82,6 +99,7 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .Distinct()
             .ToListAsync();
     }
+
     public async Task<List<DestinationReview>> GetReviewsByDestinationIdAsync(int destinationId, int skip, int take)
     {
         return await _context.DestinationReviews
@@ -93,6 +111,7 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .Take(take)
             .ToListAsync();
     }
+
     public async Task<int> CountReviewsByDestinationIdAsync(int destinationId)
     {
         return await _context.DestinationReviews
@@ -108,12 +127,14 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .Select(r => (double?)r.Rating)
             .AverageAsync();
     }
+
     public async Task<bool> HasUserReviewedDestinationAsync(int destinationId, int userId)
     {
         return await _context.DestinationReviews
             .AnyAsync(r => r.DestinationId == destinationId && r.UserId ==
             userId);
     }
+
     public async Task AddReviewAsync(DestinationReview review)
     {
         await _context.DestinationReviews.AddAsync(review);

@@ -1,4 +1,5 @@
-﻿using Geotrack.Domain.Entities.Core;
+using Geotrack.Application.DTOs.Destinations;
+using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
 
 namespace Geotrack.Application.Interfaces.Repository;
@@ -6,7 +7,7 @@ namespace Geotrack.Application.Interfaces.Repository;
 public interface IDestinationRepository : IRepository<Destination>
 {
     Task<Destination?> GetWithDetailsAsync(int destinationId);
-    Task<List<Destination>> GetSimilarPublishedDestinationsInTerritoryAsync(int destinationId, int take);
+    Task<List<DestinationRelatedItemDto>> GetSimilarPublishedDestinationsInTerritoryAsync(int destinationId, int take);
     Task<bool> IsDestinationSavedByUserAsync(int destinationId, int userId);
     Task<List<int>> GetSavedCollectionIdsByUserAsync(int destinationId, int userId);
     Task<List<DestinationReview>> GetReviewsByDestinationIdAsync(int destinationId, int skip, int take);

@@ -1,4 +1,5 @@
-﻿using Geotrack.Application.DTOs.Territories;
+﻿using Geotrack.Application.DTOs.Common;
+using Geotrack.Application.DTOs.Territories;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
@@ -44,9 +45,9 @@ public class TerritoryService : ITerritoryService
             Id = territory.Id,
             Name = territory.Name,
             Description = territory.Description,
+            Images = territory.Images.ToPublicEntityImageDtos(),
             Regions = territory.Regions
-                .Where(r => r.RegionalManagerRegions.Any(ror => ror.IsActive) ||
-                            r.Destinations.Any(d => d.Status == "Published"))
+                .Where(r => r.RegionalManagerRegions.Any(ror => ror.IsActive))
                 .OrderBy(r => r.Name)
                 .Select(r => new TerritoryRegionItemDto
                 {

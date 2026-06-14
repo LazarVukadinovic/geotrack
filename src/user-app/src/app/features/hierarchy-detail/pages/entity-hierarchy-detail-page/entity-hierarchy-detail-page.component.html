@@ -10,9 +10,7 @@
 
 <article class="ehd">
   @if (loadState() === 'loading') {
-    <section class="ehd__panel">
-      <p class="ehd__muted">Loading...</p>
-    </section>
+    <section class="ehd__panel"><p class="ehd__muted">Loading...</p></section>
   } @else if (loadState() === 'notFound') {
     <section class="ehd__panel">
       <h1 class="ehd__title">Not found</h1>
@@ -24,53 +22,156 @@
       <p class="ehd__muted">Please try again later.</p>
     </section>
   } @else if (detail(); as d) {
-    <section class="ehd__hero-panel">
-      <span class="ehd__badge">{{ d.typeLabel }}</span>
-
-      @if (d.parent) {
-        <a class="ehd__parent" [routerLink]="d.parent.route">
-          <span>{{ d.parent.label }}</span>
-          <strong>{{ d.parent.name }}</strong>
-        </a>
-      }
-
-      <h1 class="ehd__title">{{ d.title }}</h1>
-
-      @if (d.description) {
-        <div class="ehd__description-wrap">
-          <p
-            class="ehd__description"
-            [class.ehd__description--collapsed]="!descriptionExpanded()"
-            [innerHTML]="d.description | descriptionRichHtml"
-          ></p>
-          @if (d.description.length > 200) {
-            <button type="button" class="ehd__description-toggle" (click)="descriptionExpanded.set(!descriptionExpanded())">
-              {{ descriptionExpanded() ? 'Show less' : 'Show more' }}
+    @if (d.type === 'territory' || d.type === 'destination' || d.type === 'location') {
+      <section class="ehd__hero-panel ehd__hero-panel--polaroid" [class.ehd__hero-panel--territory]="d.type === 'territory'">
+        <div class="ehd__showcase" aria-label="Photos">
+          @if (currentShowcaseImage(); as image) {
+            <button
+              type="button"
+              class="ehd__showcase-slide ehd__showcase-slide--current"
+              (click)="openGallery(currentShowcaseGalleryIndex())"
+            >
+              <img [src]="image.url" [alt]="image.altText || d.title" appImageFallback loading="eager" decoding="async" fetchpriority="high">
+            </button>
+          }
+          @if (incomingShowcaseImage(); as image) {
+            <button
+              type="button"
+              class="ehd__showcase-slide ehd__showcase-slide--incoming"
+              (click)="openGallery(incomingShowcaseGalleryIndex())"
+            >
+              <img [src]="image.url" [alt]="image.altText || d.title" appImageFallback loading="eager" decoding="async">
             </button>
           }
         </div>
-      }
 
-      <div class="ehd__meta">
-        @if (d.rating != null) {
-          <span>★ {{ d.rating | number: '1.1-1' }}</span>
-        }
-        @if (d.reviewsCount != null) {
-          <span>{{ d.reviewsCount }} reviews</span>
-        }
-      </div>
-    </section>
+        <div class="ehd__polaroid-body">
+          <span class="ehd__badge">{{ d.typeLabel }}</span>
 
-    @if ((d.type === 'destination' || d.type === 'location') && galleryImages().length > 0) {
-      <section class="ehd__panel">
-        <h2 class="ehd__section-title">Photos</h2>
-        <div class="ehd__photo-grid">
-          @for (image of galleryImages().slice(0, 6); track image.id) {
-            <button type="button" class="ehd__photo-card" (click)="openGallery($index)">
-              <img [src]="image.url" [alt]="image.altText || d.title" appImageFallback>
-              @if (image.caption) {
-                <span>{{ image.caption }}</span>
+          @if (d.parent) {
+            <a class="ehd__parent" [routerLink]="d.parent.route">
+              <span>{{ d.parent.label }}</span>
+              <strong>{{ d.parent.name }}</strong>
+            </a>
+          }
+
+          <h1 class="ehd__title">{{ d.title }}</h1>
+
+          @if (d.description) {
+            <div class="ehd__description-wrap">
+              <p
+                class="ehd__description"
+                [class.ehd__description--collapsed]="!descriptionExpanded()"
+                [innerHTML]="d.description | descriptionRichHtml"
+              ></p>
+              @if (d.description.length > 200) {
+                <button type="button" class="ehd__description-toggle" (click)="descriptionExpanded.set(!descriptionExpanded())">
+                  {{ descriptionExpanded() ? 'Show less' : 'Show more' }}
+                </button>
               }
+            </div>
+          }
+
+          <div class="ehd__meta">
+            @if (d.rating != null) { <span>★ {{ d.rating | number: '1.1-1' }}</span> }
+            @if (d.reviewsCount != null) { <span>{{ d.reviewsCount }} reviews</span> }
+          </div>
+        </div>
+      </section>
+    } @else {
+      <section class="ehd__hero-panel">
+        <span class="ehd__badge">{{ d.typeLabel }}</span>
+
+        @if (d.parent) {
+          <a class="ehd__parent" [routerLink]="d.parent.route">
+            <span>{{ d.parent.label }}</span>
+            <strong>{{ d.parent.name }}</strong>
+          </a>
+        }
+
+        <h1 class="ehd__title">{{ d.title }}</h1>
+
+        @if (d.description) {
+          <div class="ehd__description-wrap">
+            <p
+              class="ehd__description"
+              [class.ehd__description--collapsed]="!descriptionExpanded()"
+              [innerHTML]="d.description | descriptionRichHtml"
+            ></p>
+            @if (d.description.length > 200) {
+              <button type="button" class="ehd__description-toggle" (click)="descriptionExpanded.set(!descriptionExpanded())">
+                {{ descriptionExpanded() ? 'Show less' : 'Show more' }}
+              </button>
+            }
+          </div>
+        }
+
+        <div class="ehd__meta">
+          @if (d.rating != null) { <span>★ {{ d.rating | number: '1.1-1' }}</span> }
+          @if (d.reviewsCount != null) { <span>{{ d.reviewsCount }} reviews</span> }
+        </div>
+      </section>
+    }
+
+    @if (d.type === 'territory') {
+      <section class="ehd__panel ehd__panel--regions">
+        @if (territoryRegions().length > 0) {
+          <div class="ehd__region-dropdown">
+            <button
+              type="button"
+              class="ehd__region-dropdown-head"
+              [attr.aria-expanded]="regionDropdownOpen()"
+              aria-controls="territory-regions-list"
+              (click)="toggleRegionDropdown()"
+            >
+              <span>Regions</span>
+              <span class="ehd__region-dropdown-right">
+                <svg class="ehd__region-chevron" [class.ehd__region-chevron--open]="regionDropdownOpen()" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/>
+                </svg>
+              </span>
+            </button>
+
+            @if (regionDropdownOpen()) {
+              <div id="territory-regions-list" class="ehd__region-list">
+                @for (region of visibleTerritoryRegions(); track region.route) {
+                  <a class="ehd__region-item" [routerLink]="region.route">{{ region.name }}</a>
+                }
+
+                @if (hiddenTerritoryRegionsCount() > 0) {
+                  <button type="button" class="ehd__region-see-more" (click)="showMoreRegions()">
+                    See more ({{ hiddenTerritoryRegionsCount() }} more)
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        } @else {
+          <p class="ehd__muted">No regions with an assigned regional manager yet.</p>
+        }
+      </section>
+    }
+
+    @if ((d.type === 'destination' || d.type === 'location')) {
+      <section class="ehd__panel ehd__panel--showcase">
+        <div class="ehd__showcase" aria-label="Entity photos">
+          @if (currentShowcaseImage(); as image) {
+            <button
+              type="button"
+              class="ehd__showcase-slide ehd__showcase-slide--current"
+              (click)="openGallery(currentShowcaseGalleryIndex())"
+            >
+              <img [src]="image.url" [alt]="image.altText || d.title" appImageFallback>
+            </button>
+          }
+
+          @if (incomingShowcaseImage(); as image) {
+            <button
+              type="button"
+              class="ehd__showcase-slide ehd__showcase-slide--incoming"
+              (click)="openGallery(incomingShowcaseGalleryIndex())"
+            >
+              <img [src]="image.url" [alt]="image.altText || d.title" appImageFallback>
             </button>
           }
         </div>
@@ -80,42 +181,40 @@
     @if (d.type === 'location' && locationPlaces().length > 0) {
       <section class="ehd__panel">
         <h2 class="ehd__section-title">Places in this location</h2>
-        <div class="ehd__card-track" role="list">
-          @for (place of locationPlaces(); track place.route) {
-            <a class="ehd__content-card" [routerLink]="place.route" role="listitem">
-              <div class="ehd__content-media">
-                @if (place.image) {
-                  <img [src]="place.image" [alt]="place.name" appImageFallback>
-                }
+        <div
+          class="ehd__loop-track ehd__loop-track--large"
+          role="list"
+          (scroll)="onTrackScroll($any($event.target))"
+        >
+          @for (place of loopItems(locationPlaces()); track place.route + '-' + $index) {
+            <a class="ehd__explore-card ehd__explore-card--simple" [routerLink]="place.route" role="listitem">
+              <div class="ehd__explore-media">
+                @if (place.image) { <img [src]="place.image" [alt]="place.name" appImageFallback loading="lazy" decoding="async"> }
               </div>
-              <div class="ehd__content-body">
-                <strong>{{ place.name }}</strong>
-                @if (place.description) { <small>{{ place.description }}</small> }
-              </div>
+              <div class="ehd__explore-body"><strong>{{ place.name }}</strong></div>
             </a>
           }
         </div>
       </section>
     }
 
-    @if (d.type !== 'location' && d.sections.length > 0) {
+    @if (d.type !== 'location' && d.type !== 'territory' && d.sections.length > 0) {
       <section class="ehd__panel">
         <h2 class="ehd__section-title">
-          {{ d.sections.length === 1 && d.sections[0].sectionTitle ? d.sections[0].sectionTitle : 'Explore nearby' }}
+          {{ d.type === 'region' ? 'Destinations' : (d.sections.length === 1 && d.sections[0].sectionTitle ? d.sections[0].sectionTitle : 'Locations') }}
         </h2>
-        <div class="ehd__card-track" role="list">
+        <div
+          class="ehd__loop-track ehd__loop-track--large"
+          role="list"
+          (scroll)="onTrackScroll($any($event.target))"
+        >
           @for (section of d.sections; track $index) {
-            @for (item of sectionItems(section); track item.route) {
-              <a class="ehd__content-card" [routerLink]="item.route" role="listitem">
-                <div class="ehd__content-media">
-                  @if (item.image) {
-                    <img [src]="item.image" [alt]="item.name" appImageFallback>
-                  }
+            @for (item of loopItems(sectionItems(section)); track item.route + '-' + $index) {
+              <a class="ehd__explore-card ehd__explore-card--simple" [routerLink]="item.route" role="listitem">
+                <div class="ehd__explore-media">
+                  @if (item.image) { <img [src]="item.image" [alt]="item.name" appImageFallback loading="lazy" decoding="async"> }
                 </div>
-                <div class="ehd__content-body">
-                  <strong>{{ item.name }}</strong>
-                  @if (item.description) { <small>{{ item.description }}</small> }
-                </div>
+                <div class="ehd__explore-body"><strong>{{ item.name }}</strong></div>
               </a>
             }
           }
@@ -126,15 +225,17 @@
     @if (d.relatedEvents.length > 0) {
       <section class="ehd__panel">
         <h2 class="ehd__section-title">Upcoming events</h2>
-        <div class="ehd__card-track" role="list">
-          @for (event of d.relatedEvents; track event.route) {
-            <a class="ehd__content-card" [routerLink]="event.route" role="listitem">
-              <div class="ehd__content-media">
-                @if (event.image) {
-                  <img [src]="event.image" [alt]="event.name" appImageFallback>
-                }
+        <div
+          class="ehd__loop-track"
+          role="list"
+          (scroll)="onTrackScroll($any($event.target))"
+        >
+          @for (event of loopItems(d.relatedEvents); track event.route + '-' + $index) {
+            <a class="ehd__explore-card" [routerLink]="event.route" role="listitem">
+              <div class="ehd__explore-media">
+                @if (event.image) { <img [src]="event.image" [alt]="event.name" appImageFallback loading="lazy" decoding="async"> }
               </div>
-              <div class="ehd__content-body">
+              <div class="ehd__explore-body">
                 <strong>{{ event.name }}</strong>
                 @if (event.meta) { <small>{{ event.meta }}</small> }
               </div>
@@ -158,36 +259,30 @@
           />
         }
 
-        @if (ri.reportMessage()) {
-          <p class="ehd__review-notice ehd__review-notice--success" role="status">{{ ri.reportMessage() }}</p>
-        }
-        @if (ri.reportError()) {
-          <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.reportError() }}</p>
-        }
+        @if (ri.reportMessage()) { <p class="ehd__review-notice ehd__review-notice--success" role="status">{{ ri.reportMessage() }}</p> }
+        @if (ri.reportError()) { <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.reportError() }}</p> }
 
         @if (d.reviews.length > 0) {
           <div class="ehd__reviews">
             @for (review of visibleReviews(); track review.id) {
               <article class="ehd__review-card">
                 <div class="ehd__review-top">
-                  <button
-                    type="button"
-                    class="ehd__review-author"
-                    [attr.aria-label]="'View ' + review.authorName + ' reviews'"
-                    (click)="navigateToAuthorReviews(review)"
-                  >
-                    {{ review.authorName }}
+                  <button type="button" class="ehd__review-author-avatar" [attr.aria-label]="'View ' + review.authorName + ' reviews'" (click)="navigateToAuthorReviews(review)">
+                    @if (review.avatarUrl) {
+                      <img [src]="review.avatarUrl" [alt]="review.authorName" appImageFallback loading="lazy" decoding="async">
+                    } @else {
+                      <span>{{ review.authorName.charAt(0) || 'G' }}</span>
+                    }
                   </button>
+                  <div class="ehd__review-meta-block">
+                    <button type="button" class="ehd__review-author" (click)="navigateToAuthorReviews(review)">{{ review.authorName }}</button>
+                    @if (review.timeAgo) { <small class="ehd__review-time">{{ review.timeAgo }}</small> }
+                  </div>
                   <span class="ehd__review-rating">★ {{ review.rating | number: '1.1-1' }}</span>
                 </div>
 
-                @if (review.timeAgo) { <small class="ehd__review-time">{{ review.timeAgo }}</small> }
-
                 @if (review.body) {
-                  <p
-                    class="ehd__review-body"
-                    [class.ehd__review-body--collapsed]="hasLongReview(review.body) && !isReviewExpanded(review.id)"
-                  >{{ review.body }}</p>
+                  <p class="ehd__review-body" [class.ehd__review-body--collapsed]="hasLongReview(review.body) && !isReviewExpanded(review.id)">{{ review.body }}</p>
                 }
 
                 @if (hasLongReview(review.body)) {
@@ -198,40 +293,20 @@
 
                 @if (review.isOwnReview) {
                   <div class="ehd__review-actions">
-                    <button type="button" class="ehd__review-action" (click)="ri.openEditModal(review)">Edit</button>
-                    <button type="button" class="ehd__review-action ehd__review-action--danger" (click)="ri.openDeleteConfirm(review)">Delete</button>
+                    <button type="button" class="ehd__review-action ehd__review-action--edit" (click)="ri.openEditModal(review)">Edit</button>
+                    <button type="button" class="ehd__review-action ehd__review-action--delete" (click)="ri.openDeleteConfirm(review)">Delete</button>
                   </div>
                 } @else {
-                  <button
-                    type="button"
-                    class="ehd__review-report"
-                    [class.ehd__review-report--reported]="ri.isReviewReported(review)"
-                    [disabled]="ri.isReviewReported(review) || ri.isReviewReporting(review.id)"
-                    (click)="ri.openReportModal(review, isLoggedIn())"
-                  >
-                    @if (ri.isReviewReporting(review.id)) {
-                      Reporting...
-                    } @else if (ri.isReviewReported(review)) {
-                      Reported
-                    } @else {
-                      Report
-                    }
+                  <button type="button" class="ehd__review-report" [class.ehd__review-report--reported]="ri.isReviewReported(review)" [disabled]="ri.isReviewReported(review) || ri.isReviewReporting(review.id)" (click)="ri.openReportModal(review, isLoggedIn())">
+                    @if (ri.isReviewReporting(review.id)) { Reporting... } @else if (ri.isReviewReported(review)) { Reported } @else { Report }
                   </button>
                 }
               </article>
             }
           </div>
 
-          @if (hiddenReviewsCount() > 0) {
-            <button type="button" class="ehd__reviews-more" (click)="showMoreReviews()">
-              Show more ({{ hiddenReviewsCount() }})
-            </button>
-          }
-          @if (visibleReviews().length > 3) {
-            <button type="button" class="ehd__reviews-more ehd__reviews-more--secondary" (click)="showLessReviews()">
-              Show less
-            </button>
-          }
+          @if (hiddenReviewsCount() > 0) { <button type="button" class="ehd__reviews-more" (click)="showMoreReviews()">Show more ({{ hiddenReviewsCount() }})</button> }
+          @if (visibleReviews().length > 3) { <button type="button" class="ehd__reviews-more ehd__reviews-more--secondary" (click)="showLessReviews()">Show less</button> }
         } @else {
           <p class="ehd__muted">No reviews yet.</p>
         }
@@ -240,18 +315,20 @@
 
     @if (d.similarLocations.length > 0) {
       <section class="ehd__panel">
-        <h2 class="ehd__section-title">Similar places nearby</h2>
-        <div class="ehd__card-track" role="list">
-          @for (item of d.similarLocations; track item.route) {
-            <a class="ehd__content-card" [routerLink]="item.route" role="listitem">
-              <div class="ehd__content-media">
-                @if (item.image) {
-                  <img [src]="item.image" [alt]="item.name" appImageFallback>
-                }
+        <h2 class="ehd__section-title">Similar locations</h2>
+        <div
+          class="ehd__loop-track"
+          role="list"
+          (scroll)="onTrackScroll($any($event.target))"
+        >
+          @for (item of loopItems(d.similarLocations); track item.route + '-' + $index) {
+            <a class="ehd__explore-card" [routerLink]="item.route" role="listitem">
+              <div class="ehd__explore-media">
+                @if (item.image) { <img [src]="item.image" [alt]="item.name" appImageFallback loading="lazy" decoding="async"> }
               </div>
-              <div class="ehd__content-body">
+              <div class="ehd__explore-body ehd__explore-body--row">
                 <strong>{{ item.name }}</strong>
-                @if (item.description) { <small>{{ item.description }}</small> }
+                @if (item.rating != null && item.rating > 0) { <span class="ehd__rating-chip">★ {{ item.rating | number: '1.1-1' }}</span> }
               </div>
             </a>
           }
@@ -262,17 +339,19 @@
     @if (d.similarDestinations.length > 0) {
       <section class="ehd__panel">
         <h2 class="ehd__section-title">Similar destinations</h2>
-        <div class="ehd__card-track" role="list">
-          @for (item of d.similarDestinations; track item.route) {
-            <a class="ehd__content-card" [routerLink]="item.route" role="listitem">
-              <div class="ehd__content-media">
-                @if (item.image) {
-                  <img [src]="item.image" [alt]="item.name" appImageFallback>
-                }
+        <div
+          class="ehd__loop-track"
+          role="list"
+          (scroll)="onTrackScroll($any($event.target))"
+        >
+          @for (item of loopItems(d.similarDestinations); track item.route + '-' + $index) {
+            <a class="ehd__explore-card" [routerLink]="item.route" role="listitem">
+              <div class="ehd__explore-media">
+                @if (item.image) { <img [src]="item.image" [alt]="item.name" appImageFallback loading="lazy" decoding="async"> }
               </div>
-              <div class="ehd__content-body">
+              <div class="ehd__explore-body ehd__explore-body--row">
                 <strong>{{ item.name }}</strong>
-                @if (item.description) { <small>{{ item.description }}</small> }
+                @if (item.rating != null && item.rating > 0) { <span class="ehd__rating-chip">★ {{ item.rating | number: '1.1-1' }}</span> }
               </div>
             </a>
           }
@@ -281,12 +360,7 @@
     }
 
     @if (galleryOpen()) {
-      <app-photo-gallery
-        [images]="galleryImages()"
-        [title]="d.title"
-        [startIndex]="galleryStartIndex()"
-        (closed)="closeGallery()"
-      />
+      <app-photo-gallery [images]="showcaseImages()" [title]="d.title" [startIndex]="galleryStartIndex()" (closed)="closeGallery()" />
     }
   }
 </article>
@@ -296,38 +370,17 @@
   <div class="ehd__sheet" role="dialog" aria-modal="true" aria-label="Report review">
     <h2 class="ehd__sheet-title">Report review</h2>
     <p class="ehd__sheet-sub">Why are you reporting this review?</p>
-
     <div class="ehd__reasons">
       @for (reason of ri.reportReasons(); track reason.value) {
-        <button
-          type="button"
-          class="ehd__reason-btn"
-          [class.ehd__reason-btn--selected]="ri.selectedReason() === reason.value"
-          (click)="ri.selectedReason.set(reason.value)"
-        >
-          {{ reason.label }}
-        </button>
+        <button type="button" class="ehd__reason-btn" [class.ehd__reason-btn--selected]="ri.selectedReason() === reason.value" (click)="ri.selectedReason.set(reason.value)">{{ reason.label }}</button>
       }
     </div>
-
     @if (ri.isReportReasonOther()) {
-      <textarea
-        class="ehd__reason-text"
-        placeholder="Please describe the issue..."
-        rows="3"
-        [value]="ri.customReason()"
-        (input)="ri.customReason.set($any($event.target).value)"
-      ></textarea>
+      <textarea class="ehd__reason-text" placeholder="Please describe the issue..." rows="3" [value]="ri.customReason()" (input)="ri.customReason.set($any($event.target).value)"></textarea>
     }
-
     <div class="ehd__sheet-actions">
       <button type="button" class="ehd__sheet-cancel" (click)="ri.closeReportModal()">Cancel</button>
-      <button
-        type="button"
-        class="ehd__sheet-submit"
-        [disabled]="!ri.selectedReason() || ri.isReviewReporting(review.id) || (ri.isReportReasonOther() && !ri.customReason().trim())"
-        (click)="ri.submitReport()"
-      >
+      <button type="button" class="ehd__sheet-submit" [disabled]="!ri.selectedReason() || ri.isReviewReporting(review.id) || (ri.isReportReasonOther() && !ri.customReason().trim())" (click)="ri.submitReport()">
         @if (ri.isReviewReporting(review.id)) { Submitting... } @else { Submit report }
       </button>
     </div>
@@ -338,35 +391,16 @@
   <div class="ehd__overlay" (click)="ri.closeEditModal()"></div>
   <div class="ehd__sheet" role="dialog" aria-modal="true" aria-label="Edit review">
     <h2 class="ehd__sheet-title">Edit review</h2>
-
     <div class="ehd__edit-stars">
       @for (star of [1,2,3,4,5]; track star) {
-        <button
-          type="button"
-          class="ehd__edit-star-btn"
-          [class.ehd__edit-star-btn--active]="ri.editRating() >= star"
-          (click)="ri.setEditRating(star)"
-        >★</button>
+        <button type="button" class="ehd__edit-star-btn" [class.ehd__edit-star-btn--active]="ri.editRating() >= star" (click)="ri.setEditRating(star)">★</button>
       }
     </div>
-
-    <textarea
-      class="ehd__reason-text"
-      rows="4"
-      maxlength="1000"
-      [value]="ri.editBody()"
-      (input)="ri.editBody.set($any($event.target).value)"
-    ></textarea>
-
-    @if (ri.editError()) {
-      <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.editError() }}</p>
-    }
-
+    <textarea class="ehd__reason-text" rows="4" maxlength="1000" [value]="ri.editBody()" (input)="ri.editBody.set($any($event.target).value)"></textarea>
+    @if (ri.editError()) { <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.editError() }}</p> }
     <div class="ehd__sheet-actions">
       <button type="button" class="ehd__sheet-cancel" [disabled]="ri.isSavingEdit()" (click)="ri.closeEditModal()">Cancel</button>
-      <button type="button" class="ehd__sheet-submit" [disabled]="ri.isSavingEdit() || ri.editRating() < 1" (click)="ri.saveEdit()">
-        @if (ri.isSavingEdit()) { Saving... } @else { Save }
-      </button>
+      <button type="button" class="ehd__sheet-submit" [disabled]="ri.isSavingEdit() || ri.editRating() < 1" (click)="ri.saveEdit()">@if (ri.isSavingEdit()) { Saving... } @else { Save }</button>
     </div>
   </div>
 }
@@ -376,16 +410,10 @@
   <div class="ehd__sheet" role="dialog" aria-modal="true" aria-label="Delete review">
     <h2 class="ehd__sheet-title">Delete review?</h2>
     <p class="ehd__sheet-sub">This action cannot be undone.</p>
-
-    @if (ri.deleteError()) {
-      <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.deleteError() }}</p>
-    }
-
+    @if (ri.deleteError()) { <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.deleteError() }}</p> }
     <div class="ehd__sheet-actions">
       <button type="button" class="ehd__sheet-cancel" [disabled]="ri.isDeleting()" (click)="ri.cancelDelete()">Cancel</button>
-      <button type="button" class="ehd__sheet-submit ehd__sheet-submit--danger" [disabled]="ri.isDeleting()" (click)="ri.confirmDelete()">
-        @if (ri.isDeleting()) { Deleting... } @else { Delete }
-      </button>
+      <button type="button" class="ehd__sheet-submit ehd__sheet-submit--danger" [disabled]="ri.isDeleting()" (click)="ri.confirmDelete()">@if (ri.isDeleting()) { Deleting... } @else { Delete }</button>
     </div>
   </div>
 }
