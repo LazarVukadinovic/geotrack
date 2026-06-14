@@ -219,71 +219,24 @@ public class DestinationService : IDestinationService
 
     private List<DestinationSectionPreviewDto> BuildDestinationPreviewSections(Destination destination)
     {
-        var sections = new List<DestinationSectionPreviewDto>();
-
-        var tags = destination.DestinationTags
-            .Where(x => x.Tag != null)
-            .Select(x => x.Tag)
-            .GroupBy(x => x.Id)
-            .Select(g => g.First())
-            .OrderBy(t => t.Name)
+        var locations = destination.Locations
+            .Where(l => l.Status == PublishedStatus)
+            .OrderBy(l => l.Name)
+            .Select(MapDestinationLocationItem)
             .ToList();
 
-        foreach (var tag in tags)
-        {
-            var locations = destination.Locations
-                .Where(l => l.LocationTags.Any(lt => lt.TagId == tag.Id))
-                .Where(l => l.Status == PublishedStatus)
-                .OrderBy(l => l.Name)
-                .Take(SectionPreviewLimit)
-                .Select(MapDestinationLocationItem)
-                .ToList();
-
-            var places = destination.Locations
-                .Where(l => l.Status == PublishedStatus)
-                .SelectMany(l => l.Places)
-                .Where(p => p.Status == PublishedStatus && p.PlaceTags.Any(pt => pt.TagId == tag.Id))
-                .OrderBy(p => p.Name)
-                .Take(SectionPreviewLimit)
-                .Select(MapDestinationPlaceItem)
-                .ToList();
-
-            if (locations.Any() || places.Any())
+        return locations.Any()
+            ? new List<DestinationSectionPreviewDto>
             {
-                sections.Add(new DestinationSectionPreviewDto
+                new()
                 {
-                    Key = tag.Slug,
-                    Title = tag.Name,
+                    Key = "locations",
+                    Title = "Locations",
                     Locations = locations,
-                    Places = places
-                });
+                    Places = new List<DestinationSectionPlaceItemDto>()
+                }
             }
-        }
-
-        if (!sections.Any())
-        {
-            sections.Add(new DestinationSectionPreviewDto
-            {
-                Key = "locations",
-                Title = "Locations",
-                Locations = destination.Locations
-                    .Where(l => l.Status == PublishedStatus)
-                    .OrderBy(l => l.Name)
-                    .Take(SectionPreviewLimit)
-                    .Select(MapDestinationLocationItem)
-                    .ToList(),
-                Places = destination.Locations
-                    .Where(l => l.Status == PublishedStatus)
-                    .SelectMany(l => l.Places)
-                    .Where(p => p.Status == PublishedStatus)
-                    .OrderBy(p => p.Name)
-                    .Take(SectionPreviewLimit)
-                    .Select(MapDestinationPlaceItem)
-                    .ToList()
-            });
-        }
-
-        return sections;
+            : new List<DestinationSectionPreviewDto>();
     }
 
     private static DestinationSectionLocationItemDto MapDestinationLocationItem(Location location)

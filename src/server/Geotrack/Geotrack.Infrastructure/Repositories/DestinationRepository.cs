@@ -48,23 +48,37 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
 
     public async Task<List<DestinationRelatedItemDto>> GetSimilarPublishedDestinationsInTerritoryAsync(int destinationId, int take)
     {
-        var territoryId = await _context.Destinations
+        var source = await _context.Destinations
             .AsNoTracking()
             .Where(d => d.Id == destinationId)
-            .Select(d => (int?)d.Region.TerritoryId)
+            .Select(d => new
+            {
+                d.DestinationTypeId,
+                TerritoryId = d.Region.TerritoryId
+            })
             .FirstOrDefaultAsync();
 
-        if (!territoryId.HasValue)
+        if (source == null)
         {
             return new List<DestinationRelatedItemDto>();
         }
+
+        var tagIds = await _context.DestinationTags
+            .AsNoTracking()
+            .Where(dt => dt.DestinationId == destinationId)
+            .Select(dt => dt.TagId)
+            .Distinct()
+            .ToListAsync();
 
         return await _context.Destinations
             .AsNoTracking()
             .Where(d => d.Id != destinationId &&
                         d.Status == "Published" &&
-                        d.Region.TerritoryId == territoryId.Value)
-            .OrderBy(d => d.Name)
+                        d.Region.TerritoryId == source.TerritoryId &&
+                        d.DestinationTypeId == source.DestinationTypeId)
+            .OrderByDescending(d => d.DestinationTags.Count(dt => tagIds.Contains(dt.TagId)))
+            .ThenByDescending(d => d.DestinationReviews.Any())
+            .ThenBy(d => d.Name)
             .Take(take)
             .Select(d => new DestinationRelatedItemDto
             {
@@ -72,7 +86,7 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
                 Name = d.Name,
                 Description = string.IsNullOrWhiteSpace(d.Summary) ? d.Description : d.Summary,
                 Image = d.Images
-                    .OrderBy(image => image.ImageRole == "cover" ? 0 : image.ImageRole == "card" ? 1 : 2)
+                    .OrderBy(image => image.ImageRole == "card" ? 0 : image.ImageRole == "cover" ? 1 : 2)
                     .ThenBy(image => image.SortOrder)
                     .Select(image => image.Url)
                     .FirstOrDefault(),

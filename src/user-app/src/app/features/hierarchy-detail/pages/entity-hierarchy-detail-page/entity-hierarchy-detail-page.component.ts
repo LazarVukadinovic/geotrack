@@ -296,6 +296,12 @@ export class EntityHierarchyDetailPageComponent {
     void this.router.navigate(['/profile']);
   }
 
+  protected exploreCurrentDestination(): void {
+    const d = this.detail();
+    if (!d || d.type !== 'destination') return;
+    void this.router.navigate(['/explore'], { queryParams: { destinationId: d.id } });
+  }
+
   protected showMoreReviews(): void {
     this.visibleReviewsCount.update(current => current + 3);
   }
@@ -599,7 +605,7 @@ export class EntityHierarchyDetailPageComponent {
       id,
       name: this.toStringValue(item['name'] ?? item['title']) || 'Item',
       description: this.toNullableString(item['description']) ?? undefined,
-      image: this.toNullableString(item['image']) ?? undefined,
+      image: this.toNullableString(item['image'] ?? item['imageUrl']) ?? undefined,
       route,
       rating: this.toNullableNumber(item['averageRating'] ?? item['rating']),
       meta: fallbackType === 'event' ? this.formatEventDate(item['startDate']) : undefined,

@@ -47,7 +47,7 @@ public class TerritoryService : ITerritoryService
             Description = territory.Description,
             Images = territory.Images.ToPublicEntityImageDtos(),
             Regions = territory.Regions
-                .Where(r => r.RegionalManagerRegions.Any(ror => ror.IsActive))
+                .Where(r => r.Destinations.Any(d => d.Status == "Published"))
                 .OrderBy(r => r.Name)
                 .Select(r => new TerritoryRegionItemDto
                 {

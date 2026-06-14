@@ -25,6 +25,8 @@ public class TerritoryRepository : Repository<Territory>, ITerritoryRepository
             .Include(t => t.Images)
             .Include(t => t.Regions)
                 .ThenInclude(r => r.RegionalManagerRegions)
+            .Include(t => t.Regions)
+                .ThenInclude(r => r.Destinations)
             .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.Id == territoryId);
     }

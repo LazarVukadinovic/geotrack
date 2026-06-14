@@ -54,12 +54,21 @@ namespace Geotrack.Application.Services
                     })
                     .ToList(),
                 Destinations = region.Destinations
-                    .Where(d => d.Status != "Archived")
+                    .Where(d => d.Status == "Published")
                     .OrderBy(d => d.Name)
                     .Select(d => new DestinationSummaryDto
                     {
                         Id = d.Id,
-                        Name = d.Name
+                        Name = d.Name,
+                        Description = string.IsNullOrWhiteSpace(d.Summary) ? d.Description : d.Summary,
+                        Image = d.Images
+                            .OrderBy(image => image.ImageRole == "card" ? 0 : image.ImageRole == "cover" ? 1 : 2)
+                            .ThenBy(image => image.SortOrder)
+                            .Select(image => image.Url)
+                            .FirstOrDefault(),
+                        AverageRating = d.DestinationReviews
+                            .Select(review => (double?)review.Rating)
+                            .Average() ?? 0
                     })
                     .ToList()
             };

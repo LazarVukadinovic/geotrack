@@ -46,7 +46,9 @@
         </div>
 
         <div class="ehd__polaroid-body">
-          <span class="ehd__badge">{{ d.typeLabel }}</span>
+          <div class="ehd__badge-wrap">
+            <span class="ehd__badge">{{ d.typeLabel }}</span>
+          </div>
 
           @if (d.parent) {
             <a class="ehd__parent" [routerLink]="d.parent.route">
@@ -72,15 +74,22 @@
             </div>
           }
 
-          <div class="ehd__meta">
-            @if (d.rating != null) { <span>★ {{ d.rating | number: '1.1-1' }}</span> }
-            @if (d.reviewsCount != null) { <span>{{ d.reviewsCount }} reviews</span> }
+          <div class="ehd__meta-explore-row">
+            <div class="ehd__meta">
+              @if (d.rating != null) { <span>★ {{ d.rating | number: '1.1-1' }}</span> }
+              @if (d.reviewsCount != null) { <span>{{ d.reviewsCount }} reviews</span> }
+            </div>
+            @if (d.type === 'destination') {
+              <button type="button" class="ehd__explore-action" (click)="exploreCurrentDestination()">Explore</button>
+            }
           </div>
         </div>
       </section>
     } @else {
       <section class="ehd__hero-panel">
-        <span class="ehd__badge">{{ d.typeLabel }}</span>
+        <div class="ehd__badge-wrap">
+          <span class="ehd__badge">{{ d.typeLabel }}</span>
+        </div>
 
         @if (d.parent) {
           <a class="ehd__parent" [routerLink]="d.parent.route">
@@ -147,7 +156,7 @@
             }
           </div>
         } @else {
-          <p class="ehd__muted">No regions with an assigned regional manager yet.</p>
+          <p class="ehd__muted">No regions with published destinations yet.</p>
         }
       </section>
     }
@@ -191,7 +200,15 @@
               <div class="ehd__explore-media">
                 @if (place.image) { <img [src]="place.image" [alt]="place.name" appImageFallback loading="lazy" decoding="async"> }
               </div>
-              <div class="ehd__explore-body"><strong>{{ place.name }}</strong></div>
+              <div class="ehd__explore-body ehd__explore-body--similar">
+                <div class="ehd__explore-name-row">
+                  <span class="ehd__explore-name">{{ place.name }}</span>
+                  @if (place.rating != null && place.rating > 0) {
+                    <span class="ehd__rating-chip">★ {{ place.rating | number: '1.1-1' }}</span>
+                  }
+                </div>
+                @if (place.description) { <small>{{ place.description }}</small> }
+              </div>
             </a>
           }
         </div>
@@ -214,7 +231,15 @@
                 <div class="ehd__explore-media">
                   @if (item.image) { <img [src]="item.image" [alt]="item.name" appImageFallback loading="lazy" decoding="async"> }
                 </div>
-                <div class="ehd__explore-body"><strong>{{ item.name }}</strong></div>
+                <div class="ehd__explore-body ehd__explore-body--similar">
+                  <div class="ehd__explore-name-row">
+                    <span class="ehd__explore-name">{{ item.name }}</span>
+                    @if (item.rating != null && item.rating > 0) {
+                      <span class="ehd__rating-chip">★ {{ item.rating | number: '1.1-1' }}</span>
+                    }
+                  </div>
+                  @if (item.description) { <small>{{ item.description }}</small> }
+                </div>
               </a>
             }
           }
@@ -267,22 +292,44 @@
             @for (review of visibleReviews(); track review.id) {
               <article class="ehd__review-card">
                 <div class="ehd__review-top">
-                  <button type="button" class="ehd__review-author-avatar" [attr.aria-label]="'View ' + review.authorName + ' reviews'" (click)="navigateToAuthorReviews(review)">
+                  <!-- Clickable avatar -->
+                  <button
+                    type="button"
+                    class="ehd__review-author-avatar"
+                    [attr.aria-label]="'View ' + review.authorName + ' reviews'"
+                    (click)="navigateToAuthorReviews(review)"
+                  >
                     @if (review.avatarUrl) {
                       <img [src]="review.avatarUrl" [alt]="review.authorName" appImageFallback loading="lazy" decoding="async">
                     } @else {
-                      <span>{{ review.authorName.charAt(0) || 'G' }}</span>
+                      {{ review.authorName.charAt(0) || 'G' }}
                     }
                   </button>
+
+                  <!-- Meta block -->
                   <div class="ehd__review-meta-block">
-                    <button type="button" class="ehd__review-author" (click)="navigateToAuthorReviews(review)">{{ review.authorName }}</button>
-                    @if (review.timeAgo) { <small class="ehd__review-time">{{ review.timeAgo }}</small> }
+                    <button type="button" class="ehd__review-author" (click)="navigateToAuthorReviews(review)">
+                      {{ review.authorName }}
+                    </button>
+                    @if (review.timeAgo) {
+                      <small class="ehd__review-time">{{ review.timeAgo }}</small>
+                    }
                   </div>
-                  <span class="ehd__review-rating">★ {{ review.rating | number: '1.1-1' }}</span>
+
+                  <!-- Rating chip -->
+                  <span class="ehd__review-rating">
+                    <svg class="ehd__review-rating-star" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="currentColor" d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                    </svg>
+                    {{ review.rating | number: '1.1-1' }}
+                  </span>
                 </div>
 
                 @if (review.body) {
-                  <p class="ehd__review-body" [class.ehd__review-body--collapsed]="hasLongReview(review.body) && !isReviewExpanded(review.id)">{{ review.body }}</p>
+                  <p
+                    class="ehd__review-body"
+                    [class.ehd__review-body--collapsed]="hasLongReview(review.body) && !isReviewExpanded(review.id)"
+                  >{{ review.body }}</p>
                 }
 
                 @if (hasLongReview(review.body)) {
@@ -293,20 +340,49 @@
 
                 @if (review.isOwnReview) {
                   <div class="ehd__review-actions">
-                    <button type="button" class="ehd__review-action ehd__review-action--edit" (click)="ri.openEditModal(review)">Edit</button>
-                    <button type="button" class="ehd__review-action ehd__review-action--delete" (click)="ri.openDeleteConfirm(review)">Delete</button>
+                    <button type="button" class="ehd__review-action ehd__review-action--edit" (click)="ri.openEditModal(review)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                      Edit
+                    </button>
+                    <button type="button" class="ehd__review-action ehd__review-action--delete" (click)="ri.openDeleteConfirm(review)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                      </svg>
+                      Delete
+                    </button>
                   </div>
                 } @else {
-                  <button type="button" class="ehd__review-report" [class.ehd__review-report--reported]="ri.isReviewReported(review)" [disabled]="ri.isReviewReported(review) || ri.isReviewReporting(review.id)" (click)="ri.openReportModal(review, isLoggedIn())">
-                    @if (ri.isReviewReporting(review.id)) { Reporting... } @else if (ri.isReviewReported(review)) { Reported } @else { Report }
+                  <button
+                    type="button"
+                    class="ehd__review-report"
+                    [class.ehd__review-report--reported]="ri.isReviewReported(review)"
+                    [disabled]="ri.isReviewReported(review) || ri.isReviewReporting(review.id)"
+                    (click)="ri.openReportModal(review, isLoggedIn())"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                            d="M5 21V4.6c0-.9.74-1.6 1.65-1.6h9.7c.83 0 1.5.67 1.5 1.5v7.2c0 .83-.67 1.5-1.5 1.5H6"/>
+                    </svg>
+                    @if (ri.isReviewReporting(review.id)) { Reporting... }
+                    @else if (ri.isReviewReported(review)) { Reported }
+                    @else { Report }
                   </button>
                 }
               </article>
             }
           </div>
 
-          @if (hiddenReviewsCount() > 0) { <button type="button" class="ehd__reviews-more" (click)="showMoreReviews()">Show more ({{ hiddenReviewsCount() }})</button> }
-          @if (visibleReviews().length > 3) { <button type="button" class="ehd__reviews-more ehd__reviews-more--secondary" (click)="showLessReviews()">Show less</button> }
+          @if (hiddenReviewsCount() > 0) {
+            <button type="button" class="ehd__reviews-more" (click)="showMoreReviews()">Show more ({{ hiddenReviewsCount() }})</button>
+          }
+          @if (visibleReviews().length > 3) {
+            <button type="button" class="ehd__reviews-more ehd__reviews-more--secondary" (click)="showLessReviews()">Show less</button>
+          }
         } @else {
           <p class="ehd__muted">No reviews yet.</p>
         }
@@ -326,9 +402,14 @@
               <div class="ehd__explore-media">
                 @if (item.image) { <img [src]="item.image" [alt]="item.name" appImageFallback loading="lazy" decoding="async"> }
               </div>
-              <div class="ehd__explore-body ehd__explore-body--row">
-                <strong>{{ item.name }}</strong>
-                @if (item.rating != null && item.rating > 0) { <span class="ehd__rating-chip">★ {{ item.rating | number: '1.1-1' }}</span> }
+              <div class="ehd__explore-body ehd__explore-body--similar">
+                <div class="ehd__explore-name-row">
+                  <span class="ehd__explore-name">{{ item.name }}</span>
+                  @if (item.rating != null && item.rating > 0) {
+                    <span class="ehd__rating-chip">★ {{ item.rating | number: '1.1-1' }}</span>
+                  }
+                </div>
+                @if (item.description) { <small>{{ item.description }}</small> }
               </div>
             </a>
           }
@@ -349,9 +430,14 @@
               <div class="ehd__explore-media">
                 @if (item.image) { <img [src]="item.image" [alt]="item.name" appImageFallback loading="lazy" decoding="async"> }
               </div>
-              <div class="ehd__explore-body ehd__explore-body--row">
-                <strong>{{ item.name }}</strong>
-                @if (item.rating != null && item.rating > 0) { <span class="ehd__rating-chip">★ {{ item.rating | number: '1.1-1' }}</span> }
+              <div class="ehd__explore-body ehd__explore-body--similar">
+                <div class="ehd__explore-name-row">
+                  <span class="ehd__explore-name">{{ item.name }}</span>
+                  @if (item.rating != null && item.rating > 0) {
+                    <span class="ehd__rating-chip">★ {{ item.rating | number: '1.1-1' }}</span>
+                  }
+                </div>
+                @if (item.description) { <small>{{ item.description }}</small> }
               </div>
             </a>
           }
@@ -365,55 +451,109 @@
   }
 </article>
 
+<!-- ── Report modal ─────────────────────────────────────────────────────────── -->
 @if (ri.reportingReview(); as review) {
   <div class="ehd__overlay" (click)="ri.closeReportModal()"></div>
   <div class="ehd__sheet" role="dialog" aria-modal="true" aria-label="Report review">
-    <h2 class="ehd__sheet-title">Report review</h2>
+    <h2 class="ehd__sheet-title">Report Review</h2>
     <p class="ehd__sheet-sub">Why are you reporting this review?</p>
     <div class="ehd__reasons">
       @for (reason of ri.reportReasons(); track reason.value) {
-        <button type="button" class="ehd__reason-btn" [class.ehd__reason-btn--selected]="ri.selectedReason() === reason.value" (click)="ri.selectedReason.set(reason.value)">{{ reason.label }}</button>
+        <button
+          type="button"
+          class="ehd__reason-btn"
+          [class.ehd__reason-btn--selected]="ri.selectedReason() === reason.value"
+          (click)="ri.selectedReason.set(reason.value)"
+        >{{ reason.label }}</button>
       }
     </div>
     @if (ri.isReportReasonOther()) {
-      <textarea class="ehd__reason-text" placeholder="Please describe the issue..." rows="3" [value]="ri.customReason()" (input)="ri.customReason.set($any($event.target).value)"></textarea>
+      <textarea
+        class="ehd__reason-text"
+        placeholder="Please describe the issue..."
+        rows="3"
+        [value]="ri.customReason()"
+        (input)="ri.customReason.set($any($event.target).value)"
+      ></textarea>
     }
     <div class="ehd__sheet-actions">
       <button type="button" class="ehd__sheet-cancel" (click)="ri.closeReportModal()">Cancel</button>
-      <button type="button" class="ehd__sheet-submit" [disabled]="!ri.selectedReason() || ri.isReviewReporting(review.id) || (ri.isReportReasonOther() && !ri.customReason().trim())" (click)="ri.submitReport()">
-        @if (ri.isReviewReporting(review.id)) { Submitting... } @else { Submit report }
+      <button
+        type="button"
+        class="ehd__sheet-submit"
+        [disabled]="!ri.selectedReason() || ri.isReviewReporting(review.id) || (ri.isReportReasonOther() && !ri.customReason().trim())"
+        (click)="ri.submitReport()"
+      >
+        @if (ri.isReviewReporting(review.id)) { Submitting... } @else { Submit Report }
       </button>
     </div>
   </div>
 }
 
+<!-- ── Edit modal ──────────────────────────────────────────────────────────── -->
 @if (ri.editingReview(); as review) {
   <div class="ehd__overlay" (click)="ri.closeEditModal()"></div>
   <div class="ehd__sheet" role="dialog" aria-modal="true" aria-label="Edit review">
-    <h2 class="ehd__sheet-title">Edit review</h2>
+    <h2 class="ehd__sheet-title">Edit Review</h2>
     <div class="ehd__edit-stars">
       @for (star of [1,2,3,4,5]; track star) {
-        <button type="button" class="ehd__edit-star-btn" [class.ehd__edit-star-btn--active]="ri.editRating() >= star" (click)="ri.setEditRating(star)">★</button>
+        <button
+          type="button"
+          class="ehd__edit-star-btn"
+          [class.ehd__edit-star-btn--active]="star <= ri.editRating()"
+          (click)="ri.setEditRating(star)"
+          [attr.aria-label]="star + ' star' + (star > 1 ? 's' : '')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+          </svg>
+        </button>
       }
     </div>
-    <textarea class="ehd__reason-text" rows="4" maxlength="1000" [value]="ri.editBody()" (input)="ri.editBody.set($any($event.target).value)"></textarea>
-    @if (ri.editError()) { <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.editError() }}</p> }
+    <textarea
+      class="ehd__reason-text"
+      placeholder="Share your experience..."
+      rows="4"
+      maxlength="1000"
+      [value]="ri.editBody()"
+      (input)="ri.editBody.set($any($event.target).value)"
+    ></textarea>
+    @if (ri.editError()) {
+      <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.editError() }}</p>
+    }
     <div class="ehd__sheet-actions">
       <button type="button" class="ehd__sheet-cancel" [disabled]="ri.isSavingEdit()" (click)="ri.closeEditModal()">Cancel</button>
-      <button type="button" class="ehd__sheet-submit" [disabled]="ri.isSavingEdit() || ri.editRating() < 1" (click)="ri.saveEdit()">@if (ri.isSavingEdit()) { Saving... } @else { Save }</button>
+      <button
+        type="button"
+        class="ehd__sheet-submit"
+        [disabled]="ri.isSavingEdit() || ri.editRating() < 1"
+        (click)="ri.saveEdit()"
+      >
+        @if (ri.isSavingEdit()) { Saving... } @else { Save }
+      </button>
     </div>
   </div>
 }
 
+<!-- ── Delete confirm ──────────────────────────────────────────────────────── -->
 @if (ri.deletingReview(); as review) {
   <div class="ehd__overlay" (click)="ri.cancelDelete()"></div>
   <div class="ehd__sheet" role="dialog" aria-modal="true" aria-label="Delete review">
-    <h2 class="ehd__sheet-title">Delete review?</h2>
-    <p class="ehd__sheet-sub">This action cannot be undone.</p>
-    @if (ri.deleteError()) { <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.deleteError() }}</p> }
+    <h2 class="ehd__sheet-title">Delete Review?</h2>
+    <p class="ehd__sheet-sub">This will permanently remove your review. This action cannot be undone.</p>
+    @if (ri.deleteError()) {
+      <p class="ehd__review-notice ehd__review-notice--error" role="alert">{{ ri.deleteError() }}</p>
+    }
     <div class="ehd__sheet-actions">
       <button type="button" class="ehd__sheet-cancel" [disabled]="ri.isDeleting()" (click)="ri.cancelDelete()">Cancel</button>
-      <button type="button" class="ehd__sheet-submit ehd__sheet-submit--danger" [disabled]="ri.isDeleting()" (click)="ri.confirmDelete()">@if (ri.isDeleting()) { Deleting... } @else { Delete }</button>
+      <button
+        type="button"
+        class="ehd__sheet-submit ehd__sheet-submit--danger"
+        [disabled]="ri.isDeleting()"
+        (click)="ri.confirmDelete()"
+      >
+        @if (ri.isDeleting()) { Deleting... } @else { Delete }
+      </button>
     </div>
   </div>
 }
