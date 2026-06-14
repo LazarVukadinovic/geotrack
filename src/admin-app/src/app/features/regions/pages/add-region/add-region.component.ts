@@ -196,6 +196,7 @@ export class AddRegionComponent implements OnInit, AfterViewInit, OnDestroy {
     this.feedbackMessage = null;
     this.renderMapLayers(false);
     this.notifyStateChanged();
+    this.save();
   }
 
   clearSelection(render = true): void {

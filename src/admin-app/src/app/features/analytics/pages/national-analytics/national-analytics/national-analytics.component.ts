@@ -570,13 +570,16 @@ export class NationalAnalyticsComponent implements OnInit, OnDestroy {
     polyline: string;
     yLabels: { y: number; text: string }[];
     isEmpty: boolean;
+    svgWidth: number;
   } {
     const data = this.contentQuality;
     if (data.length === 0) {
-      return { bars: [], dots: [], labels: [], polyline: '', yLabels: [], isEmpty: true };
+      return { bars: [], dots: [], labels: [], polyline: '', yLabels: [], isEmpty: true, svgWidth: 640 };
     }
 
-    const chartW = 570;
+    const minStep = 60;
+    const chartW = Math.max(570, data.length * minStep);
+    const svgWidth = chartW + 70;
     const step = chartW / data.length;
     const maxReviews = Math.max(...data.map(item => item.totalReviews), 1);
 
@@ -606,6 +609,7 @@ export class NationalAnalyticsComponent implements OnInit, OnDestroy {
       polyline: dots.map(dot => `${dot.x.toFixed(1)},${dot.y.toFixed(1)}`).join(' '),
       yLabels,
       isEmpty: false,
+      svgWidth,
     };
   }
 
