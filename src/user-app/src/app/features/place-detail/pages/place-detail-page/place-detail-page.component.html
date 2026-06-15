@@ -535,7 +535,7 @@
             (action)="openReviews()"
           />
 
-          @if (!hasOwnReview()) {
+          @if (canCurrentUserReviewPlace()) {
             <app-review-entry
               [isLoggedIn]="isLoggedIn()"
               [entityName]="p.title"
@@ -606,7 +606,7 @@
                   </button>
                 }
 
-                @if (review.isOwnReview) {
+                @if (canCurrentUserEditReview(review)) {
                   <div class="pd__review-actions">
                     <button type="button" class="pd__review-action-btn pd__review-action-btn--edit" (click)="ri.openEditModal(review)">
                       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -624,7 +624,7 @@
                       Delete
                     </button>
                   </div>
-                } @else {
+                } @else if (canCurrentUserReportReview(review)) {
                   <button
                     type="button"
                     class="pd__review-report"

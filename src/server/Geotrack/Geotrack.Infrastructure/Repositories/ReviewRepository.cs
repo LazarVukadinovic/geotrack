@@ -241,6 +241,8 @@ public class ReviewRepository : IReviewRepository
 
         if (stats is null)
         {
+            place.AverageRating = null;
+            place.ReviewCount = 0;
             return;
         }
 

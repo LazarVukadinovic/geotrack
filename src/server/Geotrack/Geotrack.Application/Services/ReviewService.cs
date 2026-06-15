@@ -42,12 +42,14 @@ public class ReviewService : IReviewService
             currentUserId,
             ReviewReportTargetType.Place,
             reviews.Select(review => review.Id));
+        var isEntityOwnedByCurrentUser = currentUserId.HasValue &&
+            await _reviewRepository.IsPlaceOwnedByUserAsync(placeId, currentUserId.Value);
 
         var items = reviews
             .Select(review => MapReview(review, reportedReviewIds.Contains(review.Id), currentUserId))
             .ToList();
 
-        return BuildPage(items, averageRating, totalCount, normalizedSkip, normalizedTake);
+        return BuildPage(items, averageRating, totalCount, normalizedSkip, normalizedTake, isEntityOwnedByCurrentUser);
     }
 
     public async Task<PagedReviewsResponseDto> GetEventReviewsAsync(
@@ -436,6 +438,9 @@ public class ReviewService : IReviewService
         if (review.UserId != userId)
             throw new UnauthorizedAccessException("You can only edit your own reviews.");
 
+        if (await _reviewRepository.IsPlaceOwnedByUserAsync(review.PlaceId, userId))
+            throw new InvalidOperationException("You cannot edit a review for a place that you own.");
+
         review.Rating = dto.Rating;
         review.Comment = dto.Comment?.Trim() ?? string.Empty;
         review.UpdatedAt = DateTime.UtcNow;
@@ -556,6 +561,8 @@ public class ReviewService : IReviewService
         AuthorName = GetAuthorName(review.User),
         AvatarUrl = review.User.AvatarUrl,
         Rating = (int)review.Rating,
+        CreatedAt = review.CreatedAt,
+        UpdatedAt = review.UpdatedAt,
         TimeAgo = FormatTimeAgo(review.CreatedAt),
         Body = review.Comment,
         HelpfulCount = 0,
@@ -570,6 +577,8 @@ public class ReviewService : IReviewService
         AuthorName = GetAuthorName(review.User),
         AvatarUrl = review.User.AvatarUrl,
         Rating = (int)review.Rating,
+        CreatedAt = review.CreatedAt,
+        UpdatedAt = review.UpdatedAt,
         TimeAgo = FormatTimeAgo(review.CreatedAt),
         Body = review.Comment,
         HelpfulCount = 0,
@@ -585,6 +594,8 @@ public class ReviewService : IReviewService
         AuthorName = GetAuthorName(review.User),
         AvatarUrl = review.User.AvatarUrl,
         Rating = (int)review.Rating,
+        CreatedAt = review.CreatedAt,
+        UpdatedAt = review.UpdatedAt,
         TimeAgo = FormatTimeAgo(review.CreatedAt),
         Body = review.Comment,
         HelpfulCount = 0,
@@ -599,6 +610,8 @@ public class ReviewService : IReviewService
         AuthorName = GetAuthorName(review.User),
         AvatarUrl = review.User.AvatarUrl,
         Rating = (int)review.Rating,
+        CreatedAt = review.CreatedAt,
+        UpdatedAt = review.UpdatedAt,
         TimeAgo = FormatTimeAgo(review.CreatedAt),
         Body = review.Comment,
         HelpfulCount = 0,
@@ -611,7 +624,8 @@ public class ReviewService : IReviewService
         double? averageRating,
         int totalCount,
         int skip,
-        int take) => new()
+        int take,
+        bool isEntityOwnedByCurrentUser = false) => new()
         {
             Items = items,
             AverageRating = averageRating.HasValue ? Math.Round(averageRating.Value, 1) : null,
@@ -619,7 +633,8 @@ public class ReviewService : IReviewService
             Skip = skip,
             Take = take,
             NextSkip = skip + items.Count,
-            HasMore = totalCount > skip + items.Count
+            HasMore = totalCount > skip + items.Count,
+            IsEntityOwnedByCurrentUser = isEntityOwnedByCurrentUser
         };
 
     private static List<UserReviewListItemDto> MergeByDate(

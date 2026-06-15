@@ -26,6 +26,7 @@ export interface FullReviewsResult {
   take: number;
   nextSkip: number;
   hasMore: boolean;
+  isEntityOwnedByCurrentUser: boolean;
 }
 
 export interface UserReviewItem {
@@ -65,6 +66,8 @@ interface ApiReviewDto {
   authorName?: string | null;
   avatarUrl?: string | null;
   rating: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   timeAgo?: string | null;
   body?: string | null;
   helpfulCount?: number | null;
@@ -80,6 +83,7 @@ interface ApiPagedReviewsResponseDto {
   take?: number | null;
   nextSkip?: number | null;
   hasMore?: boolean | null;
+  isEntityOwnedByCurrentUser?: boolean | null;
 }
 
 interface ApiUserReviewItemDto {
@@ -141,6 +145,7 @@ export class ReviewsService {
               take,
               nextSkip: skip + mapped.length,
               hasMore: false,
+              isEntityOwnedByCurrentUser: false,
             };
           }
 
@@ -152,6 +157,7 @@ export class ReviewsService {
             take: response.take ?? take,
             nextSkip: response.nextSkip ?? skip + mapped.length,
             hasMore: response.hasMore ?? false,
+            isEntityOwnedByCurrentUser: response.isEntityOwnedByCurrentUser ?? false,
           };
         }),
       );
@@ -167,6 +173,13 @@ export class ReviewsService {
     return this.http
       .get<ApiPagedUserReviewsResponseDto>(`/api/reviews/users/${userId}?skip=${skip}&take=${take}`)
       .pipe(map(this.mapUserReviewsResult));
+  }
+
+  createReview(entityType: ReviewsEntityType, entityId: number, rating: number, comment: string): Observable<ApiReviewDto> {
+    return this.http.post<ApiReviewDto>(`/api/reviews/${this.collectionFor(entityType)}/${entityId}`, {
+      rating,
+      comment,
+    });
   }
 
   getReportReasons(): Observable<ReviewReason[]> {

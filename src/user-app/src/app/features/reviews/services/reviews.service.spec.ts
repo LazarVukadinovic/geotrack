@@ -1,3 +1,4 @@
+import '@angular/compiler';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
@@ -96,6 +97,19 @@ describe('ReviewsService', () => {
     });
 
     expect(actualAvatarUrl).toBe('/media/uploads/avatars/avatar-user.png');
+  });
+
+  it('creates destination reviews through the central reviews API', () => {
+    service.createReview('destination', 17, 5, 'Excellent trip.').subscribe();
+
+    const req = httpMock.expectOne('/api/reviews/destinations/17');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      rating: 5,
+      comment: 'Excellent trip.',
+    });
+
+    req.flush({ id: 7, rating: 5, body: 'Excellent trip.' });
   });
 });
 

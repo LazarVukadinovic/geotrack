@@ -1,4 +1,5 @@
-﻿using Geotrack.Application.DTOs.Locations;
+using Geotrack.Application.DTOs.Locations;
+using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,15 +15,18 @@ public class LocationController : ControllerBase
 
     private readonly ILocationService _locationService;
     private readonly IClientLocationResolverService _clientLocationResolver;
+    private readonly IReviewService _reviewService;
     private readonly ILogger<LocationController> _logger;
 
     public LocationController(
         ILocationService locationService,
         IClientLocationResolverService clientLocationResolver,
+        IReviewService reviewService,
         ILogger<LocationController> logger)
     {
         _locationService = locationService;
         _clientLocationResolver = clientLocationResolver;
+        _reviewService = reviewService;
         _logger = logger;
     }
 
@@ -84,8 +88,8 @@ public class LocationController : ControllerBase
 
         try
         {
-            var result = await _locationService.GetLocationReviewsAsync(id, skip, take);
-            return Ok(result);
+            var result = await _reviewService.GetLocationReviewsAsync(id, skip, take, TryGetUserId());
+            return Ok(MapLegacyLocationReviewsResponse(id, result));
         }
         catch (Exception ex)
         {
@@ -104,8 +108,16 @@ public class LocationController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized();
 
-            var result = await _locationService.CreateLocationReviewAsync(id, userId.Value, request);
-            return CreatedAtAction(nameof(GetLocationReviews), new { id }, result);
+            var result = await _reviewService.CreateLocationReviewAsync(
+                id,
+                userId.Value,
+                new CreateReviewDto
+                {
+                    Rating = (int)Math.Round(request.Rating, MidpointRounding.AwayFromZero),
+                    Comment = request.Comment
+                });
+
+            return CreatedAtAction(nameof(GetLocationReviews), new { id }, MapLegacyLocationReviewResponse(id, result));
         }
         catch (Exception ex)
         {
@@ -138,6 +150,42 @@ public class LocationController : ControllerBase
 
         return null;
     }
+
+    private static GetLocationReviewsResponseDto MapLegacyLocationReviewsResponse(
+        int locationId,
+        PagedReviewsResponseDto response) => new()
+    {
+        LocationId = locationId,
+        AverageRating = response.AverageRating ?? 0,
+        ReviewsCount = response.TotalCount,
+        TotalCount = response.TotalCount,
+        Skip = response.Skip,
+        Take = response.Take,
+        NextSkip = response.NextSkip,
+        HasMore = response.HasMore,
+        Reviews = response.Items.Select(review => new LocationReviewItemDto
+        {
+            Id = review.Id,
+            UserId = review.AuthorUserId,
+            Rating = review.Rating,
+            Comment = review.Body,
+            CreatedAt = review.CreatedAt,
+            UpdatedAt = review.UpdatedAt
+        }).ToList()
+    };
+
+    private static CreateLocationReviewResponseDto MapLegacyLocationReviewResponse(
+        int locationId,
+        ReviewDto review) => new()
+    {
+        Id = review.Id,
+        UserId = review.AuthorUserId,
+        LocationId = locationId,
+        Rating = review.Rating,
+        Comment = review.Body,
+        CreatedAt = review.CreatedAt,
+        UpdatedAt = review.UpdatedAt
+    };
 
     private IActionResult MapException(Exception ex)
     {

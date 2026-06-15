@@ -11,6 +11,8 @@ import { PhotoGalleryComponent } from '../../../../shared/components/photo-galle
 import { ReviewEntryComponent, type ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
+import { ExploreService } from '../../../explore/services/explore.service';
+import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
 import { ReviewsService, type ReviewReportTargetType } from '../../../reviews/services/reviews.service';
 import { normalizeEntityImages, getCoverImageUrl, type ApiEntityImage, type EntityImage } from '../../../../core/models/entity-image.model';
 
@@ -102,6 +104,8 @@ export class EntityHierarchyDetailPageComponent {
   private readonly analytics = inject(AnalyticsService);
   private readonly auth = inject(AuthService);
   private readonly reviewsService = inject(ReviewsService);
+  private readonly exploreService = inject(ExploreService);
+  private readonly listingService = inject(ExploreSectionListingService);
 
   protected readonly ri = inject(ReviewInteractionsService);
   protected readonly detail = signal<HierarchyDetail | null>(null);
@@ -222,8 +226,16 @@ export class EntityHierarchyDetailPageComponent {
 
     this.ri.configure({
       targetType: () => this.resolveReviewTargetType(),
-      onEditSuccess: () => this.reloadCurrentDetail(),
-      onDeleteSuccess: () => this.reloadCurrentDetail(),
+      onEditSuccess: () => {
+        this.reloadCurrentDetail();
+        this.exploreService.invalidate();
+        this.listingService.invalidate();
+      },
+      onDeleteSuccess: () => {
+        this.reloadCurrentDetail();
+        this.exploreService.invalidate();
+        this.listingService.invalidate();
+      },
       onReportSuccess: (reviewId) => this.markReviewReported(reviewId),
     });
 
@@ -233,6 +245,7 @@ export class EntityHierarchyDetailPageComponent {
         const id = params.get('id') ?? '';
         const type = data['entityType'] as EntityType | undefined;
         this.currentType.set(type ?? null);
+        this.ri.clearReportNotice();
         this.galleryOpen.set(false);
         this.currentShowcaseIndex.set(0);
         this.incomingShowcaseIndex.set(null);
@@ -275,11 +288,7 @@ export class EntityHierarchyDetailPageComponent {
     const numId = Number(d.id);
     if (!Number.isFinite(numId)) return throwError(() => new Error('Invalid id.'));
 
-    const collection = d.type === 'destination' ? 'destinations' : 'locations';
-    return this.http.post(`/api/${collection}/${numId}/reviews`, {
-      rating: draft.rating,
-      comment: draft.body,
-    });
+    return this.reviewsService.createReview(d.type, numId, draft.rating, draft.body);
   };
 
   protected onReviewSubmitted(_draft: ReviewDraft): void {
@@ -294,6 +303,8 @@ export class EntityHierarchyDetailPageComponent {
     }
 
     this.load(d.type, d.id);
+    this.exploreService.invalidate();
+    this.listingService.invalidate();
   }
 
   protected goToLogin(): void {

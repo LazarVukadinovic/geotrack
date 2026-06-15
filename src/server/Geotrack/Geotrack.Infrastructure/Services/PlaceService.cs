@@ -760,14 +760,27 @@ public class PlaceService : IPlaceService
 
         await _contentModeration.EnsureAllowedReviewTextAsync(request.Comment);
 
-        var exists = await _db.Places.AnyAsync(p =>
-            p.Id == placeId &&
-            p.Status == PublishedStatus &&
-            p.Location.Status == PublishedStatus &&
-            p.Location.Destination.Status == PublishedStatus);
-        if (!exists)
+        var reviewTarget = await _db.Places
+            .AsNoTracking()
+            .Where(p =>
+                p.Id == placeId &&
+                p.Status == PublishedStatus &&
+                p.Location.Status == PublishedStatus &&
+                p.Location.Destination.Status == PublishedStatus)
+            .Select(p => new
+            {
+                IsOwnedByUser = p.CreatedByUserId == userId || p.UserPlaces.Any(owner => owner.UserId == userId)
+            })
+            .SingleOrDefaultAsync();
+
+        if (reviewTarget is null)
         {
             throw new KeyNotFoundException("Place not found");
+        }
+
+        if (reviewTarget.IsOwnedByUser)
+        {
+            throw new InvalidOperationException("You cannot review a place that you own.");
         }
 
         var alreadyReviewed = await _db.PlaceReviews

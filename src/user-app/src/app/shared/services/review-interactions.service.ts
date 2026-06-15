@@ -115,6 +115,11 @@ export class ReviewInteractionsService {
     this.reportSheetDragOffset.set(0);
   }
 
+  clearReportNotice(): void {
+    this.reportMessage.set('');
+    this.reportError.set('');
+  }
+
   onReportSheetHandlePointerDown(event: PointerEvent): void {
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     this.reportSheetIsDragging = true;

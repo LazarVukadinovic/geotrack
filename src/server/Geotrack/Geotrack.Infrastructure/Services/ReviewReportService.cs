@@ -224,6 +224,14 @@ public class ReviewReportService : IReviewReportService
         if (review.UserId == reporterUserId)
             throw new InvalidOperationException("You cannot report your own review.");
 
+        var reporterOwnsPlace = review.Place.CreatedByUserId == reporterUserId ||
+            await _db.UserPlaces.AsNoTracking().AnyAsync(owner =>
+                owner.PlaceId == review.PlaceId &&
+                owner.UserId == reporterUserId);
+
+        if (reporterOwnsPlace)
+            throw new InvalidOperationException("You cannot report reviews for a place that you own.");
+
         return new ReviewReport
         {
             TargetType = ReviewReportTargetType.Place,

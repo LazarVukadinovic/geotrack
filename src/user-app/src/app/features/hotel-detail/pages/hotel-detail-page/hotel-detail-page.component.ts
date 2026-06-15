@@ -17,6 +17,7 @@ import { HotelDetailService } from '../../services/hotel-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
 import { ExploreService } from '../../../explore/services/explore.service';
 import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
+import { ReviewsService } from '../../../reviews/services/reviews.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { HotelAmenityIcon, HotelBookingPartner, HotelDetail } from '../../models/hotel-detail.model';
 import type { MapEntityMarker } from '../../../../core/services/map-api.service';
@@ -42,6 +43,7 @@ export class HotelDetailPageComponent {
   private readonly http     = inject(HttpClient);
   private readonly exploreService = inject(ExploreService);
   private readonly listingService = inject(ExploreSectionListingService);
+  private readonly reviewsService = inject(ReviewsService);
 
   protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
@@ -114,6 +116,21 @@ export class HotelDetailPageComponent {
     this.hotel()?.reviews.some(review => !!review.isOwnReview) ?? false,
   );
 
+  protected readonly canCurrentUserReviewHotel = computed(() => {
+    const hotel = this.hotel();
+    return !!hotel && !hotel.isOwnedByCurrentUser && !this.hasOwnReview();
+  });
+
+  protected canCurrentUserEditReview(review: { isOwnReview?: boolean }): boolean {
+    const hotel = this.hotel();
+    return !!review.isOwnReview && !hotel?.isOwnedByCurrentUser;
+  }
+
+  protected canCurrentUserReportReview(review: { isOwnReview?: boolean }): boolean {
+    const hotel = this.hotel();
+    return !review.isOwnReview && !hotel?.isOwnedByCurrentUser;
+  }
+
   private readonly locationRequestKey = computed(() => {
     const loc = this.locationSvc.location();
     if (!loc) return 'none';
@@ -128,15 +145,24 @@ export class HotelDetailPageComponent {
       onEditSuccess: () => {
         const id = this.hotelId();
         if (id) this.service.loadHotelDetail(id);
+        this.exploreService.invalidate();
+        this.listingService.invalidate();
       },
       onDeleteSuccess: () => {
         const id = this.hotelId();
         if (id) this.service.loadHotelDetail(id);
+        this.exploreService.invalidate();
+        this.listingService.invalidate();
+      },
+      onReportSuccess: (reviewId) => {
+        const id = this.hotelId();
+        if (id) this.service.markReviewReported(id, reviewId);
       },
     });
 
     effect(() => {
       this.hotelId();
+      this.ri.clearReportNotice();
       this.scrollProgress.set(0);
       this.expandedReviewIds.set(new Set());
       this.galleryOpen.set(false);
@@ -323,12 +349,14 @@ export class HotelDetailPageComponent {
   }
 
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {
+    const hotel = this.hotel();
+    if (hotel?.isOwnedByCurrentUser) {
+      return throwError(() => new Error('You cannot review a place that you own.'));
+    }
+
     const numId = parseInt(this.hotelId(), 10);
     if (isNaN(numId)) return throwError(() => new Error('Invalid hotel id.'));
-    return this.http.post(`/api/places/${numId}/reviews`, {
-      rating:  draft.rating,
-      comment: draft.body,
-    });
+    return this.reviewsService.createReview('stay', numId, draft.rating, draft.body);
   };
 
   protected onReviewSubmitted(_draft: ReviewDraft): void {

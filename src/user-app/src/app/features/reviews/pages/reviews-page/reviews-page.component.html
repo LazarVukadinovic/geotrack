@@ -119,7 +119,7 @@
             }
 
             <div class="reviews-page__review-actions">
-              @if (review.isOwnReview) {
+              @if (canCurrentUserEditReview(review)) {
                 <button
                   type="button"
                   class="reviews-page__action-btn reviews-page__action-btn--edit"
@@ -143,7 +143,7 @@
                   </svg>
                   Delete
                 </button>
-              } @else {
+              } @else if (canCurrentUserReportReview(review)) {
                 <button
                   type="button"
                   class="reviews-page__report"

@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Geotrack.Application.DTOs.Auth;
+using Geotrack.Application.DTOs.Destinations;
+using Geotrack.Application.DTOs.Locations;
 using Geotrack.Application.DTOs.Moderation;
 using Geotrack.Application.DTOs.Places;
 using Geotrack.Application.DTOs.Reviews;
@@ -49,6 +51,48 @@ public sealed class ReviewModerationTests
         var serbianError = await serbianResponse.Content.ReadFromJsonAsync<Dictionary<string, string>>();
         Assert.NotNull(serbianError);
         Assert.Contains("content rules", serbianError["message"], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Legacy_destination_review_endpoint_uses_central_moderation_rules()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var destinationId = await GetFirstDestinationIdAsync(app);
+        using var client = await RegisterAndLoginAsync(app, "destination-moderation-author");
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/destinations/{destinationId}/reviews",
+            new CreateDestinationReviewRequestDto
+            {
+                Rating = 3,
+                Comment = "This destination was sh1t."
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.NotNull(error);
+        Assert.Contains("content rules", error["message"], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Legacy_location_review_endpoint_uses_central_moderation_rules()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var locationId = await GetFirstLocationIdAsync(app);
+        using var client = await RegisterAndLoginAsync(app, "location-moderation-author");
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/locations/{locationId}/reviews",
+            new CreateLocationReviewRequestDto
+            {
+                Rating = 3,
+                Comment = "Ovo je j e b e n o lose iskustvo."
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        Assert.NotNull(error);
+        Assert.Contains("content rules", error["message"], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -257,6 +301,26 @@ public sealed class ReviewModerationTests
         return await db.Places
             .OrderBy(place => place.Id)
             .Select(place => place.Id)
+            .FirstAsync();
+    }
+
+    private static async Task<int> GetFirstDestinationIdAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.Destinations
+            .OrderBy(destination => destination.Id)
+            .Select(destination => destination.Id)
+            .FirstAsync();
+    }
+
+    private static async Task<int> GetFirstLocationIdAsync(GeotrackApiFactory app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.Locations
+            .OrderBy(location => location.Id)
+            .Select(location => location.Id)
             .FirstAsync();
     }
 
