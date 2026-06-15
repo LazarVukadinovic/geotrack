@@ -265,7 +265,7 @@ export class NationalDashboardComponent implements OnInit, OnDestroy {
         changeText: `${this.formatPercent(stats.activeUsersChangePercent)} vs previous 30 days`,
         up: stats.activeUsersChangePercent >= 0,
         icon: 'users',
-        route: '/territory/analytics',
+        route: '/territory/users',
       },
       {
         label: 'Total Destinations',
