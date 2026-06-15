@@ -101,8 +101,13 @@ public class ReviewService : IReviewService
             normalizedSkip,
             normalizedTake);
 
+        var reportedReviewIds = await GetReportedReviewIdsAsync(
+            currentUserId,
+            ReviewReportTargetType.Destination,
+            reviews.Select(review => review.Id));
+
         var items = reviews
-            .Select(review => MapReview(review, false, currentUserId))
+            .Select(review => MapReview(review, reportedReviewIds.Contains(review.Id), currentUserId))
             .ToList();
 
         return BuildPage(items, averageRating, totalCount, normalizedSkip, normalizedTake);
@@ -127,8 +132,13 @@ public class ReviewService : IReviewService
             normalizedSkip,
             normalizedTake);
 
+        var reportedReviewIds = await GetReportedReviewIdsAsync(
+            currentUserId,
+            ReviewReportTargetType.Location,
+            reviews.Select(review => review.Id));
+
         var items = reviews
-            .Select(review => MapReview(review, false, currentUserId))
+            .Select(review => MapReview(review, reportedReviewIds.Contains(review.Id), currentUserId))
             .ToList();
 
         return BuildPage(items, averageRating, totalCount, normalizedSkip, normalizedTake);

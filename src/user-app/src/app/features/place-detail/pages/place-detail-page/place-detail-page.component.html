@@ -405,17 +405,17 @@
               </section>
             }
 
-            @if (p.similar.length > 0) {
+            @if (p.similarInDestination.length > 0) {
               <div class="pd__divider pd__divider--similar"></div>
 
-              <section class="pd__section pd__section--similar pd__section--last">
+              <section class="pd__section pd__section--similar">
                 <app-section-header
-                  title="Similar Places"
+                  title="Similar places"
                 />
 
                 <div class="pd__similar-viewport">
                   <div class="pd__similar-track" role="list">
-                    @for (s of p.similar; track s.id) {
+                    @for (s of p.similarInDestination; track s.id) {
                       <article
                         class="pd__similar-card"
                         role="listitem"
@@ -448,6 +448,71 @@
                               <span class="pd__similar-dist">{{ s.distance }}</span>
                             }
                           </div>
+                        </div>
+                      </article>
+                    }
+                  </div>
+                </div>
+              </section>
+            }
+
+            @if (p.similarInTerritory.length > 0) {
+              <div class="pd__divider pd__divider--similar"></div>
+
+              <section class="pd__section pd__section--similar pd__section--last">
+                <app-section-header
+                  title="You may also like"
+                />
+
+                <p class="pd__section-note">Similar places in other destinations within this country.</p>
+
+                <div class="pd__similar-viewport">
+                  <div class="pd__similar-track" role="list">
+                    @for (s of p.similarInTerritory; track s.id) {
+                      <article
+                        class="pd__similar-card"
+                        role="listitem"
+                        (click)="navigateToSimilar(s.id)"
+                      >
+                        <div class="pd__similar-media">
+                          <img
+                            appImageFallback
+                            class="pd__similar-img"
+                            [src]="s.image"
+                            [alt]="s.title"
+                            width="160"
+                            height="110"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        </div>
+
+                        <div class="pd__similar-body">
+                          <h3 class="pd__similar-title">{{ s.title }}</h3>
+                          @if (s.destinationName) {
+                            <p class="pd__similar-sub">{{ s.destinationName }}</p>
+                          }
+                          <div class="pd__similar-meta">
+                            @if (s.rating != null) {
+                              <svg class="pd__similar-star" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor"
+                                      d="M12 3.3 14.47 8.9l6.08.53-4.6 4 1.4 5.97L12 16.9l-5.35 3.5 1.39-5.97-4.6-4 6.08-.53L12 3.3Z"/>
+                              </svg>
+                              <span class="pd__similar-rating">{{ s.rating!.toFixed(1) }}</span>
+                            }
+                            @if (s.distance) {
+                              <span class="pd__similar-dist">{{ s.distance }}</span>
+                            }
+                          </div>
+                          @if (s.destinationId) {
+                            <button
+                              type="button"
+                              class="pd__destination-link"
+                              (click)="$event.stopPropagation(); exploreDestination(s.destinationId!)"
+                            >
+                              Explore {{ s.destinationName || 'destination' }}
+                            </button>
+                          }
                         </div>
                       </article>
                     }

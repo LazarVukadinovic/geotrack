@@ -12,6 +12,18 @@ import type { PlaceDetail, PlaceRelatedEvent } from '../../../core/models/place.
 
 export type DetailLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
 
+
+interface ApiSimilarPlace {
+  id: number;
+  title: string;
+  image?: string | null;
+  rating?: number | null;
+  distance?: string | null;
+  destinationId?: number | null;
+  destinationName?: string | null;
+  isSaved: boolean;
+}
+
 interface ApiPlaceDetail {
   id: number;
   title: string;
@@ -34,7 +46,9 @@ interface ApiPlaceDetail {
   about?: string;
   reviews: { id: number; authorUserId?: number; authorName: string; avatarUrl?: string; rating: number; timeAgo?: string; body: string; helpfulCount: number; reportedByCurrentUser?: boolean; isOwnReview?: boolean }[];
   relatedEvents?: { id: number; title: string; subtitle?: string | null; image?: string | null }[] | null;
-  similar?: { id: number; title: string; image?: string; rating?: number; distance?: string; isSaved: boolean }[] | null;
+  similar?: ApiSimilarPlace[] | null;
+  similarInDestination?: ApiSimilarPlace[] | null;
+  similarInTerritory?: ApiSimilarPlace[] | null;
   isSaved: boolean;
   isOwnable?: boolean;
   isOwnedByCurrentUser?: boolean;
@@ -162,14 +176,9 @@ export class PlaceDetailService {
             reportedByCurrentUser: r.reportedByCurrentUser ?? false,
             isOwnReview: r.isOwnReview ?? false,
           })),
-          similar: (dto.similar ?? []).map(s => ({
-            id: String(s.id),
-            title: s.title,
-            image: s.image ?? '',
-            rating: s.rating,
-            distance: s.distance ?? '',
-            isSaved: s.isSaved,
-          })),
+          similar: this.mapSimilarPlaces(dto.similarInDestination ?? dto.similar ?? []),
+          similarInDestination: this.mapSimilarPlaces(dto.similarInDestination ?? dto.similar ?? []),
+          similarInTerritory: this.mapSimilarPlaces(dto.similarInTerritory ?? []),
           isSaved: dto.isSaved,
           isOwnable: dto.isOwnable ?? false,
           isOwnedByCurrentUser: dto.isOwnedByCurrentUser ?? false,
@@ -203,6 +212,38 @@ export class PlaceDetailService {
         }
       },
     });
+  }
+
+  markReviewReported(id: string, reviewId: string): void {
+    this._cache.update(current => {
+      const existing = current[id];
+      if (!existing) return current;
+
+      return {
+        ...current,
+        [id]: {
+          ...existing,
+          reviews: existing.reviews.map(review =>
+            review.id === reviewId
+              ? { ...review, reportedByCurrentUser: true }
+              : review,
+          ),
+        },
+      };
+    });
+  }
+
+  private mapSimilarPlaces(items: ApiSimilarPlace[] | null | undefined): PlaceDetail['similar'] {
+    return (items ?? []).map(s => ({
+      id: String(s.id),
+      title: s.title,
+      image: s.image ?? '',
+      rating: s.rating ?? undefined,
+      distance: s.distance ?? '',
+      destinationId: s.destinationId != null ? String(s.destinationId) : null,
+      destinationName: s.destinationName ?? null,
+      isSaved: s.isSaved,
+    }));
   }
 
   private buildLocationQuery(): string {

@@ -29,6 +29,8 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .Include(d => d.Locations)
                 .ThenInclude(l => l.Images)
             .Include(d => d.Locations)
+                .ThenInclude(l => l.LocationReviews)
+            .Include(d => d.Locations)
                 .ThenInclude(l => l.LocationTags)
                 .ThenInclude(lt => lt.Tag)
                     .ThenInclude(tag => tag.TagType)
@@ -48,6 +50,9 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
 
     public async Task<List<DestinationRelatedItemDto>> GetSimilarPublishedDestinationsInTerritoryAsync(int destinationId, int take)
     {
+        if (take <= 0)
+            return new List<DestinationRelatedItemDto>();
+
         var source = await _context.Destinations
             .AsNoTracking()
             .Where(d => d.Id == destinationId)
@@ -59,9 +64,7 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .FirstOrDefaultAsync();
 
         if (source == null)
-        {
             return new List<DestinationRelatedItemDto>();
-        }
 
         var tagIds = await _context.DestinationTags
             .AsNoTracking()
@@ -70,32 +73,49 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .Distinct()
             .ToListAsync();
 
+        if (tagIds.Count == 0)
+            return new List<DestinationRelatedItemDto>();
+
+        const int minimumSharedTags = 3;
+
         return await _context.Destinations
             .AsNoTracking()
-            .Where(d => d.Id != destinationId &&
-                        d.Status == "Published" &&
-                        d.Region.TerritoryId == source.TerritoryId &&
-                        d.DestinationTypeId == source.DestinationTypeId)
-            .OrderByDescending(d => d.DestinationTags.Count(dt => tagIds.Contains(dt.TagId)))
-            .ThenByDescending(d => d.DestinationReviews.Any())
-            .ThenBy(d => d.Name)
-            .Take(take)
-            .Select(d => new DestinationRelatedItemDto
+            .Where(d =>
+                d.Id != destinationId &&
+                d.Status == "Published" &&
+                d.Region.TerritoryId == source.TerritoryId)
+            .Select(d => new
             {
-                Id = d.Id,
-                Name = d.Name,
-                Description = string.IsNullOrWhiteSpace(d.Summary) ? d.Description : d.Summary,
-                Image = d.Images
-                    .OrderBy(image => image.ImageRole == "card" ? 0 : image.ImageRole == "cover" ? 1 : 2)
-                    .ThenBy(image => image.SortOrder)
-                    .Select(image => image.Url)
-                    .FirstOrDefault(),
+                Destination = d,
+                SameType = d.DestinationTypeId == source.DestinationTypeId,
+                SharedTagCount = d.DestinationTags.Count(dt => tagIds.Contains(dt.TagId)),
                 AverageRating = d.DestinationReviews
                     .Select(review => (double?)review.Rating)
                     .Average() ?? 0
             })
+            .Where(x => x.SharedTagCount >= minimumSharedTags)
+            .OrderByDescending(x => x.SameType)
+            .ThenByDescending(x => x.SharedTagCount)
+            .ThenByDescending(x => x.AverageRating)
+            .ThenBy(x => x.Destination.Name)
+            .Take(take)
+            .Select(x => new DestinationRelatedItemDto
+            {
+                Id = x.Destination.Id,
+                Name = x.Destination.Name,
+                Description = string.IsNullOrWhiteSpace(x.Destination.Summary)
+                    ? x.Destination.Description
+                    : x.Destination.Summary,
+                Image = x.Destination.Images
+                    .OrderBy(image => image.ImageRole == "card" ? 0 : image.ImageRole == "cover" ? 1 : 2)
+                    .ThenBy(image => image.SortOrder)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = x.AverageRating
+            })
             .ToListAsync();
     }
+
 
     public async Task<bool> IsDestinationSavedByUserAsync(int destinationId, int userId)
     {

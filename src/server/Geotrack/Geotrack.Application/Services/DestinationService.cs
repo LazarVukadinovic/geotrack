@@ -222,6 +222,7 @@ public class DestinationService : IDestinationService
         var locations = destination.Locations
             .Where(l => l.Status == PublishedStatus)
             .OrderBy(l => l.Name)
+            .Take(SectionPreviewLimit)
             .Select(MapDestinationLocationItem)
             .ToList();
 
@@ -246,9 +247,12 @@ public class DestinationService : IDestinationService
             Id = location.Id,
             Name = location.Name,
             Image = PickCardImage(location.Images),
-            Description = string.IsNullOrWhiteSpace(location.Description) ? null : location.Description,
+            Description = string.IsNullOrWhiteSpace(location.Summary)
+                ? (string.IsNullOrWhiteSpace(location.Description) ? null : location.Description)
+                : location.Summary,
             Latitude = location.Latitude,
-            Longitude = location.Longitude
+            Longitude = location.Longitude,
+            AverageRating = Math.Round(location.LocationReviews.Select(review => (double?)review.Rating).Average() ?? 0d, 2)
         };
     }
 

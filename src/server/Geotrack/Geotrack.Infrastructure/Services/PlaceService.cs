@@ -150,6 +150,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
                 .ThenInclude(l => l.Destination)
+                    .ThenInclude(d => d.Region)
             .Include(p => p.Images)
             .Include(p => p.PlaceAmenities)
                 .ThenInclude(pa => pa.Amenity)
@@ -181,19 +182,55 @@ public class PlaceService : IPlaceService
                 item.UserId == userId.Value &&
                 item.Type == PlaceContributionType.ClaimOwnership &&
                 item.Status == PlaceContributionStatus.PendingReview);
-        var similar = await _db.Places
+        var placeTagIds = place.PlaceTags
+            .Select(pt => pt.TagId)
+            .Distinct()
+            .ToList();
+        var territoryId = place.Location.Destination.Region.TerritoryId;
+
+        var similarInDestination = await _db.Places
             .AsNoTracking()
             .Include(p => p.PlaceReviews)
             .Include(p => p.Images)
+            .Include(p => p.Location)
+                .ThenInclude(location => location.Destination)
             .WherePublicPlaces()
             .Where(p =>
                 p.Id != id &&
                 p.Stay == null &&
-                p.PlaceTypeId == place.PlaceTypeId &&
-                p.Location.DestinationId == place.Location.DestinationId)
+                p.Location.DestinationId == place.Location.DestinationId &&
+                (p.PlaceTypeId == place.PlaceTypeId ||
+                 p.PlaceTags.Any(pt => placeTagIds.Contains(pt.TagId))))
             .AsSplitQuery()
-            .OrderByDescending(p => p.PlaceReviews.Select(review => (double?)review.Rating).Average() ?? 0d)
+            .OrderByDescending(p => p.PlaceTypeId == place.PlaceTypeId)
+            .ThenByDescending(p => p.PlaceTags.Count(pt => placeTagIds.Contains(pt.TagId)))
+            .ThenByDescending(p => p.PlaceReviews.Select(review => (double?)review.Rating).Average() ?? 0d)
             .ThenByDescending(p => p.PlaceReviews.Count)
+            .ThenBy(p => p.Name)
+            .ThenBy(p => p.Id)
+            .Take(5)
+            .ToListAsync();
+
+        var similarInTerritory = await _db.Places
+            .AsNoTracking()
+            .Include(p => p.PlaceReviews)
+            .Include(p => p.Images)
+            .Include(p => p.Location)
+                .ThenInclude(location => location.Destination)
+            .WherePublicPlaces()
+            .Where(p =>
+                p.Id != id &&
+                p.Stay == null &&
+                p.Location.DestinationId != place.Location.DestinationId &&
+                p.Location.Destination.Region.TerritoryId == territoryId &&
+                (p.PlaceTypeId == place.PlaceTypeId ||
+                 p.PlaceTags.Any(pt => placeTagIds.Contains(pt.TagId))))
+            .AsSplitQuery()
+            .OrderByDescending(p => p.PlaceTypeId == place.PlaceTypeId)
+            .ThenByDescending(p => p.PlaceTags.Count(pt => placeTagIds.Contains(pt.TagId)))
+            .ThenByDescending(p => p.PlaceReviews.Select(review => (double?)review.Rating).Average() ?? 0d)
+            .ThenByDescending(p => p.PlaceReviews.Count)
+            .ThenBy(p => p.Location.Destination.Name)
             .ThenBy(p => p.Name)
             .ThenBy(p => p.Id)
             .Take(5)
@@ -290,19 +327,14 @@ public class PlaceService : IPlaceService
                     Image = GetCoverImageUrl(e.Images),
                 })
                 .ToList(),
-            Similar = similar
-                .Select(s => new SimilarPlaceDto
-                {
-                    Id = s.Id,
-                    Title = DisplayTextSafety.CleanRequired(s.Name, "Similar place"),
-                    Image = GetMainImageUrl(s.Images),
-                    Rating = CalculateAverageRating(s.PlaceReviews),
-                    Distance = SpatialDistanceFormatter.FormatBetween(
-                        originLat, originLng,
-                        s.Latitude, s.Longitude,
-                        useCurrentLocationDistance),
-                    IsSaved = favoriteIds.Contains(s.Id)
-                })
+            Similar = similarInDestination
+                .Select(s => MapSimilarPlaceDto(s, favoriteIds, originLat, originLng, useCurrentLocationDistance))
+                .ToList(),
+            SimilarInDestination = similarInDestination
+                .Select(s => MapSimilarPlaceDto(s, favoriteIds, originLat, originLng, useCurrentLocationDistance))
+                .ToList(),
+            SimilarInTerritory = similarInTerritory
+                .Select(s => MapSimilarPlaceDto(s, favoriteIds, originLat, originLng, useCurrentLocationDistance))
                 .ToList(),
             IsSaved = isSaved,
             IsOwnable = place.PlaceType?.IsOwnable ?? false,
@@ -335,6 +367,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
                 .ThenInclude(l => l.Destination)
+                    .ThenInclude(d => d.Region)
             .Include(p => p.Images)
             .Include(p => p.Stay)
                 .ThenInclude(s => s!.StayType)
@@ -1086,6 +1119,22 @@ public class PlaceService : IPlaceService
         return user.Username;
     }
 
+
+    private static SimilarPlaceDto MapSimilarPlaceDto(Place place, HashSet<int> favoriteIds, double? originLat, double? originLng, bool useCurrentLocationDistance) => new()
+    {
+        Id = place.Id,
+        Title = DisplayTextSafety.CleanRequired(place.Name, "Similar place"),
+        Image = GetMainImageUrl(place.Images),
+        Rating = CalculateAverageRating(place.PlaceReviews),
+        Distance = SpatialDistanceFormatter.FormatBetween(
+            originLat, originLng,
+            place.Latitude, place.Longitude,
+            useCurrentLocationDistance),
+        DestinationId = place.Location?.DestinationId,
+        DestinationName = DisplayTextSafety.CleanOptional(place.Location?.Destination?.Name),
+        IsSaved = favoriteIds.Contains(place.Id)
+    };
+
     private static string? FormatReviewCountLabel(int count) => count switch
     {
         0 => null,
@@ -1465,6 +1514,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
                 .ThenInclude(l => l.Destination)
+                    .ThenInclude(d => d.Region)
             .Include(p => p.Images)
             .Include(p => p.Stay)
                 .ThenInclude(stay => stay!.StayAmenities)
@@ -1665,6 +1715,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
                 .ThenInclude(l => l.Destination)
+                    .ThenInclude(d => d.Region)
             .Include(p => p.Images)
             .Include(p => p.Stay)
                 .ThenInclude(stay => stay!.StayAmenities)

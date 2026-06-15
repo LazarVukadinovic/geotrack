@@ -229,6 +229,7 @@ public class EventService : IEventService
             .Include(e => e.EventType)
             .Include(e => e.Images)
             .Include(e => e.Destination)
+                .ThenInclude(d => d.Region)
             .Include(e => e.Location)
             .Include(e => e.Place)
             .Include(e => e.EventTags).ThenInclude(et => et.Tag)
@@ -246,18 +247,29 @@ public class EventService : IEventService
 
         var isSaved = userId.HasValue && await _favoriteService.IsFavoriteAsync(userId.Value, "event", id);
 
+        var eventTagIds = evt.EventTags
+            .Select(et => et.TagId)
+            .Distinct()
+            .ToList();
+        var territoryId = evt.Destination.Region.TerritoryId;
+
         var similar = await _db.Events
             .AsNoTracking()
             .Include(e => e.EventType)
             .Include(e => e.Images)
             .Where(e =>
                 e.Id != id &&
-                e.DestinationId == evt.DestinationId &&
                 e.Status == PublishedStatus &&
                 e.Destination.Status == PublishedStatus &&
+                e.Destination.Region.TerritoryId == territoryId &&
                 (e.Location == null || e.Location.Status == PublishedStatus) &&
-                (e.Place == null || e.Place.Status == PublishedStatus))
-            .OrderBy(e => e.StartDate)
+                (e.Place == null || e.Place.Status == PublishedStatus) &&
+                (evt.EventTypeId > 0
+                    ? e.EventTypeId == evt.EventTypeId
+                    : e.EventTags.Any(et => eventTagIds.Contains(et.TagId))))
+            .OrderByDescending(e => e.DestinationId == evt.DestinationId)
+            .ThenByDescending(e => e.EventTags.Count(et => eventTagIds.Contains(et.TagId)))
+            .ThenBy(e => e.StartDate)
             .ThenBy(e => e.Name)
             .ThenBy(e => e.Id)
             .Take(5)

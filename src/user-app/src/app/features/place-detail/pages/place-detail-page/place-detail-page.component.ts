@@ -152,6 +152,10 @@ export class PlaceDetailPageComponent {
         const id = this.placeId();
         if (id) this.service.loadPlaceDetail(id);
       },
+      onReportSuccess: (reviewId) => {
+        const id = this.placeId();
+        if (id) this.service.markReviewReported(id, reviewId);
+      },
     });
 
     effect(() => {
@@ -215,6 +219,10 @@ export class PlaceDetailPageComponent {
 
   protected navigateToEvent(id: string): void {
     void this.router.navigate(['/events', id], { queryParams: this.collectionQueryParams() });
+  }
+
+  protected exploreDestination(destinationId: string): void {
+    void this.router.navigate(['/explore'], { queryParams: { destinationId } });
   }
 
   protected openGallery(startIndex = 0): void {

@@ -49,6 +49,8 @@ export interface PlaceSimilar {
   image: string;
   rating?: number;
   distance: string;
+  destinationId?: string | null;
+  destinationName?: string | null;
   isSaved: boolean;
 }
 
@@ -83,6 +85,8 @@ export interface PlaceDetail {
   reviews: PlaceReview[];
   relatedEvents: PlaceRelatedEvent[];
   similar: PlaceSimilar[];
+  similarInDestination: PlaceSimilar[];
+  similarInTerritory: PlaceSimilar[];
   isSaved: boolean;
   isOwnable: boolean;
   isOwnedByCurrentUser: boolean;
