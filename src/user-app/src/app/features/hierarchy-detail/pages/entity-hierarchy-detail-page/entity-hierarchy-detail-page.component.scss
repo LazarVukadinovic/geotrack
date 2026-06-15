@@ -1314,3 +1314,82 @@ button.ehd__photo-card span {
     align-items: center;
   }
 }
+/* ─── Place cards (Places in this location) ─────────────────────────────────── */
+
+.ehd__explore-card--simple {
+  flex-basis: clamp(220px, 36vw, 290px);
+}
+
+.ehd__explore-body--place {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 14px;
+}
+
+.ehd__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+}
+
+.ehd__category {
+  margin: 0;
+  color: var(--color-muted, #6b7a99);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ehd__place-status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-muted, #6b7a99);
+  background: rgba(26, 43, 76, 0.08);
+
+  &--success { color: #047857; background: rgba(4, 120, 87, 0.1); }
+  &--warning { color: #b45309; background: rgba(245, 158, 11, 0.14); }
+  &--muted   { color: var(--color-muted, #6b7a99); background: rgba(26, 43, 76, 0.07); }
+}
+
+.ehd__place-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 0;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ehd__place-meta--compact {
+  min-height: 18px;
+}
+
+.ehd__place-meta-rating {
+  color: var(--color-primary-navy, #1a2b4c);
+  font-weight: 800;
+}
+
+.ehd__place-meta-sub {
+  color: var(--color-muted, #6b7a99);
+}
+
+.ehd__place-meta-empty {
+  color: var(--color-muted, #6b7a99);
+}
+
+@media (max-width: 640px) {
+  .ehd__explore-card--simple {
+    flex-basis: 82vw;
+  }
+}

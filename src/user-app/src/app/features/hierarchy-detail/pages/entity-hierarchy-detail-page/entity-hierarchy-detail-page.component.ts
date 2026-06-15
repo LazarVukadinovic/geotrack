@@ -28,6 +28,10 @@ interface DetailItem {
   image?: string;
   meta?: string;
   rating?: number | null;
+  categoryLabel?: string;
+  locationName?: string;
+  statusBadge?: { label: string; tone: string };
+  tags?: string[];
 }
 
 interface DetailSectionPreview {
@@ -609,7 +613,34 @@ export class EntityHierarchyDetailPageComponent {
       route,
       rating: this.toNullableNumber(item['averageRating'] ?? item['rating']),
       meta: fallbackType === 'event' ? this.formatEventDate(item['startDate']) : undefined,
+      categoryLabel: this.toNullableString(item['categoryLabel']) ?? undefined,
+      locationName: this.toNullableString(item['locationName']) ?? undefined,
+      statusBadge: this.mapStatusBadge(item['statusBadge']),
+      tags: this.mapTags(item['tags']),
     };
+  }
+
+  private mapStatusBadge(value: unknown): { label: string; tone: string } | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const obj = value as Record<string, unknown>;
+    const label = this.toNullableString(obj['label']);
+    if (!label) return undefined;
+    return { label, tone: this.toNullableString(obj['tone']) ?? 'neutral' };
+  }
+
+  private mapTags(value: unknown): string[] | undefined {
+    if (!Array.isArray(value) || value.length === 0) return undefined;
+    const labels = (value as unknown[])
+      .map(t => {
+        if (typeof t === 'string') return t.trim();
+        if (t && typeof t === 'object') {
+          const obj = t as Record<string, unknown>;
+          return this.toNullableString(obj['name'] ?? obj['label'] ?? obj['tag']) ?? '';
+        }
+        return '';
+      })
+      .filter(Boolean);
+    return labels.length > 0 ? labels : undefined;
   }
 
   private mapRelated(value: unknown, type: 'destination' | 'location' | 'event'): DetailItem[] {

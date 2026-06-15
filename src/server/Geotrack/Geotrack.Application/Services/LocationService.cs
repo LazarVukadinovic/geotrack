@@ -293,12 +293,23 @@ public class LocationService : ILocationService
 
     private static LocationSectionPlaceItemDto MapPlaceItem(Place place)
     {
+        var averageRating = place.PlaceReviews.Count > 0
+            ? Math.Round(place.PlaceReviews.Average(review => review.Rating), 1)
+            : (double?)null;
+
         return new LocationSectionPlaceItemDto
         {
             Id = place.Id,
             Name = place.Name,
             Image = PickCardImage(place.Images),
-            LocationId = place.LocationId
+            LocationId = place.LocationId,
+            CategoryLabel = string.IsNullOrWhiteSpace(place.PlaceType?.Name) ? null : place.PlaceType.Name.Trim(),
+            AverageRating = averageRating,
+            Tags = place.PlaceTags
+                .Where(pt => pt.Tag != null && !string.IsNullOrWhiteSpace(pt.Tag.Name))
+                .Select(pt => pt.Tag!.Name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
         };
     }
 

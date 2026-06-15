@@ -200,14 +200,43 @@
               <div class="ehd__explore-media">
                 @if (place.image) { <img [src]="place.image" [alt]="place.name" appImageFallback loading="lazy" decoding="async"> }
               </div>
-              <div class="ehd__explore-body ehd__explore-body--similar">
-                <div class="ehd__explore-name-row">
-                  <span class="ehd__explore-name">{{ place.name }}</span>
-                  @if (place.rating != null && place.rating > 0) {
-                    <span class="ehd__rating-chip">★ {{ place.rating | number: '1.1-1' }}</span>
+              <div class="ehd__explore-body ehd__explore-body--place">
+                <div class="ehd__label-row">
+                  @if (place.categoryLabel || place.locationName) {
+                    <p class="ehd__category">
+                      @if (place.categoryLabel) {
+                        <span>{{ place.categoryLabel }}</span>
+                      }
+                      @if (place.categoryLabel && place.locationName) {
+                        <span> · </span>
+                      }
+                      @if (place.locationName) {
+                        <span>{{ place.locationName }}</span>
+                      }
+                    </p>
+                  }
+
+                  @if (place.statusBadge) {
+                    <span
+                      class="ehd__place-status-badge"
+                      [class.ehd__place-status-badge--success]="place.statusBadge.tone === 'success'"
+                      [class.ehd__place-status-badge--warning]="place.statusBadge.tone === 'warning'"
+                      [class.ehd__place-status-badge--muted]="place.statusBadge.tone === 'muted'"
+                    >
+                      {{ place.statusBadge.label }}
+                    </span>
                   }
                 </div>
-                @if (place.description) { <small>{{ place.description }}</small> }
+
+                <h3 class="ehd__explore-name">{{ place.name }}</h3>
+
+                <div class="ehd__place-meta ehd__place-meta--compact">
+                  @if (place.rating != null && place.rating > 0) {
+                    <span class="ehd__place-meta-rating">★ {{ place.rating | number: '1.1-1' }}</span>
+                  } @else {
+                    <span class="ehd__place-meta-empty">No reviews</span>
+                  }
+                </div>
               </div>
             </a>
           }

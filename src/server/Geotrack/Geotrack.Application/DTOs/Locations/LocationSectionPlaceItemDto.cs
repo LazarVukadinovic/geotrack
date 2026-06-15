@@ -12,4 +12,7 @@ public class LocationSectionPlaceItemDto
     public string Name { get; set; } = string.Empty;
     public string? Image { get; set; }
     public int LocationId { get; set; }
+    public string? CategoryLabel { get; set; }
+    public double? AverageRating { get; set; }
+    public List<string> Tags { get; set; } = new();
 }
