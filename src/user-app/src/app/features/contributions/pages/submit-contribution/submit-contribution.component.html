@@ -87,6 +87,7 @@
           <app-step-details
             [data]="draft().details"
             [isAccommodation]="isAccommodationDraft()"
+            [placeType]="draft().basics?.placeType"
             (changed)="onDetailsChanged($event)"
             (saved)="onDetailsSaved($event)"
             (back)="prevStep()"

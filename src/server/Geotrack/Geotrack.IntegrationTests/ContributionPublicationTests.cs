@@ -406,7 +406,8 @@ public sealed class ContributionPublicationTests
     [InlineData("Stay")]
     [InlineData("Restaurant")]
     [InlineData("Cafe")]
-    public async Task Create_requires_ownership_proof_for_proof_required_place_types(string placeType)
+    [InlineData("Bar")]
+    public async Task Create_allows_ownable_place_types_without_ownership_proof(string placeType)
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         using var client = await LoginAsync(app, "marko.p@example.com", "password123");
@@ -417,10 +418,37 @@ public sealed class ContributionPublicationTests
             payload,
             ownershipProof: OwnershipProofUpload.Missing);
 
+        response.EnsureSuccessStatusCode();
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+        Assert.Equal("PendingReview", created!.Contribution.Status);
+        Assert.Equal(placeType, created.Contribution.PlaceType);
+        Assert.False(created.Contribution.HasOwnershipProofDocument);
+    }
+
+    [Theory]
+    [InlineData("Bar")]
+    [InlineData("Cafe")]
+    [InlineData("Restaurant")]
+    [InlineData("Museum")]
+    [InlineData("Gallery")]
+    public async Task Create_requires_opening_hours_for_business_and_visitor_place_types(string placeType)
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreatePayloadForPlaceType($"Missing Hours {placeType}", placeType);
+        payload["operatingHoursEnabled"] = false;
+        payload["operatingHours"] = Array.Empty<object>();
+
+        var response = await PostContributionAsync(
+            client,
+            payload,
+            ownershipProof: OwnershipProofUpload.Missing);
+
         await AssertErrorAsync(
             response,
             HttpStatusCode.BadRequest,
-            "Ownership proof document is required.");
+            "Opening hours are required for this place type.");
     }
 
     [Theory]
@@ -442,6 +470,36 @@ public sealed class ContributionPublicationTests
         Assert.Equal("PendingReview", created!.Contribution.Status);
         Assert.Equal(placeType, created.Contribution.PlaceType);
         Assert.False(created.Contribution.HasOwnershipProofDocument);
+    }
+
+    [Fact]
+    public async Task Create_ignores_ownership_proof_for_non_ownable_place_types()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+        var payload = CreatePayloadForPlaceType("Landmark With Irrelevant Proof", "Landmark");
+
+        var response = await PostContributionAsync(client, payload);
+
+        response.EnsureSuccessStatusCode();
+        var created = await response.Content.ReadFromJsonAsync<PlaceContributionResponseDto>();
+        Assert.NotNull(created);
+        Assert.False(created!.Contribution.HasOwnershipProofDocument);
+        Assert.Null(created.Contribution.OwnershipProofDocumentUrl);
+    }
+
+    [Fact]
+    public async Task Feature_options_offer_sea_view_for_bars_as_well_as_cafes()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        using var client = await LoginAsync(app, "marko.p@example.com", "password123");
+
+        var options = await client.GetFromJsonAsync<ContributionFeatureOptionsDto>(
+            "/api/contributions/feature-options");
+
+        Assert.NotNull(options);
+        Assert.Contains("sea", options!.AmenityIdsByPlaceType["bar"]);
+        Assert.Contains("sea", options.AmenityIdsByPlaceType["cafe"]);
     }
 
     [Theory]
@@ -996,6 +1054,11 @@ public sealed class ContributionPublicationTests
             ["phone"] = "+385111222",
             ["contactEmail"] = "hello@canonical-cafe.example",
             ["website"] = "https://canonical-cafe.example",
+            ["operatingHoursEnabled"] = true,
+            ["operatingHours"] = new[]
+            {
+                new { dayOfWeek = "Monday", isOpen = true, openTime = "09:00", closeTime = "17:00" }
+            },
             ["tags"] = new[] { "Coffee", "Local" },
             ["amenities"] = new[] { "wifi" },
             ["images"] = RequiredContributionImages("generic-place"),
@@ -1094,7 +1157,12 @@ public sealed class ContributionPublicationTests
             longitude = 18.0944,
             contactEmail = "scoped-update@example.com",
             phone = "+3859876543",
-            website = "https://scoped-update.example"
+            website = "https://scoped-update.example",
+            operatingHoursEnabled = true,
+            operatingHours = new[]
+            {
+                new { dayOfWeek = "Monday", isOpen = true, openTime = "09:00", closeTime = "17:00" }
+            }
         };
 
         using var formData = new MultipartFormDataContent();

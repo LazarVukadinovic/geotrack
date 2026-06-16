@@ -8,6 +8,11 @@ import { MapApiService } from '../../../../../../core/services/map-api.service';
 import { ContributionsService, ResolveLocationOption } from '../../../../services/contributions.service';
 import { BackgroundImageFallbackDirective } from '../../../../../../shared/directives/background-image-fallback.directive';
 import { PhotoGalleryComponent } from '../../../../../../shared/components/photo-gallery/photo-gallery.component';
+import { CoverImageCropperComponent } from '../../../../../../shared/components/cover-image-cropper/cover-image-cropper.component';
+import {
+  COVER_IMAGE_ASPECT_RATIO,
+  COVER_IMAGE_OUTPUT_MAX_WIDTH,
+} from '../../../../../../core/constants/cover-image.constants';
 import type { EntityImage } from '../../../../../../core/models/entity-image.model';
 
 const MAP_STYLE_URL = '/map-style.json';
@@ -16,7 +21,10 @@ const DEFAULT_PICKER_LNG = 20.46;
 const MAX_OWNERSHIP_PROOF_BYTES = 10 * 1024 * 1024;
 const FALLBACK_OWNABLE_PLACE_TYPES = new Set(['stay', 'restaurant', 'cafe', 'bar']);
 const HIDDEN_CONTRIBUTION_PLACE_TYPES = new Set(['beach', 'nature', 'shopping']);
-const COVER_IMAGE_OUTPUT = { width: 1600, height: 900 };
+const COVER_IMAGE_OUTPUT = {
+  width: COVER_IMAGE_OUTPUT_MAX_WIDTH,
+  height: Math.round(COVER_IMAGE_OUTPUT_MAX_WIDTH / COVER_IMAGE_ASPECT_RATIO),
+};
 const CARD_IMAGE_OUTPUT = { width: 960, height: 720 };
 const MAX_GALLERY_IMAGES = 10;
 
@@ -59,7 +67,13 @@ export interface BasicsData {
 @Component({
   selector: 'app-step-basics',
   standalone: true,
-  imports: [CommonModule, FormsModule, BackgroundImageFallbackDirective, PhotoGalleryComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    BackgroundImageFallbackDirective,
+    PhotoGalleryComponent,
+    CoverImageCropperComponent,
+  ],
   templateUrl: './step-basics.component.html',
   styleUrl: './step-basics.component.css',
 })
@@ -75,6 +89,8 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
   placeTypes = signal<ContributionPlaceTypeOption[]>(defaultPlaceTypes());
   stayTypes = signal<{ id: number; name: string }[]>(defaultStayTypes());
+  readonly coverImageAspectRatio = COVER_IMAGE_ASPECT_RATIO;
+  coverCropFile: File | null = null;
   coverPreviewUrl = signal('');
   cardPreviewUrl = signal('');
   galleryPreviewUrls = signal<string[]>([]);
@@ -148,17 +164,29 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   }
 
   onCoverImageSelected(e: Event): void {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    (e.target as HTMLInputElement).value = '';
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
     if (!file) return;
+
+    this.coverCropFile = file;
+  }
+
+  onCoverCropConfirmed(file: File): void {
     const reader = new FileReader();
     reader.onload = () => {
-      this.coverPreviewUrl.set(reader.result as string);
-      this.form.imageUrl = this.coverPreviewUrl();
+      const previewUrl = reader.result as string;
+      this.coverPreviewUrl.set(previewUrl);
+      this.form.imageUrl = previewUrl;
       this.form.coverImageFile = file;
+      this.coverCropFile = null;
       this.resetCoverCrop();
     };
     reader.readAsDataURL(file);
+  }
+
+  onCoverCropCancelled(): void {
+    this.coverCropFile = null;
   }
 
   onCardImageSelected(e: Event): void {
@@ -656,14 +684,14 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   }
 
   /** True for types where ownership doc section is shown (Bar, Cafe, Restaurant, Stay). */
-  requiresOwnershipProof(): boolean {
+  supportsOwnershipProof(): boolean {
     const selectedType = this.selectedPlaceType();
     return selectedType?.isOwnable ?? FALLBACK_OWNABLE_PLACE_TYPES.has(normalizePlaceType(this.form.placeType));
   }
 
   /** True when ownable type selected but no proof attached — user should see warning. */
   showOwnershipWarning(): boolean {
-    return this.requiresOwnershipProof() &&
+    return this.supportsOwnershipProof() &&
       !this.form.ownershipProofFile &&
       !this.form.ownershipProofDocumentUrl;
   }
@@ -727,8 +755,8 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
   ownershipProofHelpText(): string {
     return this.isAccommodationSelected()
-      ? 'Upload a PDF document proving your ownership or management of this property.'
-      : 'Upload a PDF document proving your ownership or management of this business.';
+      ? 'Optionally upload a PDF proving your ownership or management of this property.'
+      : 'Optionally upload a PDF proving your ownership or management of this business.';
   }
 
   showLocationError(): boolean {
@@ -751,7 +779,9 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     this.form.cardImgBgPosition = this.cardBgPosition();
     this.form.cardImgBgSize = this.cardBgSize();
 
-    const croppedCoverImageFile = this.form.coverImageFile
+    const coverNeedsAdditionalCrop =
+      this.bgPosition() !== '50% 50%' || this.bgSize() !== 'cover';
+    const croppedCoverImageFile = this.form.coverImageFile && coverNeedsAdditionalCrop
       ? await cropImageFile(
         this.form.coverImageFile,
         this.coverPreviewUrl(),
@@ -774,7 +804,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
 
     // The uploaded proof is preserved in-memory while the user cycles place types,
     // but it must never be submitted for a type that doesn't support ownership claims.
-    const includeOwnershipProof = this.requiresOwnershipProof();
+    const includeOwnershipProof = this.supportsOwnershipProof();
 
     this.saved.emit({
       ...this.form,

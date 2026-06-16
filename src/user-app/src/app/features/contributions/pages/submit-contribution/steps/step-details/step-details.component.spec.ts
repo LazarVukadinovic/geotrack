@@ -74,4 +74,32 @@ describe('StepDetailsComponent', () => {
     expect(changedValues.at(-1)?.operatingHours.some(hour =>
       hour.openTime === '09:00' && hour.closeTime === '17:00')).toBe(true);
   });
+
+  it('requires opening hours for bars and keeps the section enabled', () => {
+    fixture.componentRef.setInput('isAccommodation', false);
+    fixture.componentRef.setInput('placeType', 'Bar');
+    fixture.detectChanges();
+
+    expect(component.openingHoursRequired()).toBe(true);
+    expect(component.form.openingHoursEnabled).toBe(true);
+
+    component.form.openingHoursEnabled = false;
+    component.onContinue();
+
+    expect(component.isValid()).toBe(false);
+    expect(component.openingHoursError).toBe('Opening hours are required for this place type.');
+  });
+
+  it('uses native time inputs so letters cannot be entered as opening hours', () => {
+    fixture.componentRef.setInput('isAccommodation', false);
+    fixture.componentRef.setInput('placeType', 'Bar');
+    fixture.detectChanges();
+
+    const timeInput = fixture.nativeElement.querySelector('input[name="openingHours-Monday-open"]') as HTMLInputElement;
+
+    expect(timeInput).toBeTruthy();
+    expect(timeInput.type).toBe('time');
+    timeInput.value = 'a';
+    expect(timeInput.value).toBe('');
+  });
 });

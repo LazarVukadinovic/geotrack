@@ -31,12 +31,20 @@ public class PlaceContributionService : IPlaceContributionService
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
-    private static readonly HashSet<string> LegacyOwnershipProofRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> LegacyOwnablePlaceTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "stay",
         "restaurant",
         "cafe",
         "bar"
+    };
+    private static readonly HashSet<string> OpeningHoursRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bar",
+        "cafe",
+        "restaurant",
+        "museum",
+        "gallery"
     };
     private static readonly HashSet<string> ContributionIneligiblePlaceTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -368,14 +376,23 @@ public class PlaceContributionService : IPlaceContributionService
         else
         {
             Validate(request);
+            await ValidateRequiredOpeningHoursAsync(type, request);
             references = await ResolveContributionReferencesAsync(request);
         }
 
-        var requiresOwnershipProof = await RequiresOwnershipProofAsync(type, request);
+        var requiresOwnershipProof = RequiresOwnershipProof(type);
         if (requiresOwnershipProof &&
             ownershipProofBytes is null or { Length: 0 })
         {
             throw new InvalidOperationException("Ownership proof document is required.");
+        }
+
+        var allowsOwnershipProof = await AllowsOwnershipProofAsync(type, request);
+        if (!allowsOwnershipProof)
+        {
+            ownershipProofBytes = null;
+            ownershipProofOriginalFileName = null;
+            ownershipProofContentType = null;
         }
 
         string? storedCardImageUrl = null;
@@ -539,7 +556,7 @@ public class PlaceContributionService : IPlaceContributionService
         Place? targetPlace = null;
         ContributionReferenceResolution? references = null;
 
-        var requiresOwnershipProof = await RequiresOwnershipProofAsync(type, request);
+        var requiresOwnershipProof = RequiresOwnershipProof(type);
         var allowsOwnershipProof = await AllowsOwnershipProofAsync(type, request);
         if (requiresOwnershipProof &&
             string.IsNullOrWhiteSpace(contribution.OwnershipProofDocumentUrl) &&
@@ -571,6 +588,7 @@ public class PlaceContributionService : IPlaceContributionService
         else
         {
             Validate(request);
+            await ValidateRequiredOpeningHoursAsync(type, request);
             references = await ResolveContributionReferencesAsync(request);
         }
 
@@ -1397,14 +1415,22 @@ public class PlaceContributionService : IPlaceContributionService
     private static bool RequiresTargetPlaceReviewScope(PlaceContributionType type) =>
         type is PlaceContributionType.UpdatePlace or PlaceContributionType.ClaimOwnership;
 
-    private async Task<bool> RequiresOwnershipProofAsync(
+    private static bool RequiresOwnershipProof(PlaceContributionType contributionType) =>
+        contributionType == PlaceContributionType.ClaimOwnership;
+
+    private async Task ValidateRequiredOpeningHoursAsync(
         PlaceContributionType contributionType,
         UpsertPlaceContributionDto request)
     {
         if (contributionType == PlaceContributionType.ClaimOwnership)
-            return true;
+            return;
 
-        return await ResolveRequestedPlaceTypeOwnableAsync(request);
+        var placeTypeName = await ResolveRequestedPlaceTypeNameAsync(request);
+        if (placeTypeName is null || !OpeningHoursRequiredPlaceTypes.Contains(placeTypeName))
+            return;
+
+        if (!request.OperatingHoursEnabled)
+            throw new InvalidOperationException("Opening hours are required for this place type.");
     }
 
     private async Task<bool> AllowsOwnershipProofAsync(
@@ -1417,8 +1443,9 @@ public class PlaceContributionService : IPlaceContributionService
 
     private async Task<string?> ResolveRequestedPlaceTypeNameAsync(UpsertPlaceContributionDto request)
     {
-        if (!string.IsNullOrWhiteSpace(request.PlaceType))
-            return request.PlaceType;
+        var requestedPlaceType = NormalizeOptional(request.PlaceType);
+        if (requestedPlaceType is not null)
+            return requestedPlaceType;
 
         if (!request.PlaceTypeId.HasValue)
             return null;
@@ -1445,7 +1472,7 @@ public class PlaceContributionService : IPlaceContributionService
             if (placeType is null)
                 throw new KeyNotFoundException("Place type not found.");
 
-            return placeType.IsOwnable || LegacyOwnershipProofRequiredPlaceTypes.Contains(placeType.Name);
+            return placeType.IsOwnable || LegacyOwnablePlaceTypes.Contains(placeType.Name);
         }
 
         var placeTypeName = NormalizeOptional(request.PlaceType);
@@ -1463,7 +1490,7 @@ public class PlaceContributionService : IPlaceContributionService
             .Select(placeType => (bool?)placeType.IsOwnable)
             .SingleOrDefaultAsync();
 
-        return dbIsOwnable ?? LegacyOwnershipProofRequiredPlaceTypes.Contains(placeTypeName);
+        return dbIsOwnable ?? LegacyOwnablePlaceTypes.Contains(placeTypeName);
     }
 
     private async Task<bool> UserCanManagePlaceAsync(int userId, int placeId)
@@ -1835,7 +1862,7 @@ public class PlaceContributionService : IPlaceContributionService
         {
             Name = ToTitle(displayName),
             Description = normalized == "stay" ? "Accommodation and stay listings" : $"{ToTitle(displayName)} listings",
-            IsOwnable = LegacyOwnershipProofRequiredPlaceTypes.Contains(normalized),
+            IsOwnable = LegacyOwnablePlaceTypes.Contains(normalized),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -3231,7 +3258,7 @@ public class PlaceContributionService : IPlaceContributionService
             ["stay"] = Pick("free-wifi", "swimming-pool", "breakfast-included", "parking", "spa", "fitness-center", "restaurant", "air-conditioning", "outdoor-seating", "sea-view").ToList(),
             ["restaurant"] = Pick("outdoor", "wifi", "parking", "ac", "sea").ToList(),
             ["cafe"] = Pick("outdoor", "wifi", "breakfast", "parking", "ac", "sea").ToList(),
-            ["bar"] = Pick("outdoor", "wifi", "parking", "ac").ToList(),
+            ["bar"] = Pick("outdoor", "wifi", "parking", "ac", "sea").ToList(),
             ["beach"] = Pick("parking", "outdoor", "wifi", "sea").ToList(),
             ["landmark"] = Pick("parking", "wifi", "ac").ToList(),
             ["nature"] = Pick("parking", "outdoor").ToList(),

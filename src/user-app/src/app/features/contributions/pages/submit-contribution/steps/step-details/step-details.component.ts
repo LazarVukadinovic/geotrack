@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, ViewChild, effect, input, output } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, ViewChild, computed, effect, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { formatDescriptionPlainText, normalizeEditorDescriptionHtml } from '../../../../../../shared/utils/description-formatting';
@@ -17,6 +17,14 @@ interface DayHours {
 }
 
 type TimeField = 'openTime' | 'closeTime';
+
+const REQUIRED_OPENING_HOURS_PLACE_TYPES = new Set([
+  'bar',
+  'cafe',
+  'restaurant',
+  'museum',
+  'gallery',
+]);
 
 export interface ContributionOperatingHour {
   dayOfWeek: string;
@@ -47,6 +55,7 @@ export class StepDetailsComponent implements AfterViewInit {
 
   data = input<DetailsData | null>(null);
   isAccommodation = input(false);
+  placeType = input<string | null | undefined>(null);
   saved = output<DetailsData>();
   back = output<void>();
   changed = output<DetailsData>();
@@ -59,6 +68,9 @@ export class StepDetailsComponent implements AfterViewInit {
   readonly clockOuterHours = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
   readonly clockInnerHours = [0, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
   readonly clockMinutes = Array.from({ length: 12 }, (_, index) => index * 5);
+  readonly openingHoursRequired = computed(() =>
+    REQUIRED_OPENING_HOURS_PLACE_TYPES.has(normalizePlaceType(this.placeType() ?? '')),
+  );
 
   bookingPartners = [
     { id: 'booking', label: 'Booking.com' },
@@ -76,9 +88,10 @@ export class StepDetailsComponent implements AfterViewInit {
   ];
 
   days: DayHours[] = StepDetailsComponent.defaultDays.map(day => ({ ...day }));
-    constructor() {
+  constructor() {
     effect(() => {
       const d = this.data();
+      const openingHoursRequired = this.openingHoursRequired();
       if (d) {
         Object.assign(this.form, {
           ...d,
@@ -96,6 +109,10 @@ export class StepDetailsComponent implements AfterViewInit {
           this.applyOpeningHoursText(d.openingHours);
         }
         this.moveAccommodationWebsiteToBookingPartner();
+      }
+
+      if (openingHoursRequired) {
+        this.form.openingHoursEnabled = true;
       }
     });
   }
@@ -256,6 +273,16 @@ export class StepDetailsComponent implements AfterViewInit {
   onOpeningHoursChanged(): void {
     this.openingHoursError = '';
     this.changed.emit(this.normalizedForm());
+  }
+
+  toggleOpeningHoursEnabled(): void {
+    if (this.openingHoursRequired()) {
+      this.form.openingHoursEnabled = true;
+      return;
+    }
+
+    this.form.openingHoursEnabled = !this.form.openingHoursEnabled;
+    this.onOpeningHoursChanged();
   }
 
   toggleOpen24Hours(): void {
@@ -508,8 +535,16 @@ export class StepDetailsComponent implements AfterViewInit {
   }
 
   private validateOpeningHours(): string {
+    if (this.openingHoursRequired() && !this.form.openingHoursEnabled) {
+      return 'Opening hours are required for this place type.';
+    }
+
     if (!this.form.openingHoursEnabled) return '';
     if (this.form.open24Hours) return '';
+
+    if (!this.days.some(day => day.open)) {
+      return 'Set opening hours for at least one day.';
+    }
 
     for (const day of this.days) {
       if (!day.open) continue;
@@ -638,4 +673,14 @@ export class StepDetailsComponent implements AfterViewInit {
 
     return '';
   }
+}
+
+function normalizePlaceType(value: string): string {
+  return value
+    .trim()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }

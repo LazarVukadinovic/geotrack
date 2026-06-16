@@ -51,28 +51,30 @@ describe('StepBasicsComponent', () => {
     component.form.cardImageUrl = '/media/uploads/contributions/card.webp';
     component.form.lat = 42.6507;
     component.form.lng = 18.0944;
+    component.form.destinationId = 1;
+    component.form.locationId = 1;
 
     expect(component.isValid()).toBe(true);
     expect(component.hasConfirmedLocation()).toBe(true);
   });
 
-  for (const placeType of ['Stay', 'Restaurant', 'Cafe']) {
-    it(`requires proof upload for ${placeType}`, () => {
+  for (const placeType of ['Stay', 'Restaurant', 'Cafe', 'Bar']) {
+    it(`supports an optional proof upload for ${placeType}`, () => {
       component.form.placeType = placeType;
 
-      expect(component.requiresOwnershipProof()).toBe(true);
+      expect(component.supportsOwnershipProof()).toBe(true);
     });
   }
 
   for (const placeType of ['Landmark', 'Nature', 'Beach']) {
-    it(`does not require proof upload for ${placeType}`, () => {
+    it(`does not show proof upload for ${placeType}`, () => {
       component.form.placeType = placeType;
 
-      expect(component.requiresOwnershipProof()).toBe(false);
+      expect(component.supportsOwnershipProof()).toBe(false);
     });
   }
 
-  for (const placeType of ['Stay', 'Restaurant', 'Cafe']) {
+  for (const placeType of ['Stay', 'Restaurant', 'Cafe', 'Bar']) {
     it(`shows ownership warning without proof for ${placeType}`, () => {
       fillValidLocation();
       component.form.placeType = placeType;
@@ -82,7 +84,7 @@ describe('StepBasicsComponent', () => {
     });
   }
 
-  it('allows valid Restaurant proof and clears it when switching to an unrelated type', () => {
+  it('preserves an uploaded Restaurant proof in memory but omits it for an unrelated type', async () => {
     fillValidLocation();
     component.selectPlaceType({ id: 2, name: 'Restaurant', description: null, isOwnable: true });
     component.form.ownershipProofFile = makePdfFile();
@@ -91,9 +93,15 @@ describe('StepBasicsComponent', () => {
 
     component.selectPlaceType({ id: 1, name: 'Landmark', description: null, isOwnable: false });
 
-    expect(component.requiresOwnershipProof()).toBe(false);
-    expect(component.form.ownershipProofFile).toBeNull();
+    expect(component.supportsOwnershipProof()).toBe(false);
+    expect(component.form.ownershipProofFile).not.toBeNull();
     expect(component.isValid()).toBe(true);
+
+    let savedProof: File | null | undefined;
+    component.saved.subscribe(value => savedProof = value.ownershipProofFile);
+    await component.onContinue();
+
+    expect(savedProof).toBeNull();
   });
 
   it('keeps existing ownership proof locked for approved owner edits', () => {
@@ -148,6 +156,8 @@ describe('StepBasicsComponent', () => {
     component.form.cardImageUrl = '/media/uploads/contributions/card.webp';
     component.form.lat = 42.6507;
     component.form.lng = 18.0944;
+    component.form.destinationId = 1;
+    component.form.locationId = 1;
   }
 
   function makePdfFile(): File {

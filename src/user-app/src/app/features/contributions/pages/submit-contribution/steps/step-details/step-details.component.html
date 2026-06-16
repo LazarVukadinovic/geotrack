@@ -78,15 +78,29 @@
   <div class="bg-white rounded-2xl p-5">
     <div class="flex items-center justify-between mb-4">
       <div>
-        <h3 class="text-base font-bold text-slate-800 mb-1">Opening Hours</h3>
-        <p class="text-xs text-slate-500">Add public opening hours only when they should appear on the place page.</p>
+        <h3 class="text-base font-bold text-slate-800 mb-1">
+          Opening Hours
+          @if (openingHoursRequired()) {
+            <span class="text-red-500" aria-hidden="true">*</span>
+          }
+        </h3>
+        <p class="text-xs text-slate-500">
+          @if (openingHoursRequired()) {
+            Opening hours are required for this place type.
+          } @else {
+            Add public opening hours only when they should appear on the place page.
+          }
+        </p>
       </div>
       <button
         type="button"
         class="relative flex-none border-none bg-transparent cursor-pointer"
+        [class.cursor-not-allowed]="openingHoursRequired()"
+        [class.opacity-70]="openingHoursRequired()"
         style="width: 46px; height: 26px;"
-        (click)="form.openingHoursEnabled = !form.openingHoursEnabled; onOpeningHoursChanged()"
-        [title]="form.openingHoursEnabled ? 'Disable opening hours' : 'Enable opening hours'"
+        [disabled]="openingHoursRequired()"
+        (click)="toggleOpeningHoursEnabled()"
+        [title]="openingHoursRequired() ? 'Opening hours are required for this place type' : (form.openingHoursEnabled ? 'Disable opening hours' : 'Enable opening hours')"
       >
         <span
           class="absolute inset-0 rounded-full transition-colors duration-200"
@@ -142,9 +156,12 @@
             <div class="relative flex-1 min-w-0">
               <input
                 [attr.name]="'openingHours-' + day.name + '-open'"
-                type="text"
+                type="time"
                 autocomplete="off"
                 inputmode="numeric"
+                min="00:00"
+                max="23:59"
+                step="60"
                 enterkeyhint="next"
                 autocapitalize="none"
                 autocorrect="off"
@@ -172,9 +189,12 @@
             <div class="relative flex-1 min-w-0">
               <input
                 [attr.name]="'openingHours-' + day.name + '-close'"
-                type="text"
+                type="time"
                 autocomplete="off"
                 inputmode="numeric"
+                min="00:00"
+                max="23:59"
+                step="60"
                 enterkeyhint="done"
                 autocapitalize="none"
                 autocorrect="off"
