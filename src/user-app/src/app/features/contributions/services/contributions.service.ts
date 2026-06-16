@@ -9,6 +9,7 @@ import {
   normalizeContributionAmenityIds,
   toContributionAmenityApiValues,
 } from './contribution-amenities';
+import { isOpen24HoursSchedule } from '../../../shared/utils/opening-hours';
 
 export interface ResolveLocationResult {
   locationId: number | null;
@@ -383,6 +384,7 @@ export class ContributionsService {
       details: {
         description: detail.description ?? '',
         openingHoursEnabled: detail.operatingHoursEnabled || !!detail.openingHours?.trim(),
+        open24Hours: isOpen24HoursSchedule(detail.operatingHours),
         openingHours: detail.openingHours ?? '',
         operatingHours: detail.operatingHours,
         phone: detail.phone ?? '',

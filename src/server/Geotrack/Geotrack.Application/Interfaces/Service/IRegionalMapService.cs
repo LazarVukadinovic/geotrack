@@ -4,6 +4,10 @@ namespace Geotrack.Application.Interfaces.Service;
 
 public interface IRegionalMapService
 {
+    Task<RegionalMapAssignedRegionBoundaryDto> GetRegionBoundaryAsync(
+        int regionId,
+        CancellationToken cancellationToken = default);
+
     Task<RegionalMapResponseDto> GetMapAsync(
         int userId,
         int regionId,

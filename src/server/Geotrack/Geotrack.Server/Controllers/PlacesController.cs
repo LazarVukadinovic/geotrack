@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Places;
+using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
 using Microsoft.AspNetCore.Authorization;
@@ -15,11 +16,16 @@ public class PlacesController : ControllerBase
 {
     private readonly IPlaceService _placeService;
     private readonly IContributionMediaStorageService _mediaStorage;
+    private readonly IReviewService _reviewService;
 
-    public PlacesController(IPlaceService placeService, IContributionMediaStorageService mediaStorage)
+    public PlacesController(
+        IPlaceService placeService,
+        IContributionMediaStorageService mediaStorage,
+        IReviewService reviewService)
     {
         _placeService = placeService;
         _mediaStorage = mediaStorage;
+        _reviewService = reviewService;
     }
 
     [HttpGet]
@@ -144,8 +150,8 @@ public class PlacesController : ControllerBase
 
         try
         {
-            var result = await _placeService.GetPlaceReviewsAsync(id, skip, take);
-            return Ok(result);
+            var result = await _reviewService.GetPlaceReviewsAsync(id, skip, take, GetUserId());
+            return Ok(MapLegacyPlaceReviewsResponse(id, result));
         }
         catch (Exception ex)
         {
@@ -276,8 +282,16 @@ public class PlacesController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized();
 
-            var result = await _placeService.CreatePlaceReviewAsync(id, userId.Value, request);
-            return CreatedAtAction(nameof(GetPlaceReviews), new { id }, result);
+            var result = await _reviewService.CreatePlaceReviewAsync(
+                id,
+                userId.Value,
+                new CreateReviewDto
+                {
+                    Rating = (int)Math.Round(request.Rating, MidpointRounding.AwayFromZero),
+                    Comment = request.Comment
+                });
+
+            return CreatedAtAction(nameof(GetPlaceReviews), new { id }, MapLegacyPlaceReviewResponse(id, result));
         }
         catch (Exception ex)
         {
@@ -305,6 +319,42 @@ public class PlacesController : ControllerBase
 
         return null;
     }
+
+    private static GetPlaceReviewsResponseDto MapLegacyPlaceReviewsResponse(
+        int placeId,
+        PagedReviewsResponseDto response) => new()
+    {
+        PlaceId = placeId,
+        AverageRating = response.AverageRating ?? 0,
+        ReviewsCount = response.TotalCount,
+        TotalCount = response.TotalCount,
+        Skip = response.Skip,
+        Take = response.Take,
+        NextSkip = response.NextSkip,
+        HasMore = response.HasMore,
+        Reviews = response.Items.Select(review => new PlaceReviewItemDto
+        {
+            Id = review.Id,
+            UserId = review.AuthorUserId,
+            Rating = review.Rating,
+            Comment = review.Body,
+            CreatedAt = review.CreatedAt,
+            UpdatedAt = review.UpdatedAt
+        }).ToList()
+    };
+
+    private static CreatePlaceReviewResponseDto MapLegacyPlaceReviewResponse(
+        int placeId,
+        ReviewDto review) => new()
+    {
+        Id = review.Id,
+        UserId = review.AuthorUserId,
+        PlaceId = placeId,
+        Rating = review.Rating,
+        Comment = review.Body,
+        CreatedAt = review.CreatedAt,
+        UpdatedAt = review.UpdatedAt
+    };
 
     private ActionResult? ValidateOptionalCoordinates(double? latitude, double? longitude)
     {

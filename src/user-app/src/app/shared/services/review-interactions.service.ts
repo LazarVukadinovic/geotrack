@@ -66,11 +66,11 @@ export class ReviewInteractionsService {
   }
 
   isReviewReported(review: { id: string; reportedByCurrentUser: boolean }): boolean {
-    return review.reportedByCurrentUser || !!this.reportedReviewIds()[review.id];
+    return review.reportedByCurrentUser || !!this.reportedReviewIds()[this.reviewStateKey(review.id)];
   }
 
   isReviewReporting(reviewId: string): boolean {
-    return !!this.reportingReviewIds()[reviewId];
+    return !!this.reportingReviewIds()[this.reviewStateKey(reviewId)];
   }
 
   goToAuthorReviews(review: { authorUserId: number; authorName: string; isOwnReview?: boolean }): void {
@@ -86,6 +86,11 @@ export class ReviewInteractionsService {
     if (!isLoggedIn) {
       this.reportMessage.set('');
       this.reportError.set('Log in to report a review.');
+      return;
+    }
+    if (this.isReviewReported(review)) {
+      this.reportMessage.set('You have already reported this review.');
+      this.reportError.set('');
       return;
     }
     this.reportingReview.set(review);
@@ -108,6 +113,11 @@ export class ReviewInteractionsService {
   closeReportModal(): void {
     this.reportingReview.set(null);
     this.reportSheetDragOffset.set(0);
+  }
+
+  clearReportNotice(): void {
+    this.reportMessage.set('');
+    this.reportError.set('');
   }
 
   onReportSheetHandlePointerDown(event: PointerEvent): void {
@@ -141,19 +151,21 @@ export class ReviewInteractionsService {
     const reason = this.selectedReason();
     if (!targetType || isNaN(reviewId) || !reason || this.isReviewReporting(review.id)) return;
 
+    const stateKey = this.reviewStateKey(review.id, targetType);
+
     const note = reason === 'other' ? this.customReason().trim() : '';
     if (reason === 'other' && !note) return;
 
     this.reportMessage.set('');
     this.reportError.set('');
-    this.setReviewReporting(review.id, true);
+    this.setReviewReporting(stateKey, true);
 
     this.reviewsService.reportReview(targetType, reviewId, reason, note)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
-          this.setReviewReporting(review.id, false);
-          this.markReviewReported(review.id);
+          this.setReviewReporting(stateKey, false);
+          this.markReviewReported(stateKey);
           this.config.onReportSuccess?.(review.id);
           this.reportMessage.set(response.alreadyReported
             ? 'You have already reported this review.'
@@ -161,7 +173,7 @@ export class ReviewInteractionsService {
           this.reportingReview.set(null);
         },
         error: (err) => {
-          this.setReviewReporting(review.id, false);
+          this.setReviewReporting(stateKey, false);
           this.reportError.set(err?.error?.message || 'Could not report this review. Please try again.');
           this.reportingReview.set(null);
         },
@@ -279,19 +291,23 @@ export class ReviewInteractionsService {
     return typeof t === 'function' ? t() : t;
   }
 
-  private markReviewReported(reviewId: string): void {
-    this.reportedReviewIds.update(current => ({ ...current, [reviewId]: true }));
+  private markReviewReported(stateKey: string): void {
+    this.reportedReviewIds.update(current => ({ ...current, [stateKey]: true }));
   }
 
-  private setReviewReporting(reviewId: string, isReporting: boolean): void {
+  private setReviewReporting(stateKey: string, isReporting: boolean): void {
     this.reportingReviewIds.update(current => {
       const next = { ...current };
       if (isReporting) {
-        next[reviewId] = true;
+        next[stateKey] = true;
       } else {
-        delete next[reviewId];
+        delete next[stateKey];
       }
       return next;
     });
+  }
+
+  private reviewStateKey(reviewId: string, targetType: ReviewReportTargetType | null = this.resolveTargetType()): string {
+    return targetType ? `${targetType}:${reviewId}` : reviewId;
   }
 }

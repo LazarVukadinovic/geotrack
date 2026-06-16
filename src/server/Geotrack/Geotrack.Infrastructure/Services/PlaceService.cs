@@ -150,6 +150,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
                 .ThenInclude(l => l.Destination)
+                    .ThenInclude(d => d.Region)
             .Include(p => p.Images)
             .Include(p => p.PlaceAmenities)
                 .ThenInclude(pa => pa.Amenity)
@@ -181,19 +182,55 @@ public class PlaceService : IPlaceService
                 item.UserId == userId.Value &&
                 item.Type == PlaceContributionType.ClaimOwnership &&
                 item.Status == PlaceContributionStatus.PendingReview);
-        var similar = await _db.Places
+        var placeTagIds = place.PlaceTags
+            .Select(pt => pt.TagId)
+            .Distinct()
+            .ToList();
+        var territoryId = place.Location.Destination.Region.TerritoryId;
+
+        var similarInDestination = await _db.Places
             .AsNoTracking()
             .Include(p => p.PlaceReviews)
             .Include(p => p.Images)
+            .Include(p => p.Location)
+                .ThenInclude(location => location.Destination)
             .WherePublicPlaces()
             .Where(p =>
                 p.Id != id &&
                 p.Stay == null &&
-                p.PlaceTypeId == place.PlaceTypeId &&
-                p.Location.DestinationId == place.Location.DestinationId)
+                p.Location.DestinationId == place.Location.DestinationId &&
+                (p.PlaceTypeId == place.PlaceTypeId ||
+                 p.PlaceTags.Any(pt => placeTagIds.Contains(pt.TagId))))
             .AsSplitQuery()
-            .OrderByDescending(p => p.PlaceReviews.Select(review => (double?)review.Rating).Average() ?? 0d)
+            .OrderByDescending(p => p.PlaceTypeId == place.PlaceTypeId)
+            .ThenByDescending(p => p.PlaceTags.Count(pt => placeTagIds.Contains(pt.TagId)))
+            .ThenByDescending(p => p.PlaceReviews.Select(review => (double?)review.Rating).Average() ?? 0d)
             .ThenByDescending(p => p.PlaceReviews.Count)
+            .ThenBy(p => p.Name)
+            .ThenBy(p => p.Id)
+            .Take(5)
+            .ToListAsync();
+
+        var similarInTerritory = await _db.Places
+            .AsNoTracking()
+            .Include(p => p.PlaceReviews)
+            .Include(p => p.Images)
+            .Include(p => p.Location)
+                .ThenInclude(location => location.Destination)
+            .WherePublicPlaces()
+            .Where(p =>
+                p.Id != id &&
+                p.Stay == null &&
+                p.Location.DestinationId != place.Location.DestinationId &&
+                p.Location.Destination.Region.TerritoryId == territoryId &&
+                (p.PlaceTypeId == place.PlaceTypeId ||
+                 p.PlaceTags.Any(pt => placeTagIds.Contains(pt.TagId))))
+            .AsSplitQuery()
+            .OrderByDescending(p => p.PlaceTypeId == place.PlaceTypeId)
+            .ThenByDescending(p => p.PlaceTags.Count(pt => placeTagIds.Contains(pt.TagId)))
+            .ThenByDescending(p => p.PlaceReviews.Select(review => (double?)review.Rating).Average() ?? 0d)
+            .ThenByDescending(p => p.PlaceReviews.Count)
+            .ThenBy(p => p.Location.Destination.Name)
             .ThenBy(p => p.Name)
             .ThenBy(p => p.Id)
             .Take(5)
@@ -259,7 +296,7 @@ public class PlaceService : IPlaceService
             Rating = averageRating,
             ReviewCount = FormatReviewCountLabel(reviewCount),
             Distance = detailDistance,
-            OpenStatus = DeriveOpenStatus(place.OpeningHours),
+            OpenStatus = DeriveOpenStatus(place.OperatingHoursEnabled, place.OperatingHoursJson),
             OpeningHours = DisplayTextSafety.CleanOptional(place.OpeningHours),
             OperatingHoursEnabled = place.OperatingHoursEnabled,
             OperatingHours = ParseStructuredOperatingHours(place.OperatingHoursJson),
@@ -290,19 +327,14 @@ public class PlaceService : IPlaceService
                     Image = GetCoverImageUrl(e.Images),
                 })
                 .ToList(),
-            Similar = similar
-                .Select(s => new SimilarPlaceDto
-                {
-                    Id = s.Id,
-                    Title = DisplayTextSafety.CleanRequired(s.Name, "Similar place"),
-                    Image = GetMainImageUrl(s.Images),
-                    Rating = CalculateAverageRating(s.PlaceReviews),
-                    Distance = SpatialDistanceFormatter.FormatBetween(
-                        originLat, originLng,
-                        s.Latitude, s.Longitude,
-                        useCurrentLocationDistance),
-                    IsSaved = favoriteIds.Contains(s.Id)
-                })
+            Similar = similarInDestination
+                .Select(s => MapSimilarPlaceDto(s, favoriteIds, originLat, originLng, useCurrentLocationDistance))
+                .ToList(),
+            SimilarInDestination = similarInDestination
+                .Select(s => MapSimilarPlaceDto(s, favoriteIds, originLat, originLng, useCurrentLocationDistance))
+                .ToList(),
+            SimilarInTerritory = similarInTerritory
+                .Select(s => MapSimilarPlaceDto(s, favoriteIds, originLat, originLng, useCurrentLocationDistance))
                 .ToList(),
             IsSaved = isSaved,
             IsOwnable = place.PlaceType?.IsOwnable ?? false,
@@ -335,6 +367,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
                 .ThenInclude(l => l.Destination)
+                    .ThenInclude(d => d.Region)
             .Include(p => p.Images)
             .Include(p => p.Stay)
                 .ThenInclude(s => s!.StayType)
@@ -727,14 +760,27 @@ public class PlaceService : IPlaceService
 
         await _contentModeration.EnsureAllowedReviewTextAsync(request.Comment);
 
-        var exists = await _db.Places.AnyAsync(p =>
-            p.Id == placeId &&
-            p.Status == PublishedStatus &&
-            p.Location.Status == PublishedStatus &&
-            p.Location.Destination.Status == PublishedStatus);
-        if (!exists)
+        var reviewTarget = await _db.Places
+            .AsNoTracking()
+            .Where(p =>
+                p.Id == placeId &&
+                p.Status == PublishedStatus &&
+                p.Location.Status == PublishedStatus &&
+                p.Location.Destination.Status == PublishedStatus)
+            .Select(p => new
+            {
+                IsOwnedByUser = p.CreatedByUserId == userId || p.UserPlaces.Any(owner => owner.UserId == userId)
+            })
+            .SingleOrDefaultAsync();
+
+        if (reviewTarget is null)
         {
             throw new KeyNotFoundException("Place not found");
+        }
+
+        if (reviewTarget.IsOwnedByUser)
+        {
+            throw new InvalidOperationException("You cannot review a place that you own.");
         }
 
         var alreadyReviewed = await _db.PlaceReviews
@@ -1086,6 +1132,22 @@ public class PlaceService : IPlaceService
         return user.Username;
     }
 
+
+    private static SimilarPlaceDto MapSimilarPlaceDto(Place place, HashSet<int> favoriteIds, double? originLat, double? originLng, bool useCurrentLocationDistance) => new()
+    {
+        Id = place.Id,
+        Title = DisplayTextSafety.CleanRequired(place.Name, "Similar place"),
+        Image = GetMainImageUrl(place.Images),
+        Rating = CalculateAverageRating(place.PlaceReviews),
+        Distance = SpatialDistanceFormatter.FormatBetween(
+            originLat, originLng,
+            place.Latitude, place.Longitude,
+            useCurrentLocationDistance),
+        DestinationId = place.Location?.DestinationId,
+        DestinationName = DisplayTextSafety.CleanOptional(place.Location?.Destination?.Name),
+        IsSaved = favoriteIds.Contains(place.Id)
+    };
+
     private static string? FormatReviewCountLabel(int count) => count switch
     {
         0 => null,
@@ -1103,8 +1165,13 @@ public class PlaceService : IPlaceService
         return Math.Round(reviews.Average(r => r.Rating), 1);
     }
 
-    private static string? DeriveOpenStatus(string? hours) =>
-        string.IsNullOrWhiteSpace(hours) ? null : "Open";
+    private static string? DeriveOpenStatus(bool enabled, string? operatingHoursJson) =>
+        OperatingHoursStatusCalculator.Evaluate(enabled, operatingHoursJson) switch
+        {
+            OperatingHoursStatus.Open => "Open now",
+            OperatingHoursStatus.Closed => "Closed now",
+            _ => null
+        };
 
     private static List<PlaceOperatingHourDto>? ParseStructuredOperatingHours(string? json)
     {
@@ -1149,18 +1216,18 @@ public class PlaceService : IPlaceService
             if (document.RootElement.ValueKind != JsonValueKind.Array)
                 return null;
 
-            var schedule = new List<OpeningHoursDayDto>();
+            var groupedSchedule = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var item in document.RootElement.EnumerateArray())
             {
                 var legacyDay = ReadJsonString(item, "day");
                 var legacyHours = ReadJsonString(item, "hours");
                 if (!string.IsNullOrWhiteSpace(legacyDay))
                 {
-                    schedule.Add(new OpeningHoursDayDto
-                    {
-                        Day = NormalizeOpeningHoursDayLabel(legacyDay),
-                        Hours = NormalizeOpeningHoursText(legacyHours)
-                    });
+                    AddOpeningHoursScheduleEntry(
+                        groupedSchedule,
+                        NormalizeOpeningHoursDayLabel(legacyDay),
+                        NormalizeOpeningHoursText(legacyHours));
                     continue;
                 }
 
@@ -1168,15 +1235,33 @@ public class PlaceService : IPlaceService
                 if (string.IsNullOrWhiteSpace(dayOfWeek))
                     continue;
 
+                var dayLabel = NormalizeOpeningHoursDayLabel(dayOfWeek);
                 var isOpen = ReadJsonBoolean(item, "isOpen");
                 var openTime = ReadJsonString(item, "openTime");
                 var closeTime = ReadJsonString(item, "closeTime");
+
+                var displayHours = isOpen && !string.IsNullOrWhiteSpace(openTime) && !string.IsNullOrWhiteSpace(closeTime)
+                    ? FormatOpeningHoursSlot(openTime, closeTime)
+                    : "Closed";
+
+                AddOpeningHoursScheduleEntry(groupedSchedule, dayLabel, displayHours);
+            }
+
+            var schedule = DayOrder
+                .Where(groupedSchedule.ContainsKey)
+                .Select(day => new OpeningHoursDayDto
+                {
+                    Day = day,
+                    Hours = FormatOpeningHoursDay(groupedSchedule[day])
+                })
+                .ToList();
+
+            foreach (var entry in groupedSchedule.Where(entry => !DayOrder.Contains(entry.Key, StringComparer.OrdinalIgnoreCase)))
+            {
                 schedule.Add(new OpeningHoursDayDto
                 {
-                    Day = NormalizeOpeningHoursDayLabel(dayOfWeek),
-                    Hours = isOpen && !string.IsNullOrWhiteSpace(openTime) && !string.IsNullOrWhiteSpace(closeTime)
-                        ? $"{openTime.Trim()} - {closeTime.Trim()}"
-                        : "Closed"
+                    Day = entry.Key,
+                    Hours = FormatOpeningHoursDay(entry.Value)
                 });
             }
 
@@ -1186,6 +1271,54 @@ public class PlaceService : IPlaceService
         {
             return null;
         }
+    }
+
+    private static readonly string[] DayOrder =
+    [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday"
+    ];
+
+    private static void AddOpeningHoursScheduleEntry(
+        IDictionary<string, List<string>> schedule,
+        string day,
+        string hours)
+    {
+        if (!schedule.TryGetValue(day, out var dayHours))
+        {
+            dayHours = new List<string>();
+            schedule[day] = dayHours;
+        }
+
+        if (!string.IsNullOrWhiteSpace(hours))
+            dayHours.Add(hours);
+    }
+
+    private static string FormatOpeningHoursSlot(string openTime, string closeTime)
+    {
+        var open = openTime.Trim();
+        var close = closeTime.Trim();
+        return open == "00:00" && close == "00:00"
+            ? "Open 24 hours"
+            : $"{open} - {close}";
+    }
+
+    private static string FormatOpeningHoursDay(IReadOnlyCollection<string> values)
+    {
+        var nonEmpty = values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .ToList();
+
+        if (nonEmpty.Count == 0 || nonEmpty.All(value => string.Equals(value, "Closed", StringComparison.OrdinalIgnoreCase)))
+            return "Closed";
+
+        return string.Join(", ", nonEmpty.Where(value => !string.Equals(value, "Closed", StringComparison.OrdinalIgnoreCase)));
     }
 
     private static string? ReadJsonString(JsonElement element, string propertyName)
@@ -1220,7 +1353,13 @@ public class PlaceService : IPlaceService
         if (string.IsNullOrWhiteSpace(value))
             return "Closed";
 
-        return value.Trim().Replace('–', '-').Replace(" - ", " - ").Replace("-", " - ");
+        var normalized = value.Trim()
+            .Replace('–', '-')
+            .Replace('—', '-');
+
+        normalized = Regex.Replace(normalized, @"\s*-\s*", " - ");
+        normalized = Regex.Replace(normalized, @"\s*,\s*", ", ");
+        return normalized;
     }
 
     private static OwnerUpdateOperatingHoursResult NormalizeOwnerUpdateOperatingHours(
@@ -1251,7 +1390,8 @@ public class PlaceService : IPlaceService
 
             var openTime = NormalizeOwnerUpdateClockTime(input.OpenTime, "Opening time is invalid.");
             var closeTime = NormalizeOwnerUpdateClockTime(input.CloseTime, "Closing time is invalid.");
-            if (openTime == closeTime)
+            // 00:00 - 00:00 is the "open 24 hours" sentinel; any other equal pair is ambiguous.
+            if (openTime == closeTime && openTime != "00:00")
                 throw new InvalidOperationException("Opening time and closing time cannot be the same.");
 
             normalizedHours.Add(new OwnerUpdateOperatingHourDto
@@ -1314,6 +1454,10 @@ public class PlaceService : IPlaceService
 
     private static string? BuildOwnerUpdateOpeningHoursSummary(IReadOnlyCollection<OwnerUpdateOperatingHourDto> hours)
     {
+        if (hours.Count == 7 && hours.All(hour =>
+                hour.IsOpen && hour.OpenTime == "00:00" && hour.CloseTime == "00:00"))
+            return "Open 24 hours";
+
         var firstOpen = hours.FirstOrDefault(hour => hour.IsOpen);
         return firstOpen is null
             ? "Closed"
@@ -1383,6 +1527,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
                 .ThenInclude(l => l.Destination)
+                    .ThenInclude(d => d.Region)
             .Include(p => p.Images)
             .Include(p => p.Stay)
                 .ThenInclude(stay => stay!.StayAmenities)
@@ -1493,21 +1638,8 @@ public class PlaceService : IPlaceService
             changedFields.Add(nameof(request.AccessibilityNotes));
         }
 
-        if (request.PlaceTypeId.HasValue && request.PlaceTypeId.Value > 0)
-        {
-            var placeTypeExists = await _db.PlaceTypes.AnyAsync(pt => pt.Id == request.PlaceTypeId.Value);
-            if (!placeTypeExists)
-                throw new InvalidOperationException("Place type is invalid.");
-
-            place.PlaceTypeId = request.PlaceTypeId.Value;
-
-            var linkedContribution = await _db.PlaceContributions
-                .Where(c => c.PlaceId == place.Id && c.Status == PlaceContributionStatus.Approved)
-                .FirstOrDefaultAsync();
-
-            if (linkedContribution != null)
-                linkedContribution.PlaceTypeId = request.PlaceTypeId.Value;
-        }
+        if (request.PlaceTypeId.HasValue && request.PlaceTypeId.Value > 0 && request.PlaceTypeId.Value != place.PlaceTypeId)
+            throw new InvalidOperationException("Place type cannot be changed after the place is approved.");
 
         if (request.Tags is not null)
         {
@@ -1596,6 +1728,7 @@ public class PlaceService : IPlaceService
             .Include(p => p.PlaceType)
             .Include(p => p.Location)
                 .ThenInclude(l => l.Destination)
+                    .ThenInclude(d => d.Region)
             .Include(p => p.Images)
             .Include(p => p.Stay)
                 .ThenInclude(stay => stay!.StayAmenities)
@@ -1644,7 +1777,7 @@ public class PlaceService : IPlaceService
                 .ToList(),
             Rating = reviewStats.AverageRating,
             ReviewCount = FormatReviewCountLabel(reviewStats.Count),
-            OpenStatus = DeriveOpenStatus(refreshedPlace.OpeningHours),
+            OpenStatus = DeriveOpenStatus(refreshedPlace.OperatingHoursEnabled, refreshedPlace.OperatingHoursJson),
             OpeningHours = DisplayTextSafety.CleanOptional(refreshedPlace.OpeningHours),
             OperatingHoursEnabled = refreshedPlace.OperatingHoursEnabled,
             OperatingHours = ParseStructuredOperatingHours(refreshedPlace.OperatingHoursJson),

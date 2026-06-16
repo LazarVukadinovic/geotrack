@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Geotrack.Application.DTOs.Common;
+using Geotrack.Application.DTOs.Locations;
 
 namespace Geotrack.Application.DTOs.Destinations;
+
 public class GetDestinationDetailsResponseDto
 {
     public int Id { get; set; }
@@ -21,5 +19,16 @@ public class GetDestinationDetailsResponseDto
     public int ReviewsCount { get; set; }
     public bool IsSaved { get; set; }
     public List<int> SavedCollectionIds { get; set; } = new();
+    public List<PublicEntityImageDto> Images { get; set; } = new();
     public List<DestinationSectionPreviewDto> Sections { get; set; } = new();
+    public List<DestinationRelatedItemDto> SimilarDestinations { get; set; } = new();
+}
+
+public class DestinationRelatedItemDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? Image { get; set; }
+    public double AverageRating { get; set; }
 }

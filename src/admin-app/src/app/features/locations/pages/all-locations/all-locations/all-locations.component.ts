@@ -66,6 +66,8 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
 
   deleteTarget: LocationListItem | null = null;
   isDeleting = false;
+  isCheckingDelete = false;
+  deleteModalError: string | null = null;
 
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
   private listRequestSequence = 0;
@@ -294,22 +296,38 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
   promptDelete(item: LocationListItem, event?: MouseEvent): void {
     event?.stopPropagation();
     this.errorMessage = null;
+    this.deleteModalError = null;
     this.deleteTarget = item;
+    this.isCheckingDelete = true;
     this.notifyStateChanged();
+
+    this.locationsService.getLocation(item.regionId, item.id).subscribe({
+      next: dto => {
+        if (dto.canDelete === false) {
+          this.deleteModalError = 'Cannot delete: this location has related content.';
+        }
+        this.isCheckingDelete = false;
+        this.notifyStateChanged();
+      },
+      error: () => {
+        this.isCheckingDelete = false;
+        this.notifyStateChanged();
+      },
+    });
   }
 
   cancelDelete(): void {
     if (this.isDeleting) return;
     this.deleteTarget = null;
+    this.deleteModalError = null;
     this.notifyStateChanged();
   }
 
   confirmDelete(): void {
-    if (!this.deleteTarget || !this.activeRegionId || this.isDeleting) return;
+    if (!this.deleteTarget || !this.activeRegionId || this.isDeleting || this.deleteModalError) return;
 
     const target = this.deleteTarget;
     this.isDeleting = true;
-    this.errorMessage = null;
     this.notifyStateChanged();
 
     this.deleteSubscription = this.locationsService
@@ -432,12 +450,12 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
 
   private handleActionError(error: unknown): void {
     if (error instanceof HttpErrorResponse) {
-      this.errorMessage = error.error?.message ?? 'Unable to delete this location.';
+      this.deleteModalError = error.error?.message ?? 'Unable to delete this location.';
       this.notifyStateChanged();
       return;
     }
 
-    this.errorMessage = 'Unable to delete this location.';
+    this.deleteModalError = 'Unable to delete this location.';
     this.notifyStateChanged();
   }
 

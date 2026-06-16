@@ -17,7 +17,7 @@ import { PlaceDetailService } from '../../services/place-detail.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
 import { ExploreService } from '../../../explore/services/explore.service';
 import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
-import { reviewsMoreActionLabel } from '../../../reviews/utils/review-section-ui';
+import { ReviewsService } from '../../../reviews/services/reviews.service';
 import type { ReviewDraft } from '../../../../shared/components/review-entry/review-entry.component';
 import type { PlaceDetail } from '../../../../core/models/place.model';
 import type { MapEntityMarker, MapEntityType } from '../../../../core/services/map-api.service';
@@ -33,6 +33,9 @@ import { isLongDescription } from '../../../../shared/utils/description-formatti
   styleUrl: './place-detail-page.component.scss',
 })
 export class PlaceDetailPageComponent {
+  private readonly collapsedReviewLength = 140;
+  protected readonly collapsedReviewLines = 3;
+  protected readonly reviewPreviewLimit = 3;
   private readonly route    = inject(ActivatedRoute);
   private readonly router   = inject(Router);
   private readonly service  = inject(PlaceDetailService);
@@ -42,10 +45,10 @@ export class PlaceDetailPageComponent {
   private readonly http     = inject(HttpClient);
   private readonly exploreService = inject(ExploreService);
   private readonly listingService = inject(ExploreSectionListingService);
+  private readonly reviewsService = inject(ReviewsService);
 
   protected readonly ri = inject(ReviewInteractionsService);
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
-  protected readonly reviewsMoreActionLabel = reviewsMoreActionLabel;
 
   protected readonly placeId = toSignal(
     this.route.paramMap.pipe(map((p) => p.get('id') ?? '')),
@@ -71,6 +74,7 @@ export class PlaceDetailPageComponent {
   protected readonly ownershipClaimMessage = signal('');
   protected readonly ownershipClaimSubmitting = signal(false);
   protected readonly ownershipClaimSubmitted = signal(false);
+  protected readonly expandedReviewIds = signal<Set<string>>(new Set());
 
   protected readonly heroImage = computed(() => this.place()?.heroImage ?? '');
   protected readonly heroImagePosition = computed(() => this.place()?.heroImagePosition || '50% 50%');
@@ -110,6 +114,25 @@ export class PlaceDetailPageComponent {
     this.place()?.longitude ?? null,
   ));
 
+  protected readonly hasOwnReview = computed(() =>
+    this.place()?.reviews.some(review => !!review.isOwnReview) ?? false,
+  );
+
+  protected readonly canCurrentUserReviewPlace = computed(() => {
+    const place = this.place();
+    return !!place && !place.isOwnedByCurrentUser && !this.hasOwnReview();
+  });
+
+  protected canCurrentUserEditReview(review: { isOwnReview?: boolean }): boolean {
+    const place = this.place();
+    return !!review.isOwnReview && !place?.isOwnedByCurrentUser;
+  }
+
+  protected canCurrentUserReportReview(review: { isOwnReview?: boolean }): boolean {
+    const place = this.place();
+    return !review.isOwnReview && !place?.isOwnedByCurrentUser;
+  }
+
   protected readonly is24Hours = computed(() => {
     const p = this.place();
     if (!p) return false;
@@ -124,10 +147,7 @@ export class PlaceDetailPageComponent {
   protected readonly computedOpenStatus = computed(() => {
     const p = this.place();
     if (!p) return '';
-    if (this.is24Hours()) return 'Open now';
-    const schedule = (p.openingHoursSchedule ?? []).filter(day => !!day.day?.trim());
-    if (!schedule || schedule.length === 0) return p.openStatus ?? '';
-    return this.calculateCurrentOpenStatus(schedule, p.openStatus ?? '');
+    return p.openStatus ?? '';
   });
 
   private readonly locationRequestKey = computed(() => {
@@ -144,18 +164,28 @@ export class PlaceDetailPageComponent {
       onEditSuccess: () => {
         const id = this.placeId();
         if (id) this.service.loadPlaceDetail(id);
+        this.exploreService.invalidate();
+        this.listingService.invalidate();
       },
       onDeleteSuccess: () => {
         const id = this.placeId();
         if (id) this.service.loadPlaceDetail(id);
+        this.exploreService.invalidate();
+        this.listingService.invalidate();
+      },
+      onReportSuccess: (reviewId) => {
+        const id = this.placeId();
+        if (id) this.service.markReviewReported(id, reviewId);
       },
     });
 
     effect(() => {
       this.placeId();
+      this.ri.clearReportNotice();
       this.scrollProgress.set(0);
       this.hoursExpanded.set(false);
       this.aboutExpanded.set(false);
+      this.expandedReviewIds.set(new Set());
       this.galleryOpen.set(false);
       const el = this.pdScroll()?.nativeElement;
       if (el) el.scrollTop = 0;
@@ -211,6 +241,10 @@ export class PlaceDetailPageComponent {
 
   protected navigateToEvent(id: string): void {
     void this.router.navigate(['/events', id], { queryParams: this.collectionQueryParams() });
+  }
+
+  protected exploreDestination(destinationId: string): void {
+    void this.router.navigate(['/explore'], { queryParams: { destinationId } });
   }
 
   protected openGallery(startIndex = 0): void {
@@ -365,12 +399,14 @@ export class PlaceDetailPageComponent {
   }
 
   protected readonly submitReview = (draft: ReviewDraft): Observable<unknown> => {
+    const place = this.place();
+    if (place?.isOwnedByCurrentUser) {
+      return throwError(() => new Error('You cannot review a place that you own.'));
+    }
+
     const numId = parseInt(this.placeId(), 10);
     if (isNaN(numId)) return throwError(() => new Error('Invalid place id.'));
-    return this.http.post(`/api/places/${numId}/reviews`, {
-      rating:  draft.rating,
-      comment: draft.body,
-    });
+    return this.reviewsService.createReview('place', numId, draft.rating, draft.body);
   };
 
   protected onReviewSubmitted(_draft: ReviewDraft): void {
@@ -426,6 +462,43 @@ export class PlaceDetailPageComponent {
 
   protected hasLongAbout(about: string | null | undefined): boolean {
     return isLongDescription(about);
+  }
+
+  protected hasLongReview(body: string | null | undefined): boolean {
+    const value = (body ?? '').trim();
+    const lineCount = value ? value.split(/\r\n|\r|\n/).length : 0;
+    return value.length > this.collapsedReviewLength || lineCount > this.collapsedReviewLines;
+  }
+
+  protected isReviewExpanded(reviewId: string | number): boolean {
+    return this.expandedReviewIds().has(String(reviewId));
+  }
+
+  protected toggleReviewExpanded(reviewId: string | number): void {
+    const key = String(reviewId);
+    this.expandedReviewIds.update(current => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  protected reviewMoreActionLabel(reviews: readonly unknown[] | null | undefined): 'More' | null {
+    return (reviews?.length ?? 0) > this.reviewPreviewLimit ? 'More' : null;
+  }
+
+  protected visibleReviewPreview<T extends { isOwnReview?: boolean }>(reviews: readonly T[]): readonly T[] {
+    if (reviews.length <= this.reviewPreviewLimit) return reviews;
+    const ownReview = reviews.find(review => !!review.isOwnReview);
+    if (!ownReview) return reviews.slice(0, this.reviewPreviewLimit);
+    return [
+      ownReview,
+      ...reviews.filter(review => review !== ownReview).slice(0, this.reviewPreviewLimit - 1),
+    ];
   }
 
   private buildDirectionsUrl(latitude: number | null, longitude: number | null): string | null {
@@ -491,54 +564,5 @@ export class PlaceDetailPageComponent {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? value as Record<string, unknown>
       : undefined;
-  }
-
-  private calculateCurrentOpenStatus(schedule: { day: string; hours: string }[], fallback: string): string {
-    const now = new Date();
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const todayName = dayNames[now.getDay()];
-    const yesterdayName = dayNames[(now.getDay() + 6) % 7];
-    const currentMins = now.getHours() * 60 + now.getMinutes();
-
-    const todayEntry = schedule.find(d =>
-      d.day.toLowerCase() === todayName.toLowerCase() ||
-      d.day.toLowerCase().startsWith(todayName.toLowerCase().slice(0, 3)),
-    );
-    const yesterdayEntry = schedule.find(d =>
-      d.day.toLowerCase() === yesterdayName.toLowerCase() ||
-      d.day.toLowerCase().startsWith(yesterdayName.toLowerCase().slice(0, 3)),
-    );
-
-    if (!todayEntry) return fallback;
-
-    const yesterdayMatch = yesterdayEntry?.hours.toLowerCase().match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
-    if (yesterdayMatch) {
-      const yesterdayOpenMins = parseInt(yesterdayMatch[1], 10) * 60 + parseInt(yesterdayMatch[2], 10);
-      const yesterdayCloseMins = parseInt(yesterdayMatch[3], 10) * 60 + parseInt(yesterdayMatch[4], 10);
-      if (yesterdayCloseMins <= yesterdayOpenMins && currentMins < yesterdayCloseMins) {
-        return 'Open now';
-      }
-    }
-
-    const hoursStr = todayEntry.hours.toLowerCase();
-    if (hoursStr.includes('closed')) return 'Closed now';
-    if (hoursStr.includes('24') || hoursStr === 'always open') return 'Open now';
-
-    const timeMatch = hoursStr.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
-    if (!timeMatch) return fallback;
-
-    const openH = parseInt(timeMatch[1], 10);
-    const openM = parseInt(timeMatch[2], 10);
-    const closeH = parseInt(timeMatch[3], 10);
-    const closeM = parseInt(timeMatch[4], 10);
-
-    const openMins = openH * 60 + openM;
-    const closeMins = closeH * 60 + closeM;
-
-    const isOpen = closeMins <= openMins
-      ? currentMins >= openMins || currentMins < closeMins
-      : currentMins >= openMins && currentMins < closeMins;
-
-    return isOpen ? 'Open now' : 'Closed now';
   }
 }

@@ -11,6 +11,7 @@ public sealed class ContentHtmlSanitizer : IContentHtmlSanitizer
         "br",
         "strong",
         "em",
+        "u",
         "ul",
         "ol",
         "li",

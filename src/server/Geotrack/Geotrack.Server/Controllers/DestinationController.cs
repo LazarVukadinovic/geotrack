@@ -1,5 +1,6 @@
 using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Explore;
+using Geotrack.Application.DTOs.Reviews;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,15 +16,18 @@ public class DestinationController : ControllerBase
 
     private readonly IDestinationService _destinationService;
     private readonly IExploreService _exploreService;
+    private readonly IReviewService _reviewService;
     private readonly ILogger<DestinationController> _logger;
 
     public DestinationController(
         IDestinationService destinationService,
         IExploreService exploreService,
+        IReviewService reviewService,
         ILogger<DestinationController> logger)
     {
         _destinationService = destinationService;
         _exploreService = exploreService;
+        _reviewService = reviewService;
         _logger = logger;
     }
 
@@ -125,8 +129,8 @@ public class DestinationController : ControllerBase
 
         try
         {
-            var result = await _destinationService.GetDestinationReviewsAsync(id, skip, take);
-            return Ok(result);
+            var result = await _reviewService.GetDestinationReviewsAsync(id, skip, take, TryGetUserId());
+            return Ok(MapLegacyDestinationReviewsResponse(id, result));
         }
         catch (Exception ex)
         {
@@ -145,8 +149,16 @@ public class DestinationController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized();
 
-            var result = await _destinationService.CreateDestinationReviewAsync(id, userId.Value, request);
-            return CreatedAtAction(nameof(GetDestinationReviews), new { id }, result);
+            var result = await _reviewService.CreateDestinationReviewAsync(
+                id,
+                userId.Value,
+                new CreateReviewDto
+                {
+                    Rating = (int)Math.Round(request.Rating, MidpointRounding.AwayFromZero),
+                    Comment = request.Comment
+                });
+
+            return CreatedAtAction(nameof(GetDestinationReviews), new { id }, MapLegacyDestinationReviewResponse(id, result));
         }
         catch (Exception ex)
         {
@@ -217,6 +229,42 @@ public class DestinationController : ControllerBase
                longitude <= 180 &&
                (latitude != 0d || longitude != 0d);
     }
+
+    private static GetDestinationReviewsResponseDto MapLegacyDestinationReviewsResponse(
+        int destinationId,
+        PagedReviewsResponseDto response) => new()
+    {
+        DestinationId = destinationId,
+        AverageRating = response.AverageRating ?? 0,
+        ReviewsCount = response.TotalCount,
+        TotalCount = response.TotalCount,
+        Skip = response.Skip,
+        Take = response.Take,
+        NextSkip = response.NextSkip,
+        HasMore = response.HasMore,
+        Reviews = response.Items.Select(review => new DestinationReviewItemDto
+        {
+            Id = review.Id,
+            UserId = review.AuthorUserId,
+            Rating = review.Rating,
+            Comment = review.Body,
+            CreatedAt = review.CreatedAt,
+            UpdatedAt = review.UpdatedAt
+        }).ToList()
+    };
+
+    private static CreateDestinationReviewResponseDto MapLegacyDestinationReviewResponse(
+        int destinationId,
+        ReviewDto review) => new()
+    {
+        Id = review.Id,
+        UserId = review.AuthorUserId,
+        DestinationId = destinationId,
+        Rating = review.Rating,
+        Comment = review.Body,
+        CreatedAt = review.CreatedAt,
+        UpdatedAt = review.UpdatedAt
+    };
 
     private IActionResult MapException(Exception ex)
     {

@@ -41,6 +41,7 @@ export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
   hasOwner?: boolean;
   hasLinkedContribution?: boolean;
   owners: RegionalPlaceOwnerDto[];
+  canDelete?: boolean;
   latitude: number;
   longitude: number;
   openingHours?: string | null;
@@ -189,4 +190,6 @@ export interface RegionalPlaceUpdateRequest {
   tagIds?: number[] | null;
   cardImageUrl?: string | null;
   coverImageUrl?: string | null;
+  galleryImageUrls?: string[] | null;
+  galleryImageFiles?: File[];
 }

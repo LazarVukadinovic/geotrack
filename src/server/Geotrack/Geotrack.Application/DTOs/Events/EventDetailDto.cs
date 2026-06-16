@@ -8,6 +8,9 @@ public class EventDetailDto
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Location { get; set; }
+    public int DestinationId { get; set; }
+    public string? DestinationName { get; set; }
+    public string ParentEntityType { get; set; } = "Location";
     public int? LocationId { get; set; }
     public string? LocationName { get; set; }
     public int? PlaceId { get; set; }
@@ -24,6 +27,14 @@ public class EventDetailDto
     public List<EventSimilarDto> Similar { get; set; } = new();
     public bool IsSaved { get; set; }
     public string? ExternalTicketLink { get; set; }
+    public DateTime StartsAt { get; set; }
+    public DateTime EndsAt { get; set; }
+    public bool IsAllDay { get; set; }
+    public bool IsRecurring { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
+    public int? AttendanceLimit { get; set; }
+    public string? AgeRestriction { get; set; }
 }
 
 public class EventDetailInfoDto

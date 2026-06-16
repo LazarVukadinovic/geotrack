@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, OnInit, computed, input, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, OnInit, computed, effect, input, output, signal, viewChild } from '@angular/core';
 import type { EntityImage } from '../../../core/models/entity-image.model';
 import { ImageFallbackDirective } from '../../directives/image-fallback.directive';
 
@@ -13,7 +13,10 @@ export class PhotoGalleryComponent implements OnInit {
   readonly images = input.required<EntityImage[]>();
   readonly title = input<string>('');
   readonly startIndex = input<number>(0);
+  readonly manageable = input(false);
   readonly closed = output<void>();
+  readonly removed = output<number>();
+  readonly changed = output<{ index: number; file: File }>();
 
   // Logical index (0..n-1) — drives dots, counter, caption
   protected readonly currentIndex = signal(0);
@@ -47,6 +50,25 @@ export class PhotoGalleryComponent implements OnInit {
   private dragStartX = 0;
   private dragStartY = 0;
   private isHorizontalDrag: boolean | undefined = undefined;
+
+  constructor() {
+    effect(() => {
+      const n = this.images().length;
+      if (n === 0) return;
+
+      const idx = Math.max(0, Math.min(this.currentIndex(), n - 1));
+      if (idx !== this.currentIndex()) {
+        this.currentIndex.set(idx);
+      }
+
+      const pos = n <= 1 ? 0 : idx + 1;
+      if (pos !== this.trackPos()) {
+        this.animationEnabled.set(false);
+        this.trackPos.set(pos);
+        requestAnimationFrame(() => this.animationEnabled.set(true));
+      }
+    });
+  }
 
   ngOnInit(): void {
     const n = this.images().length;
@@ -101,6 +123,18 @@ export class PhotoGalleryComponent implements OnInit {
 
   protected close(): void {
     this.closed.emit();
+  }
+
+  protected removeCurrentImage(): void {
+    this.removed.emit(this.currentIndex());
+  }
+
+  protected changeCurrentImage(e: Event): void {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.changed.emit({ index: this.currentIndex(), file });
   }
 
   @HostListener('keydown', ['$event'])

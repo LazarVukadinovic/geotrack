@@ -13,3 +13,170 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.gt-map-filter-option {
+  align-items: center;
+  background: #ffffff;
+  border: 0;
+  color: #374151;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.8rem 0.95rem;
+  text-align: left;
+  transition: background-color 150ms ease, color 150ms ease;
+  width: 100%;
+}
+
+.gt-map-filter-option + .gt-map-filter-option {
+  border-top: 1px solid #f3f4f6;
+}
+
+.gt-map-filter-option:hover,
+.gt-map-filter-option--active {
+  background: #f8fafc;
+  color: #111827;
+}
+
+.gt-map-filter-swatch,
+.gt-map-legend-token {
+  border-radius: 999px;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.gt-map-filter-swatch {
+  height: 0.875rem;
+  width: 0.875rem;
+}
+
+.gt-map-filter-swatch--all {
+  background:
+    linear-gradient(135deg, #2563eb 0 33%, #0891b2 33% 66%, #7c3aed 66% 100%);
+}
+
+.gt-map-filter-swatch--place,
+.gt-map-filter-swatch--location,
+.gt-map-filter-swatch--destination {
+  background: #ffffff;
+  border: 3px solid transparent;
+}
+
+.gt-map-filter-swatch--place {
+  border-color: #2563eb;
+}
+
+.gt-map-filter-swatch--location {
+  border-color: #0891b2;
+}
+
+.gt-map-filter-swatch--destination {
+  border-color: #7c3aed;
+}
+
+.gt-map-legend-token {
+  height: 0.95rem;
+  position: relative;
+  width: 0.95rem;
+}
+
+.gt-map-legend-token::after {
+  border-radius: 999px;
+  content: "";
+  inset: 0.18rem;
+  position: absolute;
+}
+
+.gt-map-legend-token--region {
+  background: rgba(4, 120, 87, 0.16);
+  border: 2px solid #047857;
+  border-radius: 0.3rem;
+}
+
+.gt-map-legend-token--region::after {
+  display: none;
+}
+
+.gt-map-legend-token--place,
+.gt-map-legend-token--location,
+.gt-map-legend-token--destination {
+  background: #ffffff;
+  border: 3px solid transparent;
+}
+
+.gt-map-legend-token--place {
+  border-color: #2563eb;
+}
+
+.gt-map-legend-token--location {
+  border-color: #0891b2;
+}
+
+.gt-map-legend-token--destination {
+  border-color: #7c3aed;
+}
+
+.gt-map-legend-token--place::after {
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.gt-map-legend-token--location::after {
+  background: rgba(8, 145, 178, 0.18);
+}
+
+.gt-map-legend-token--destination::after {
+  background: rgba(124, 58, 237, 0.18);
+}
+
+.gt-map-legend-token--pin {
+  background: #ffffff;
+  border: 3px solid #f97316;
+}
+
+.gt-map-legend-token--pin::after {
+  background: rgba(249, 115, 22, 0.24);
+}
+
+.gt-admin-marker {
+  align-items: center;
+  background: #ffffff;
+  border: 3px solid #2563eb;
+  border-radius: 999px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0;
+  width: 100%;
+}
+
+.gt-admin-marker--location {
+  border-color: #0891b2;
+}
+
+.gt-admin-marker--destination {
+  border-color: #7c3aed;
+}
+
+.gt-admin-marker--event {
+  border-color: #dc2626;
+}
+
+.gt-admin-marker img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.gt-admin-marker__fallback {
+  align-items: center;
+  color: #1f2937;
+  display: flex;
+  font-size: 0.85rem;
+  font-weight: 800;
+  height: 100%;
+  justify-content: center;
+  width: 100%;
+}

@@ -69,7 +69,7 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
-                    <span class="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Place</span>
+                    <span class="text-[10px] font-bold text-slate-700 uppercase tracking-wide">{{ detailLabel(item) }}</span>
                   }
                 </span>
                 <h3 class="user-review-card__name text-sm font-bold text-slate-800 truncate flex-1">{{ item.entityName }}</h3>
@@ -90,7 +90,23 @@
 
               <!-- Review body -->
               @if (item.body) {
-                <p class="user-review-card__body-text text-sm text-slate-600 leading-relaxed line-clamp-3">{{ item.body }}</p>
+                <p
+                  class="user-review-card__body-text text-sm text-slate-600 leading-relaxed"
+                  [class.user-review-card__body-text--collapsed]="hasLongReview(item.body) && !isReviewExpanded(item.id)"
+                  [style.--review-lines]="collapsedReviewLines"
+                >
+                  {{ item.body }}
+                </p>
+                @if (hasLongReview(item.body)) {
+                  <button
+                    type="button"
+                    class="user-review-card__body-toggle"
+                    [attr.aria-expanded]="isReviewExpanded(item.id)"
+                    (click)="toggleReviewExpanded($event, item.id)"
+                  >
+                    {{ isReviewExpanded(item.id) ? 'Show less' : 'Show more' }}
+                  </button>
+                }
               }
 
               <!-- Navigate hint -->

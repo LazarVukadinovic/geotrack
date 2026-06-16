@@ -218,7 +218,9 @@ public class RegionalLocationService : IRegionalLocationService
             .SingleOrDefaultAsync()
             ?? throw new KeyNotFoundException("Location not found.");
 
-        return MapDetail(row);
+        var dto = MapDetail(row);
+        dto.CanDelete = !await HasBlockingDependenciesAsync(row.Id);
+        return dto;
     }
 
     public async Task<RegionalLocationDetailDto> CreateLocationAsync(
@@ -245,7 +247,7 @@ public class RegionalLocationService : IRegionalLocationService
 
         var name = NormalizeRequiredText(request.Name, "Location name is required.", 200, "Location name is too long.");
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
-        var description = NormalizeRichDescription(request.Description, 8000, "Description is too long.");
+        var description = _htmlSanitizer.SanitizeRichText(request.Description);
         var status = NormalizeCreateStatus(request.Status);
         var boundary = BuildBoundary(request.Boundary);
         if (boundary is not null)
@@ -277,43 +279,47 @@ public class RegionalLocationService : IRegionalLocationService
         var tagIds = await ValidateLocationTagIdsAsync(request.TagIds);
         var now = DateTime.UtcNow;
 
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-
-        var location = new Location
+        Location? location = null;
+        await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            Name = name,
-            Summary = summary,
-            Description = description,
-            Status = status,
-            DestinationId = destination.Id,
-            LocationTypeId = locationTypeId,
-            Latitude = coordinates.Latitude,
-            Longitude = coordinates.Longitude,
-            CreatedByUserId = userId,
-            PublishedAt = status == PublishedStatus ? now : null,
-            BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long."),
-            BoundaryShapeType = boundary?.ShapeType,
-            CreatedAt = now,
-            LocationTags = tagIds
-                .Select(tagId => new LocationTag { TagId = tagId })
-                .ToList()
-        };
+            await using var transaction = await _db.Database.BeginTransactionAsync();
 
-        _db.Locations.Add(location);
-        if (boundary is not null)
-        {
-            _db.Entry(location).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = boundary.Geometry;
-        }
+            location = new Location
+            {
+                Name = name,
+                Summary = summary,
+                Description = description,
+                Status = status,
+                DestinationId = destination.Id,
+                LocationTypeId = locationTypeId,
+                Latitude = coordinates.Latitude,
+                Longitude = coordinates.Longitude,
+                CreatedByUserId = userId,
+                PublishedAt = status == PublishedStatus ? now : null,
+                BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long."),
+                BoundaryShapeType = boundary?.ShapeType,
+                CreatedAt = now,
+                LocationTags = tagIds
+                    .Select(tagId => new LocationTag { TagId = tagId })
+                    .ToList()
+            };
 
-        await _db.SaveChangesAsync();
+            _db.Locations.Add(location);
+            if (boundary is not null)
+            {
+                _db.Entry(location).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = boundary.Geometry;
+            }
 
-        _db.EntityImages.AddRange(AddRequiredCreateImages(request, location.Id, location.Name, now));
+            await _db.SaveChangesAsync();
 
-        location.InternalReferenceId = BuildInternalReferenceId(location.Id);
-        await _db.SaveChangesAsync();
-        await transaction.CommitAsync();
+            _db.EntityImages.AddRange(AddRequiredCreateImages(request, location.Id, location.Name, now));
 
-        return await GetLocationAsync(userId, request.RegionId, location.Id);
+            location.InternalReferenceId = BuildInternalReferenceId(location.Id);
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+        });
+
+        return await GetLocationAsync(userId, request.RegionId, location!.Id);
     }
 
     public async Task<RegionalLocationDetailDto> UpdateLocationAsync(
@@ -616,7 +622,7 @@ public class RegionalLocationService : IRegionalLocationService
 
         if (request.Description is not null)
         {
-            location.Description = NormalizeRichDescription(request.Description, 2000, "Description is too long.");
+            location.Description = _htmlSanitizer.SanitizeRichText(request.Description);
         }
 
         if (request.LocationTypeId.HasValue)
@@ -831,15 +837,6 @@ public class RegionalLocationService : IRegionalLocationService
         return normalized;
     }
 
-    private string NormalizeRichDescription(string? value, int maxLength, string tooLongMessage)
-    {
-        var normalized = _htmlSanitizer.SanitizeRichText(value);
-        if (normalized.Length > maxLength)
-            throw new InvalidOperationException(tooLongMessage);
-
-        return normalized;
-    }
-
     private static void ValidateLatitude(double latitude)
     {
         if (!double.IsFinite(latitude) || latitude is < -90 or > 90)
@@ -1023,6 +1020,41 @@ public class RegionalLocationService : IRegionalLocationService
                 isMain: false,
                 sortOrder: 1,
                 now);
+        }
+
+        if (request.GalleryImageUrls is not null)
+        {
+            var existingGalleryImages = location.Images
+                .Where(item => item.TargetType == EntityImageTargetType.Location &&
+                               item.LocationId == location.Id &&
+                               item.ImageRole == EntityImageRole.Gallery)
+                .ToList();
+
+            foreach (var image in existingGalleryImages)
+            {
+                location.Images.Remove(image);
+            }
+
+            var galleryUrls = request.GalleryImageUrls
+                .Select(NormalizeOptionalImageUrl)
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            for (var i = 0; i < galleryUrls.Count; i++)
+            {
+                location.Images.Add(new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Location,
+                    LocationId = location.Id,
+                    Url = galleryUrls[i]!,
+                    AltText = location.Name,
+                    IsMain = false,
+                    ImageRole = EntityImageRole.Gallery,
+                    SortOrder = i + 2,
+                    CreatedAt = now
+                });
+            }
         }
     }
 

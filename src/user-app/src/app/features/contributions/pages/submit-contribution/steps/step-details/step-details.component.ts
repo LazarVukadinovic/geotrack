@@ -2,6 +2,7 @@ import { AfterViewInit, Component, ElementRef, ViewChild, effect, input, output 
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { formatDescriptionPlainText, normalizeEditorDescriptionHtml } from '../../../../../../shared/utils/description-formatting';
+import { OPEN_24_HOURS_LABEL, isOpen24HoursSchedule, isOpen24HoursText } from '../../../../../../shared/utils/opening-hours';
 
 export interface BookingPartner {
   id: string;
@@ -30,6 +31,7 @@ export interface DetailsData {
   contactEmail: string;
   website: string;
   openingHoursEnabled: boolean;
+  open24Hours: boolean;
   openingHours: string;
   operatingHours: ContributionOperatingHour[];
   bookingPartners: BookingPartner[];
@@ -63,7 +65,7 @@ export class StepDetailsComponent implements AfterViewInit {
     { id: 'airbnb', label: 'Airbnb' },
     { id: 'hotel', label: 'Official Website' },
   ];
-  days: DayHours[] = [
+  private static readonly defaultDays: DayHours[] = [
     { name: 'Monday', open: true, openTime: '09:00', closeTime: '17:00' },
     { name: 'Tuesday', open: true, openTime: '09:00', closeTime: '17:00' },
     { name: 'Wednesday', open: true, openTime: '09:00', closeTime: '17:00' },
@@ -72,6 +74,8 @@ export class StepDetailsComponent implements AfterViewInit {
     { name: 'Saturday', open: true, openTime: '10:00', closeTime: '20:00' },
     { name: 'Sunday', open: false, openTime: '09:00', closeTime: '17:00' },
   ];
+
+  days: DayHours[] = StepDetailsComponent.defaultDays.map(day => ({ ...day }));
     constructor() {
     effect(() => {
       const d = this.data();
@@ -84,7 +88,10 @@ export class StepDetailsComponent implements AfterViewInit {
           this.writeDescriptionEditor();
         }
         if (d.operatingHours?.length) {
-          this.applyOperatingHours(d.operatingHours);
+          this.form.open24Hours = d.open24Hours ?? isOpen24HoursSchedule(d.operatingHours);
+          if (!this.form.open24Hours) {
+            this.applyOperatingHours(d.operatingHours);
+          }
         } else {
           this.applyOpeningHoursText(d.openingHours);
         }
@@ -98,6 +105,7 @@ export class StepDetailsComponent implements AfterViewInit {
     contactEmail: '',
     website: '',
     openingHoursEnabled: false,
+    open24Hours: false,
     openingHours: '',
     operatingHours: [],
     bookingPartners: [],
@@ -107,12 +115,18 @@ export class StepDetailsComponent implements AfterViewInit {
     this.writeDescriptionEditor();
   }
 
+  readonly descriptionMaxLength = 2000;
+
   get descriptionTextLength(): number {
-    return formatDescriptionPlainText(this.form.description).length;
+    return this.form.description.length;
   }
 
   get hasDescriptionText(): boolean {
-    return this.descriptionTextLength > 0;
+    return formatDescriptionPlainText(this.form.description).length > 0;
+  }
+
+  get descriptionAtLimit(): boolean {
+    return this.descriptionTextLength >= this.descriptionMaxLength;
   }
 
   onContinue(): void {
@@ -166,8 +180,19 @@ export class StepDetailsComponent implements AfterViewInit {
 
 
   onDescriptionBeforeInput(event: InputEvent): void {
+    if (
+      event.inputType !== 'deleteContentBackward' &&
+      event.inputType !== 'deleteContentForward' &&
+      event.inputType !== 'deleteByCut' &&
+      !event.inputType.startsWith('delete') &&
+      this.descriptionAtLimit
+    ) {
+      event.preventDefault();
+      return;
+    }
     if (event.inputType === 'insertParagraph' || event.inputType === 'insertLineBreak') {
       event.preventDefault();
+      if (this.descriptionAtLimit) return;
       this.insertDescriptionHtml('<br>');
       const editor = this.descriptionEditor?.nativeElement;
       if (editor) {
@@ -200,7 +225,18 @@ export class StepDetailsComponent implements AfterViewInit {
     event.preventDefault();
     const html = clipboard.getData('text/html');
     const text = clipboard.getData('text/plain');
-    document.execCommand('insertHTML', false, normalizeEditorDescriptionHtml(html || text));
+    const normalized = normalizeEditorDescriptionHtml(html || text);
+    const currentLength = this.descriptionTextLength;
+    const remaining = this.descriptionMaxLength - currentLength;
+    if (remaining <= 0) return;
+
+    const pastedPlain = formatDescriptionPlainText(normalized);
+    if (pastedPlain.length > remaining) {
+      const trimmedText = pastedPlain.slice(0, remaining);
+      document.execCommand('insertHTML', false, normalizeEditorDescriptionHtml(trimmedText));
+    } else {
+      document.execCommand('insertHTML', false, normalized);
+    }
     this.onDescriptionChanged(false);
   }
 
@@ -220,6 +256,15 @@ export class StepDetailsComponent implements AfterViewInit {
   onOpeningHoursChanged(): void {
     this.openingHoursError = '';
     this.changed.emit(this.normalizedForm());
+  }
+
+  toggleOpen24Hours(): void {
+    const nextValue = !this.form.open24Hours;
+    this.form.open24Hours = nextValue;
+    if (!nextValue) {
+      this.restoreDefaultDayHours();
+    }
+    this.onOpeningHoursChanged();
   }
 
   openTimePicker(day: DayHours, field: TimeField): void {
@@ -376,6 +421,7 @@ export class StepDetailsComponent implements AfterViewInit {
       contactEmail: this.form.contactEmail.trim(),
       website: this.isAccommodation() ? '' : this.form.website.trim(),
       openingHoursEnabled: this.form.openingHoursEnabled,
+      open24Hours: this.form.open24Hours,
       openingHours,
       operatingHours,
       bookingPartners: this.isAccommodation() ? this.form.bookingPartners.map(partner => ({
@@ -386,6 +432,8 @@ export class StepDetailsComponent implements AfterViewInit {
   }
 
   private buildOpeningHoursText(): string {
+    if (this.form.open24Hours) return OPEN_24_HOURS_LABEL;
+
     return this.days
       .map(day => day.open ? `${day.name}: ${day.openTime} - ${day.closeTime}` : `${day.name}: Closed`)
       .join('\n');
@@ -435,6 +483,15 @@ export class StepDetailsComponent implements AfterViewInit {
   }
 
   private buildOperatingHoursPayload(): ContributionOperatingHour[] {
+    if (this.form.open24Hours) {
+      return this.days.map(day => ({
+        dayOfWeek: day.name,
+        isOpen: true,
+        openTime: '00:00',
+        closeTime: '00:00',
+      }));
+    }
+
     return this.days.map(day => day.open
       ? {
           dayOfWeek: day.name,
@@ -452,22 +509,35 @@ export class StepDetailsComponent implements AfterViewInit {
 
   private validateOpeningHours(): string {
     if (!this.form.openingHoursEnabled) return '';
+    if (this.form.open24Hours) return '';
 
     for (const day of this.days) {
-      if (day.open && day.openTime === day.closeTime) {
-        return `${day.name} opening time and closing time cannot be the same.`;
+      if (!day.open) continue;
+
+      if (!this.isValidClockTime(day.openTime) || !this.isValidClockTime(day.closeTime)) {
+        return `${day.name} opening hours must use 24-hour HH:mm format.`;
       }
 
-      if (day.open && (!this.isValidClockTime(day.openTime) || !this.isValidClockTime(day.closeTime))) {
-        return `${day.name} opening hours must use 24-hour HH:mm format.`;
+      // 00:00 - 00:00 is the "open 24 hours" sentinel; any other equal pair is ambiguous.
+      if (day.openTime === day.closeTime && !this.isAllDayRange(day.openTime, day.closeTime)) {
+        return `${day.name} opening time and closing time cannot be the same.`;
       }
     }
 
     return '';
   }
 
+  private isAllDayRange(openTime: string, closeTime: string): boolean {
+    return openTime === '00:00' && closeTime === '00:00';
+  }
+
   private applyOpeningHoursText(value: string): void {
     if (!value.trim()) return;
+
+    if (isOpen24HoursText(value)) {
+      this.form.open24Hours = true;
+      return;
+    }
 
     const byDay = new Map<string, Partial<DayHours>>();
     for (const line of value.split(/\r?\n/)) {
@@ -496,6 +566,10 @@ export class StepDetailsComponent implements AfterViewInit {
       day.openTime = incoming.openTime ?? day.openTime;
       day.closeTime = incoming.closeTime ?? day.closeTime;
     }
+  }
+
+  private restoreDefaultDayHours(): void {
+    this.days = StepDetailsComponent.defaultDays.map(day => ({ ...day }));
   }
 
   private normalizeTimeInput(value: string): string | null {

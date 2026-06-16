@@ -954,9 +954,21 @@
               <div class="min-w-0 space-y-5">
                 <section>
                   <h3 class="text-sm font-bold text-gray-900 mb-2">Overview</h3>
-                  <p *ngIf="detail.description || detail.summary; else noEntityDescription" class="text-sm text-gray-600 leading-6 whitespace-pre-line">
-                    {{ detail.description || detail.summary }}
-                  </p>
+                  <ng-container *ngIf="entityDetailDescription(detail); else noEntityDescription">
+                    <div
+                      class="text-sm text-gray-600 leading-6 whitespace-pre-line"
+                      [class.line-clamp-5]="isEntityDetailDescriptionLong(detail) && !entityDetailDescriptionExpanded"
+                      [innerHTML]="entityDetailDescription(detail) | descriptionRichHtml"
+                    ></div>
+                    <button
+                      *ngIf="isEntityDetailDescriptionLong(detail)"
+                      type="button"
+                      (click)="entityDetailDescriptionExpanded = !entityDetailDescriptionExpanded"
+                      class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-transparent border-none cursor-pointer p-0"
+                    >
+                      {{ entityDetailDescriptionExpanded ? 'Show less' : 'Show more' }}
+                    </button>
+                  </ng-container>
                   <ng-template #noEntityDescription>
                     <p class="text-sm text-gray-400">No additional description is available.</p>
                   </ng-template>
@@ -991,12 +1003,31 @@
                   </div>
                 </section>
 
-                <section *ngIf="detail.typeSpecific.operatingHours.length > 0">
-                  <h3 class="text-sm font-bold text-gray-900 mb-2">Operating Hours</h3>
-                  <div class="grid sm:grid-cols-2 gap-2">
-                    <div *ngFor="let hour of detail.typeSpecific.operatingHours" class="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                      {{ operatingHoursLabel(hour) }}
-                    </div>
+                <section *ngIf="detail.entityType === 'place' && hasDisplayableOpeningHours(detail)">
+                  <h3 class="text-sm font-bold text-gray-900 mb-2">Opening Hours</h3>
+                  <div class="rounded-xl border border-gray-100 overflow-hidden">
+                    <p *ngIf="showsOpen24HoursForDetail(detail)" class="px-3 py-2.5 text-sm text-gray-700 bg-white">
+                      {{ open24HoursLabel }}
+                    </p>
+                    <ng-container *ngIf="!showsOpen24HoursForDetail(detail)">
+                      <div
+                        *ngIf="detail.typeSpecific.operatingHours.length > 0; else openingHoursTextOnly"
+                        class="divide-y divide-gray-100"
+                      >
+                        <div
+                          *ngFor="let hour of detail.typeSpecific.operatingHours"
+                          class="flex items-center justify-between gap-3 px-3 py-2.5 bg-white"
+                        >
+                          <span class="text-sm font-medium text-gray-700 w-28 flex-none">{{ hour.dayOfWeek }}</span>
+                          <span class="text-sm text-gray-600 text-right">{{ openingHourTimeRange(hour) }}</span>
+                        </div>
+                      </div>
+                      <ng-template #openingHoursTextOnly>
+                        <p class="px-3 py-2.5 text-sm text-gray-700 leading-relaxed whitespace-pre-line bg-white">
+                          {{ detail.typeSpecific.openingHours }}
+                        </p>
+                      </ng-template>
+                    </ng-container>
                   </div>
                 </section>
 

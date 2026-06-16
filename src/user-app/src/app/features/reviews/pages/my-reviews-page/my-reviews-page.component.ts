@@ -12,6 +12,8 @@ import type { UserReviewItem } from '../../services/reviews.service';
   styleUrl: './my-reviews-page.component.css',
 })
 export class MyReviewsPageComponent implements OnInit {
+  private readonly collapsedReviewLength = 140;
+  protected readonly collapsedReviewLines = 3;
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly reviewsService = inject(ReviewsService);
@@ -23,6 +25,7 @@ export class MyReviewsPageComponent implements OnInit {
   protected readonly nextSkip = signal(0);
   protected readonly isLoadingMore = signal(false);
   protected readonly totalCount = signal(0);
+  protected readonly expandedReviewIds = signal<Set<string>>(new Set());
 
   private readonly pageSize = 10;
 
@@ -58,8 +61,34 @@ export class MyReviewsPageComponent implements OnInit {
   }
 
   protected openDetail(item: UserReviewItem): void {
-    const route = item.entityType === 'event' ? '/events' : '/places';
+    const route = this.detailRouteFor(item.entityType);
     void this.router.navigate([route, item.entityId]);
+  }
+
+  protected detailLabel(item: UserReviewItem): string {
+    switch (item.entityType) {
+      case 'event':
+        return 'event';
+      case 'destination':
+        return 'destination';
+      case 'location':
+        return 'location';
+      default:
+        return 'place';
+    }
+  }
+
+  private detailRouteFor(entityType: UserReviewItem['entityType']): string {
+    switch (entityType) {
+      case 'event':
+        return '/events';
+      case 'destination':
+        return '/destinations';
+      case 'location':
+        return '/locations';
+      default:
+        return '/places';
+    }
   }
 
   protected starArray(rating: number): number[] {
@@ -70,10 +99,35 @@ export class MyReviewsPageComponent implements OnInit {
     return star <= rating;
   }
 
+  protected hasLongReview(body: string | null | undefined): boolean {
+    const value = (body ?? '').trim();
+    const lineCount = value ? value.split(/\r\n|\r|\n/).length : 0;
+    return value.length > this.collapsedReviewLength || lineCount > this.collapsedReviewLines;
+  }
+
+  protected isReviewExpanded(reviewId: string | number): boolean {
+    return this.expandedReviewIds().has(String(reviewId));
+  }
+
+  protected toggleReviewExpanded(event: Event, reviewId: string | number): void {
+    event.stopPropagation();
+    const key = String(reviewId);
+    this.expandedReviewIds.update(current => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
   private load(): void {
     this.isLoading.set(true);
     this.loadError.set(null);
     this.items.set([]);
+    this.expandedReviewIds.set(new Set());
     this.hasMore.set(false);
     this.nextSkip.set(0);
 

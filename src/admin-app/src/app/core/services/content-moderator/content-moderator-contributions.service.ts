@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
+import { AdminMapAssignedRegionBoundary } from '../../models/admin-map.model';
 
 export interface CmRegionOption {
   id: number;
@@ -20,6 +21,11 @@ export interface CmLocationOption {
   destinationId: number;
   destinationName: string;
   status: string;
+}
+
+export interface CmDestinationCenterValidationResult {
+  isAllowed: boolean;
+  message: string;
 }
 
 export interface CmContributionListItem {
@@ -54,6 +60,7 @@ export interface CmContributionDetail extends CmContributionListItem {
   country: string | null;
   suggestedRegionId: number | null;
   suggestedRegionName: string | null;
+  regionDisplayName: string | null;
   suggestedDestinationName: string | null;
   suggestedLocationName: string | null;
   latitude: number | null;
@@ -120,6 +127,7 @@ interface ApiContributionItem {
   country?: string | null;
   suggestedRegionId?: number | null;
   suggestedRegionName?: string | null;
+  regionDisplayName?: string | null;
   suggestedDestinationName?: string | null;
   suggestedLocationName?: string | null;
   latitude?: number | null;
@@ -177,6 +185,8 @@ export class ContentModeratorContributionsService {
     regionId: number,
     existingDestinationId: number | null,
     newDestinationName: string | null,
+    newDestinationLatitude: number | null,
+    newDestinationLongitude: number | null,
     newLocationName: string | null,
     note?: string,
   ): Observable<CmContributionDetail> {
@@ -185,6 +195,8 @@ export class ContentModeratorContributionsService {
         regionId,
         existingDestinationId: existingDestinationId ?? undefined,
         newDestinationName: newDestinationName?.trim() || undefined,
+        newDestinationLatitude: newDestinationLatitude ?? undefined,
+        newDestinationLongitude: newDestinationLongitude ?? undefined,
         newLocationName: newLocationName?.trim() || undefined,
         note: note?.trim() || undefined,
       })
@@ -222,6 +234,23 @@ export class ContentModeratorContributionsService {
         ...region,
         isSuggested: region.isSuggested ?? false,
       }))));
+  }
+
+  getRegionMapContext(regionId: number): Observable<AdminMapAssignedRegionBoundary> {
+    return this.http.get<AdminMapAssignedRegionBoundary>(
+      `/api/contributions/content-manager/regions/${regionId}/map-context`,
+    );
+  }
+
+  validateDestinationCenter(
+    regionId: number,
+    latitude: number,
+    longitude: number,
+  ): Observable<CmDestinationCenterValidationResult> {
+    return this.http.post<CmDestinationCenterValidationResult>(
+      `/api/contributions/content-manager/regions/${regionId}/validate-destination-center`,
+      { latitude, longitude },
+    );
   }
 
   uploadDestinationCardImage(destinationId: number, imageFile: File): Observable<void> {
@@ -272,6 +301,7 @@ function mapDetail(item: ApiContributionItem): CmContributionDetail {
     country: item.country ?? null,
     suggestedRegionId: item.suggestedRegionId ?? null,
     suggestedRegionName: item.suggestedRegionName ?? null,
+    regionDisplayName: item.regionDisplayName ?? null,
     suggestedDestinationName: item.suggestedDestinationName ?? null,
     suggestedLocationName: item.suggestedLocationName ?? null,
     latitude: item.latitude ?? null,

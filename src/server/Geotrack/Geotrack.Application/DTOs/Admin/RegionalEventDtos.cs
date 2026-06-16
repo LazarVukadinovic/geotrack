@@ -36,6 +36,7 @@ public class RegionalEventListItemDto
     public string? Duration { get; set; }
     public string? HostedBy { get; set; }
     public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
     public int? AttendanceLimit { get; set; }
     public string? AgeRestriction { get; set; }
     public string? VenueDescription { get; set; }
@@ -52,6 +53,7 @@ public class RegionalEventListItemDto
 
 public class RegionalEventDetailDto : RegionalEventListItemDto
 {
+    public bool CanDelete { get; set; }
 }
 
 public class RegionalEventListResponseDto
@@ -85,6 +87,7 @@ public class RegionalEventUpdateRequestDto
     public string? HostedBy { get; set; }
     public string? OrganizerName { get; set; }
     public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
     public int? AttendanceLimit { get; set; }
     public bool ClearAttendanceLimit { get; set; }
     public string? AgeRestriction { get; set; }
@@ -117,8 +120,12 @@ public record class RegionalEventCreateRequestDto
     public string? ExternalTicketLink { get; set; }
     public string? OrganizerName { get; set; }
     public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
     public int? AttendanceLimit { get; set; }
     public string? AgeRestriction { get; set; }
+    public string? VenueDescription { get; set; }
+    public string? ArrivalTips { get; set; }
+    public string? Accessibility { get; set; }
     public List<int> TagIds { get; set; } = new();
     public List<RegionalEntityImageInputDto> Images { get; set; } = new();
 

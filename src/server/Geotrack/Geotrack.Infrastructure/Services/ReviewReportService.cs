@@ -55,6 +55,8 @@ public class ReviewReportService : IReviewReportService
         {
             ReviewReportTargetType.Place => await BuildPlaceReviewReportAsync(reporterUserId, reviewId, request),
             ReviewReportTargetType.Event => await BuildEventReviewReportAsync(reporterUserId, reviewId, request),
+            ReviewReportTargetType.Destination => await BuildDestinationReviewReportAsync(reporterUserId, reviewId, request),
+            ReviewReportTargetType.Location => await BuildLocationReviewReportAsync(reporterUserId, reviewId, request),
             _ => throw new InvalidOperationException("Invalid review target.")
         };
 
@@ -88,11 +90,11 @@ public class ReviewReportService : IReviewReportService
 
         await _adminNotificationService.CreateReviewReportedNotificationAsync(report);
 
-            return new ReportReviewResponseDto
-            {
-                ReportId = report.Id,
-                AlreadyReported = false,
-                Status = report.Status.ToString(),
+        return new ReportReviewResponseDto
+        {
+            ReportId = report.Id,
+            AlreadyReported = false,
+            Status = report.Status.ToString(),
             Message = "Thanks. This review has been queued for content moderation."
         };
     }
@@ -149,51 +151,60 @@ public class ReviewReportService : IReviewReportService
         int reportId,
         ModerateReviewReportRequestDto request)
     {
-        var report = await LoadReportForModerationAsync(reportId);
-        await EnsureReviewModeratorAsync(reviewerUserId);
-
-        if (report.Status != ReviewReportStatus.Pending)
-            throw new InvalidOperationException("This report has already been reviewed.");
-
-        var now = DateTime.UtcNow;
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-
-        switch (report.TargetType)
+        return await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            case ReviewReportTargetType.Place:
-                await RemovePlaceReviewAsync(report);
-                break;
-            case ReviewReportTargetType.Event:
-                await RemoveEventReviewAsync(report);
-                break;
-            default:
-                throw new InvalidOperationException("Invalid review target.");
-        }
+            var report = await LoadReportForModerationAsync(reportId);
+            await EnsureReviewModeratorAsync(reviewerUserId);
 
-        var pendingReportsForReview = await _db.ReviewReports
-            .Where(existing =>
-                existing.TargetType == report.TargetType &&
-                existing.ReviewId == report.ReviewId &&
-                existing.Status == ReviewReportStatus.Pending)
-            .ToListAsync();
+            if (report.Status != ReviewReportStatus.Pending)
+                throw new InvalidOperationException("This report has already been reviewed.");
 
-        foreach (var pendingReport in pendingReportsForReview)
-        {
-            pendingReport.Status = ReviewReportStatus.Actioned;
-            pendingReport.Decision = ReviewReportDecision.RemoveReview;
-            pendingReport.ReviewedByUserId = reviewerUserId;
-            pendingReport.ReviewedAt = now;
-            pendingReport.DecisionNote = NormalizeDecisionNote(request.Note);
+            var now = DateTime.UtcNow;
+            await using var transaction = await _db.Database.BeginTransactionAsync();
 
-            _notificationService.AddReviewReportReporterDecisionNotification(pendingReport);
-        }
+            switch (report.TargetType)
+            {
+                case ReviewReportTargetType.Place:
+                    await RemovePlaceReviewAsync(report);
+                    break;
+                case ReviewReportTargetType.Event:
+                    await RemoveEventReviewAsync(report);
+                    break;
+                case ReviewReportTargetType.Destination:
+                    await RemoveDestinationReviewAsync(report);
+                    break;
+                case ReviewReportTargetType.Location:
+                    await RemoveLocationReviewAsync(report);
+                    break;
+                default:
+                    throw new InvalidOperationException("Invalid review target.");
+            }
 
-        _notificationService.AddReportedReviewRemovedNotification(report);
+            var pendingReportsForReview = await _db.ReviewReports
+                .Where(existing =>
+                    existing.TargetType == report.TargetType &&
+                    existing.ReviewId == report.ReviewId &&
+                    existing.Status == ReviewReportStatus.Pending)
+                .ToListAsync();
 
-        await _db.SaveChangesAsync();
-        await transaction.CommitAsync();
+            foreach (var pendingReport in pendingReportsForReview)
+            {
+                pendingReport.Status = ReviewReportStatus.Actioned;
+                pendingReport.Decision = ReviewReportDecision.RemoveReview;
+                pendingReport.ReviewedByUserId = reviewerUserId;
+                pendingReport.ReviewedAt = now;
+                pendingReport.DecisionNote = NormalizeDecisionNote(request.Note);
 
-        return MapReport(report);
+                _notificationService.AddReviewReportReporterDecisionNotification(pendingReport);
+            }
+
+            _notificationService.AddReportedReviewRemovedNotification(report);
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return MapReport(report);
+        });
     }
 
     private async Task<ReviewReport> BuildPlaceReviewReportAsync(
@@ -212,6 +223,14 @@ public class ReviewReportService : IReviewReportService
 
         if (review.UserId == reporterUserId)
             throw new InvalidOperationException("You cannot report your own review.");
+
+        var reporterOwnsPlace = review.Place.CreatedByUserId == reporterUserId ||
+            await _db.UserPlaces.AsNoTracking().AnyAsync(owner =>
+                owner.PlaceId == review.PlaceId &&
+                owner.UserId == reporterUserId);
+
+        if (reporterOwnsPlace)
+            throw new InvalidOperationException("You cannot report reviews for a place that you own.");
 
         return new ReviewReport
         {
@@ -273,6 +292,80 @@ public class ReviewReportService : IReviewReportService
         };
     }
 
+
+    private async Task<ReviewReport> BuildDestinationReviewReportAsync(
+        int reporterUserId,
+        int reviewId,
+        ReportReviewRequestDto request)
+    {
+        var review = await _db.DestinationReviews
+            .Include(item => item.User)
+            .Include(item => item.Destination)
+                .ThenInclude(destination => destination.Region)
+            .FirstOrDefaultAsync(item => item.Id == reviewId)
+            ?? throw new KeyNotFoundException("Review not found.");
+
+        if (review.UserId == reporterUserId)
+            throw new InvalidOperationException("You cannot report your own review.");
+
+        return new ReviewReport
+        {
+            TargetType = ReviewReportTargetType.Destination,
+            ReviewId = review.Id,
+            ReporterUserId = reporterUserId,
+            Reason = ParseReason(request.Reason),
+            Note = NormalizeReportNote(request.Note),
+            Status = ReviewReportStatus.Pending,
+            ReviewAuthorUserId = review.UserId,
+            ReviewAuthorName = GetAuthorName(review.User),
+            EntityId = review.DestinationId,
+            EntityName = review.Destination.Name,
+            RegionId = review.Destination.RegionId,
+            RegionName = review.Destination.Region.Name,
+            ReviewRating = review.Rating,
+            ReviewCommentSnapshot = review.Comment,
+            ReviewCreatedAt = review.CreatedAt,
+            CreatedAt = DateTime.UtcNow
+        };
+    }
+
+    private async Task<ReviewReport> BuildLocationReviewReportAsync(
+        int reporterUserId,
+        int reviewId,
+        ReportReviewRequestDto request)
+    {
+        var review = await _db.LocationReviews
+            .Include(item => item.User)
+            .Include(item => item.Location)
+                .ThenInclude(location => location.Destination)
+                .ThenInclude(destination => destination.Region)
+            .FirstOrDefaultAsync(item => item.Id == reviewId)
+            ?? throw new KeyNotFoundException("Review not found.");
+
+        if (review.UserId == reporterUserId)
+            throw new InvalidOperationException("You cannot report your own review.");
+
+        return new ReviewReport
+        {
+            TargetType = ReviewReportTargetType.Location,
+            ReviewId = review.Id,
+            ReporterUserId = reporterUserId,
+            Reason = ParseReason(request.Reason),
+            Note = NormalizeReportNote(request.Note),
+            Status = ReviewReportStatus.Pending,
+            ReviewAuthorUserId = review.UserId,
+            ReviewAuthorName = GetAuthorName(review.User),
+            EntityId = review.LocationId,
+            EntityName = review.Location.Name,
+            RegionId = review.Location.Destination.RegionId,
+            RegionName = review.Location.Destination.Region.Name,
+            ReviewRating = review.Rating,
+            ReviewCommentSnapshot = review.Comment,
+            ReviewCreatedAt = review.CreatedAt,
+            CreatedAt = DateTime.UtcNow
+        };
+    }
+
     private async Task RemovePlaceReviewAsync(ReviewReport report)
     {
         var review = await _db.PlaceReviews
@@ -304,6 +397,25 @@ public class ReviewReportService : IReviewReportService
 
         if (review is not null)
             _db.EventReviews.Remove(review);
+    }
+
+
+    private async Task RemoveDestinationReviewAsync(ReviewReport report)
+    {
+        var review = await _db.DestinationReviews
+            .FirstOrDefaultAsync(item => item.Id == report.ReviewId);
+
+        if (review is not null)
+            _db.DestinationReviews.Remove(review);
+    }
+
+    private async Task RemoveLocationReviewAsync(ReviewReport report)
+    {
+        var review = await _db.LocationReviews
+            .FirstOrDefaultAsync(item => item.Id == report.ReviewId);
+
+        if (review is not null)
+            _db.LocationReviews.Remove(review);
     }
 
     private async Task<ReviewReport> LoadReportForModerationAsync(int reportId)
@@ -349,6 +461,8 @@ public class ReviewReportService : IReviewReportService
         {
             "place" or "places" or "stay" or "stays" => ReviewReportTargetType.Place,
             "event" or "events" => ReviewReportTargetType.Event,
+            "destination" or "destinations" => ReviewReportTargetType.Destination,
+            "location" or "locations" => ReviewReportTargetType.Location,
             _ => throw new InvalidOperationException("Invalid review target.")
         };
     }

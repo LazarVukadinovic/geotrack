@@ -107,7 +107,7 @@
                   <div
                     #editorRef
                     contenteditable="true"
-                    class="w-full px-3 py-2 text-sm min-h-[100px] outline-none text-gray-700"
+                    class="w-full h-[140px] overflow-y-auto px-3 py-2 text-sm outline-none text-gray-700"
                     style="font-family: inherit;"
                     (keydown)="onEditorKeydown($event)"
                     (keyup)="onEditorChange()"
@@ -185,6 +185,20 @@
               <label class="block text-xs font-semibold text-gray-600 mb-1">Venue Name <span class="text-gray-400 font-normal">(Optional)</span></label>
               <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" placeholder="e.g. Seattle Convention Center" [(ngModel)]="customVenueName" />
             </div>
+            <div class="mt-3">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Venue Description</label>
+              <textarea class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none resize-none focus:border-blue-500" rows="3" [(ngModel)]="venueDescription" placeholder="Describe the venue and where the event takes place"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Arrival Tips</label>
+                <textarea class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none resize-none focus:border-blue-500" rows="3" [(ngModel)]="arrivalTips" placeholder="Public transport, entrances, or arrival advice"></textarea>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Parking &amp; Accessibility</label>
+                <textarea class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none resize-none focus:border-blue-500" rows="3" [(ngModel)]="accessibility" placeholder="Parking and accessibility information"></textarea>
+              </div>
+            </div>
           </div>
 
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
@@ -245,7 +259,7 @@
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">External Ticket Link</label>
-                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" [(ngModel)]="externalTicketLink" placeholder="https://tickets.example.com/..." />
+                <input class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-400" [(ngModel)]="externalTicketLink" [disabled]="freeEvent" placeholder="https://tickets.example.com/..." />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Organizer Name</label>
@@ -254,6 +268,10 @@
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Contact Email</label>
                 <input type="email" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" [(ngModel)]="contactEmail" placeholder="contact@example.com" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Contact Phone</label>
+                <input type="tel" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500" [(ngModel)]="contactPhone" placeholder="+381 11 123 4567" />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Attendance Limit <span class="text-gray-400 font-normal">(Optional)</span></label>

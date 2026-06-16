@@ -122,6 +122,7 @@ export class ReviewEntryComponent implements OnDestroy {
 
   protected onStarClick(n: number): void {
     this.draftRating.set(n);
+    this.hoverRating.set(0);
   }
 
   protected onStarEnter(n: number): void {

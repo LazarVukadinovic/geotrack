@@ -297,6 +297,7 @@ function makePlaceDraft(): ContributionDraftData {
     details: {
       description: 'A place contribution.',
       openingHoursEnabled: true,
+      open24Hours: false,
       openingHours: 'Mon-Fri 09:00-17:00',
       operatingHours: [
         { dayOfWeek: 'Monday', isOpen: true, openTime: '09:00', closeTime: '17:00' },

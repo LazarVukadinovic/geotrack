@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subject, finalize, forkJoin, takeUntil } from 'rxjs';
+import { Subject, Subscription, finalize, forkJoin, takeUntil } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -16,6 +16,21 @@ import {
 } from '../../../../core/services/content-moderator/content-moderator-contributions.service';
 import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 import { isLongDescription } from '../../../../shared/utils/description-formatting';
+import {
+  OPEN_24_HOURS_LABEL,
+  hasDisplayableOperatingHours,
+  isOpen24HoursSchedule,
+  isOpen24HoursText,
+} from '../../../../shared/utils/opening-hours';
+import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
+import { AdminMapViewport, AdminMapZone } from '../../../../core/models/admin-map.model';
+import {
+  applyAssignedRegionViewport,
+  createRegionalMapPinIcon,
+  renderAssignedRegionBoundary,
+} from '../../../add-pages/shared/regional-creation-map';
+
+declare const L: any;
 
 type DestinationChoice = 'existing' | 'new';
 
@@ -33,6 +48,8 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly lightbox = inject(LightboxService);
+  private readonly mapTileLayer = inject(MapTileLayerService);
+  private readonly zone = inject(NgZone);
   private readonly destroy$ = new Subject<void>();
 
   contribution: CmContributionDetail | null = null;
@@ -55,6 +72,14 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   destinationChoice: DestinationChoice = 'new';
   selectedDestinationId: number | null = null;
   newDestinationName = '';
+  newDestinationLatitude: number | null = null;
+  newDestinationLongitude: number | null = null;
+  destinationCenterConfirmed = false;
+  destinationCenterValidationPending = false;
+  destinationCenterMessage: string | null = null;
+  destinationRegionBoundaryMessage: string | null = null;
+  destinationCenterModalOpen = false;
+  destinationCenterCandidateAllowed = false;
   locations: CmLocationOption[] = [];
   locationsLoading = false;
   newLocationName = '';
@@ -69,6 +94,31 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   locationImagePreview: string | null = null;
   locationImageError = '';
 
+  private destinationCenterMap: any = null;
+  private destinationCenterMarker: any = null;
+  private destinationRegionBoundaryLayer: any = null;
+  private destinationCenterModalMap: any = null;
+  private destinationCenterModalMarker: any = null;
+  private destinationModalRegionBoundaryLayer: any = null;
+  private destinationCenterCandidateLatitude: number | null = null;
+  private destinationCenterCandidateLongitude: number | null = null;
+  private destinationRegionViewport: AdminMapViewport | null = null;
+  private destinationRegionZone: AdminMapZone | null = null;
+  private destinationCenterValidationSubscription: Subscription | null = null;
+  private destinationRegionMapSubscription: Subscription | null = null;
+
+  @ViewChild('destinationCenterMap')
+  set destinationCenterMapElement(element: ElementRef<HTMLDivElement> | undefined) {
+    if (!element) {
+      this.destroyDestinationCenterMap();
+      return;
+    }
+    setTimeout(() => this.initDestinationCenterMap(element.nativeElement), 0);
+  }
+
+  @ViewChild('destinationCenterModalMap')
+  destinationCenterModalMapElement?: ElementRef<HTMLDivElement>;
+
   readonly galleryLimit = 8;
   get userName(): string { return this.auth.fullName || 'Content Moderator'; }
   get userRole(): string { return this.auth.getUser()?.role || 'Content Moderator'; }
@@ -78,9 +128,13 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     return !!this.contribution && !this.contribution.locationId;
   }
 
-  /** Use CM approve endpoint whenever the assignment form has a region selected. */
+  /**
+   * Use the CM approve endpoint whenever the assignment form has a region selected.
+   * Ownership claims target an existing place (no assignment form is shown), so they always
+   * go through the plain approve endpoint even though a suggested region is auto-selected.
+   */
   get usesCmApprove(): boolean {
-    return !!this.selectedRegionId;
+    return !this.isOwnershipClaim && !!this.selectedRegionId;
   }
 
   get canApprove(): boolean {
@@ -89,12 +143,23 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     if (!this.selectedRegionId) return false;
     if (!this.newLocationName.trim()) return false;
     if (this.destinationChoice === 'existing') return !!this.selectedDestinationId;
-    return !!this.newDestinationName.trim();
+    return !!this.newDestinationName.trim() && this.destinationCenterConfirmed;
   }
 
   get isDescriptionLong(): boolean {
     return isLongDescription(this.contribution?.description);
   }
+
+  get hasDisplayableOperatingHours(): boolean {
+    return hasDisplayableOperatingHours(this.contribution?.operatingHours ?? []);
+  }
+
+  get showsOpen24Hours(): boolean {
+    const hours = this.contribution?.operatingHours ?? [];
+    return isOpen24HoursSchedule(hours) || isOpen24HoursText(this.contribution?.openingHours);
+  }
+
+  readonly open24HoursLabel = OPEN_24_HOURS_LABEL;
 
   get locationDisplay(): string {
     if (!this.contribution) return '';
@@ -160,6 +225,10 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destinationCenterValidationSubscription?.unsubscribe();
+    this.destinationRegionMapSubscription?.unsubscribe();
+    this.destroyDestinationCenterModalMap();
+    this.destroyDestinationCenterMap();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -214,6 +283,8 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     this.destinations = [];
     this.locations = [];
     this.destinationChoice = 'new';
+    this.clearDestinationCenter();
+    this.loadDestinationRegionMapContext();
     this.cdr.markForCheck();
 
     if (!this.selectedRegionId) return;
@@ -246,6 +317,8 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     this.locations = [];
     this.selectedDestinationId = null;
     this.destinationChoice = 'new';
+    this.clearDestinationCenter();
+    this.clearDestinationRegionMapContext();
     this.cdr.markForCheck();
   }
 
@@ -256,6 +329,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     if (choice === 'existing') {
       this.destinationImageFile = null;
       this.destinationImagePreview = null;
+      this.clearDestinationCenter();
     }
     this.locationImageFile = null;
     this.locationImagePreview = null;
@@ -341,6 +415,8 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
           this.selectedRegionId!,
           this.destinationChoice === 'existing' ? this.selectedDestinationId : null,
           this.destinationChoice === 'new' ? this.newDestinationName.trim() : null,
+          this.destinationChoice === 'new' ? this.newDestinationLatitude : null,
+          this.destinationChoice === 'new' ? this.newDestinationLongitude : null,
           this.newLocationName.trim(),
           this.reviewerNote,
         )
@@ -405,6 +481,273 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
 
   goBack(): void { this.router.navigate(['/content-moderator/contributions']); }
 
+  get isOwnershipClaim(): boolean {
+    return (this.contribution?.type ?? '').toLowerCase() === 'claimownership';
+  }
+
+  clearDestinationCenter(): void {
+    this.destinationCenterValidationSubscription?.unsubscribe();
+    this.destinationCenterValidationSubscription = null;
+    this.newDestinationLatitude = null;
+    this.newDestinationLongitude = null;
+    this.destinationCenterConfirmed = false;
+    this.destinationCenterValidationPending = false;
+    this.destinationCenterMessage = null;
+    this.destinationCenterCandidateLatitude = null;
+    this.destinationCenterCandidateLongitude = null;
+    this.destinationCenterCandidateAllowed = false;
+    if (this.destinationCenterMarker && this.destinationCenterMap) {
+      this.destinationCenterMap.removeLayer(this.destinationCenterMarker);
+      this.destinationCenterMarker = null;
+    }
+    this.removeDestinationCenterModalMarker();
+    this.cdr.markForCheck();
+  }
+
+  openDestinationCenterModal(): void {
+    if (!this.selectedRegionId || this.destinationRegionBoundaryMessage) return;
+
+    this.destinationCenterCandidateLatitude = this.newDestinationLatitude;
+    this.destinationCenterCandidateLongitude = this.newDestinationLongitude;
+    this.destinationCenterCandidateAllowed = this.destinationCenterConfirmed;
+    this.destinationCenterMessage = null;
+    this.destinationCenterModalOpen = true;
+    this.cdr.markForCheck();
+    setTimeout(() => {
+      const element = this.destinationCenterModalMapElement?.nativeElement;
+      if (element) this.initDestinationCenterModalMap(element);
+    }, 50);
+  }
+
+  closeDestinationCenterModal(): void {
+    this.destinationCenterModalOpen = false;
+    this.destinationCenterValidationSubscription?.unsubscribe();
+    this.destinationCenterValidationSubscription = null;
+    this.destinationCenterValidationPending = false;
+    this.destinationCenterMessage = null;
+    this.destroyDestinationCenterModalMap();
+    this.cdr.markForCheck();
+  }
+
+  confirmDestinationCenter(): void {
+    if (
+      !this.destinationCenterCandidateAllowed ||
+      this.destinationCenterCandidateLatitude == null ||
+      this.destinationCenterCandidateLongitude == null
+    ) return;
+
+    this.newDestinationLatitude = this.destinationCenterCandidateLatitude;
+    this.newDestinationLongitude = this.destinationCenterCandidateLongitude;
+    this.destinationCenterConfirmed = true;
+    this.destinationCenterMessage = 'Destination centre is inside the selected region.';
+    this.showDestinationCenterMarker();
+    this.destinationCenterMap?.setView(
+      [this.newDestinationLatitude, this.newDestinationLongitude],
+      12,
+      { animate: false },
+    );
+    this.closeDestinationCenterModal();
+  }
+
+  private loadDestinationRegionMapContext(): void {
+    this.clearDestinationRegionMapContext();
+    if (!this.selectedRegionId) return;
+
+    const requestedRegionId = this.selectedRegionId;
+    this.destinationRegionBoundaryMessage = 'Loading selected region boundary...';
+    this.destinationRegionMapSubscription = this.service.getRegionMapContext(requestedRegionId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: context => {
+          if (context.regionId !== this.selectedRegionId) return;
+
+          this.destinationRegionViewport = context.viewport;
+          this.destinationRegionZone = context.hasBoundary && context.geometryGeoJson
+            ? {
+                id: context.regionId,
+                entityType: 'Region',
+                name: context.regionName,
+                displayName: context.displayName,
+                geometryGeoJson: context.geometryGeoJson,
+                isGeometryFallback: false,
+              }
+            : null;
+          this.destinationRegionBoundaryMessage = context.hasBoundary
+            ? null
+            : context.message || 'The selected region does not have a usable boundary.';
+          this.refreshDestinationRegionBoundary();
+          this.applyDestinationRegionViewport();
+          this.cdr.markForCheck();
+        },
+        error: err => {
+          if (requestedRegionId !== this.selectedRegionId) return;
+          this.destinationRegionBoundaryMessage = err?.error?.message ||
+            'Unable to load the selected region boundary.';
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private clearDestinationRegionMapContext(): void {
+    this.destinationRegionMapSubscription?.unsubscribe();
+    this.destinationRegionMapSubscription = null;
+    this.destinationRegionViewport = null;
+    this.destinationRegionZone = null;
+    this.destinationRegionBoundaryMessage = null;
+    this.refreshDestinationRegionBoundary();
+  }
+
+  private refreshDestinationRegionBoundary(): void {
+    this.destinationRegionBoundaryLayer = renderAssignedRegionBoundary(
+      typeof L === 'undefined' ? null : L,
+      this.destinationCenterMap,
+      this.destinationRegionBoundaryLayer,
+      this.destinationRegionZone,
+    );
+    this.destinationModalRegionBoundaryLayer = renderAssignedRegionBoundary(
+      typeof L === 'undefined' ? null : L,
+      this.destinationCenterModalMap,
+      this.destinationModalRegionBoundaryLayer,
+      this.destinationRegionZone,
+    );
+  }
+
+  private applyDestinationRegionViewport(): void {
+    if (this.destinationRegionViewport && !this.destinationRegionViewport.isEmpty) {
+      applyAssignedRegionViewport(this.destinationCenterMap, this.destinationRegionViewport, 9, 11);
+      applyAssignedRegionViewport(this.destinationCenterModalMap, this.destinationRegionViewport, 9, 11);
+      return;
+    }
+
+    const fallbackLatitude = this.contribution?.latitude ?? 44.0165;
+    const fallbackLongitude = this.contribution?.longitude ?? 21.0059;
+    for (const map of [this.destinationCenterMap, this.destinationCenterModalMap]) {
+      map?.setView(
+        [fallbackLatitude, fallbackLongitude],
+        this.contribution?.latitude != null ? 13 : 7,
+        { animate: false },
+      );
+    }
+  }
+
+  private validateDestinationCenter(latitude: number, longitude: number): void {
+    if (!this.selectedRegionId || this.destinationCenterValidationPending) return;
+
+    this.destinationCenterValidationSubscription?.unsubscribe();
+    this.destinationCenterValidationPending = true;
+    this.destinationCenterCandidateAllowed = false;
+    this.destinationCenterMessage = 'Checking destination centre...';
+    this.cdr.markForCheck();
+
+    this.destinationCenterValidationSubscription = this.service
+      .validateDestinationCenter(this.selectedRegionId, latitude, longitude)
+      .pipe(takeUntil(this.destroy$), finalize(() => {
+        this.destinationCenterValidationPending = false;
+        this.cdr.markForCheck();
+      }))
+      .subscribe({
+        next: result => {
+          this.destinationCenterMessage = result.message;
+          if (!result.isAllowed) {
+            this.destinationCenterCandidateLatitude = null;
+            this.destinationCenterCandidateLongitude = null;
+            this.destinationCenterCandidateAllowed = false;
+            this.removeDestinationCenterModalMarker();
+            return;
+          }
+
+          this.destinationCenterCandidateLatitude = latitude;
+          this.destinationCenterCandidateLongitude = longitude;
+          this.destinationCenterCandidateAllowed = true;
+          this.showDestinationCenterModalMarker();
+          this.destinationCenterModalMap?.setView([latitude, longitude], 12, { animate: true });
+        },
+        error: err => {
+          this.destinationCenterMessage = err?.error?.message ||
+            'Unable to validate the destination centre.';
+          this.destinationCenterCandidateAllowed = false;
+        },
+      });
+  }
+
+  private initDestinationCenterMap(element: HTMLDivElement): void {
+    if (this.destinationCenterMap || typeof L === 'undefined') return;
+
+    this.destinationCenterMap = L.map(element, { zoomControl: true, attributionControl: false });
+    this.mapTileLayer.addTo(L, this.destinationCenterMap);
+    this.refreshDestinationRegionBoundary();
+    this.applyDestinationRegionViewport();
+    setTimeout(() => this.destinationCenterMap?.invalidateSize(), 100);
+    this.showDestinationCenterMarker();
+  }
+
+  private initDestinationCenterModalMap(element: HTMLDivElement): void {
+    if (this.destinationCenterModalMap || typeof L === 'undefined') return;
+
+    this.destinationCenterModalMap = L.map(element, { zoomControl: true, attributionControl: false });
+    this.mapTileLayer.addTo(L, this.destinationCenterModalMap);
+    this.refreshDestinationRegionBoundary();
+    this.applyDestinationRegionViewport();
+    this.destinationCenterModalMap.on('click', (event: any) => {
+      this.zone.run(() => this.validateDestinationCenter(event.latlng.lat, event.latlng.lng));
+    });
+    setTimeout(() => this.destinationCenterModalMap?.invalidateSize(), 100);
+    this.showDestinationCenterModalMarker();
+  }
+
+  private showDestinationCenterMarker(): void {
+    if (!this.destinationCenterMap || this.newDestinationLatitude == null || this.newDestinationLongitude == null) return;
+    const point: [number, number] = [this.newDestinationLatitude, this.newDestinationLongitude];
+    if (this.destinationCenterMarker) {
+      this.destinationCenterMarker.setLatLng(point);
+    } else {
+      this.destinationCenterMarker = L.marker(point, {
+        icon: createRegionalMapPinIcon(L),
+      }).addTo(this.destinationCenterMap);
+    }
+  }
+
+  private showDestinationCenterModalMarker(): void {
+    if (
+      !this.destinationCenterModalMap ||
+      this.destinationCenterCandidateLatitude == null ||
+      this.destinationCenterCandidateLongitude == null
+    ) return;
+
+    const point: [number, number] = [
+      this.destinationCenterCandidateLatitude,
+      this.destinationCenterCandidateLongitude,
+    ];
+    if (this.destinationCenterModalMarker) {
+      this.destinationCenterModalMarker.setLatLng(point);
+    } else {
+      this.destinationCenterModalMarker = L.marker(point, {
+        icon: createRegionalMapPinIcon(L),
+      }).addTo(this.destinationCenterModalMap);
+    }
+  }
+
+  private removeDestinationCenterModalMarker(): void {
+    if (this.destinationCenterModalMarker && this.destinationCenterModalMap) {
+      this.destinationCenterModalMap.removeLayer(this.destinationCenterModalMarker);
+    }
+    this.destinationCenterModalMarker = null;
+  }
+
+  private destroyDestinationCenterModalMap(): void {
+    this.destinationCenterModalMap?.remove();
+    this.destinationCenterModalMap = null;
+    this.destinationCenterModalMarker = null;
+    this.destinationModalRegionBoundaryLayer = null;
+  }
+
+  private destroyDestinationCenterMap(): void {
+    this.destinationCenterMap?.remove();
+    this.destinationCenterMap = null;
+    this.destinationCenterMarker = null;
+    this.destinationRegionBoundaryLayer = null;
+  }
+
   typeLabel(type: string): string {
     switch ((type ?? '').toLowerCase()) {
       case 'updateplace': return 'Update Place';
@@ -415,5 +758,14 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
 
   regionDisplayName(region: CmRegionOption): string {
     return region.territoryName ? `${region.name} (${region.territoryName})` : region.name;
+  }
+
+  partnerDisplayName(id: string): string {
+    switch (id.toLowerCase()) {
+      case 'booking': return 'Booking.com';
+      case 'airbnb': return 'Airbnb';
+      case 'hotel': return 'Official Website';
+      default: return id;
+    }
   }
 }

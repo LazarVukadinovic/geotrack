@@ -613,7 +613,7 @@ describe('AnalyticsPageComponent', () => {
     const cases = [
       { row: entityRow('destination'), expected: ['Destination Fields', 'Locations', 'Boundary note'] },
       { row: entityRow('location'), expected: ['Location Fields', 'Parent destination', 'Places'] },
-      { row: entityRow('place'), expected: ['Place Fields', 'Website', 'Opening hours'] },
+      { row: entityRow('place'), expected: ['Place Fields', 'Website', 'Opening Hours'] },
       { row: entityRow('place', 18, 'Real Stay'), expected: ['Stay type', 'Hotel', 'WiFi'] },
       { row: entityRow('event'), expected: ['Event Fields', 'Starts', 'Venue'] },
     ];

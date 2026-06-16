@@ -79,6 +79,7 @@ export interface PlaceListItem {
   analyticsReviewAvg?: number;
   analyticsReviewCount?: number;
   analyticsTrend?: 'up' | 'stable' | 'down';
+  canDelete?: boolean;
 }
 
 export interface PlacesPage {
@@ -164,12 +165,24 @@ export class PlacesListService {
     payload: RegionalPlaceUpdateRequest,
   ): Observable<RegionalPlaceDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, payload, { params }).pipe(
+    return this.http.put<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, this.buildUpdateFormData(payload), { params }).pipe(
       map(dto => {
         this.toListItem(dto);
         return dto;
       }),
     );
+  }
+
+  private buildUpdateFormData(payload: RegionalPlaceUpdateRequest): FormData {
+    const { galleryImageFiles, ...request } = payload;
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+
+    for (const file of galleryImageFiles ?? []) {
+      if (file) formData.append('galleryImages', file);
+    }
+
+    return formData;
   }
 
   getParentDestinations(
@@ -256,7 +269,7 @@ export class PlacesListService {
     formData.append('coverImage', coverImageFile);
 
     for (const file of galleryImageFiles ?? []) {
-      formData.append('galleryImages', file);
+      if (file) formData.append('galleryImages', file);
     }
 
     return formData;
@@ -327,6 +340,7 @@ export class PlacesListService {
       visitorTips: detail.visitorTips ?? undefined,
       accessNotes: detail.accessNotes ?? undefined,
       accessibilityNotes: detail.accessibilityNotes ?? undefined,
+      canDelete: detail.canDelete ?? true,
     };
 
     this.cache.set(id, item);

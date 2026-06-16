@@ -52,6 +52,13 @@ declare const L: any;
 
 type EventParentType = 'location' | 'place' | 'destination';
 
+interface EventParentPrefillState {
+  venueType: EventParentType;
+  destinationId: number | null;
+  locationId: number | null;
+  placeId: number | null;
+}
+
 interface EventFormDraft {
   activeRegionId: number | null;
   eventTitle: string;
@@ -73,8 +80,12 @@ interface EventFormDraft {
   externalTicketLink: string;
   organizerName: string;
   contactEmail: string;
+  contactPhone: string;
   attendanceLimit: string;
   ageRestriction: string;
+  venueDescription: string;
+  arrivalTips: string;
+  accessibility: string;
   descriptionHtml: string;
   selectedTagIds: number[];
   cardImageName: string;
@@ -163,8 +174,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   externalTicketLink = '';
   organizerName = '';
   contactEmail = '';
+  contactPhone = '';
   attendanceLimit = '';
   ageRestriction = '';
+  venueDescription = '';
+  arrivalTips = '';
+  accessibility = '';
 
   isBold = false;
   isItalic = false;
@@ -210,6 +225,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   private regionBoundaryZone: AdminMapZone | null = null;
   private scopeValidationResult: RegionalScopeValidationResult | null = null;
   private unregisterDraftSource: (() => void) | null = null;
+  private navigationPrefillApplied = false;
 
   constructor(
     private readonly zone: NgZone,
@@ -235,7 +251,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     setTimeout(() => this.initMiniMap(), 0);
-    setTimeout(() => this.restoreSavedDraftIfPresent(), 0);
+    setTimeout(() => {
+      const appliedPrefill = this.applyNavigationPrefill();
+      if (!appliedPrefill) {
+        this.restoreSavedDraftIfPresent();
+      }
+    }, 0);
   }
 
   ngOnDestroy(): void {
@@ -375,7 +396,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       Boolean(this.eventTitle.trim()) &&
       Boolean(this.summary.trim()) &&
       Boolean(this.eventTypeId) &&
-      Boolean(this.parentDestination) &&
+      Boolean(this.resolveDestinationId()) &&
       Boolean(this.cardImageFile) &&
       Boolean(this.coverImageFile) &&
       !this.regionBoundaryMissingMessage &&
@@ -853,6 +874,10 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
           this.assignedRegions = Array.isArray(regions) ? regions : [];
           this.activeRegionId = this.resolveInitialRegionId(this.assignedRegions);
           if (this.activeRegionId) {
+            const prefill = this.getNavigationPrefill();
+            if (!this.isEditMode && prefill) {
+              this.venueType = prefill.venueType;
+            }
             sessionStorage.setItem(NewEventComponent.activeRegionStorageKey, String(this.activeRegionId));
             this.loadAssignedRegionMap(this.activeRegionId);
             this.loadParentOptions();
@@ -888,8 +913,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
         this.externalTicketLink = dto.externalTicketLink ?? '';
         this.organizerName = dto.hostedBy ?? '';
         this.contactEmail = dto.contactEmail ?? '';
+        this.contactPhone = dto.contactPhone ?? '';
         this.attendanceLimit = dto.attendanceLimit != null ? String(dto.attendanceLimit) : '';
         this.ageRestriction = dto.ageRestriction ?? '';
+        this.venueDescription = dto.venueDescription ?? '';
+        this.arrivalTips = dto.arrivalTips ?? '';
+        this.accessibility = dto.accessibility ?? '';
 
         const parentType = (dto.parentEntityType ?? '').toLowerCase();
         if (parentType === 'place') {
@@ -939,9 +968,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
         ];
 
         this.selectedTagIds = new Set((dto.tags ?? []).map(tag => tag.id));
-        for (const tag of dto.tags ?? []) {
-          this.knownTags.set(tag.id, tag);
-        }
+        this.syncSelectedTagsWithAvailableTags();
         this.classItems = this.classItems.map(item => ({
           ...item,
           checked: this.selectedTagIds.has(item.tag.id),
@@ -1033,6 +1060,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
         next: tags => {
           this.eventTags = this.normalizeTags(tags);
           this.eventTags.forEach(tag => this.knownTags.set(tag.id, tag));
+          this.syncSelectedTagsWithAvailableTags();
           this.classItems = this.eventTags.map(tag => ({
             tag,
             checked: this.selectedTagIds.has(tag.id),
@@ -1078,7 +1106,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
 
           this.loadDestinationsForDerivation();
           this.updateMiniMapFromSelection();
-          if (this.isEditMode && this.hasSelectedParent()) {
+          if (this.hasSelectedParent()) {
             this.validateSelectedParentLocation();
           }
           this.cdr.markForCheck();
@@ -1160,7 +1188,21 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private selectedTagIdList(): number[] {
-    return [...new Set(this.selectedTagIds)].sort((a, b) => a - b);
+    const allowedIds = this.availableTagIdSet();
+    return [...new Set(this.selectedTagIds)]
+      .filter(id => allowedIds.size === 0 || allowedIds.has(id))
+      .sort((a, b) => a - b);
+  }
+
+  private syncSelectedTagsWithAvailableTags(): void {
+    const allowedIds = this.availableTagIdSet();
+    if (allowedIds.size === 0) return;
+
+    this.selectedTagIds = new Set([...this.selectedTagIds].filter(id => allowedIds.has(id)));
+  }
+
+  private availableTagIdSet(): Set<number> {
+    return new Set(this.eventTags.map(tag => tag.id));
   }
 
   private buildPayload(): RegionalEventCreateRequest | null {
@@ -1203,8 +1245,14 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
-    if (!this.hasSelectedParent() || !this.parentDestination) {
+    if (!this.hasSelectedParent()) {
       this.errorMessage = 'Select a valid event parent in the active region.';
+      return null;
+    }
+
+    const destinationId = this.resolveDestinationId();
+    if (!destinationId) {
+      this.errorMessage = 'Could not determine destination for the selected parent. Please re-select.';
       return null;
     }
 
@@ -1267,7 +1315,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     return {
       regionId: this.activeRegionId,
       parentEntityType: this.toBackendParentType(this.venueType),
-      destinationId: this.parentDestination.id,
+      destinationId,
       locationId: this.venueType === 'location'
         ? this.selectedLocationId
         : this.venueType === 'place'
@@ -1286,11 +1334,15 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       isRecurring: this.recurring,
       isFree: this.freeEvent,
       ticketPrice: this.freeEvent ? null : this.ticketPrice.trim() || null,
-      externalTicketLink: externalTicketLink || null,
+      externalTicketLink: this.freeEvent ? null : externalTicketLink || null,
       organizerName: this.organizerName.trim() || null,
       contactEmail: contactEmail || null,
+      contactPhone: this.contactPhone.trim() || null,
       attendanceLimit,
       ageRestriction: this.ageRestriction.trim() || null,
+      venueDescription: this.venueDescription.trim() || null,
+      arrivalTips: this.arrivalTips.trim() || null,
+      accessibility: this.accessibility.trim() || null,
       tagIds: this.selectedTagIdList(),
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
@@ -1314,6 +1366,44 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     if (regions.some(region => region.id === storedRegion)) return storedRegion;
 
     return regions[0].id;
+  }
+
+  private getNavigationPrefill(): EventParentPrefillState | null {
+    const state = history.state as {
+      eventPrefill?: Partial<EventParentPrefillState> | null;
+    } | null;
+    const prefill = state?.eventPrefill;
+    const venueType = prefill?.venueType;
+    if (venueType !== 'location' && venueType !== 'place' && venueType !== 'destination') {
+      return null;
+    }
+
+    return {
+      venueType,
+      destinationId: prefill?.destinationId ?? null,
+      locationId: prefill?.locationId ?? null,
+      placeId: prefill?.placeId ?? null,
+    };
+  }
+
+  private applyNavigationPrefill(): boolean {
+    if (this.isEditMode || this.navigationPrefillApplied) return false;
+
+    const prefill = this.getNavigationPrefill();
+    if (!prefill) return false;
+
+    this.navigationPrefillApplied = true;
+    this.venueType = prefill.venueType;
+    this.selectedDestinationId = prefill.destinationId ?? null;
+    this.selectedLocationId = prefill.locationId ?? null;
+    this.selectedPlaceId = prefill.placeId ?? null;
+    if (this.activeRegionId) {
+      this.loadParentOptions();
+    }
+    this.updateMiniMapFromSelection();
+    this.validateSelectedParentLocation();
+    this.cdr.markForCheck();
+    return true;
   }
 
   private resetParentSelection(): void {
@@ -1548,6 +1638,14 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.validationSubscription = null;
   }
 
+  private resolveDestinationId(): number | null {
+    return this.parentDestination?.id ??
+      this.selectedDestinationId ??
+      this.selectedLocation?.destinationId ??
+      this.selectedPlace?.destinationId ??
+      null;
+  }
+
   private buildUpdatePayload(): RegionalEventUpdateRequest | null {
     this.errorMessage = null;
 
@@ -1589,12 +1687,7 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     // Derive destinationId without requiring parentDestination to be fully resolved (lists may still be loading).
-    const destinationId =
-      this.parentDestination?.id ??
-      this.selectedDestinationId ??
-      this.selectedLocation?.destinationId ??
-      this.selectedPlace?.destinationId ??
-      null;
+    const destinationId = this.resolveDestinationId();
 
     if (!destinationId) {
       this.errorMessage = 'Could not determine destination for the selected parent. Please re-select.';
@@ -1672,12 +1765,16 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       isRecurring: this.recurring,
       isFree: this.freeEvent,
       ticketPrice: this.freeEvent ? '' : this.ticketPrice.trim(),
-      externalTicketLink,
+      externalTicketLink: this.freeEvent ? '' : externalTicketLink,
       organizerName: this.organizerName.trim(),
       contactEmail,
+      contactPhone: this.contactPhone.trim(),
       attendanceLimit,
       clearAttendanceLimit: attendanceLimit === null,
       ageRestriction: this.ageRestriction.trim(),
+      venueDescription: this.venueDescription.trim(),
+      arrivalTips: this.arrivalTips.trim(),
+      accessibility: this.accessibility.trim(),
       tagIds: this.selectedTagIdList(),
     };
   }
@@ -1723,8 +1820,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       Boolean(this.externalTicketLink.trim()) ||
       Boolean(this.organizerName.trim()) ||
       Boolean(this.contactEmail.trim()) ||
+      Boolean(this.contactPhone.trim()) ||
       Boolean(this.attendanceLimit.trim()) ||
       Boolean(this.ageRestriction.trim()) ||
+      Boolean(this.venueDescription.trim()) ||
+      Boolean(this.arrivalTips.trim()) ||
+      Boolean(this.accessibility.trim()) ||
       Boolean(descriptionHtml) ||
       Boolean(this.eventTypeId) ||
       this.hasSelectedParent() ||
@@ -1756,8 +1857,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
       externalTicketLink: this.externalTicketLink,
       organizerName: this.organizerName,
       contactEmail: this.contactEmail,
+      contactPhone: this.contactPhone,
       attendanceLimit: this.attendanceLimit,
       ageRestriction: this.ageRestriction,
+      venueDescription: this.venueDescription,
+      arrivalTips: this.arrivalTips,
+      accessibility: this.accessibility,
       descriptionHtml,
       selectedTagIds: [...this.selectedTagIds],
       cardImageName: this.cardImageName,
@@ -1798,9 +1903,14 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     this.externalTicketLink = payload.externalTicketLink ?? this.externalTicketLink;
     this.organizerName = payload.organizerName ?? this.organizerName;
     this.contactEmail = payload.contactEmail ?? this.contactEmail;
+    this.contactPhone = payload.contactPhone ?? this.contactPhone;
     this.attendanceLimit = payload.attendanceLimit ?? this.attendanceLimit;
     this.ageRestriction = payload.ageRestriction ?? this.ageRestriction;
+    this.venueDescription = payload.venueDescription ?? this.venueDescription;
+    this.arrivalTips = payload.arrivalTips ?? this.arrivalTips;
+    this.accessibility = payload.accessibility ?? this.accessibility;
     this.selectedTagIds = new Set(payload.selectedTagIds ?? []);
+    this.syncSelectedTagsWithAvailableTags();
     this.classItems = this.classItems.map(item => ({
       ...item,
       checked: this.selectedTagIds.has(item.tag.id),

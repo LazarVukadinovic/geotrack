@@ -113,6 +113,7 @@ public class PlaceContributionDetailDto : PlaceContributionListItemDto
     public string? Country { get; set; }
     public int? SuggestedRegionId { get; set; }
     public string? SuggestedRegionName { get; set; }
+    public string? RegionDisplayName { get; set; }
     public string? SuggestedDestinationName { get; set; }
     public string? SuggestedLocationName { get; set; }
     public string ImagePosition { get; set; } = "50% 50%";
@@ -215,9 +216,24 @@ public class ContentManagerApproveContributionDto
     public int? ExistingDestinationId { get; set; }
     /// <summary>Name for a new destination to create when no existing destination is chosen.</summary>
     public string? NewDestinationName { get; set; }
+    /// <summary>Confirmed geographic centre for a newly created destination.</summary>
+    public double? NewDestinationLatitude { get; set; }
+    public double? NewDestinationLongitude { get; set; }
     /// <summary>Name for the location/area inside the chosen destination.</summary>
     public string? NewLocationName { get; set; }
     public string? Note { get; set; }
+}
+
+public class ContentManagerDestinationCenterValidationDto
+{
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+}
+
+public class ContentManagerDestinationCenterValidationResultDto
+{
+    public bool IsAllowed { get; set; }
+    public string Message { get; set; } = string.Empty;
 }
 
 public class ContributionRegionOptionsDto

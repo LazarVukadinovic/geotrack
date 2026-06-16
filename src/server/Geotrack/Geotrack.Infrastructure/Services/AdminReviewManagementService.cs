@@ -103,25 +103,29 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
         var reference = ParseReviewKey(reviewKey);
         var note = NormalizeModerationNote(request?.Note);
 
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-        var target = await LoadReviewTargetAsync(reference, cancellationToken);
-        await RemoveReviewEntityAsync(target, cancellationToken);
-        await ResolvePendingReportsForRemovedReviewAsync(
-            target,
-            currentAdmin.UserId,
-            note,
-            DateTime.UtcNow,
-            cancellationToken);
-        await RecordReviewRemovalAuditAsync(
-            currentAdmin.UserId,
-            target,
-            "DeleteReview",
-            note,
-            cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        var removedReviewKey = await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            var target = await LoadReviewTargetAsync(reference, cancellationToken);
+            await RemoveReviewEntityAsync(target, cancellationToken);
+            await ResolvePendingReportsForRemovedReviewAsync(
+                target,
+                currentAdmin.UserId,
+                note,
+                DateTime.UtcNow,
+                cancellationToken);
+            await RecordReviewRemovalAuditAsync(
+                currentAdmin.UserId,
+                target,
+                "DeleteReview",
+                note,
+                cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return target.ReviewKey;
+        });
 
-        return await BuildActionResultAsync(target.ReviewKey, "Review removed.", cancellationToken);
+        return await BuildActionResultAsync(removedReviewKey, "Review removed.", cancellationToken);
     }
 
     public async Task<AdminReviewActionResultDto> AcceptReportAsync(
@@ -195,51 +199,55 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
         var note = NormalizeModerationNote(request?.Note);
         var now = DateTime.UtcNow;
 
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-        var target = await LoadReviewTargetAsync(reference, cancellationToken);
-        EnsureCanMutateAuthor(currentAdmin, target.Author, "suspend");
-
-        if (target.Author.IsDeleted)
-            throw new InvalidOperationException("Deleted users cannot be suspended.");
-
-        await RemoveReviewEntityAsync(target, cancellationToken);
-        await ResolvePendingReportsForRemovedReviewAsync(
-            target,
-            currentAdmin.UserId,
-            note,
-            now,
-            cancellationToken);
-        await RecordReviewRemovalAuditAsync(
-            currentAdmin.UserId,
-            target,
-            "RemoveReviewAndSuspendAuthor",
-            note,
-            cancellationToken);
-
-        if (!target.Author.IsSuspended)
+        var removedReviewKey = await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            var previousAuthorStatus = ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted);
-            target.Author.IsSuspended = true;
-            target.Author.SuspendedAt = now;
-            target.Author.SuspendedByUserId = currentAdmin.UserId;
-            target.Author.UpdatedAt = now;
-            await RevokeRefreshTokensAsync(target.Author.Id, now, cancellationToken);
-            await _auditService.RecordAsync(
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            var target = await LoadReviewTargetAsync(reference, cancellationToken);
+            EnsureCanMutateAuthor(currentAdmin, target.Author, "suspend");
+
+            if (target.Author.IsDeleted)
+                throw new InvalidOperationException("Deleted users cannot be suspended.");
+
+            await RemoveReviewEntityAsync(target, cancellationToken);
+            await ResolvePendingReportsForRemovedReviewAsync(
+                target,
                 currentAdmin.UserId,
-                "User",
-                target.Author.Id,
-                "SuspendUser",
-                previousAuthorStatus,
-                ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted),
                 note,
-                sourceArea: "ReviewManagement",
-                cancellationToken: cancellationToken);
-        }
+                now,
+                cancellationToken);
+            await RecordReviewRemovalAuditAsync(
+                currentAdmin.UserId,
+                target,
+                "RemoveReviewAndSuspendAuthor",
+                note,
+                cancellationToken);
 
-        await _db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            if (!target.Author.IsSuspended)
+            {
+                var previousAuthorStatus = ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted);
+                target.Author.IsSuspended = true;
+                target.Author.SuspendedAt = now;
+                target.Author.SuspendedByUserId = currentAdmin.UserId;
+                target.Author.UpdatedAt = now;
+                await RevokeRefreshTokensAsync(target.Author.Id, now, cancellationToken);
+                await _auditService.RecordAsync(
+                    currentAdmin.UserId,
+                    "User",
+                    target.Author.Id,
+                    "SuspendUser",
+                    previousAuthorStatus,
+                    ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted),
+                    note,
+                    sourceArea: "ReviewManagement",
+                    cancellationToken: cancellationToken);
+            }
 
-        return await BuildActionResultAsync(target.ReviewKey, "Review removed and author suspended.", cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return target.ReviewKey;
+        });
+
+        return await BuildActionResultAsync(removedReviewKey, "Review removed and author suspended.", cancellationToken);
     }
 
     public async Task<AdminReviewActionResultDto> RemoveReviewAndDeleteAuthorAsync(
@@ -253,51 +261,55 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
         var note = NormalizeModerationNote(request?.Note);
         var now = DateTime.UtcNow;
 
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-        var target = await LoadReviewTargetAsync(reference, cancellationToken);
-        EnsureCanMutateAuthor(currentAdmin, target.Author, "delete");
-
-        await RemoveReviewEntityAsync(target, cancellationToken);
-        await ResolvePendingReportsForRemovedReviewAsync(
-            target,
-            currentAdmin.UserId,
-            note,
-            now,
-            cancellationToken);
-        await RecordReviewRemovalAuditAsync(
-            currentAdmin.UserId,
-            target,
-            "RemoveReviewAndDeleteAuthor",
-            note,
-            cancellationToken);
-
-        if (!target.Author.IsDeleted)
+        var removedReviewKey = await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            var previousAuthorStatus = ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted);
-            target.Author.IsDeleted = true;
-            target.Author.DeletedAt = now;
-            target.Author.DeletedByUserId = currentAdmin.UserId;
-            target.Author.IsSuspended = false;
-            target.Author.SuspendedAt = null;
-            target.Author.SuspendedByUserId = null;
-            target.Author.UpdatedAt = now;
-            await RevokeRefreshTokensAsync(target.Author.Id, now, cancellationToken);
-            await _auditService.RecordAsync(
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            var target = await LoadReviewTargetAsync(reference, cancellationToken);
+            EnsureCanMutateAuthor(currentAdmin, target.Author, "delete");
+
+            await RemoveReviewEntityAsync(target, cancellationToken);
+            await ResolvePendingReportsForRemovedReviewAsync(
+                target,
                 currentAdmin.UserId,
-                "User",
-                target.Author.Id,
-                "DeleteUser",
-                previousAuthorStatus,
-                ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted),
                 note,
-                sourceArea: "ReviewManagement",
-                cancellationToken: cancellationToken);
-        }
+                now,
+                cancellationToken);
+            await RecordReviewRemovalAuditAsync(
+                currentAdmin.UserId,
+                target,
+                "RemoveReviewAndDeleteAuthor",
+                note,
+                cancellationToken);
 
-        await _db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            if (!target.Author.IsDeleted)
+            {
+                var previousAuthorStatus = ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted);
+                target.Author.IsDeleted = true;
+                target.Author.DeletedAt = now;
+                target.Author.DeletedByUserId = currentAdmin.UserId;
+                target.Author.IsSuspended = false;
+                target.Author.SuspendedAt = null;
+                target.Author.SuspendedByUserId = null;
+                target.Author.UpdatedAt = now;
+                await RevokeRefreshTokensAsync(target.Author.Id, now, cancellationToken);
+                await _auditService.RecordAsync(
+                    currentAdmin.UserId,
+                    "User",
+                    target.Author.Id,
+                    "DeleteUser",
+                    previousAuthorStatus,
+                    ResolveAccountStatus(target.Author.IsSuspended, target.Author.IsDeleted),
+                    note,
+                    sourceArea: "ReviewManagement",
+                    cancellationToken: cancellationToken);
+            }
 
-        return await BuildActionResultAsync(target.ReviewKey, "Review removed and author deactivated.", cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return target.ReviewKey;
+        });
+
+        return await BuildActionResultAsync(removedReviewKey, "Review removed and author deactivated.", cancellationToken);
     }
 
     private IQueryable<ReviewListRow> BuildLiveReviewRows()
@@ -403,9 +415,14 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
                 LocationName = null,
                 DestinationName = review.Destination.Name,
                 RegionName = review.Destination.Region.Name,
-                ReportTargetType = null,
-                ReportCount = 0,
-                PendingReportCount = 0
+                ReportTargetType = ReviewReportTargetType.Destination,
+                ReportCount = _db.ReviewReports.Count(report =>
+                    report.TargetType == ReviewReportTargetType.Destination &&
+                    report.ReviewId == review.Id),
+                PendingReportCount = _db.ReviewReports.Count(report =>
+                    report.TargetType == ReviewReportTargetType.Destination &&
+                    report.ReviewId == review.Id &&
+                    report.Status == ReviewReportStatus.Pending)
             });
 
         var locationReviews = _db.LocationReviews
@@ -435,9 +452,14 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
                 LocationName = review.Location.Name,
                 DestinationName = review.Location.Destination.Name,
                 RegionName = review.Location.Destination.Region.Name,
-                ReportTargetType = null,
-                ReportCount = 0,
-                PendingReportCount = 0
+                ReportTargetType = ReviewReportTargetType.Location,
+                ReportCount = _db.ReviewReports.Count(report =>
+                    report.TargetType == ReviewReportTargetType.Location &&
+                    report.ReviewId == review.Id),
+                PendingReportCount = _db.ReviewReports.Count(report =>
+                    report.TargetType == ReviewReportTargetType.Location &&
+                    report.ReviewId == review.Id &&
+                    report.Status == ReviewReportStatus.Pending)
             });
 
         return placeReviews
@@ -631,34 +653,24 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
         IReadOnlyCollection<ReviewListRow> rows,
         CancellationToken cancellationToken)
     {
-        var placeReviewIds = rows
-            .Where(row => row.ReportTargetType == ReviewReportTargetType.Place)
-            .Select(row => row.ReviewId)
-            .Distinct()
-            .ToList();
-        var eventReviewIds = rows
-            .Where(row => row.ReportTargetType == ReviewReportTargetType.Event)
-            .Select(row => row.ReviewId)
-            .Distinct()
-            .ToList();
+        var reviewIdsByTarget = rows
+            .Where(row => row.ReportTargetType.HasValue)
+            .GroupBy(row => row.ReportTargetType!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(row => row.ReviewId).Distinct().ToList());
 
         var reports = new List<ReportRow>();
 
-        if (placeReviewIds.Count > 0)
+        foreach (var (targetType, reviewIds) in reviewIdsByTarget)
         {
-            reports.AddRange(await BuildReportRowsQuery()
-                .Where(report =>
-                    report.TargetType == ReviewReportTargetType.Place &&
-                    placeReviewIds.Contains(report.ReviewId))
-                .ToListAsync(cancellationToken));
-        }
+            if (reviewIds.Count == 0)
+                continue;
 
-        if (eventReviewIds.Count > 0)
-        {
             reports.AddRange(await BuildReportRowsQuery()
                 .Where(report =>
-                    report.TargetType == ReviewReportTargetType.Event &&
-                    eventReviewIds.Contains(report.ReviewId))
+                    report.TargetType == targetType &&
+                    reviewIds.Contains(report.ReviewId))
                 .ToListAsync(cancellationToken));
         }
 
@@ -777,51 +789,51 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
         switch (reference.Kind)
         {
             case AdminReviewKind.Place:
-            {
-                var review = await _db.PlaceReviews
-                    .Include(item => item.User)
-                        .ThenInclude(user => user.UserRoles)
-                            .ThenInclude(userRole => userRole.Role)
-                    .Include(item => item.Place)
-                        .ThenInclude(place => place.Stay)
-                    .SingleOrDefaultAsync(item => item.Id == reference.ReviewId, cancellationToken)
-                    ?? throw new KeyNotFoundException("Review not found.");
+                {
+                    var review = await _db.PlaceReviews
+                        .Include(item => item.User)
+                            .ThenInclude(user => user.UserRoles)
+                                .ThenInclude(userRole => userRole.Role)
+                        .Include(item => item.Place)
+                            .ThenInclude(place => place.Stay)
+                        .SingleOrDefaultAsync(item => item.Id == reference.ReviewId, cancellationToken)
+                        ?? throw new KeyNotFoundException("Review not found.");
 
-                return ReviewMutationTarget.ForPlace(review);
-            }
+                    return ReviewMutationTarget.ForPlace(review);
+                }
             case AdminReviewKind.Event:
-            {
-                var review = await _db.EventReviews
-                    .Include(item => item.User)
-                        .ThenInclude(user => user.UserRoles)
-                            .ThenInclude(userRole => userRole.Role)
-                    .SingleOrDefaultAsync(item => item.Id == reference.ReviewId, cancellationToken)
-                    ?? throw new KeyNotFoundException("Review not found.");
+                {
+                    var review = await _db.EventReviews
+                        .Include(item => item.User)
+                            .ThenInclude(user => user.UserRoles)
+                                .ThenInclude(userRole => userRole.Role)
+                        .SingleOrDefaultAsync(item => item.Id == reference.ReviewId, cancellationToken)
+                        ?? throw new KeyNotFoundException("Review not found.");
 
-                return ReviewMutationTarget.ForEvent(review);
-            }
+                    return ReviewMutationTarget.ForEvent(review);
+                }
             case AdminReviewKind.Destination:
-            {
-                var review = await _db.DestinationReviews
-                    .Include(item => item.User)
-                        .ThenInclude(user => user.UserRoles)
-                            .ThenInclude(userRole => userRole.Role)
-                    .SingleOrDefaultAsync(item => item.Id == reference.ReviewId, cancellationToken)
-                    ?? throw new KeyNotFoundException("Review not found.");
+                {
+                    var review = await _db.DestinationReviews
+                        .Include(item => item.User)
+                            .ThenInclude(user => user.UserRoles)
+                                .ThenInclude(userRole => userRole.Role)
+                        .SingleOrDefaultAsync(item => item.Id == reference.ReviewId, cancellationToken)
+                        ?? throw new KeyNotFoundException("Review not found.");
 
-                return ReviewMutationTarget.ForDestination(review);
-            }
+                    return ReviewMutationTarget.ForDestination(review);
+                }
             case AdminReviewKind.Location:
-            {
-                var review = await _db.LocationReviews
-                    .Include(item => item.User)
-                        .ThenInclude(user => user.UserRoles)
-                            .ThenInclude(userRole => userRole.Role)
-                    .SingleOrDefaultAsync(item => item.Id == reference.ReviewId, cancellationToken)
-                    ?? throw new KeyNotFoundException("Review not found.");
+                {
+                    var review = await _db.LocationReviews
+                        .Include(item => item.User)
+                            .ThenInclude(user => user.UserRoles)
+                                .ThenInclude(userRole => userRole.Role)
+                        .SingleOrDefaultAsync(item => item.Id == reference.ReviewId, cancellationToken)
+                        ?? throw new KeyNotFoundException("Review not found.");
 
-                return ReviewMutationTarget.ForLocation(review);
-            }
+                    return ReviewMutationTarget.ForLocation(review);
+                }
             default:
                 throw new InvalidOperationException("Invalid review type.");
         }
@@ -834,29 +846,29 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
         switch (target.Kind)
         {
             case AdminReviewKind.Place:
-            {
-                var review = target.PlaceReview!;
-                var place = await _db.Places.FindAsync(new object[] { review.PlaceId }, cancellationToken);
-                var stats = await _db.PlaceReviews
-                    .Where(item => item.PlaceId == review.PlaceId && item.Id != review.Id)
-                    .GroupBy(item => item.PlaceId)
-                    .Select(group => new
-                    {
-                        Average = group.Average(item => item.Rating),
-                        Count = group.Count()
-                    })
-                    .FirstOrDefaultAsync(cancellationToken);
-
-                _db.PlaceReviews.Remove(review);
-
-                if (place is not null)
                 {
-                    place.AverageRating = stats is null ? null : Math.Round(stats.Average, 1);
-                    place.ReviewCount = stats?.Count ?? 0;
-                }
+                    var review = target.PlaceReview!;
+                    var place = await _db.Places.FindAsync(new object[] { review.PlaceId }, cancellationToken);
+                    var stats = await _db.PlaceReviews
+                        .Where(item => item.PlaceId == review.PlaceId && item.Id != review.Id)
+                        .GroupBy(item => item.PlaceId)
+                        .Select(group => new
+                        {
+                            Average = group.Average(item => item.Rating),
+                            Count = group.Count()
+                        })
+                        .FirstOrDefaultAsync(cancellationToken);
 
-                break;
-            }
+                    _db.PlaceReviews.Remove(review);
+
+                    if (place is not null)
+                    {
+                        place.AverageRating = stats is null ? null : Math.Round(stats.Average, 1);
+                        place.ReviewCount = stats?.Count ?? 0;
+                    }
+
+                    break;
+                }
             case AdminReviewKind.Event:
                 _db.EventReviews.Remove(target.EventReview!);
                 break;
@@ -1431,6 +1443,8 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
         {
             AdminReviewKind.Place => ReviewReportTargetType.Place,
             AdminReviewKind.Event => ReviewReportTargetType.Event,
+            AdminReviewKind.Destination => ReviewReportTargetType.Destination,
+            AdminReviewKind.Location => ReviewReportTargetType.Location,
             _ => null
         };
     }
@@ -1553,6 +1567,7 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
             ReviewId = review.Id,
             EntityId = review.DestinationId,
             Author = review.User,
+            ReportTargetType = ReviewReportTargetType.Destination,
             DestinationReview = review
         };
 
@@ -1563,6 +1578,7 @@ public sealed class AdminReviewManagementService : IAdminReviewManagementService
             ReviewId = review.Id,
             EntityId = review.LocationId,
             Author = review.User,
+            ReportTargetType = ReviewReportTargetType.Location,
             LocationReview = review
         };
     }

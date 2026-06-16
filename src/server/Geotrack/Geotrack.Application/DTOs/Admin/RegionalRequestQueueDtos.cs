@@ -29,6 +29,8 @@ public class RegionalRequestQueueCountsByTypeDto
     public int Locations { get; set; }
     public int Places { get; set; }
     public int Events { get; set; }
+    public int Ownership { get; set; }
+    public int Contributions { get; set; }
 }
 
 public class RegionalRequestQueueResponseDto

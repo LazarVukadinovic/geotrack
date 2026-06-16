@@ -19,6 +19,21 @@
   margin-top: 10px;
 }
 
+.step-basics__gallery-note {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.step-basics__gallery-error {
+  margin: 8px 0 0 4px;
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .step-basics__gallery-thumb {
   position: relative;
   min-width: 0;

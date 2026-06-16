@@ -40,6 +40,8 @@ public sealed class RegionalScopeValidationService : IRegionalScopeValidationSer
         double latitude,
         double longitude,
         string operationType,
+        int? destinationId = null,
+        int? locationId = null,
         CancellationToken cancellationToken = default)
     {
         var label = NormalizeEntityLabel(entityType);
@@ -68,6 +70,15 @@ public sealed class RegionalScopeValidationService : IRegionalScopeValidationSer
 
         if (scope.RegionBoundary!.Covers(point))
         {
+            var parentValidation = await ValidateParentScopeAsync(
+                scope,
+                label,
+                destinationId,
+                locationId,
+                cancellationToken);
+            if (parentValidation is not null)
+                return parentValidation;
+
             return Allowed(
                 RegionalScopeValidationModes.InsideAssignedRegion,
                 label,
@@ -182,6 +193,8 @@ public sealed class RegionalScopeValidationService : IRegionalScopeValidationSer
         double latitude,
         double longitude,
         string operationType,
+        int? destinationId = null,
+        int? locationId = null,
         CancellationToken cancellationToken = default)
     {
         var result = await ValidatePointAsync(
@@ -191,8 +204,69 @@ public sealed class RegionalScopeValidationService : IRegionalScopeValidationSer
             latitude,
             longitude,
             operationType,
+            destinationId,
+            locationId,
             cancellationToken);
         ThrowIfRejected(result);
+    }
+
+    private async Task<RegionalScopeValidationResultDto?> ValidateParentScopeAsync(
+        AssignedRegionalScope scope,
+        string label,
+        int? destinationId,
+        int? locationId,
+        CancellationToken cancellationToken)
+    {
+        if (locationId.HasValue)
+        {
+            var location = await _db.Locations
+                .AsNoTracking()
+                .Where(item =>
+                    item.Id == locationId.Value &&
+                    item.Destination.RegionId == scope.RegionId)
+                .Select(item => new { item.Id, item.DestinationId })
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (location is null)
+            {
+                return Rejected(
+                    RegionalScopeValidationModes.RejectedMissingBoundary,
+                    label,
+                    scope,
+                    "Parent location is invalid for the selected region.");
+            }
+
+            if (destinationId.HasValue && destinationId.Value > 0 && location.DestinationId != destinationId.Value)
+            {
+                return Rejected(
+                    RegionalScopeValidationModes.RejectedMissingBoundary,
+                    label,
+                    scope,
+                    "Selected parent location does not belong to the chosen destination.");
+            }
+        }
+
+        if (destinationId.HasValue && destinationId.Value > 0)
+        {
+            var destination = await _db.Destinations
+                .AsNoTracking()
+                .Where(item =>
+                    item.Id == destinationId.Value &&
+                    item.RegionId == scope.RegionId)
+                .Select(item => item.Id)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (destination <= 0)
+            {
+                return Rejected(
+                    RegionalScopeValidationModes.RejectedMissingBoundary,
+                    label,
+                    scope,
+                    "Parent destination is invalid for the selected region.");
+            }
+        }
+
+        return null;
     }
 
     public async Task EnsureGeometryAllowedAsync(

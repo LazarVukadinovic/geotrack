@@ -1,4 +1,5 @@
-﻿using Geotrack.Application.DTOs.Destinations;
+﻿using Geotrack.Application.DTOs.Common;
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
@@ -40,6 +41,8 @@ public class DestinationService : IDestinationService
             savedCollectionIds = await _destinationRepository.GetSavedCollectionIdsByUserAsync(destinationId, userId.Value);
         }
 
+        var similarDestinations = await _destinationRepository.GetSimilarPublishedDestinationsInTerritoryAsync(destinationId, 6);
+
         return new GetDestinationDetailsResponseDto
         {
             Id = destination.Id,
@@ -56,7 +59,9 @@ public class DestinationService : IDestinationService
             ReviewsCount = reviewsCount,
             IsSaved = isSaved,
             SavedCollectionIds = savedCollectionIds,
-            Sections = BuildDestinationPreviewSections(destination)
+            Images = destination.Images.ToPublicEntityImageDtos(),
+            Sections = BuildDestinationPreviewSections(destination),
+            SimilarDestinations = similarDestinations
         };
     }
 
@@ -214,71 +219,25 @@ public class DestinationService : IDestinationService
 
     private List<DestinationSectionPreviewDto> BuildDestinationPreviewSections(Destination destination)
     {
-        var sections = new List<DestinationSectionPreviewDto>();
-
-        var tags = destination.DestinationTags
-            .Where(x => x.Tag != null)
-            .Select(x => x.Tag)
-            .GroupBy(x => x.Id)
-            .Select(g => g.First())
-            .OrderBy(t => t.Name)
+        var locations = destination.Locations
+            .Where(l => l.Status == PublishedStatus)
+            .OrderBy(l => l.Name)
+            .Take(SectionPreviewLimit)
+            .Select(MapDestinationLocationItem)
             .ToList();
 
-        foreach (var tag in tags)
-        {
-            var locations = destination.Locations
-                .Where(l => l.LocationTags.Any(lt => lt.TagId == tag.Id))
-                .Where(l => l.Status == PublishedStatus)
-                .OrderBy(l => l.Name)
-                .Take(SectionPreviewLimit)
-                .Select(MapDestinationLocationItem)
-                .ToList();
-
-            var places = destination.Locations
-                .Where(l => l.Status == PublishedStatus)
-                .SelectMany(l => l.Places)
-                .Where(p => p.Status == PublishedStatus && p.PlaceTags.Any(pt => pt.TagId == tag.Id))
-                .OrderBy(p => p.Name)
-                .Take(SectionPreviewLimit)
-                .Select(MapDestinationPlaceItem)
-                .ToList();
-
-            if (locations.Any() || places.Any())
+        return locations.Any()
+            ? new List<DestinationSectionPreviewDto>
             {
-                sections.Add(new DestinationSectionPreviewDto
+                new()
                 {
-                    Key = tag.Slug,
-                    Title = tag.Name,
+                    Key = "locations",
+                    Title = "Locations",
                     Locations = locations,
-                    Places = places
-                });
+                    Places = new List<DestinationSectionPlaceItemDto>()
+                }
             }
-        }
-
-        if (!sections.Any())
-        {
-            sections.Add(new DestinationSectionPreviewDto
-            {
-                Key = "locations",
-                Title = "Locations",
-                Locations = destination.Locations
-                    .Where(l => l.Status == PublishedStatus)
-                    .OrderBy(l => l.Name)
-                    .Take(SectionPreviewLimit)
-                    .Select(MapDestinationLocationItem)
-                    .ToList(),
-                Places = destination.Locations
-                    .Where(l => l.Status == PublishedStatus)
-                    .SelectMany(l => l.Places)
-                    .Where(p => p.Status == PublishedStatus)
-                    .OrderBy(p => p.Name)
-                    .Take(SectionPreviewLimit)
-                    .Select(MapDestinationPlaceItem)
-                    .ToList()
-            });
-        }
-
-        return sections;
+            : new List<DestinationSectionPreviewDto>();
     }
 
     private static DestinationSectionLocationItemDto MapDestinationLocationItem(Location location)
@@ -287,9 +246,13 @@ public class DestinationService : IDestinationService
         {
             Id = location.Id,
             Name = location.Name,
-            Description = string.IsNullOrWhiteSpace(location.Description) ? null : location.Description,
+            Image = PickCardImage(location.Images),
+            Description = string.IsNullOrWhiteSpace(location.Summary)
+                ? (string.IsNullOrWhiteSpace(location.Description) ? null : location.Description)
+                : location.Summary,
             Latitude = location.Latitude,
-            Longitude = location.Longitude
+            Longitude = location.Longitude,
+            AverageRating = Math.Round(location.LocationReviews.Select(review => (double?)review.Rating).Average() ?? 0d, 2)
         };
     }
 
@@ -299,8 +262,19 @@ public class DestinationService : IDestinationService
         {
             Id = place.Id,
             Name = place.Name,
+            Image = PickCardImage(place.Images),
             LocationId = place.LocationId
         };
+    }
+
+    private static string? PickCardImage(IEnumerable<EntityImage> images)
+    {
+        return images
+            .Where(image => !string.IsNullOrWhiteSpace(image.Url))
+            .OrderBy(image => image.ImageRole == "cover" ? 0 : image.ImageRole == "card" ? 1 : 2)
+            .ThenBy(image => image.SortOrder)
+            .Select(image => image.Url)
+            .FirstOrDefault();
     }
 
     public async Task<List<DestinationSearchResultDto>> SearchAsync(string query)
@@ -313,13 +287,13 @@ public class DestinationService : IDestinationService
         return destinations
             .Where(d => d.Status == PublishedStatus)
             .Select(d => new DestinationSearchResultDto
-        {
-            Id = d.Id,
-            Name = d.Name,
-            Description = d.Description,
-            Latitude = d.Latitude,
-            Longitude = d.Longitude,
-        }).ToList();
+            {
+                Id = d.Id,
+                Name = d.Name,
+                Description = d.Description,
+                Latitude = d.Latitude,
+                Longitude = d.Longitude,
+            }).ToList();
     }
 
     public async Task<List<DestinationSearchItemDto>> SearchWithinDestinationAsync(int destinationId, string query, IEnumerable<string>? types)
@@ -345,14 +319,14 @@ public class DestinationService : IDestinationService
             results.AddRange(locations
                 .Where(l => l.Status == PublishedStatus)
                 .Select(l => new DestinationSearchItemDto
-            {
-                Id = l.Id,
-                Type = "location",
-                Name = l.Name,
-                Latitude = l.Latitude,
-                Longitude = l.Longitude,
-                ParentName = null
-            }));
+                {
+                    Id = l.Id,
+                    Type = "location",
+                    Name = l.Name,
+                    Latitude = l.Latitude,
+                    Longitude = l.Longitude,
+                    ParentName = null
+                }));
         }
 
         if (typesToSearch.Contains("place"))
@@ -361,15 +335,15 @@ public class DestinationService : IDestinationService
             results.AddRange(places
                 .Where(p => p.Status == PublishedStatus && p.Location?.Status == PublishedStatus)
                 .Select(p => new DestinationSearchItemDto
-            {
-                Id = p.Id,
-                Type = "place",
-                Name = p.Name,
-                Description = p.Description,
-                Latitude = p.Latitude,
-                Longitude = p.Longitude,
-                ParentName = p.Location?.Name
-            }));
+                {
+                    Id = p.Id,
+                    Type = "place",
+                    Name = p.Name,
+                    Description = p.Description,
+                    Latitude = p.Latitude,
+                    Longitude = p.Longitude,
+                    ParentName = p.Location?.Name
+                }));
         }
 
         if (typesToSearch.Contains("event"))
@@ -381,15 +355,15 @@ public class DestinationService : IDestinationService
                     (e.Location == null || e.Location.Status == PublishedStatus) &&
                     (e.Place == null || e.Place.Status == PublishedStatus))
                 .Select(e => new DestinationSearchItemDto
-            {
-                Id = e.Id,
-                Type = "event",
-                Name = e.Name,
-                Description = e.Description,
-                Latitude = e.Place?.Latitude ?? e.Location?.Latitude ?? e.Destination.Latitude,
-                Longitude = e.Place?.Longitude ?? e.Location?.Longitude ?? e.Destination.Longitude,
-                ParentName = e.Place?.Name ?? e.Location?.Name ?? e.Destination.Name
-            }));
+                {
+                    Id = e.Id,
+                    Type = "event",
+                    Name = e.Name,
+                    Description = e.Description,
+                    Latitude = e.Place?.Latitude ?? e.Location?.Latitude ?? e.Destination.Latitude,
+                    Longitude = e.Place?.Longitude ?? e.Location?.Longitude ?? e.Destination.Longitude,
+                    ParentName = e.Place?.Name ?? e.Location?.Name ?? e.Destination.Name
+                }));
         }
 
         return results;

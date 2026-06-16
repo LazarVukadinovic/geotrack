@@ -217,6 +217,7 @@ public sealed class UploadRateLimitHardeningTests
     {
         var controller = new ContributionsController(
             service,
+            null!,
             Options.Create(new UploadLimitsOptions()));
 
         var httpContext = new DefaultHttpContext();
@@ -401,12 +402,20 @@ public sealed class UploadRateLimitHardeningTests
             int regionId,
             int? existingDestinationId,
             string? newDestinationName,
+            double? newDestinationLatitude,
+            double? newDestinationLongitude,
             string? newLocationName,
             string? note) =>
             Task.FromResult(new PlaceContributionDetailDto { Id = contributionId });
 
         public Task<ContributionRegionOptionsDto> GetRegionOptionsAsync() =>
             Task.FromResult(new ContributionRegionOptionsDto());
+
+        public Task<ContentManagerDestinationCenterValidationResultDto> ValidateDestinationCenterAsync(
+            int regionId,
+            double latitude,
+            double longitude) =>
+            Task.FromResult(new ContentManagerDestinationCenterValidationResultDto { IsAllowed = true });
 
         public Task<ContributionLocationOptionsDto> GetDestinationLocationOptionsAsync(int destinationId) =>
             Task.FromResult(new ContributionLocationOptionsDto());

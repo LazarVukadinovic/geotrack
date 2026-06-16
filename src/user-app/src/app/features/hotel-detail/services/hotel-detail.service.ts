@@ -183,6 +183,26 @@ export class HotelDetailService {
     });
   }
 
+
+  markReviewReported(id: string, reviewId: string): void {
+    this._cache.update(current => {
+      const existing = current[id];
+      if (!existing) return current;
+
+      return {
+        ...current,
+        [id]: {
+          ...existing,
+          reviews: existing.reviews.map(review =>
+            review.id === reviewId
+              ? { ...review, reportedByCurrentUser: true }
+              : review,
+          ),
+        },
+      };
+    });
+  }
+
   private buildLocationQuery(): string {
     if (this.destinationSvc.mode() === 'location') {
       const loc = this.locationSvc.location();

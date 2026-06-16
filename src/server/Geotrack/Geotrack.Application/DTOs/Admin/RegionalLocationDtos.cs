@@ -33,6 +33,7 @@ public class RegionalLocationDetailDto : RegionalLocationListItemDto
 {
     public double Latitude { get; set; }
     public double Longitude { get; set; }
+    public bool CanDelete { get; set; }
 }
 
 public class RegionalLocationListResponseDto
@@ -55,6 +56,7 @@ public class RegionalLocationUpdateRequestDto
     public List<int>? TagIds { get; set; }
     public string? CardImageUrl { get; set; }
     public string? CoverImageUrl { get; set; }
+    public List<string>? GalleryImageUrls { get; set; }
 }
 
 public class RegionalLocationCreateRequestDto

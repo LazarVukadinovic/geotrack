@@ -2,8 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 
-export type ReviewsEntityType = 'place' | 'stay' | 'event';
-export type ReviewReportTargetType = 'place' | 'event';
+export type ReviewsEntityType = 'place' | 'stay' | 'event' | 'destination' | 'location';
+export type ReviewReportTargetType = 'place' | 'event' | 'destination' | 'location';
 
 export interface FullReview {
   id: string;
@@ -26,11 +26,12 @@ export interface FullReviewsResult {
   take: number;
   nextSkip: number;
   hasMore: boolean;
+  isEntityOwnedByCurrentUser: boolean;
 }
 
 export interface UserReviewItem {
   id: number;
-  entityType: 'place' | 'event';
+  entityType: 'place' | 'event' | 'destination' | 'location';
   entityId: number;
   entityName: string;
   rating: number;
@@ -65,6 +66,8 @@ interface ApiReviewDto {
   authorName?: string | null;
   avatarUrl?: string | null;
   rating: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   timeAgo?: string | null;
   body?: string | null;
   helpfulCount?: number | null;
@@ -80,6 +83,7 @@ interface ApiPagedReviewsResponseDto {
   take?: number | null;
   nextSkip?: number | null;
   hasMore?: boolean | null;
+  isEntityOwnedByCurrentUser?: boolean | null;
 }
 
 interface ApiUserReviewItemDto {
@@ -141,6 +145,7 @@ export class ReviewsService {
               take,
               nextSkip: skip + mapped.length,
               hasMore: false,
+              isEntityOwnedByCurrentUser: false,
             };
           }
 
@@ -152,6 +157,7 @@ export class ReviewsService {
             take: response.take ?? take,
             nextSkip: response.nextSkip ?? skip + mapped.length,
             hasMore: response.hasMore ?? false,
+            isEntityOwnedByCurrentUser: response.isEntityOwnedByCurrentUser ?? false,
           };
         }),
       );
@@ -167,6 +173,13 @@ export class ReviewsService {
     return this.http
       .get<ApiPagedUserReviewsResponseDto>(`/api/reviews/users/${userId}?skip=${skip}&take=${take}`)
       .pipe(map(this.mapUserReviewsResult));
+  }
+
+  createReview(entityType: ReviewsEntityType, entityId: number, rating: number, comment: string): Observable<ApiReviewDto> {
+    return this.http.post<ApiReviewDto>(`/api/reviews/${this.collectionFor(entityType)}/${entityId}`, {
+      rating,
+      comment,
+    });
   }
 
   getReportReasons(): Observable<ReviewReason[]> {
@@ -186,7 +199,7 @@ export class ReviewsService {
   }
 
   deleteReview(targetType: ReviewReportTargetType, reviewId: number): Observable<void> {
-    return this.http.delete<void>(`/api/reviews/${targetType}s/${reviewId}`);
+    return this.http.delete<void>(`/api/reviews/${this.collectionFor(targetType)}/${reviewId}`);
   }
 
   updateReview(
@@ -195,13 +208,13 @@ export class ReviewsService {
     rating: number,
     comment: string,
   ): Observable<ApiReviewDto> {
-    return this.http.put<ApiReviewDto>(`/api/reviews/${targetType}s/${reviewId}`, { rating, comment });
+    return this.http.put<ApiReviewDto>(`/api/reviews/${this.collectionFor(targetType)}/${reviewId}`, { rating, comment });
   }
 
   private mapUserReviewsResult = (response: ApiPagedUserReviewsResponseDto): UserReviewsResult => {
     const items = (response.items ?? []).map((item) => ({
       id: item.id,
-      entityType: (item.entityType === 'event' ? 'event' : 'place') as 'place' | 'event',
+      entityType: this.normalizeUserReviewEntityType(item.entityType),
       entityId: item.entityId,
       entityName: item.entityName ?? '',
       rating: item.rating,
@@ -219,8 +232,34 @@ export class ReviewsService {
     };
   };
 
+  private normalizeUserReviewEntityType(value: string): 'place' | 'event' | 'destination' | 'location' {
+    switch ((value ?? '').toLowerCase()) {
+      case 'event':
+        return 'event';
+      case 'destination':
+        return 'destination';
+      case 'location':
+        return 'location';
+      default:
+        return 'place';
+    }
+  }
+
   private buildEndpoint(entityType: ReviewsEntityType, entityId: number, skip: number, take: number): string {
-    const collection = entityType === 'event' ? 'events' : 'places';
+    const collection = this.collectionFor(entityType);
     return `/api/reviews/${collection}/${entityId}?skip=${skip}&take=${take}`;
+  }
+
+  private collectionFor(entityType: ReviewsEntityType | ReviewReportTargetType): string {
+    switch (entityType) {
+      case 'event':
+        return 'events';
+      case 'destination':
+        return 'destinations';
+      case 'location':
+        return 'locations';
+      default:
+        return 'places';
+    }
   }
 }

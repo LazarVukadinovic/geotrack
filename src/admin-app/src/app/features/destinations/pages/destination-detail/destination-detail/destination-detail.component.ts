@@ -5,6 +5,7 @@ import {
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent }  from '../../../../../shared/components/topbar/topbar.component';
 import { DestinationsListService, DestinationListItem } from '../../../../../core/services/destinations-list.service';
@@ -45,6 +46,7 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
   mapModalOpen  = false;
   deleteTarget: DestinationListItem | null = null;
   isDeleting    = false;
+  deleteError: string | null = null;
 
   private miniMap:     any = null;
   private modalMap:    any = null;
@@ -202,6 +204,22 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
     });
   }
 
+  addEvent(): void {
+    const it = this.item!;
+    this.router.navigate(['/events/new'], {
+      state: {
+        regionId: it.regionId,
+        eventPrefill: {
+          venueType: 'destination',
+          destinationId: Number(it.id),
+          locationId: null,
+          placeId: null,
+        },
+        returnTo: `/destinations/detail/${it.id}`,
+      }
+    });
+  }
+
   promptDelete(): void {
     this.deleteTarget = this.item;
     this.cdr.markForCheck();
@@ -209,18 +227,48 @@ export class DestinationDetailComponent implements OnInit, AfterViewInit, OnDest
 
   cancelDelete(): void {
     this.deleteTarget = null;
+    this.deleteError  = null;
     this.cdr.markForCheck();
   }
 
   confirmDelete(): void {
     if (!this.deleteTarget) return;
     this.isDeleting = true;
-    this.svc.delete$(this.deleteTarget.id)
-      .subscribe(() => {
-        this.isDeleting   = false;
-        this.deleteTarget = null;
-        this.router.navigate(['/destinations']);
+    this.deleteError = null;
+    this.svc.delete$(this.deleteTarget.id, this.deleteTarget.regionId)
+      .subscribe({
+        next: () => {
+          this.isDeleting   = false;
+          this.deleteTarget = null;
+          this.router.navigate(['/destinations']);
+        },
+        error: (err: unknown) => {
+          this.isDeleting = false;
+          this.deleteError = err instanceof HttpErrorResponse
+            ? (err.error?.message ?? 'Unable to delete this destination.')
+            : 'Unable to delete this destination.';
+          this.cdr.markForCheck();
+        },
       });
+  }
+
+  descriptionExpanded = false;
+  readonly descriptionPreviewLength = 420;
+
+  isDescriptionLong(description: string | null | undefined): boolean {
+    return this.descriptionPlainText(description).length > this.descriptionPreviewLength;
+  }
+
+  isDescriptionCollapsed(description: string | null | undefined): boolean {
+    return this.isDescriptionLong(description) && !this.descriptionExpanded;
+  }
+
+  toggleDescription(): void {
+    this.descriptionExpanded = !this.descriptionExpanded;
+  }
+
+  private descriptionPlainText(description: string | null | undefined): string {
+    return (description ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   readonly galleryLimit = 6;

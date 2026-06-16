@@ -5,12 +5,18 @@ import {
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent }  from '../../../../../shared/components/topbar/topbar.component';
 import { PlacesListService, PlaceListItem } from '../../../../../core/services/places-list.service';
 import { LightboxService } from '../../../../../core/services/lightbox.service';
 import { MapTileLayerService } from '../../../../../core/services/map-tile-layer.service';
 import { DescriptionRichHtmlPipe } from '../../../../../shared/pipes/description-rich-html.pipe';
+import {
+  OPEN_24_HOURS_LABEL,
+  isOpen24HoursSchedule,
+  isOpen24HoursText,
+} from '../../../../../shared/utils/opening-hours';
 declare const L: any;
 
 @Component({
@@ -37,6 +43,7 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   item:      PlaceListItem | null = null;
   isLoading  = true;
   notFound   = false;
+  descriptionExpanded = false;
 
   region   = 'Šumadija, Srbija';
   userName = '';
@@ -45,6 +52,7 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   mapModalOpen  = false;
   deleteTarget: PlaceListItem | null = null;
   isDeleting    = false;
+  deleteError: string | null = null;
   ownerFormOpen = false;
   ownerIdentifier = '';
   ownerError = '';
@@ -92,11 +100,16 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private setItem(item: PlaceListItem): void {
     this.item      = { ...item };
+    this.descriptionExpanded = false;
     this.region    = this.item.regionDisplayName || this.item.region;
     this.isLoading = false;
     this.notFound  = false;
     this.cdr.markForCheck();
     setTimeout(() => this.initMiniMap(), 100);
+  }
+
+  isDescriptionLong(value: string | null | undefined): boolean {
+    return (value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().length > 420;
   }
 
   private loadFromBackend(regionId: number, id: string): void {
@@ -182,6 +195,13 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   get parentLocationName(): string {
     return this.item?.locationName || (this.item as any)?.parentLocation || '';
   }
+
+  get showsOpen24Hours(): boolean {
+    const hours = this.item?.hours ?? [];
+    return isOpen24HoursSchedule(hours) || isOpen24HoursText(this.item?.openingHours);
+  }
+
+  readonly open24HoursLabel = OPEN_24_HOURS_LABEL;
 
   goToParentLocation(event?: Event): void {
     event?.preventDefault();
@@ -270,17 +290,12 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
     const it = this.item!;
     this.router.navigate(['/events/new'], {
       state: {
-        place: {
-          id:          it.id,
-          name:        it.name,
-          type:        'Place',
-          category:    (it as any).category ?? 'Place',
-          description: (it as any).description ?? '',
-          status:      'Active',
-          eventsToday: 0,
-          lat:         (it as any).lat,
-          lng:         (it as any).lng,
-          address:     (it as any).address,
+        regionId: it.regionId,
+        eventPrefill: {
+          venueType: 'place',
+          destinationId: it.destinationId ?? null,
+          locationId: it.locationId ?? null,
+          placeId: Number(it.id),
         },
         returnTo: `/places/detail/${it.id}`,
       }
@@ -294,17 +309,28 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
 
   cancelDelete(): void {
     this.deleteTarget = null;
+    this.deleteError  = null;
     this.cdr.markForCheck();
   }
 
   confirmDelete(): void {
     if (!this.deleteTarget) return;
-    this.isDeleting = true;
-    this.svc.delete$(this.deleteTarget.id)
-      .subscribe(() => {
-        this.isDeleting   = false;
-        this.deleteTarget = null;
-        this.router.navigate(['/places']);
+    this.isDeleting  = true;
+    this.deleteError = null;
+    this.svc.delete$(this.deleteTarget.id, this.deleteTarget.regionId)
+      .subscribe({
+        next: () => {
+          this.isDeleting   = false;
+          this.deleteTarget = null;
+          this.router.navigate(['/places']);
+        },
+        error: (err: unknown) => {
+          this.isDeleting = false;
+          this.deleteError = err instanceof HttpErrorResponse
+            ? (err.error?.message ?? 'Unable to delete this place.')
+            : 'Unable to delete this place.';
+          this.cdr.markForCheck();
+        },
       });
   }
 

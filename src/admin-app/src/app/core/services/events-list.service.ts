@@ -70,6 +70,7 @@ export interface EventListItem {
   zone?: [number, number][];
   venueType?: string;
   contactEmail?: string;
+  contactPhone?: string;
   attendanceLimit?: string;
   ageRestriction?: string;
   internalRefId?: string;
@@ -83,6 +84,7 @@ export interface EventListItem {
   analyticsReviewAvg?: number;
   analyticsReviewCount?: number;
   analyticsTrend?: 'up' | 'stable' | 'down';
+  canDelete?: boolean;
 }
 
 export interface EventsPage {
@@ -303,12 +305,14 @@ export class EventsListService {
       classification: dto.tags?.map(tag => tag.name) ?? [],
       duration: dto.duration ?? null,
       organizerName: dto.hostedBy ?? undefined,
+      contactPhone: dto.contactPhone ?? undefined,
       venueDescription: dto.venueDescription ?? null,
       arrivalTips: dto.arrivalTips ?? null,
       accessibility: dto.accessibility ?? null,
       coverImageUrl,
       coverImageName: coverImageUrl ? 'Cover image' : undefined,
       galleryImages: [...galleryImages, ...fallbackGalleryImages],
+      canDelete: (dto as any).canDelete ?? true,
     };
 
     this.cache.set(id, item);

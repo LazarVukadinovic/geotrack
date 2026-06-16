@@ -28,7 +28,12 @@ import { MapTileLayerService } from '../../../../core/services/map-tile-layer.se
 import { AdminFormDraftService } from '../../../../core/services/admin-form-draft.service';
 import { COVER_IMAGE_ASPECT_RATIO } from '../../../../core/constants/cover-image.constants';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
-import { AdminMapViewport, AdminMapZone, RegionalScopeValidationResult } from '../../../../core/models/admin-map.model';
+import {
+  AdminMapViewport,
+  AdminMapZone,
+  RegionalScopeValidationResult,
+  buildPlaceReturnQueryParams,
+} from '../../../../core/models/admin-map.model';
 import {
   RegionalDestinationCreateRequest,
   RegionalDestinationTagDto,
@@ -62,6 +67,17 @@ interface DestinationFormDraft {
   cardImageName: string;
   coverImageName: string;
   galleryImageNames: string[];
+}
+
+interface AddPlaceFlowCoordinates {
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+interface AddPlaceDestinationFlowState {
+  returnUrl?: string | null;
+  placeDraft?: unknown;
+  coordinates?: AddPlaceFlowCoordinates | null;
 }
 
 @Component({
@@ -130,6 +146,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   isItalic = false;
   isUnderline = false;
   editorIsEmpty = true;
+  readonly descriptionMaxLength = 8000;
+  descriptionLimitReached = false;
 
   cardImageUrl: string | null = null;
   cardImageName = '';
@@ -167,6 +185,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private regionBoundaryZone: AdminMapZone | null = null;
   private scopeValidationResult: RegionalScopeValidationResult | null = null;
   private unregisterDraftSource: (() => void) | null = null;
+  private addPlaceFlowState: AddPlaceDestinationFlowState | null = null;
 
   constructor(
     private readonly zone: NgZone,
@@ -186,6 +205,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     const editId = Number(this.route.snapshot.paramMap.get('id'));
     this.isEditMode = Number.isFinite(editId) && editId > 0;
     this.editDestinationId = this.isEditMode ? editId : null;
+    this.captureAddPlaceFlowState();
 
     this.loadAssignedRegions();
     this.loadDestinationTags();
@@ -194,7 +214,12 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   ngAfterViewInit(): void {
     setTimeout(() => this.initMiniMap(), 0);
-    setTimeout(() => this.restoreSavedDraftIfPresent(), 0);
+    setTimeout(() => {
+      const restoredFromPlaceFlow = this.applyAddPlaceFlowPrefill();
+      if (!restoredFromPlaceFlow) {
+        this.restoreSavedDraftIfPresent();
+      }
+    }, 0);
   }
 
   ngOnDestroy(): void {
@@ -240,6 +265,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       this.hasValidCenter() &&
       this.zoneConfirmed &&
       !this.regionBoundaryMissingMessage &&
+      !this.scopeValidationPending &&
+      this.scopeValidationResult?.isAllowed === true &&
       !this.isScopeValidationRejected &&
       mediaReady &&
       !this.regionLoading &&
@@ -371,6 +398,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       .subscribe({
         next: (tags) => {
           this.destinationTags = this.normalizeTags(tags);
+          this.syncSelectedTagsWithAvailableTags();
           this.classItems = this.destinationTags.map((tag) => ({
             tag,
             checked: this.selectedTagIds.has(tag.id),
@@ -410,6 +438,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         }));
 
         this.selectedTagIds = new Set((dto.tags ?? []).map((tag) => tag.id));
+        this.syncSelectedTagsWithAvailableTags();
         this.classItems = this.classItems.map((item) => ({
           ...item,
           checked: this.selectedTagIds.has(item.tag.id),
@@ -525,6 +554,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
   onEditorChange(): void {
     this.syncToolbarState();
+    this.syncDescriptionLimitState();
     this.syncEmptyState();
   }
 
@@ -542,11 +572,13 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     const text = clipboard.getData('text/plain');
     document.execCommand('insertHTML', false, normalizeEditorDescriptionHtml(html || text));
     this.syncToolbarState();
+    this.syncDescriptionLimitState();
     this.syncEmptyState();
   }
 
   onEditorBlur(): void {
     this.syncToolbarState();
+    this.syncDescriptionLimitState();
     const el = this.editorRef?.nativeElement;
     if (
       el &&
@@ -743,6 +775,20 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         next: (created) => {
           this.formDrafts.clearDraft(this.draftFormType());
           this.feedbackMessage = 'Destination published.';
+          if (this.isAddPlaceReturnFlow()) {
+            const placeDraft = this.addPlaceFlowState?.placeDraft ?? null;
+            this.router.navigate(['/places/new'], {
+              queryParams: buildPlaceReturnQueryParams(placeDraft),
+              state: {
+                restoredDraft: placeDraft,
+                newlyCreatedDestination: {
+                  id: created.id,
+                  name: created.name,
+                },
+              },
+            });
+            return;
+          }
           this.router.navigate(['/destinations'], {
             queryParams: { regionId: created.regionId },
             state: { feedbackMessage: 'Destination published.' },
@@ -842,7 +888,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
-    if (this.scopeValidationPending || this.scopeValidationResult?.isAllowed !== true) {
+    if (!this.isAddPlaceReturnFlow() && (this.scopeValidationPending || this.scopeValidationResult?.isAllowed !== true)) {
       this.errorMessage = this.scopeValidationPending
         ? 'Location validation is still running.'
         : this.scopeValidationMessage ?? 'Selected location could not be validated against your assigned regional scope.';
@@ -905,6 +951,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       latitude: this.centerLat,
       longitude: this.centerLng,
       tagIds: this.selectedTagIdList(),
+      galleryImageUrls: this.galleryImages.filter(image => !image.file).map(image => image.url),
+      galleryImageFiles: this.galleryImages.filter(image => image.file).map(image => image.file),
     };
   }
 
@@ -1188,6 +1236,43 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.validationSubscription = null;
   }
 
+  private captureAddPlaceFlowState(): void {
+    this.addPlaceFlowState = history.state as AddPlaceDestinationFlowState | null;
+  }
+
+  private applyAddPlaceFlowPrefill(): boolean {
+    if (!this.isAddPlaceReturnFlow()) {
+      return false;
+    }
+
+    const latitude = this.readRouteNumber(this.addPlaceFlowState?.coordinates?.latitude);
+    const longitude = this.readRouteNumber(this.addPlaceFlowState?.coordinates?.longitude);
+    if (latitude !== null && longitude !== null && this.hasValidCoordinatePair(latitude, longitude)) {
+      this.centerLat = latitude;
+      this.centerLng = longitude;
+      this.zoneConfirmed = true;
+      this.validateSelectedPoint(latitude, longitude);
+      setTimeout(() => this.showZoneOnMiniMap(), 0);
+    }
+
+    this.notifyStateChanged();
+    return true;
+  }
+
+  private isAddPlaceReturnFlow(): boolean {
+    return !this.isEditMode && (
+      this.route.snapshot.queryParamMap.get('returnFlow') === 'create-place' ||
+      this.addPlaceFlowState?.returnUrl === '/places/new'
+    );
+  }
+
+  private readRouteNumber(value: number | string | null | undefined): number | null {
+    if (value === null || value === undefined || value === '') return null;
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   private searchTags(query: string): void {
     this.tagSearchLoading = true;
     this.notifyStateChanged();
@@ -1254,7 +1339,21 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   private selectedTagIdList(): number[] {
-    return [...new Set(this.selectedTagIds)].sort((a, b) => a - b);
+    const allowedIds = this.availableTagIdSet();
+    return [...new Set(this.selectedTagIds)]
+      .filter(id => allowedIds.size === 0 || allowedIds.has(id))
+      .sort((a, b) => a - b);
+  }
+
+  private syncSelectedTagsWithAvailableTags(): void {
+    const allowedIds = this.availableTagIdSet();
+    if (allowedIds.size === 0) return;
+
+    this.selectedTagIds = new Set([...this.selectedTagIds].filter(id => allowedIds.has(id)));
+  }
+
+  private availableTagIdSet(): Set<number> {
+    return new Set(this.destinationTags.map(tag => tag.id));
   }
 
   private setActiveRegion(regionId: number, updateUrl: boolean): void {
@@ -1314,6 +1413,11 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
     this.errorMessage = null;
     return true;
+  }
+
+  private syncDescriptionLimitState(): void {
+    const text = this.editorRef?.nativeElement?.innerText ?? this.editorRef?.nativeElement?.textContent ?? '';
+    this.descriptionLimitReached = text.length >= this.descriptionMaxLength;
   }
 
   private syncEmptyState(): void {
@@ -1441,6 +1545,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.centerLng = payload.centerLng;
     this.zoneConfirmed = Boolean(payload.zoneConfirmed && this.hasValidCenter());
     this.selectedTagIds = new Set(payload.selectedTagIds ?? []);
+    this.syncSelectedTagsWithAvailableTags();
     this.classItems = this.classItems.map(item => ({
       ...item,
       checked: this.selectedTagIds.has(item.tag.id),

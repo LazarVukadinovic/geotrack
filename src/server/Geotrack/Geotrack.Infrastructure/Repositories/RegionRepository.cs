@@ -42,6 +42,9 @@ namespace Geotrack.Infrastructure.Repositories
                 .Include(r => r.RegionalManagerRegions)
                     .ThenInclude(ror => ror.User)
                 .Include(r => r.Destinations)
+                    .ThenInclude(d => d.Images)
+                .Include(r => r.Destinations)
+                    .ThenInclude(d => d.DestinationReviews)
                 .AsSplitQuery()
                 .FirstOrDefaultAsync(r => r.Id == regionId);
         }

@@ -74,11 +74,6 @@ public static class UploadValidation
     {
         var images = CollectFiles(files);
 
-        EnsureFileCount(
-            images,
-            limits.Images.MaxRegionalFilesPerRequest,
-            $"A maximum of {limits.Images.MaxRegionalFilesPerRequest} images can be uploaded at once.");
-
         EnsureTotalLength(
             images,
             limits.Images.MaxRegionalRequestBytes,

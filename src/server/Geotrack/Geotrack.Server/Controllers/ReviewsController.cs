@@ -45,6 +45,33 @@ public class ReviewsController : ControllerBase
         return Ok(reviews);
     }
 
+
+    [HttpGet("destinations/{destinationId:int}")]
+    public async Task<ActionResult> GetDestinationReviews(
+        int destinationId,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
+    {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null) return pagingError;
+
+        var reviews = await _reviewService.GetDestinationReviewsAsync(destinationId, skip, take, GetOptionalUserId());
+        return Ok(reviews);
+    }
+
+    [HttpGet("locations/{locationId:int}")]
+    public async Task<ActionResult> GetLocationReviews(
+        int locationId,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 10)
+    {
+        var pagingError = ValidatePaging(skip, take);
+        if (pagingError is not null) return pagingError;
+
+        var reviews = await _reviewService.GetLocationReviewsAsync(locationId, skip, take, GetOptionalUserId());
+        return Ok(reviews);
+    }
+
     [Authorize]
     [HttpPost("places/{placeId:int}")]
     [EnableRateLimiting("reviews")]
@@ -75,6 +102,45 @@ public class ReviewsController : ControllerBase
         try
         {
             var review = await _reviewService.CreateEventReviewAsync(eventId, userId.Value, dto);
+            return Ok(review);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+
+    [Authorize]
+    [HttpPost("destinations/{destinationId:int}")]
+    [EnableRateLimiting("reviews")]
+    public async Task<IActionResult> CreateDestinationReview(int destinationId, [FromBody] CreateReviewDto dto)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            var review = await _reviewService.CreateDestinationReviewAsync(destinationId, userId.Value, dto);
+            return Ok(review);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    [Authorize]
+    [HttpPost("locations/{locationId:int}")]
+    [EnableRateLimiting("reviews")]
+    public async Task<IActionResult> CreateLocationReview(int locationId, [FromBody] CreateReviewDto dto)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            var review = await _reviewService.CreateLocationReviewAsync(locationId, userId.Value, dto);
             return Ok(review);
         }
         catch (Exception ex)
@@ -168,6 +234,43 @@ public class ReviewsController : ControllerBase
         }
     }
 
+
+    [Authorize]
+    [HttpDelete("destinations/{reviewId:int}")]
+    public async Task<IActionResult> DeleteDestinationReview([FromRoute] int reviewId)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            await _reviewService.DeleteDestinationReviewAsync(reviewId, userId.Value);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    [Authorize]
+    [HttpDelete("locations/{reviewId:int}")]
+    public async Task<IActionResult> DeleteLocationReview([FromRoute] int reviewId)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            await _reviewService.DeleteLocationReviewAsync(reviewId, userId.Value);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
     // --- Edit own review ---
 
     [Authorize]
@@ -200,6 +303,45 @@ public class ReviewsController : ControllerBase
         try
         {
             var result = await _reviewService.UpdateEventReviewAsync(reviewId, userId.Value, dto);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+
+    [Authorize]
+    [HttpPut("destinations/{reviewId:int}")]
+    [EnableRateLimiting("reviews")]
+    public async Task<IActionResult> UpdateDestinationReview([FromRoute] int reviewId, [FromBody] CreateReviewDto dto)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            var result = await _reviewService.UpdateDestinationReviewAsync(reviewId, userId.Value, dto);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return MapException(ex);
+        }
+    }
+
+    [Authorize]
+    [HttpPut("locations/{reviewId:int}")]
+    [EnableRateLimiting("reviews")]
+    public async Task<IActionResult> UpdateLocationReview([FromRoute] int reviewId, [FromBody] CreateReviewDto dto)
+    {
+        var userId = GetRequiredUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            var result = await _reviewService.UpdateLocationReviewAsync(reviewId, userId.Value, dto);
             return Ok(result);
         }
         catch (Exception ex)

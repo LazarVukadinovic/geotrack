@@ -15,6 +15,7 @@ using Xunit;
 using Coordinate = NetTopologySuite.Geometries.Coordinate;
 using Geometry = NetTopologySuite.Geometries.Geometry;
 using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using Point = NetTopologySuite.Geometries.Point;
 using Polygon = NetTopologySuite.Geometries.Polygon;
 using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
@@ -23,6 +24,7 @@ namespace Geotrack.IntegrationTests;
 public sealed class RegionalEventsTests
 {
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
+    private const string CoordinatesPropertyName = "Coordinates";
     private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 4326);
 
     [Fact]
@@ -215,6 +217,30 @@ public sealed class RegionalEventsTests
         Assert.Equal("16+", updated.AgeRestriction);
         Assert.Contains(updated.Images, image => image.Url == "/media/seed/events/search-card.webp" && image.IsMain);
         Assert.Contains(updated.Images, image => image.Url == "/media/uploads/regional/updated-gallery.webp" && !image.IsMain);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var spatial = await db.Events
+            .Where(item => item.Id == fixture.SearchEventId)
+            .Select(item => new
+            {
+                ExpectedLatitude = item.Place != null
+                    ? item.Place.Latitude
+                    : item.Location != null
+                        ? item.Location.Latitude
+                        : item.Destination.Latitude,
+                ExpectedLongitude = item.Place != null
+                    ? item.Place.Longitude
+                    : item.Location != null
+                        ? item.Location.Longitude
+                        : item.Destination.Longitude,
+                Coordinates = EF.Property<Point?>(item, CoordinatesPropertyName)
+            })
+            .SingleAsync();
+
+        Assert.NotNull(spatial.Coordinates);
+        Assert.Equal(spatial.ExpectedLongitude, spatial.Coordinates!.X, precision: 6);
+        Assert.Equal(spatial.ExpectedLatitude, spatial.Coordinates.Y, precision: 6);
     }
 
     [Fact]

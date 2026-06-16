@@ -36,6 +36,7 @@ export interface RegionalEventListItemDto {
   duration?: string | null;
   hostedBy?: string | null;
   contactEmail?: string | null;
+  contactPhone?: string | null;
   attendanceLimit?: number | null;
   ageRestriction?: string | null;
   venueDescription?: string | null;
@@ -61,6 +62,7 @@ export interface RegionalEventImageDto {
 
 export interface RegionalEventDetailDto extends RegionalEventListItemDto {
   galleryImageUrls?: string[] | null;
+  canDelete?: boolean;
 }
 
 export interface RegionalEventListResponse {
@@ -101,8 +103,12 @@ export interface RegionalEventCreateRequest {
   externalTicketLink?: string | null;
   organizerName?: string | null;
   contactEmail?: string | null;
+  contactPhone?: string | null;
   attendanceLimit?: number | null;
   ageRestriction?: string | null;
+  venueDescription?: string | null;
+  arrivalTips?: string | null;
+  accessibility?: string | null;
   tagIds: number[];
   cardImageFile?: File | null;
   coverImageFile?: File | null;
@@ -137,9 +143,13 @@ export interface RegionalEventUpdateRequest {
   externalTicketLink?: string | null;
   organizerName?: string | null;
   contactEmail?: string | null;
+  contactPhone?: string | null;
   attendanceLimit?: number | null;
   clearAttendanceLimit?: boolean | null;
   ageRestriction?: string | null;
+  venueDescription?: string | null;
+  arrivalTips?: string | null;
+  accessibility?: string | null;
   tagIds?: number[] | null;
   images?: RegionalEventImageInputDto[] | null;
 }

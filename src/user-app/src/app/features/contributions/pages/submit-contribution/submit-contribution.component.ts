@@ -13,6 +13,7 @@ import { ExploreSectionListingService } from '../../../explore/services/explore-
 import { PlaceDetailService } from '../../../place-detail/services/place-detail.service';
 import { HotelDetailService } from '../../../hotel-detail/services/hotel-detail.service';
 import { normalizeContributionAmenityIds } from '../../services/contribution-amenities';
+import { isOpen24HoursSchedule } from '../../../../shared/utils/opening-hours';
 
 export interface ContributionDraft {
   basics: BasicsData | null;
@@ -60,6 +61,7 @@ export class SubmitContributionComponent implements OnInit {
   protected readonly savesDirectly = computed(() => this.editStatus() === 'Approved' && this.editPlaceId() != null);
   protected readonly ownershipProofLocked = computed(() =>
     this.savesDirectly() && !!this.draft().basics?.ownershipProofDocumentUrl);
+  protected readonly placeTypeLocked = computed(() => this.savesDirectly());
   protected readonly submitLabel = computed(() => this.savesDirectly() ? 'Save' : 'Submit');
   protected readonly submittingLabel = computed(() => this.savesDirectly() ? 'Saving...' : 'Submitting...');
   protected readonly isAccommodationDraft = computed(() => this.draft().basics?.placeType === 'Stay');
@@ -79,7 +81,7 @@ export class SubmitContributionComponent implements OnInit {
   protected readonly draft = signal<ContributionDraft>({
     basics: null,
     features: { tags: [], amenities: [] },
-    details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, openingHours: '', operatingHours: [], bookingPartners: [] },
+    details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, open24Hours: false, openingHours: '', operatingHours: [], bookingPartners: [] },
   });
 
   ngOnInit(): void {
@@ -234,6 +236,7 @@ export class SubmitContributionComponent implements OnInit {
           details: {
             description: place.about ?? (typeof navState['placeAbout'] === 'string' ? navState['placeAbout'] : ''),
             openingHoursEnabled,
+            open24Hours: isOpen24HoursSchedule(operatingHours),
             openingHours: place.openingHours ?? '',
             operatingHours,
             phone: place.phoneNumber ?? '',
@@ -349,6 +352,9 @@ export class SubmitContributionComponent implements OnInit {
   protected prevStep(): void {
     const step = this.currentStep();
     if (step <= 1) return;
+    if (step === 4) {
+      this.submitError.set(null);
+    }
     this.currentStep.update(s => s - 1);
   }
 
@@ -372,7 +378,7 @@ export class SubmitContributionComponent implements OnInit {
     this.draft.set({
       basics: null,
       features: { tags: [], amenities: [] },
-      details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, openingHours: '', operatingHours: [], bookingPartners: [] },
+      details: { description: '', phone: '', contactEmail: '', website: '', openingHoursEnabled: false, open24Hours: false, openingHours: '', operatingHours: [], bookingPartners: [] },
     });
     this.editId.set(null);
     this.entityType.set('Place');

@@ -56,6 +56,8 @@ interface PopupEntity {
   editRoute?: string | null;
 }
 
+type MapEntityFilter = 'all' | 'place' | 'location' | 'destination';
+
 @Component({
   selector: 'app-map-page',
   standalone: true,
@@ -81,10 +83,17 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
   searchQuery = '';
   searchResults: AdminMapSearchResult[] = [];
   searchDropdownOpen = false;
+  searchResultsCache: AdminMapSearchResult[] = [];
+  entityFilter: MapEntityFilter = 'all';
+  filterMenuOpen = false;
+  pinValidationPending = false;
+  pinValidationMessage: string | null = null;
+  pinValidationTone: 'error' | 'success' | null = null;
 
   mapData: AdminMapResponse | null = null;
   selectedEntity: PopupEntity | null = null;
   selectedZone: AdminMapZone | null = null;
+  stackedEntities: PopupEntity[] | null = null;
   popupPosition: PopupPosition | null = null;
   droppedPin: DroppedPin | null = null;
   droppedPinPosition: PopupPosition | null = null;
@@ -164,9 +173,9 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
   get hasMapContent(): boolean {
     return Boolean(this.mapData && (
-      this.mapData.markers.length > 0 ||
+      this.mapData.markers.some(marker => this.markerMatchesFilter(marker)) ||
       this.hasAssignedRegionBoundary ||
-      this.mapData.zones.some(zone => zone.entityType !== 'Region')
+      this.mapData.zones.some(zone => zone.entityType !== 'Region' && this.zoneMatchesFilter(zone))
     ));
   }
 
@@ -179,8 +188,11 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
       return 'No active assigned region is selected.';
     }
 
-    const markerCount = this.mapData?.markers.length ?? 0;
-    const zoneCount = this.mapData?.zones.filter(zone => zone.entityType !== 'Region').length ?? 0;
+    const markerCount = this.mapData?.markers.filter(marker => this.markerMatchesFilter(marker)).length ?? 0;
+    const zoneCount = this.mapData?.zones
+      .filter(zone => zone.entityType !== 'Region')
+      .filter(zone => this.zoneMatchesFilter(zone))
+      .length ?? 0;
     const selected = this.selectedEntity
       ? ` Selected entity: ${this.selectedEntity.title}.`
       : this.selectedZone
@@ -194,6 +206,20 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
   get assignedRegionBoundary(): AdminMapAssignedRegionBoundary | null {
     return this.mapData?.assignedRegionBoundary ?? null;
+  }
+
+  get searchPlaceholder(): string {
+    if (this.entityFilter === 'place') return 'Search places or coordinates...';
+    if (this.entityFilter === 'location') return 'Search locations or coordinates...';
+    if (this.entityFilter === 'destination') return 'Search destinations or coordinates...';
+    return 'Search places, locations, destinations, or coordinates...';
+  }
+
+  get activeFilterLabel(): string {
+    if (this.entityFilter === 'place') return 'Places';
+    if (this.entityFilter === 'location') return 'Locations';
+    if (this.entityFilter === 'destination') return 'Destinations';
+    return 'All';
   }
 
   get hasAssignedRegionBoundary(): boolean {
@@ -264,6 +290,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.clearSelections();
     this.searchQuery = '';
     this.searchResults = [];
+    this.searchResultsCache = [];
     this.searchDropdownOpen = false;
     this.loadMapData(regionId);
   }
@@ -276,6 +303,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     const query = this.searchQuery.trim();
     if (query.length < 2 || this.parseCoordinates(query)) {
       this.searchResults = [];
+      this.searchResultsCache = [];
       this.searchDropdownOpen = false;
       this.notifyStateChanged();
       return;
@@ -298,6 +326,18 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     }, 150);
   }
 
+  toggleFilterMenu(): void {
+    this.filterMenuOpen = !this.filterMenuOpen;
+    this.notifyStateChanged();
+  }
+
+  closeFilterMenu(): void {
+    setTimeout(() => {
+      this.filterMenuOpen = false;
+      this.notifyStateChanged();
+    }, 150);
+  }
+
   doSearch(): void {
     const query = this.searchQuery.trim();
     if (!query || !this.activeRegionId) return;
@@ -314,6 +354,14 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.runSearch(true);
+  }
+
+  clearSearch(): void {
+    this.searchQuery = '';
+    this.searchResults = [];
+    this.searchResultsCache = [];
+    this.searchDropdownOpen = false;
+    this.closePopup();
   }
 
   selectSearchResult(result: AdminMapSearchResult): void {
@@ -335,25 +383,62 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    const queryParams: Record<string, string | number> = {
-      latitude: this.droppedPin.latitude.toFixed(6),
-      longitude: this.droppedPin.longitude.toFixed(6),
-      source: 'map',
-    };
-
-    if (this.activeRegionId) {
-      queryParams['regionId'] = this.activeRegionId;
+    if (!this.activeRegionId) {
+      this.pinValidationTone = 'error';
+      this.pinValidationMessage = 'Select an active region before creating a place from the map.';
+      this.notifyStateChanged();
+      return;
     }
 
-    this.router.navigate(['/places/new'], {
-      queryParams,
-      state: {
-        regionId: this.activeRegionId,
-        droppedPin: {
-          latitude: this.droppedPin.latitude,
-          longitude: this.droppedPin.longitude,
-        },
-        returnTo: '/map',
+    const { latitude, longitude } = this.droppedPin;
+    this.pinValidationPending = true;
+    this.pinValidationMessage = null;
+    this.pinValidationTone = null;
+    this.notifyStateChanged();
+
+    this.adminMapService.validateEntityLocation({
+      regionId: this.activeRegionId,
+      entityType: 'Place',
+      operationType: 'Create',
+      latitude,
+      longitude,
+    }).pipe(
+      finalize(() => {
+        this.pinValidationPending = false;
+        this.notifyStateChanged();
+      }),
+    ).subscribe({
+      next: result => {
+        if (!result.isAllowed) {
+          this.pinValidationTone = 'error';
+          this.pinValidationMessage = result.message || 'Place cannot be created outside your assigned region.';
+          this.notifyStateChanged();
+          return;
+        }
+
+        const queryParams: Record<string, string | number> = {
+          latitude: latitude.toFixed(6),
+          longitude: longitude.toFixed(6),
+          source: 'map',
+          regionId: this.activeRegionId!,
+        };
+
+        this.router.navigate(['/places/new'], {
+          queryParams,
+          state: {
+            regionId: this.activeRegionId,
+            droppedPin: { latitude, longitude },
+            returnTo: '/map',
+          },
+        });
+      },
+      error: error => {
+        this.pinValidationTone = 'error';
+        this.pinValidationMessage = this.extractErrorMessage(
+          error,
+          'Unable to validate this location against your assigned region.',
+        );
+        this.notifyStateChanged();
       },
     });
   }
@@ -418,6 +503,23 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     if (type === 'Destination') return '#7c3aed';
     if (type === 'Region') return '#16a34a';
     return '#2563eb';
+  }
+
+  setEntityFilter(filter: MapEntityFilter): void {
+    if (this.entityFilter === filter) {
+      this.filterMenuOpen = false;
+      this.notifyStateChanged();
+      return;
+    }
+
+    this.entityFilter = filter;
+    this.filterMenuOpen = false;
+    this.clearSelections();
+    this.clearDroppedPin();
+    this.renderMapData();
+    this.searchResults = this.filterSearchResults(this.searchResultsCache);
+    this.searchDropdownOpen = this.searchResults.length > 0;
+    this.notifyStateChanged();
   }
 
   private loadMapData(regionId: number): void {
@@ -525,9 +627,12 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const zones = data.zones
       .filter(zone => zone.entityType !== 'Region')
+      .filter(zone => this.zoneMatchesFilter(zone))
       .sort((a, b) => this.zoneOrder(a) - this.zoneOrder(b));
     zones.forEach(zone => this.addZone(zone));
-    data.markers.forEach(marker => this.addMarker(marker));
+    data.markers
+      .filter(marker => this.markerMatchesFilter(marker))
+      .forEach(marker => this.addMarker(marker));
     this.applyViewport(data);
     this.notifyStateChanged();
   }
@@ -608,7 +713,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
       if (event.originalEvent) {
         L.DomEvent.stopPropagation(event.originalEvent);
       }
-      this.zone.run(() => this.activateEntity(marker));
+      this.zone.run(() => this.activateEntity(this.markerToPopupEntity(marker)));
     });
   }
 
@@ -677,7 +782,7 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     zoomOut?.setAttribute('title', 'Zoom out');
   }
 
-  private activateEntity(entity: PopupEntity): void {
+  activateEntity(entity: PopupEntity): void {
     this.selectedEntity = entity;
     this.selectedZone = null;
     this.droppedPin = null;
@@ -693,6 +798,8 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.clearSelections();
     this.clearDroppedPinMarker();
+    this.pinValidationMessage = null;
+    this.pinValidationTone = null;
     this.droppedPin = { latitude, longitude };
 
     this.droppedPinMarker = L.marker([latitude, longitude], {
@@ -786,7 +893,8 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: response => {
-          this.searchResults = response.items ?? [];
+          this.searchResultsCache = response.items ?? [];
+          this.searchResults = this.filterSearchResults(this.searchResultsCache);
           this.searchDropdownOpen = !selectFirst && this.searchResults.length > 0;
           if (selectFirst && this.searchResults.length > 0) {
             this.selectSearchResult(this.searchResults[0]);
@@ -876,6 +984,26 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     return marker.title.trim().charAt(0).toUpperCase() || 'P';
   }
 
+
+  private markerMatchesFilter(marker: AdminMapMarker): boolean {
+    if (this.entityFilter === 'all') return true;
+    return marker.entityType.toLowerCase() === this.entityFilter;
+  }
+
+  private zoneMatchesFilter(zone: AdminMapZone): boolean {
+    if (this.entityFilter === 'all') return true;
+    return zone.entityType.toLowerCase() === this.entityFilter;
+  }
+
+  private searchResultMatchesFilter(result: AdminMapSearchResult): boolean {
+    if (this.entityFilter === 'all') return true;
+    return result.entityType.toLowerCase() === this.entityFilter;
+  }
+
+  private filterSearchResults(results: AdminMapSearchResult[]): AdminMapSearchResult[] {
+    return results.filter(result => this.searchResultMatchesFilter(result));
+  }
+
   private searchResultToPopupEntity(result: AdminMapSearchResult): PopupEntity {
     const id = result.id;
     return {
@@ -895,6 +1023,22 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
             ? `/locations/edit/${id}`
             : `/places/edit/${id}`
         : null,
+    };
+  }
+
+  private markerToPopupEntity(marker: AdminMapMarker): PopupEntity {
+    return {
+      id: marker.id,
+      entityType: marker.entityType,
+      title: marker.title,
+      subtitle: marker.subtitle,
+      categoryLabel: marker.categoryLabel,
+      latitude: marker.latitude,
+      longitude: marker.longitude,
+      imageUrl: marker.imageUrl,
+      status: marker.status,
+      detailRoute: marker.detailRoute,
+      editRoute: marker.editRoute,
     };
   }
 
@@ -976,6 +1120,14 @@ export class MapPageComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.notifyStateChanged();
+  }
+
+  private extractErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse) {
+      return error.error?.message ?? fallback;
+    }
+
+    return fallback;
   }
 
   private setMapCursor(cursor: string): void {

@@ -204,6 +204,8 @@ export class ReviewRequestsService {
       locations: this.toSafeCount(counts?.locations),
       places: this.toSafeCount(counts?.places),
       events: this.toSafeCount(counts?.events),
+      ownership: this.toSafeCount(counts?.ownership),
+      contributions: this.toSafeCount(counts?.contributions),
     };
   }
 

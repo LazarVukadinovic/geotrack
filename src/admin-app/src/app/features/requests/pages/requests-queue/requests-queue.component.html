@@ -43,7 +43,7 @@
           (click)="selectTab(tab.key)"
           class="px-4 py-2 rounded-full text-sm font-semibold transition-all"
           [ngClass]="activeTab === tab.key
-            ? 'bg-blue-700 text-white shadow-sm'
+            ? (tab.key === 'rejected' ? 'bg-red-600 text-white shadow-sm' : 'bg-blue-700 text-white shadow-sm')
             : tab.key === 'approved' ? 'bg-white text-blue-600 border border-blue-200 hover:border-blue-400'
             : tab.key === 'rejected' ? 'bg-white text-red-500 border border-red-200 hover:border-red-400'
             : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-300 hover:text-blue-700'"
@@ -166,8 +166,16 @@
             <div class="flex-1 min-w-0">
               <p class="text-sm font-semibold text-gray-900 mb-0.5 truncate">{{ req.title }}</p>
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full" [ngClass]="typeBadgeClass(req.entityType)">
-                  {{ req.entityType }}
+                <span *ngIf="req.contributionType === 'ClaimOwnership'"
+                  class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M12 2l3 7h7l-5.5 4 2 7L12 16.5 5.5 20l2-7L2 9h7z"/>
+                  </svg>
+                  Ownership Claim
+                </span>
+                <span *ngIf="req.contributionType !== 'ClaimOwnership'"
+                  class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  {{ req.contributionType === 'CreatePlace' ? 'New Place' : req.contributionType === 'UpdatePlace' ? 'Update' : req.entityType }}
                 </span>
                 <span class="text-xs text-gray-400">{{ req.regionDisplayName }}</span>
                 <span class="text-gray-300 text-xs">&middot;</span>
@@ -260,20 +268,13 @@
 >
   <div class="bg-white rounded-xl shadow-xl w-[420px] max-w-[92vw] p-5" (click)="$event.stopPropagation()">
     <h2 class="text-base font-bold text-gray-900 mb-1">Reject request</h2>
-    <p class="text-sm text-gray-500 mb-4">Add a clear reason for the affected user.</p>
-    <label class="block text-xs font-semibold text-gray-500 mb-1">Reason</label>
-    <input
-      [(ngModel)]="rejectReason"
-      type="text"
-      class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 mb-3"
-      placeholder="Missing information, not relevant, duplicate..."
-    />
-    <label class="block text-xs font-semibold text-gray-500 mb-1">Moderator note</label>
+    <p class="text-sm text-gray-500 mb-4">Optionally add an internal note before rejecting.</p>
+    <label class="block text-xs font-semibold text-gray-500 mb-1">Note</label>
     <textarea
       [(ngModel)]="rejectNote"
       rows="4"
       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none resize-none focus:border-blue-400"
-      placeholder="Optional extra context"
+      placeholder="Optional internal moderation note"
     ></textarea>
     <div class="flex justify-end gap-2 mt-4">
       <button type="button" (click)="cancelReject()" class="px-3 py-2 rounded-lg text-sm text-gray-600 border border-gray-200 bg-white hover:bg-gray-50">

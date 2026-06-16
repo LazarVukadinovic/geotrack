@@ -17,13 +17,16 @@ namespace Geotrack.Server.Controllers;
 public class ContributionsController : ControllerBase
 {
     private readonly IPlaceContributionService _contributions;
+    private readonly IRegionalMapService _regionalMap;
     private readonly UploadLimitsOptions _uploadLimits;
 
     public ContributionsController(
         IPlaceContributionService contributions,
+        IRegionalMapService regionalMap,
         IOptions<UploadLimitsOptions> uploadLimits)
     {
         _contributions = contributions;
+        _regionalMap = regionalMap;
         _uploadLimits = uploadLimits.Value;
     }
 
@@ -109,6 +112,39 @@ public class ContributionsController : ControllerBase
         return Ok(await _contributions.GetRegionOptionsAsync());
     }
 
+    [HttpGet("content-manager/regions/{regionId:int}/map-context")]
+    [Authorize(Roles = "Admin,ContentModerator")]
+    public async Task<ActionResult> GetContentManagerRegionMapContext(int regionId)
+    {
+        try
+        {
+            return Ok(await _regionalMap.GetRegionBoundaryAsync(regionId));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("content-manager/regions/{regionId:int}/validate-destination-center")]
+    [Authorize(Roles = "Admin,ContentModerator")]
+    public async Task<ActionResult<ContentManagerDestinationCenterValidationResultDto>> ValidateDestinationCenter(
+        int regionId,
+        [FromBody] ContentManagerDestinationCenterValidationDto request)
+    {
+        try
+        {
+            return Ok(await _contributions.ValidateDestinationCenterAsync(
+                regionId,
+                request.Latitude,
+                request.Longitude));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("content-manager/destinations/{destinationId:int}/locations")]
     [Authorize(Roles = "Admin,ContentModerator")]
     public async Task<ActionResult<ContributionLocationOptionsDto>> GetDestinationLocationOptions(int destinationId)
@@ -137,6 +173,8 @@ public class ContributionsController : ControllerBase
                 request.RegionId,
                 request.ExistingDestinationId,
                 request.NewDestinationName,
+                request.NewDestinationLatitude,
+                request.NewDestinationLongitude,
                 request.NewLocationName,
                 request.Note);
 

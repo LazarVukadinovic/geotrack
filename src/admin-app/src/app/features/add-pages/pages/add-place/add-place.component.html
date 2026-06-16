@@ -20,12 +20,6 @@
       ></app-cover-image-cropper>
     }
 
-    @if (isEditMode) {
-      <div class="px-8 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-700 font-medium">
-        This screen is create-only for now. Existing places are still protected from local mock edits.
-      </div>
-    }
-
     <div class="flex-1 overflow-y-auto px-8 py-6">
       @if (errorMessage) {
         <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -60,9 +54,9 @@
                 <select
                   class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none disabled:bg-gray-100 disabled:text-gray-400"
                   style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
-                  [(ngModel)]="parentDestinationId"
-                  (ngModelChange)="onParentDestinationChanged()"
-                  [disabled]="!activeRegionId || parentDestinationsLoading || parentDestinations.length === 0"
+                  [ngModel]="parentDestinationId"
+                  (ngModelChange)="onParentDestinationSelection($event)"
+                  [disabled]="!activeRegionId || parentDestinationsLoading"
                 >
                   <option [ngValue]="null">
                     {{ parentDestinationsLoading ? 'Loading destinations...' : 'Select parent destination...' }}
@@ -70,6 +64,7 @@
                   @for (destination of parentDestinations; track destination.id) {
                     <option [ngValue]="destination.id">{{ destination.displayName || destination.name }}</option>
                   }
+                  <option [ngValue]="createDestinationOptionValue">Create new destination</option>
                 </select>
                 @if (!parentDestinationsLoading && activeRegionId && parentDestinations.length === 0) {
                   <p class="text-[11px] text-amber-600 mt-1">Create a destination in this region before publishing a place.</p>
@@ -83,9 +78,9 @@
                 <select
                   class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none disabled:bg-gray-100 disabled:text-gray-400"
                   style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
-                  [(ngModel)]="parentLocationId"
-                  (ngModelChange)="onParentLocationChanged()"
-                  [disabled]="!activeRegionId || !parentDestinationId || parentLocationsLoading || parentLocations.length === 0"
+                  [ngModel]="parentLocationId"
+                  (ngModelChange)="onParentLocationSelection($event)"
+                  [disabled]="!activeRegionId || parentLocationsLoading"
                 >
                   <option [ngValue]="null">
                     {{ parentLocationsLoading ? 'Loading locations...' : (parentDestinationId ? 'Select parent location...' : 'Select destination first...') }}
@@ -93,6 +88,7 @@
                   @for (location of parentLocations; track location.id) {
                     <option [ngValue]="location.id">{{ location.displayName }}</option>
                   }
+                  <option [ngValue]="createLocationOptionValue">Create new location</option>
                 </select>
                 @if (!parentLocationsLoading && parentDestinationId && parentLocations.length === 0) {
                   <p class="text-[11px] text-amber-600 mt-1">Create a location inside this destination before publishing a place.</p>
@@ -217,8 +213,9 @@
                   <div
                     #editorRef
                     contenteditable="true"
-                    class="w-full px-3 py-2 text-sm min-h-[100px] outline-none text-gray-700"
+                    class="w-full h-[140px] overflow-y-auto px-3 py-2 text-sm outline-none text-gray-700"
                     style="font-family: inherit;"
+                    (beforeinput)="onEditorBeforeInput($event)"
                     (keydown)="onEditorKeydown($event)"
                     (keyup)="onEditorChange()"
                     (input)="onEditorChange()"
@@ -227,6 +224,9 @@
                     (blur)="onEditorBlur()"
                     (paste)="onEditorPaste($event)"
                   ></div>
+                  @if (descriptionLimitReached) {
+                    <p class="mt-2 text-xs font-medium text-amber-600">Description limit reached ({{ descriptionMaxLength }} characters).</p>
+                  }
                 </div>
               </div>
             </div>
@@ -336,6 +336,32 @@
               </button>
             </div>
 
+            @if (opsEnabled) {
+              <div class="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3 mb-3 bg-gray-50">
+                <div>
+                  <p class="text-sm font-semibold text-gray-800">Open 24 hours</p>
+                  <p class="text-xs text-gray-500">The place is open all day, every day.</p>
+                </div>
+                <button
+                  type="button"
+                  class="relative flex-shrink-0 border-none bg-transparent cursor-pointer"
+                  style="width: 44px; height: 24px;"
+                  (click)="open24Hours = !open24Hours"
+                  [title]="open24Hours ? 'Disable 24-hour opening' : 'Enable 24-hour opening'"
+                >
+                  <span class="absolute inset-0 rounded-full transition-colors duration-200"
+                    [class.bg-blue-600]="open24Hours" [class.bg-gray-300]="!open24Hours"></span>
+                  <span class="absolute top-1/2 -translate-y-1/2 bg-white rounded-full shadow-md transition-all duration-200"
+                    style="width: 20px; height: 20px;" [style.left]="open24Hours ? '22px' : '2px'"></span>
+                </button>
+              </div>
+            }
+
+            @if (opsEnabled && open24Hours) {
+              <div class="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
+                Open 24 hours, seven days a week
+              </div>
+            } @else {
             <div
               class="border border-gray-200 rounded-lg overflow-hidden transition-all duration-200"
               [class.opacity-40]="!opsEnabled"
@@ -414,6 +440,7 @@
                 </div>
               }
             </div>
+            }
             @if (activeTimePicker) {
               <div
                 class="fixed inset-0 z-50 flex items-center justify-center"

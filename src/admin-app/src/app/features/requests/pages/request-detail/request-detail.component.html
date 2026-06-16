@@ -43,225 +43,456 @@
       </div>
 
       <ng-container *ngIf="!isLoading && request">
-        <div class="mb-5">
-          <div class="flex items-center gap-2 flex-wrap mb-2">
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" [ngClass]="typeBadgeClass(request.entityType)">
-              {{ request.entityType }}
-            </span>
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" [ngClass]="statusBadgeClass(request.status)">
-              {{ request.status }}
-            </span>
-            <span class="text-xs text-gray-400">ID: {{ request.displayRequestId }}</span>
-          </div>
-          <h1 class="text-2xl font-bold text-gray-900">{{ request.title }}</h1>
-          <p class="text-sm text-gray-500 mt-1">{{ request.regionDisplayName }}</p>
-        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
-          <div class="flex flex-col gap-5 min-w-0">
-            <section class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-              <div class="h-64 bg-gray-100 overflow-hidden flex items-center justify-center">
+          <!-- Main content -->
+          <div class="lg:col-span-2 space-y-4">
+
+            <!-- OWNERSHIP CLAIM: prominent proof + place info -->
+            <ng-container *ngIf="isOwnershipClaim">
+
+              <!-- Ownership header banner -->
+              <div class="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm p-5">
+                <div class="flex items-center gap-2 mb-3">
+                  <svg class="w-5 h-5 text-amber-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2l3 7h7l-5.5 4 2 7L12 16.5 5.5 20l2-7L2 9h7z"/>
+                  </svg>
+                  <h2 class="text-sm font-bold text-amber-800 uppercase tracking-wider">Ownership Claim</h2>
+                  <span class="text-xs text-amber-600 ml-1">{{ request.displayRequestId }}</span>
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ml-auto" [ngClass]="statusBadgeClass(request.status)">
+                    {{ request.status }}
+                  </span>
+                </div>
+                <p class="text-xs text-amber-700 mb-4">
+                  The user is claiming ownership of an existing place. Review the proof of ownership document below.
+                </p>
+
+                <!-- Target place -->
+                <div *ngIf="request.targetEntityName" class="bg-white rounded-xl border border-amber-200 px-4 py-3 mb-4">
+                  <p class="text-[11px] font-semibold text-amber-600 uppercase tracking-wider mb-1">Claiming ownership of</p>
+                  <p class="text-base font-bold text-gray-900">{{ request.targetEntityName }}</p>
+                  <div *ngIf="request.destinationName || request.locationName" class="flex items-center gap-1.5 mt-1 text-sm text-gray-500">
+                    <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="10" r="3" /><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                    </svg>
+                    <span>{{ request.destinationName }}<ng-container *ngIf="request.destinationName && request.locationName"> › </ng-container>{{ request.locationName }}</span>
+                  </div>
+                </div>
+
+                <!-- Proof of ownership (prominent) -->
+                <div>
+                  <p class="text-[11px] font-semibold text-amber-600 uppercase tracking-wider mb-2">Proof of Ownership Document</p>
+                  <ng-container *ngIf="ownershipProofHref as proofHref">
+                    <a
+                      [href]="proofHref"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-3 text-sm font-semibold text-amber-800 hover:bg-amber-100 transition-colors"
+                    >
+                      <svg class="w-5 h-5 flex-shrink-0 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+                        <polyline points="10 9 9 9 8 9" />
+                      </svg>
+                      {{ request.ownershipProofOriginalFileName || 'View proof document' }}
+                    </a>
+                  </ng-container>
+                  <div *ngIf="!ownershipProofHref && request.hasOwnershipProofDocument" class="text-sm text-amber-700">
+                    {{ request.ownershipProofOriginalFileName || 'Proof document uploaded' }}
+                  </div>
+                  <p *ngIf="!ownershipProofHref && !request.hasOwnershipProofDocument" class="text-sm text-red-500 font-medium">
+                    No proof document was submitted.
+                  </p>
+                  <p *ngIf="request.ownershipProofUploadedAt" class="text-xs text-amber-600 mt-1.5">
+                    Uploaded {{ request.ownershipProofUploadedAt | date:'medium' }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- Additional place details (collapsible context) -->
+              <details class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden group">
+                <summary class="flex items-center gap-2 px-5 py-4 cursor-pointer text-xs font-semibold text-gray-500 uppercase tracking-wider select-none list-none">
+                  <svg class="w-3.5 h-3.5 text-gray-400 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                  Place Details
+                </summary>
+                <div class="space-y-4 border-t border-gray-100">
+
+                  <!-- Description -->
+                  <div *ngIf="request.description || request.previewText" class="px-5 pt-4 pb-2">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Description</h4>
+                    <p class="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed"
+                      [class.line-clamp-5]="isDescriptionLong && !descriptionExpanded">{{ request.description || request.previewText }}</p>
+                    <button *ngIf="isDescriptionLong" type="button" (click)="descriptionExpanded = !descriptionExpanded"
+                      class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-transparent border-none cursor-pointer p-0">
+                      {{ descriptionExpanded ? 'Show less' : 'Show more' }}
+                    </button>
+                  </div>
+
+                  <!-- Contact -->
+                  <div class="px-5 pb-2">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Contact</h4>
+                    <div class="space-y-1 text-sm text-gray-700">
+                      <p><span class="text-gray-400">Phone:</span>
+                        <span *ngIf="request.phoneNumber" class="ml-1">{{ request.phoneNumber }}</span>
+                        <span *ngIf="!request.phoneNumber" class="ml-1 text-gray-400 italic">Not provided</span>
+                      </p>
+                      <p><span class="text-gray-400">Email:</span>
+                        <span *ngIf="request.contactEmail" class="ml-1">{{ request.contactEmail }}</span>
+                        <span *ngIf="!request.contactEmail" class="ml-1 text-gray-400 italic">Not provided</span>
+                      </p>
+                      <p *ngIf="!request.stayType"><span class="text-gray-400">Website:</span>
+                        <a *ngIf="request.website" [href]="request.website" target="_blank" rel="noopener" class="text-blue-600 hover:underline ml-1">{{ request.website }}</a>
+                        <span *ngIf="!request.website" class="ml-1 text-gray-400 italic">Not provided</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- Booking Partners -->
+                  <div *ngIf="request.stayType" class="px-5 pb-2">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Booking Partners</h4>
+                    <ng-container *ngIf="request.bookingPartners?.length; else noBookingPartnersOwnership">
+                      <div class="flex flex-col gap-1.5">
+                        <div *ngFor="let partner of request.bookingPartners" class="flex items-center gap-1.5 text-sm">
+                          <span class="font-medium text-gray-700 flex-none">{{ partnerDisplayName(partner.id) }}:</span>
+                          <a *ngIf="partner.url" [href]="partner.url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline truncate">{{ partner.url }}</a>
+                          <span *ngIf="!partner.url" class="text-gray-400 italic">Not provided</span>
+                        </div>
+                      </div>
+                    </ng-container>
+                    <ng-template #noBookingPartnersOwnership>
+                      <p class="text-sm text-gray-400 italic">Not provided</p>
+                    </ng-template>
+                  </div>
+
+                  <!-- Opening Hours (structured) -->
+                  <div *ngIf="request.operatingHoursEnabled && hasDisplayableOperatingHours && request.operatingHours?.length" class="px-5 pb-2">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Opening Hours</h4>
+                    <p *ngIf="showsOpen24Hours" class="text-sm text-gray-700 leading-relaxed">{{ open24HoursLabel }}</p>
+                    <div *ngIf="!showsOpen24Hours" class="flex flex-col">
+                      <div *ngFor="let hour of request.operatingHours"
+                           class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                        <span class="text-sm font-medium text-gray-700 w-28 flex-none">{{ hour.dayOfWeek }}</span>
+                        <span *ngIf="hour.isOpen" class="text-sm text-gray-600">{{ hour.openTime }} – {{ hour.closeTime }}</span>
+                        <span *ngIf="!hour.isOpen" class="text-xs font-semibold text-red-500">Closed</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Opening Hours (plain text) -->
+                  <div *ngIf="!request.operatingHoursEnabled && request.openingHours" class="px-5 pb-2">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Opening Hours</h4>
+                    <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ request.openingHours }}</p>
+                  </div>
+
+                  <!-- Tags -->
+                  <div *ngIf="request.tags?.length" class="px-5 pb-2">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Tags</h4>
+                    <div class="flex flex-wrap gap-1.5">
+                      <span *ngFor="let tag of request.tags" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">{{ tag }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Amenities -->
+                  <div *ngIf="allAmenities.length" class="px-5 pb-2">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Amenities</h4>
+                    <div class="flex flex-wrap gap-1.5">
+                      <span *ngFor="let amenity of allAmenities" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">{{ amenity }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Photos -->
+                  <div *ngIf="ownershipGalleryImages.length" class="px-5 pb-5">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Photos</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <button
+                        *ngFor="let image of ownershipGalleryPreviewImages; let i = index"
+                        type="button"
+                        class="relative aspect-square rounded-lg overflow-hidden border border-gray-100 bg-gray-50 cursor-pointer group p-0 focus:outline-none"
+                        (click)="openOwnershipGallery(i)"
+                      >
+                        <img [src]="image.url" [alt]="image.altText || request.title + ' photo ' + (i + 1)" class="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" />
+                        <div class="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200"></div>
+                        <span *ngIf="image.imageRole" class="absolute left-2 bottom-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white pointer-events-none">
+                          {{ image.imageRole }}
+                        </span>
+                        <div *ngIf="i === ownershipGalleryPreviewImages.length - 1 && ownershipGalleryOverflowCount > 0"
+                             class="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
+                          <span class="text-white text-lg font-bold">+{{ ownershipGalleryOverflowCount }}</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+              </details>
+
+            </ng-container>
+
+            <!-- REGULAR CONTRIBUTION: normal layout -->
+            <ng-container *ngIf="!isOwnershipClaim">
+
+            <!-- Hero card: cover image + info -->
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div *ngIf="primaryImageUrl" class="relative h-56 overflow-hidden">
                 <img
-                  *ngIf="primaryImageUrl; else noImage"
                   [src]="primaryImageUrl"
                   [alt]="request.title"
                   class="w-full h-full object-cover"
                 />
-                <ng-template #noImage>
-                  <div class="flex flex-col items-center gap-2 text-gray-300">
-                    <svg class="w-12 h-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <rect x="3" y="5" width="18" height="14" rx="2" />
-                      <circle cx="8.5" cy="10" r="1.5" />
-                      <path d="M21 16l-5-5-4 4-2-2-5 5" />
-                    </svg>
-                    <span class="text-sm">No image provided</span>
-                  </div>
-                </ng-template>
               </div>
+              <div class="p-5">
+                <p class="text-xs text-gray-400 mb-2">ID: {{ request.displayRequestId }}</p>
+                <div class="flex items-center gap-2 mb-3 flex-wrap">
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" [ngClass]="statusBadgeClass(request.status)">
+                    {{ request.status }}
+                  </span>
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" [ngClass]="typeBadgeClass(request.entityType)">
+                    {{ request.entityType }}
+                  </span>
+                  <span *ngIf="request.placeType || request.stayType" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+                    {{ request.placeType }}<ng-container *ngIf="request.placeType && request.stayType"> — </ng-container>{{ request.stayType }}
+                  </span>
+                </div>
+                <h2 class="text-xl font-bold text-gray-900 mb-3">{{ request.title }}</h2>
+                <div class="space-y-1.5 text-sm text-gray-600">
+                  <div *ngIf="request.destinationName || request.locationName" class="flex items-start gap-2">
+                    <svg class="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="10" r="3" /><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                    </svg>
+                    <span>
+                      {{ request.destinationName }}<ng-container *ngIf="request.destinationName && request.locationName"> › </ng-container>{{ request.locationName }}
+                    </span>
+                  </div>
+                  <div *ngIf="request.address" class="flex items-start gap-2">
+                    <svg class="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                    </svg>
+                    <span>{{ request.address }}</span>
+                  </div>
+                  <div *ngIf="request.latitude !== null && request.latitude !== undefined && request.longitude !== null && request.longitude !== undefined" class="flex items-start gap-2">
+                    <svg class="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
+                      <path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" />
+                    </svg>
+                    <span class="font-mono text-xs">{{ request.latitude | number:'1.5-5' }}, {{ request.longitude | number:'1.5-5' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-              <div class="p-6">
-                <h2 class="text-sm font-bold text-gray-800 mb-2">Description</h2>
-                <p class="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
-                  {{ request.description || request.previewText || 'No description was provided.' }}
+            <!-- Description -->
+            <div *ngIf="request.description || request.previewText" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Description</h3>
+              <p class="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed"
+                [class.line-clamp-5]="isDescriptionLong && !descriptionExpanded">{{ request.description || request.previewText }}</p>
+              <button *ngIf="isDescriptionLong" type="button" (click)="descriptionExpanded = !descriptionExpanded"
+                class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-transparent border-none cursor-pointer p-0">
+                {{ descriptionExpanded ? 'Show less' : 'Show more' }}
+              </button>
+            </div>
+
+            <!-- Contact -->
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Contact</h3>
+              <div class="space-y-2 text-sm text-gray-700">
+                <p>
+                  <span class="text-gray-400">Phone:</span>
+                  <span *ngIf="request.phoneNumber" class="ml-1">{{ request.phoneNumber }}</span>
+                  <span *ngIf="!request.phoneNumber" class="ml-1 text-gray-400 italic">Not provided</span>
+                </p>
+                <p>
+                  <span class="text-gray-400">Email:</span>
+                  <span *ngIf="request.contactEmail" class="ml-1">{{ request.contactEmail }}</span>
+                  <span *ngIf="!request.contactEmail" class="ml-1 text-gray-400 italic">Not provided</span>
+                </p>
+                <p *ngIf="!request.stayType">
+                  <span class="text-gray-400">Website:</span>
+                  <a *ngIf="request.website" [href]="request.website" target="_blank" rel="noopener" class="text-blue-600 hover:underline ml-1">{{ request.website }}</a>
+                  <span *ngIf="!request.website" class="ml-1 text-gray-400 italic">Not provided</span>
                 </p>
               </div>
-            </section>
+            </div>
 
-            <section *ngIf="submittedMediaImages.length" class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h2 class="text-sm font-bold text-gray-800 mb-4">Submitted Media</h2>
+            <!-- Booking Partners (accommodation only) -->
+            <div *ngIf="request.stayType" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Booking Partners</h3>
+              <ng-container *ngIf="request.bookingPartners?.length; else noBookingPartners">
+                <div class="flex flex-col gap-1.5">
+                  <div *ngFor="let partner of request.bookingPartners" class="flex items-center gap-1.5 text-sm">
+                    <span class="font-medium text-gray-700 flex-none">{{ partnerDisplayName(partner.id) }}:</span>
+                    <a *ngIf="partner.url" [href]="partner.url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline truncate">{{ partner.url }}</a>
+                    <span *ngIf="!partner.url" class="text-gray-400 italic">Not provided</span>
+                  </div>
+                </div>
+              </ng-container>
+              <ng-template #noBookingPartners>
+                <p class="text-sm text-gray-400 italic">Not provided</p>
+              </ng-template>
+            </div>
+
+            <!-- Proof of Ownership -->
+            <div *ngIf="ownershipProofHref || request.hasOwnershipProofDocument" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Proof of Ownership</h3>
+              <ng-container *ngIf="ownershipProofHref as proofHref; else proofMetadata">
+                <a
+                  [href]="proofHref"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                >
+                  <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                  </svg>
+                  {{ request.ownershipProofOriginalFileName || 'View proof document' }}
+                </a>
+              </ng-container>
+              <ng-template #proofMetadata>
+                <p class="text-sm text-gray-500">{{ request.ownershipProofOriginalFileName || 'Proof document uploaded' }}</p>
+              </ng-template>
+            </div>
+
+            <!-- Opening Hours (structured) -->
+            <div *ngIf="request.operatingHoursEnabled && hasDisplayableOperatingHours && request.operatingHours?.length" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Opening Hours</h3>
+              <p *ngIf="showsOpen24Hours" class="text-sm text-gray-700 leading-relaxed">{{ open24HoursLabel }}</p>
+              <div *ngIf="!showsOpen24Hours" class="flex flex-col">
+                <div *ngFor="let hour of request.operatingHours"
+                     class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                  <span class="text-sm font-medium text-gray-700 w-28 flex-none">{{ hour.dayOfWeek }}</span>
+                  <span *ngIf="hour.isOpen" class="text-sm text-gray-600 text-right">{{ hour.openTime }} – {{ hour.closeTime }}</span>
+                  <span *ngIf="!hour.isOpen" class="text-xs font-semibold text-red-500 text-right">Closed</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Opening Hours (plain text) -->
+            <div *ngIf="!request.operatingHoursEnabled && request.openingHours" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Opening Hours</h3>
+              <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ request.openingHours }}</p>
+            </div>
+
+            <!-- Tags -->
+            <div *ngIf="request.tags?.length" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Tags</h3>
+              <div class="flex flex-wrap gap-1.5">
+                <span *ngFor="let tag of request.tags" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                  {{ tag }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Amenities -->
+            <div *ngIf="allAmenities.length" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Amenities</h3>
+              <div class="flex flex-wrap gap-1.5">
+                <span *ngFor="let amenity of allAmenities" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                  {{ amenity }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Photos -->
+            <div *ngIf="submittedMediaImages.length" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Photos</h3>
               <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <button
                   *ngFor="let image of submittedMediaPreviewImages; let i = index"
                   type="button"
-                  class="relative aspect-square rounded-lg overflow-hidden border border-gray-100 bg-gray-50 cursor-pointer group p-0"
+                  class="relative aspect-square rounded-lg overflow-hidden border border-gray-100 bg-gray-50 cursor-pointer group p-0 focus:outline-none"
                   (click)="openSubmittedMedia(i)"
                 >
-                  <img [src]="image.url" [alt]="image.altText || request.title + ' submitted photo ' + (i + 1)" class="w-full h-full object-cover transition-transform group-hover:scale-105" />
-                  <span class="absolute left-2 bottom-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
-                    {{ image.imageRole || 'photo' }}
+                  <img [src]="image.url" [alt]="image.altText || request.title + ' photo ' + (i + 1)" class="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" />
+                  <div class="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200"></div>
+                  <span *ngIf="image.imageRole" class="absolute left-2 bottom-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white pointer-events-none">
+                    {{ image.imageRole }}
                   </span>
-                  <span
+                  <div
                     *ngIf="i === submittedMediaPreviewImages.length - 1 && submittedMediaOverflowCount > 0"
-                    class="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-bold text-white"
+                    class="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg"
                   >
-                    +{{ submittedMediaOverflowCount }}
-                  </span>
+                    <span class="text-white text-lg font-bold">+{{ submittedMediaOverflowCount }}</span>
+                  </div>
                 </button>
               </div>
-            </section>
+            </div>
 
-            <section *ngIf="request.source === 'Contribution'" class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h2 class="text-sm font-bold text-gray-800 mb-4">Contribution Details</h2>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="detail-field">
-                  <span>Contribution Type</span>
-                  <strong>{{ request.contributionType || 'Contribution' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Place Type</span>
-                  <strong>{{ request.placeType || request.stayType || 'Not specified' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Destination</span>
-                  <strong>{{ request.destinationName || 'Not specified' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Location</span>
-                  <strong>{{ request.locationName || 'Not specified' }}</strong>
-                </div>
-                <div class="detail-field md:col-span-2">
-                  <span>Address</span>
-                  <strong>{{ request.address || 'Not specified' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Coordinates</span>
-                  <strong *ngIf="request.latitude !== null && request.latitude !== undefined && request.longitude !== null && request.longitude !== undefined; else noCoords">
-                    {{ request.latitude | number:'1.5-5' }}, {{ request.longitude | number:'1.5-5' }}
-                  </strong>
-                  <ng-template #noCoords><strong>Not specified</strong></ng-template>
-                </div>
-                <div class="detail-field">
-                  <span>Website</span>
-                  <strong>{{ request.website || 'Not specified' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Phone</span>
-                  <strong>{{ request.phoneNumber || 'Not specified' }}</strong>
-                </div>
-                <div class="detail-field">
-                  <span>Email</span>
-                  <strong>{{ request.contactEmail || 'Not specified' }}</strong>
-                </div>
-                <div class="detail-field md:col-span-2">
-                  <span>Proof of Ownership</span>
-                  <strong>
-                    <ng-container *ngIf="ownershipProofHref as proofHref; else proofMetadata">
-                      <a
-                        [href]="proofHref"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="text-blue-700 hover:text-blue-800 underline underline-offset-2"
-                      >
-                        {{ request.ownershipProofOriginalFileName || 'View proof document' }}
-                      </a>
-                    </ng-container>
-                    <ng-template #proofMetadata>
-                      {{ request.hasOwnershipProofDocument ? (request.ownershipProofOriginalFileName || 'Proof document uploaded') : 'Not provided' }}
-                    </ng-template>
-                  </strong>
-                </div>
-              </div>
-
-              <div *ngIf="request.operatingHoursEnabled && request.operatingHours?.length" class="mt-5">
-                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Opening Hours</h3>
-                <div class="flex flex-col">
-                  <div *ngFor="let hour of request.operatingHours"
-                       class="flex items-center py-1.5 gap-8 border-b border-gray-100 last:border-0">
-                    <span class="text-sm font-medium text-gray-700 w-28 flex-none">{{ hour.dayOfWeek }}</span>
-                    <span *ngIf="hour.isOpen" class="text-sm text-gray-600">{{ hour.openTime }} – {{ hour.closeTime }}</span>
-                    <span *ngIf="!hour.isOpen" class="text-xs font-semibold text-red-500">Closed</span>
-                  </div>
-                </div>
-              </div>
-              <div *ngIf="!request.operatingHoursEnabled && request.openingHours" class="mt-5">
-                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Opening Hours</h3>
-                <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ request.openingHours }}</p>
-              </div>
-
-              <div *ngIf="request.tags?.length" class="mt-5">
-                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Tags</h3>
-                <div class="flex flex-wrap gap-2">
-                  <span *ngFor="let tag of request.tags" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-50 text-gray-600 border border-gray-200">
-                    {{ tag }}
-                  </span>
-                </div>
-              </div>
-
-              <div *ngIf="allAmenities.length" class="mt-5">
-                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Amenities</h3>
-                <div class="flex flex-wrap gap-2">
-                  <span *ngFor="let amenity of allAmenities" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
-                    {{ amenity }}
-                  </span>
-                </div>
-              </div>
-
-              <div *ngIf="request.bookingPartners?.length" class="mt-5">
-                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Booking Partners</h3>
-                <div class="flex flex-col gap-2">
-                  <div *ngFor="let partner of request.bookingPartners" class="text-sm text-gray-600">
-                    <span class="font-semibold text-gray-800">{{ partner.id }}</span>
-                    <span *ngIf="partner.url" class="text-gray-400"> - {{ partner.url }}</span>
-                  </div>
-                </div>
-              </div>
-            </section>
+            </ng-container>
+            <!-- END regular contribution layout -->
 
           </div>
 
-          <aside class="flex flex-col gap-4">
-            <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-              <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{{ decisionCardTitle }}</h2>
-              <p class="text-sm text-gray-600 leading-relaxed mb-4">{{ decisionHelperText }}</p>
+          <!-- Sidebar -->
+          <div class="space-y-4">
 
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Moderator Note</label>
+            <!-- Review Decision (pending) -->
+            <section *ngIf="request.status === 'Pending'" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Review Decision</h2>
+              <label class="block text-xs font-medium text-gray-600 mb-1.5">Moderator Note</label>
               <textarea
                 [(ngModel)]="reviewerNotes"
-                rows="4"
-                [disabled]="request.status !== 'Pending' || processing"
-                class="w-full border border-gray-200 rounded-lg p-3 text-sm outline-none resize-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
+                rows="3"
+                [disabled]="processing"
+                class="w-full rounded-xl border border-gray-200 text-sm px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-300 mb-1 disabled:bg-gray-50 disabled:text-gray-400"
                 placeholder="Optional internal moderation note"
               ></textarea>
-              <p class="text-xs text-gray-400 mt-1">This note is visible only to admins/moderators.</p>
-
-              <div class="flex gap-2 mt-4">
+              <p class="text-xs text-gray-400 mb-3">This note is visible only to admins/moderators.</p>
+              <div class="flex gap-2">
                 <button
                   type="button"
                   (click)="startApproveDecision()"
                   [disabled]="!canModerate"
-                  class="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-blue-700 hover:bg-blue-800 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed border-none cursor-pointer"
+                  class="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors"
                 >
-                  {{ processing ? 'Working...' : approveButtonLabel }}
+                  {{ processing ? 'Processing...' : approveButtonLabel }}
                 </button>
                 <button
                   type="button"
                   (click)="startRejectDecision()"
                   [disabled]="!canModerate"
-                  class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white border text-red-600 border-red-200 hover:bg-red-50 disabled:text-gray-300 disabled:border-gray-100 disabled:cursor-not-allowed cursor-pointer"
+                  class="flex-1 rounded-xl py-2.5 text-sm font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 disabled:opacity-50 transition-colors"
                 >
-                  {{ processing ? 'Working...' : rejectButtonLabel }}
+                  {{ processing ? 'Processing...' : rejectButtonLabel }}
                 </button>
               </div>
-
-              <p *ngIf="request.status !== 'Pending'" class="text-xs text-gray-400 mt-3">
-                This request has already been reviewed.
-              </p>
             </section>
 
-            <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+            <!-- Decision result (approved / rejected) -->
+            <section *ngIf="request.status !== 'Pending'" class="bg-white rounded-2xl shadow-sm p-5"
+              [ngClass]="request.status === 'Approved' ? 'border border-green-200' : 'border border-red-200'">
+              <div class="flex items-center gap-2 mb-3">
+                <ng-container *ngIf="request.status === 'Approved'">
+                  <svg class="w-4 h-4 text-green-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <h2 class="text-xs font-semibold text-green-700 uppercase tracking-wider">Approved</h2>
+                </ng-container>
+                <ng-container *ngIf="request.status === 'Rejected'">
+                  <svg class="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                  <h2 class="text-xs font-semibold text-red-600 uppercase tracking-wider">Rejected</h2>
+                </ng-container>
+              </div>
+              <ng-container *ngIf="request.decisionNote">
+                <div class="rounded-xl px-3 py-2.5 text-sm text-gray-700 leading-relaxed"
+                  [ngClass]="request.status === 'Approved' ? 'bg-green-50' : 'bg-red-50'">
+                  {{ request.decisionNote }}
+                </div>
+              </ng-container>
+              <p *ngIf="!request.decisionNote" class="text-xs text-gray-400 italic">No note was added.</p>
+            </section>
+
+            <!-- Submitted By -->
+            <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Submitted By</h2>
               <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center text-sm font-bold text-gray-600">
+                <div class="w-10 h-10 rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
                   {{ request.submittedByInitials || 'U' }}
                 </div>
                 <div class="min-w-0">
@@ -271,18 +502,16 @@
               </div>
             </section>
 
-            <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+            <!-- Region Scope -->
+            <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Region Scope</h2>
               <div class="detail-field">
                 <span>Active Region</span>
                 <strong>{{ request.regionDisplayName }}</strong>
               </div>
-              <div class="detail-field mt-3">
-                <span>Backend Source</span>
-                <strong>{{ request.source }}</strong>
-              </div>
             </section>
-          </aside>
+
+          </div>
         </div>
       </ng-container>
     </div>

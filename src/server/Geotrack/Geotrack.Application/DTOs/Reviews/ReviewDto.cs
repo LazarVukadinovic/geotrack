@@ -9,6 +9,8 @@ public class ReviewDto
     public string AuthorName { get; set; } = string.Empty;
     public string? AvatarUrl { get; set; }
     public int Rating { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public string? TimeAgo { get; set; }
     public string Body { get; set; } = string.Empty;
     public int HelpfulCount { get; set; }
@@ -25,6 +27,7 @@ public class PagedReviewsResponseDto
     public int Take { get; set; }
     public int NextSkip { get; set; }
     public bool HasMore { get; set; }
+    public bool IsEntityOwnedByCurrentUser { get; set; }
 }
 
 public class CreateReviewDto

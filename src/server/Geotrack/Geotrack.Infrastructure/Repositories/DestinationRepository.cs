@@ -1,3 +1,4 @@
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Reviews;
@@ -8,25 +9,35 @@ namespace Geotrack.Infrastructure.Repositories;
 public class DestinationRepository : Repository<Destination>, IDestinationRepository
 {
     private readonly AppDbContext _context;
+
     public DestinationRepository(AppDbContext context) : base(context)
     {
         _context = context;
     }
+
     public async Task<Destination?> GetWithDetailsAsync(int destinationId)
     {
         return await _context.Destinations
             .AsNoTracking()
             .Include(d => d.DestinationType)
             .Include(d => d.Region)
+            .Include(d => d.Images)
             .Include(d => d.DestinationTags)
                 .ThenInclude(dt => dt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
             .Include(d => d.Locations)
+                .ThenInclude(l => l.Images)
+            .Include(d => d.Locations)
+                .ThenInclude(l => l.LocationReviews)
+            .Include(d => d.Locations)
                 .ThenInclude(l => l.LocationTags)
                 .ThenInclude(lt => lt.Tag)
                     .ThenInclude(tag => tag.TagType)
                         .ThenInclude(tagType => tagType!.PlaceTypes)
+            .Include(d => d.Locations)
+                .ThenInclude(l => l.Places)
+                    .ThenInclude(p => p.Images)
             .Include(d => d.Locations)
                 .ThenInclude(l => l.Places)
                 .ThenInclude(p => p.PlaceTags)
@@ -36,12 +47,83 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .AsSplitQuery()
             .FirstOrDefaultAsync(d => d.Id == destinationId);
     }
+
+    public async Task<List<DestinationRelatedItemDto>> GetSimilarPublishedDestinationsInTerritoryAsync(int destinationId, int take)
+    {
+        if (take <= 0)
+            return new List<DestinationRelatedItemDto>();
+
+        var source = await _context.Destinations
+            .AsNoTracking()
+            .Where(d => d.Id == destinationId)
+            .Select(d => new
+            {
+                d.DestinationTypeId,
+                TerritoryId = d.Region.TerritoryId
+            })
+            .FirstOrDefaultAsync();
+
+        if (source == null)
+            return new List<DestinationRelatedItemDto>();
+
+        var tagIds = await _context.DestinationTags
+            .AsNoTracking()
+            .Where(dt => dt.DestinationId == destinationId)
+            .Select(dt => dt.TagId)
+            .Distinct()
+            .ToListAsync();
+
+        if (tagIds.Count == 0)
+            return new List<DestinationRelatedItemDto>();
+
+        const int minimumSharedTags = 3;
+
+        return await _context.Destinations
+            .AsNoTracking()
+            .Where(d =>
+                d.Id != destinationId &&
+                d.Status == "Published" &&
+                d.Region.TerritoryId == source.TerritoryId)
+            .Select(d => new
+            {
+                Destination = d,
+                SameType = d.DestinationTypeId == source.DestinationTypeId,
+                SharedTagCount = d.DestinationTags.Count(dt => tagIds.Contains(dt.TagId)),
+                AverageRating = d.DestinationReviews
+                    .Select(review => (double?)review.Rating)
+                    .Average() ?? 0
+            })
+            .Where(x => x.SharedTagCount >= minimumSharedTags)
+            .OrderByDescending(x => x.SameType)
+            .ThenByDescending(x => x.SharedTagCount)
+            .ThenByDescending(x => x.AverageRating)
+            .ThenBy(x => x.Destination.Name)
+            .Take(take)
+            .Select(x => new DestinationRelatedItemDto
+            {
+                Id = x.Destination.Id,
+                Name = x.Destination.Name,
+                Description = string.IsNullOrWhiteSpace(x.Destination.Summary)
+                    ? x.Destination.Description
+                    : x.Destination.Summary,
+                Image = x.Destination.Images
+                    .OrderBy(image => image.ImageRole == "card" ? 0 : image.ImageRole == "cover" ? 1 : 2)
+                    .ThenBy(image => image.SortOrder)
+                    .Select(image => image.Url)
+                    .FirstOrDefault(),
+                AverageRating = x.AverageRating
+            })
+            .ToListAsync();
+    }
+
+
     public async Task<bool> IsDestinationSavedByUserAsync(int destinationId, int userId)
     {
         return await _context.CollectionItems
             .AnyAsync(ci => ci.DestinationId == destinationId &&
             ci.Collection.UserId == userId);
     }
+
     public async Task<List<int>> GetSavedCollectionIdsByUserAsync(int destinationId, int userId)
     {
         return await _context.CollectionItems
@@ -51,6 +133,7 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .Distinct()
             .ToListAsync();
     }
+
     public async Task<List<DestinationReview>> GetReviewsByDestinationIdAsync(int destinationId, int skip, int take)
     {
         return await _context.DestinationReviews
@@ -62,6 +145,7 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .Take(take)
             .ToListAsync();
     }
+
     public async Task<int> CountReviewsByDestinationIdAsync(int destinationId)
     {
         return await _context.DestinationReviews
@@ -77,12 +161,14 @@ public class DestinationRepository : Repository<Destination>, IDestinationReposi
             .Select(r => (double?)r.Rating)
             .AverageAsync();
     }
+
     public async Task<bool> HasUserReviewedDestinationAsync(int destinationId, int userId)
     {
         return await _context.DestinationReviews
             .AnyAsync(r => r.DestinationId == destinationId && r.UserId ==
             userId);
     }
+
     public async Task AddReviewAsync(DestinationReview review)
     {
         await _context.DestinationReviews.AddAsync(review);

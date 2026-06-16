@@ -1,4 +1,5 @@
-﻿using Geotrack.Application.DTOs.Locations;
+﻿using Geotrack.Application.DTOs.Common;
+using Geotrack.Application.DTOs.Locations;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
@@ -40,6 +41,9 @@ public class LocationService : ILocationService
             savedCollectionIds = await _locationRepository.GetSavedCollectionIdsByUserAsync(locationId, userId.Value);
         }
 
+        var similarLocations = await _locationRepository.GetSimilarPublishedLocationsInTerritoryAsync(locationId, 6);
+        var relatedEvents = await _locationRepository.GetPublishedEventsForLocationAsync(locationId, 6);
+
         return new GetLocationDetailsResponseDto
         {
             Id = location.Id,
@@ -56,7 +60,10 @@ public class LocationService : ILocationService
             ReviewsCount = reviewsCount,
             IsSaved = isSaved,
             SavedCollectionIds = savedCollectionIds,
-            Sections = BuildLocationPreviewSections(location)
+            Images = location.Images.ToPublicEntityImageDtos(),
+            Sections = BuildLocationPreviewSections(location),
+            SimilarLocations = similarLocations,
+            RelatedEvents = relatedEvents.Select(MapEventItem).ToList()
         };
     }
 
@@ -286,11 +293,23 @@ public class LocationService : ILocationService
 
     private static LocationSectionPlaceItemDto MapPlaceItem(Place place)
     {
+        var averageRating = place.PlaceReviews.Count > 0
+            ? Math.Round(place.PlaceReviews.Average(review => review.Rating), 1)
+            : (double?)null;
+
         return new LocationSectionPlaceItemDto
         {
             Id = place.Id,
             Name = place.Name,
-            LocationId = place.LocationId
+            Image = PickCardImage(place.Images),
+            LocationId = place.LocationId,
+            CategoryLabel = string.IsNullOrWhiteSpace(place.PlaceType?.Name) ? null : place.PlaceType.Name.Trim(),
+            AverageRating = averageRating,
+            Tags = place.PlaceTags
+                .Where(pt => pt.Tag != null && !string.IsNullOrWhiteSpace(pt.Tag.Name))
+                .Select(pt => pt.Tag!.Name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
         };
     }
 
@@ -300,11 +319,22 @@ public class LocationService : ILocationService
         {
             Id = @event.Id,
             Name = @event.Name,
+            Image = PickCardImage(@event.Images),
             LocationId = @event.LocationId,
             PlaceId = @event.PlaceId,
             StartDate = @event.StartDate,
             EndDate = @event.EndDate
         };
+    }
+
+    private static string? PickCardImage(IEnumerable<EntityImage> images)
+    {
+        return images
+            .Where(image => !string.IsNullOrWhiteSpace(image.Url))
+            .OrderBy(image => image.ImageRole == "cover" ? 0 : image.ImageRole == "card" ? 1 : 2)
+            .ThenBy(image => image.SortOrder)
+            .Select(image => image.Url)
+            .FirstOrDefault();
     }
 
     private static void EnsurePublished(Location location)

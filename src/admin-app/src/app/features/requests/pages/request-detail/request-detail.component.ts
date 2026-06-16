@@ -13,6 +13,12 @@ import { RegionalManagerSidebarStateService } from '../../../../core/services/re
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { RegionalAssignedRegion } from '../../../../core/models/dashboard.model';
 import { PlaceContributionImage, ReviewRequestDetail } from '../../../../core/models/review-request.model';
+import {
+  OPEN_24_HOURS_LABEL,
+  hasDisplayableOperatingHours,
+  isOpen24HoursSchedule,
+  isOpen24HoursText,
+} from '../../../../shared/utils/opening-hours';
 
 interface DetailLoadOptions {
   allowRegionFallback: boolean;
@@ -41,6 +47,14 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
   authRequired = false;
   reviewerNotes = '';
   processing = false;
+  descriptionExpanded = false;
+
+  private static readonly descriptionCollapseThreshold = 300;
+
+  get isDescriptionLong(): boolean {
+    const text = this.request?.description || this.request?.previewText || '';
+    return text.length > RequestDetailComponent.descriptionCollapseThreshold;
+  }
 
   private detailRequestSequence = 0;
   private regionSubscription: Subscription | null = null;
@@ -96,12 +110,16 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     return 'Approve applies the submitted contribution. Reject closes it without applying changes.';
   }
 
+  get isOwnershipClaim(): boolean {
+    return this.request?.contributionType === 'ClaimOwnership';
+  }
+
   get approveButtonLabel(): string {
-    return 'Approve Contribution';
+    return this.isOwnershipClaim ? 'Approve Claim' : 'Approve Contribution';
   }
 
   get rejectButtonLabel(): string {
-    return 'Reject Contribution';
+    return this.isOwnershipClaim ? 'Reject Claim' : 'Reject Contribution';
   }
 
   get primaryImageUrl(): string | null {
@@ -136,6 +154,31 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     ];
 
     return [...new Set(values.filter(Boolean))];
+  }
+
+  get hasDisplayableOperatingHours(): boolean {
+    return hasDisplayableOperatingHours(this.request?.operatingHours ?? []);
+  }
+
+  get showsOpen24Hours(): boolean {
+    const hours = this.request?.operatingHours ?? [];
+    return isOpen24HoursSchedule(hours) || isOpen24HoursText(this.request?.openingHours);
+  }
+
+  readonly open24HoursLabel = OPEN_24_HOURS_LABEL;
+
+  get ownershipGalleryImages(): PlaceContributionImage[] {
+    return (this.request?.images ?? [])
+      .filter(image => !!image.url)
+      .sort((a, b) => this.imageRoleSort(a.imageRole) - this.imageRoleSort(b.imageRole) || a.sortOrder - b.sortOrder || a.id - b.id);
+  }
+
+  get ownershipGalleryPreviewImages(): PlaceContributionImage[] {
+    return this.ownershipGalleryImages.slice(0, 4);
+  }
+
+  get ownershipGalleryOverflowCount(): number {
+    return Math.max(0, this.ownershipGalleryImages.length - 4);
   }
 
   get ownershipProofHref(): string | null {
@@ -264,10 +307,30 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  partnerDisplayName(id: string): string {
+    switch (id.toLowerCase()) {
+      case 'booking': return 'Booking.com';
+      case 'airbnb': return 'Airbnb';
+      case 'hotel': return 'Official Website';
+      default: return id;
+    }
+  }
+
   openSubmittedMedia(index: number): void {
     const images = this.submittedMediaImages.map((image, imageIndex) => ({
       url: image.url,
       name: image.caption || image.altText || `Submitted photo ${imageIndex + 1}`,
+    }));
+
+    if (images.length === 0) return;
+
+    this.lightboxService.open(images, Math.min(index, images.length - 1));
+  }
+
+  openOwnershipGallery(index: number): void {
+    const images = this.ownershipGalleryImages.map((image, imageIndex) => ({
+      url: image.url,
+      name: image.caption || image.altText || `Photo ${imageIndex + 1}`,
     }));
 
     if (images.length === 0) return;
@@ -549,6 +612,9 @@ export class RequestDetailComponent implements OnInit, OnDestroy {
   }
 
   private actionSuccessMessage(action: DecisionAction): string {
+    if (this.isOwnershipClaim) {
+      return action === 'approve' ? 'Ownership claim approved.' : 'Ownership claim rejected.';
+    }
     return action === 'approve' ? 'Contribution approved.' : 'Contribution rejected.';
   }
 

@@ -50,6 +50,7 @@ export interface DestinationListItem {
   analyticsReviewAvg?: number;
   analyticsReviewCount?: number;
   analyticsTrend?: 'up' | 'stable' | 'down';
+  canDelete?: boolean;
 }
 
 export interface DestinationsPage {
@@ -111,7 +112,7 @@ export class DestinationsListService {
     payload: RegionalDestinationUpdateRequest,
   ): Observable<RegionalDestinationDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalDestinationDetailDto>(`${this.endpoint}/${destinationId}`, payload, { params });
+    return this.http.put<RegionalDestinationDetailDto>(`${this.endpoint}/${destinationId}`, this.buildUpdateFormData(payload), { params });
   }
 
   getDestinationTags(): Observable<RegionalDestinationTagDto[]> {
@@ -132,6 +133,19 @@ export class DestinationsListService {
     return this.http.delete<void>(`${this.endpoint}/${destinationId}`, { params });
   }
 
+  private buildUpdateFormData(payload: RegionalDestinationUpdateRequest): FormData {
+    const { galleryImageFiles, ...request } = payload;
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(request));
+
+    for (const file of galleryImageFiles ?? []) {
+      if (file) {
+        formData.append('galleryImages', file);
+      }
+    }
+
+    return formData;
+  }
 
   private buildCreateFormData(payload: RegionalDestinationCreateRequest): FormData {
     const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
@@ -145,7 +159,7 @@ export class DestinationsListService {
     formData.append('coverImage', coverImageFile);
 
     for (const file of galleryImageFiles ?? []) {
-      formData.append('galleryImages', file);
+      if (file) formData.append('galleryImages', file);
     }
 
     return formData;
@@ -182,6 +196,7 @@ export class DestinationsListService {
       lat: (dto as RegionalDestinationDetailDto).latitude,
       lng: (dto as RegionalDestinationDetailDto).longitude,
       tags: (dto.tags ?? []).map(tag => tag.name),
+      canDelete: (dto as RegionalDestinationDetailDto).canDelete ?? true,
     };
 
     this.cache.set(id, item);

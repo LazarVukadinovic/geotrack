@@ -10,6 +10,10 @@ using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
+using Coordinate = NetTopologySuite.Geometries.Coordinate;
+using Geometry = NetTopologySuite.Geometries.Geometry;
+using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
+using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -25,8 +29,10 @@ public class PlaceContributionService : IPlaceContributionService
     private const double MaxContributionLocationMatchDistanceKm = 15d;
     private const double MaxContributionDestinationMatchDistanceKm = 40d;
     private const string ManagedContributionMediaPrefix = "/media/uploads/contributions/";
+    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
     private static readonly HashSet<string> LegacyOwnershipProofRequiredPlaceTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "stay",
@@ -810,6 +816,48 @@ public class PlaceContributionService : IPlaceContributionService
         return new ContributionRegionOptionsDto { Regions = regions };
     }
 
+    public async Task<ContentManagerDestinationCenterValidationResultDto> ValidateDestinationCenterAsync(
+        int regionId,
+        double latitude,
+        double longitude)
+    {
+        if (!HasUsableCoordinates(latitude, longitude))
+        {
+            return new ContentManagerDestinationCenterValidationResultDto
+            {
+                IsAllowed = false,
+                Message = "Select a valid destination centre on the map."
+            };
+        }
+
+        var boundary = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.Id == regionId)
+            .Select(region => EF.Property<Geometry?>(region, BoundaryGeometryPropertyName))
+            .SingleOrDefaultAsync();
+
+        if (boundary is null || boundary.IsEmpty || !boundary.IsValid)
+        {
+            return new ContentManagerDestinationCenterValidationResultDto
+            {
+                IsAllowed = false,
+                Message = "The selected region does not have a valid boundary. Contact an administrator."
+            };
+        }
+
+        var point = Wgs84GeometryFactory.CreatePoint(new Coordinate(longitude, latitude));
+        point.SRID = 4326;
+        var isAllowed = boundary.Covers(point);
+
+        return new ContentManagerDestinationCenterValidationResultDto
+        {
+            IsAllowed = isAllowed,
+            Message = isAllowed
+                ? "Destination centre is inside the selected region."
+                : "Destination centre must be inside the selected region."
+        };
+    }
+
     public async Task<ContributionLocationOptionsDto> GetDestinationLocationOptionsAsync(int destinationId)
     {
         var destination = await _db.Destinations
@@ -875,6 +923,7 @@ public class PlaceContributionService : IPlaceContributionService
 
         detail.SuggestedRegionId = suggestedRegion.Id;
         detail.SuggestedRegionName = suggestedRegion.Name;
+        detail.RegionDisplayName ??= BuildContributionRegionDisplayName(suggestedRegion.Name, suggestedRegion.TerritoryName);
     }
 
     public async Task<PlaceContributionDetailDto> ApproveForContentManagerAsync(
@@ -883,6 +932,8 @@ public class PlaceContributionService : IPlaceContributionService
         int regionId,
         int? existingDestinationId,
         string? newDestinationName,
+        double? newDestinationLatitude,
+        double? newDestinationLongitude,
         string? newLocationName,
         string? note)
     {
@@ -900,6 +951,11 @@ public class PlaceContributionService : IPlaceContributionService
         var managesAll = await ReviewerManagesAllAsync(reviewerUserId);
         if (!isContentManager && !managesAll)
             throw new UnauthorizedAccessException("Only content managers can use this approval method.");
+
+        // Claim-ownership and update contributions reference an existing place that already has
+        // a location assigned, so they bypass the region/destination/location assignment flow.
+        if (contribution.Type is PlaceContributionType.ClaimOwnership or PlaceContributionType.UpdatePlace)
+            return await ApproveExistingPlaceForContentManagerAsync(contribution, reviewerUserId, note, DateTime.UtcNow);
 
         var region = await _db.Regions
             .AsNoTracking()
@@ -932,14 +988,27 @@ public class PlaceContributionService : IPlaceContributionService
                 ?? NormalizeOptional(contribution.City)
                 ?? region.Name;
 
+            if (!newDestinationLatitude.HasValue || !newDestinationLongitude.HasValue ||
+                !HasUsableCoordinates(newDestinationLatitude.Value, newDestinationLongitude.Value))
+            {
+                throw new InvalidOperationException("Confirm the new destination centre on the map before approving.");
+            }
+
+            var centreValidation = await ValidateDestinationCenterAsync(
+                regionId,
+                newDestinationLatitude.Value,
+                newDestinationLongitude.Value);
+            if (!centreValidation.IsAllowed)
+                throw new InvalidOperationException(centreValidation.Message);
+
             var destinationType = await ResolveDestinationTypeAsync();
             destination = new Destination
             {
                 Name = destName,
                 SearchText = destName.ToLowerInvariant(),
                 Description = string.Empty,
-                Latitude = contribution.Latitude.Value,
-                Longitude = contribution.Longitude.Value,
+                Latitude = newDestinationLatitude.Value,
+                Longitude = newDestinationLongitude.Value,
                 RegionId = regionId,
                 DestinationTypeId = destinationType.Id,
                 Status = "Published",
@@ -1009,6 +1078,54 @@ public class PlaceContributionService : IPlaceContributionService
         if (locationIsNew)
             result.CreatedLocationId = location.Id;
         return result;
+    }
+
+    /// <summary>
+    /// Approves a contribution that targets an existing place (claim-ownership or update) on behalf
+    /// of a content manager. These contributions already carry a place and location, so the region/
+    /// destination/location assignment used for new places does not apply here.
+    /// </summary>
+    private async Task<PlaceContributionDetailDto> ApproveExistingPlaceForContentManagerAsync(
+        PlaceContribution contribution,
+        int reviewerUserId,
+        string? note,
+        DateTime now)
+    {
+        if (contribution.Type == PlaceContributionType.UpdatePlace)
+        {
+            if (!contribution.PlaceId.HasValue)
+                throw new InvalidOperationException("Update contribution is missing target place.");
+
+            await ApplyUpdateToExistingPlaceAsync(contribution, contribution.PlaceId.Value, now);
+        }
+        else if (contribution.Type == PlaceContributionType.ClaimOwnership)
+        {
+            if (!contribution.PlaceId.HasValue)
+                throw new InvalidOperationException("Ownership claim is missing target place.");
+
+            var targetPlace = await LoadOwnershipTargetPlaceAsync(contribution.PlaceId.Value)
+                ?? throw new InvalidOperationException("The place you are trying to claim does not exist.");
+
+            await BackfillMissingOwnershipSnapshotAsync(contribution, targetPlace, now);
+            await ApplyUpdateToExistingPlaceAsync(contribution, contribution.PlaceId.Value, now);
+            await EnsureUserPlaceAsync(contribution.UserId, contribution.PlaceId.Value, now);
+        }
+        else
+        {
+            throw new InvalidOperationException("Only claim-ownership and update contributions are supported here.");
+        }
+
+        contribution.Status = PlaceContributionStatus.Approved;
+        contribution.ReviewedByUserId = reviewerUserId;
+        contribution.ReviewedAt = now;
+        contribution.ReviewNote = NormalizeOptional(note);
+        contribution.UpdatedAt = now;
+
+        await _notificationService.AddContributionDecisionNotificationAsync(contribution);
+        await _db.SaveChangesAsync();
+
+        var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
+        return MapDetail(saved, includeReviewNote: true);
     }
 
     public async Task AddDestinationCardImageAsync(int destinationId, byte[] imageBytes)
@@ -1137,12 +1254,15 @@ public class PlaceContributionService : IPlaceContributionService
             .Include(c => c.Location)
                 .ThenInclude(l => l!.Destination)
                     .ThenInclude(d => d.Region)
+                        .ThenInclude(r => r.Territory)
             .Include(c => c.StayType)
             .Include(c => c.Images)
             .Include(c => c.User)
             .Include(c => c.Place)
                 .ThenInclude(p => p!.Location)
                     .ThenInclude(l => l.Destination)
+                        .ThenInclude(d => d.Region)
+                            .ThenInclude(r => r.Territory)
             .Include(c => c.Place)
                 .ThenInclude(p => p!.Images)
             .AsSplitQuery();
@@ -2715,7 +2835,8 @@ public class PlaceContributionService : IPlaceContributionService
             CheckOutTime = contribution.CheckOutTime,
             City = contribution.City ?? contribution.Location?.Name,
             Region = contribution.Region ?? contribution.Location?.Destination?.Region?.Name,
-            Country = contribution.Country ?? contribution.Location?.Destination?.Name,
+            Country = contribution.Country ?? contribution.Location?.Destination?.Region?.Territory?.Name,
+            RegionDisplayName = BuildPlaceRegionDisplayName(contribution),
             ImagePosition = GetCoverImage(contribution)?.ImagePosition ?? "50% 50%",
             ImageSize = GetCoverImage(contribution)?.ImageSize ?? "cover",
             CardImagePosition = GetCardImage(contribution)?.ImagePosition,
@@ -2963,7 +3084,7 @@ public class PlaceContributionService : IPlaceContributionService
         detail.CheckOutTime = place.Stay?.CheckOutTime;
         detail.City = place.Location?.Name ?? detail.City;
         detail.Region = place.Location?.Destination?.Region?.Name ?? detail.Region;
-        detail.Country = place.Location?.Destination?.Name ?? detail.Country;
+        detail.Country = place.Location?.Destination?.Region?.Territory?.Name ?? detail.Country;
         detail.ImagePosition = coverImage?.ImagePosition ?? "50% 50%";
         detail.ImageSize = coverImage?.ImageSize ?? "cover";
         detail.CardImagePosition = cardImage?.ImagePosition;
@@ -3232,6 +3353,26 @@ public class PlaceContributionService : IPlaceContributionService
             .ToList();
     }
 
+    private static string? BuildPlaceRegionDisplayName(PlaceContribution contribution)
+    {
+        var region = contribution.Place?.Location?.Destination?.Region;
+        if (region != null)
+            return BuildContributionRegionDisplayName(region.Name, region.Territory?.Name);
+
+        var locationRegion = contribution.Location?.Destination?.Region;
+        if (locationRegion != null)
+            return BuildContributionRegionDisplayName(locationRegion.Name, locationRegion.Territory?.Name);
+
+        return null;
+    }
+
+    private static string BuildContributionRegionDisplayName(string regionName, string? territoryName)
+    {
+        return string.IsNullOrWhiteSpace(territoryName)
+            ? regionName
+            : regionName + ", " + territoryName;
+    }
+
     private static string NormalizeRequired(string? value, string fieldName)
     {
         var normalized = NormalizeOptional(value);
@@ -3390,7 +3531,8 @@ public class PlaceContributionService : IPlaceContributionService
 
             var openTime = NormalizeClockTime(input.OpenTime, "Opening time is invalid.");
             var closeTime = NormalizeClockTime(input.CloseTime, "Closing time is invalid.");
-            if (openTime == closeTime)
+            // 00:00 - 00:00 is the "open 24 hours" sentinel; any other equal pair is ambiguous.
+            if (openTime == closeTime && openTime != "00:00")
                 throw new InvalidOperationException("Opening time and closing time cannot be the same.");
 
             normalizedHours.Add(new ContributionOperatingHourDto
@@ -3450,6 +3592,10 @@ public class PlaceContributionService : IPlaceContributionService
 
     private static string? BuildOpeningHoursSummary(IReadOnlyCollection<ContributionOperatingHourDto> hours)
     {
+        if (hours.Count == 7 && hours.All(h =>
+                h.IsOpen && h.OpenTime == "00:00" && h.CloseTime == "00:00"))
+            return "Open 24 hours";
+
         if (!hours.Any(h => h.IsOpen))
             return null;
 

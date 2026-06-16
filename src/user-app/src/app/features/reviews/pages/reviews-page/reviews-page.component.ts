@@ -7,7 +7,8 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { ReviewsService } from '../../services/reviews.service';
 import { ReviewInteractionsService } from '../../../../shared/services/review-interactions.service';
 import type { FullReview, ReviewsEntityType } from '../../services/reviews.service';
-
+import { ExploreService } from '../../../explore/services/explore.service';
+import { ExploreSectionListingService } from '../../../explore/services/explore-section-listing.service';
 type ReviewsLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
 
 @Component({
@@ -19,11 +20,15 @@ type ReviewsLoadState = 'idle' | 'loading' | 'loaded' | 'notFound' | 'error';
   styleUrl: './reviews-page.component.scss',
 })
 export class ReviewsPageComponent {
+  private readonly collapsedReviewLength = 140;
+  protected readonly collapsedReviewLines = 3;
   private readonly pageSize = 10;
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly reviewsService = inject(ReviewsService);
   protected readonly auth = inject(AuthService);
+  private readonly exploreService = inject(ExploreService);
+  private readonly listingService = inject(ExploreSectionListingService);
 
   protected readonly ri = inject(ReviewInteractionsService);
 
@@ -49,13 +54,17 @@ export class ReviewsPageComponent {
   protected readonly averageRating = signal<number | null>(null);
   protected readonly reviewsCount = signal(0);
   protected readonly hasMore = signal(false);
+  protected readonly entityOwnedByCurrentUser = signal(false);
   protected readonly nextSkip = signal(0);
   protected readonly loadingMore = signal(false);
+  protected readonly expandedReviewIds = signal<Set<string>>(new Set());
 
   protected readonly entityKindLabel = computed(() => {
     switch (this.normalizeEntityType(this.entityTypeParam())) {
       case 'stay': return 'Stay';
       case 'event': return 'Event';
+      case 'destination': return 'Destination';
+      case 'location': return 'Location';
       case 'place': return 'Place';
       default: return 'Item';
     }
@@ -77,17 +86,23 @@ export class ReviewsPageComponent {
       targetType: () => {
         const et = this.normalizeEntityType(this.entityTypeParam());
         if (!et) return null;
-        return et === 'event' ? 'event' : 'place';
+        return et === 'stay' ? 'place' : et;
       },
       onEditSuccess: (reviewId, updated) => {
-        this.reviews.update(current => current.map(item =>
-          item.id === reviewId ? { ...item, rating: updated.rating, body: updated.body } : item,
-        ));
-      },
-      onDeleteSuccess: (reviewId) => {
-        this.reviews.update(current => current.filter(item => item.id !== reviewId));
-        this.reviewsCount.update(n => Math.max(0, n - 1));
-      },
+      this.reviews.update(current => current.map(item =>
+        item.id === reviewId ? { ...item, rating: updated.rating, body: updated.body } : item,
+      ));
+
+      this.exploreService.invalidate();
+      this.listingService.invalidate();
+    },
+    onDeleteSuccess: (reviewId) => {
+      this.reviews.update(current => current.filter(item => item.id !== reviewId));
+      this.reviewsCount.update(n => Math.max(0, n - 1));
+
+      this.exploreService.invalidate();
+      this.listingService.invalidate();
+    },
       onReportSuccess: (reviewId) => {
         this.reviews.update(current => current.map(item =>
           item.id === reviewId ? { ...item, reportedByCurrentUser: true } : item,
@@ -130,6 +145,7 @@ export class ReviewsPageComponent {
           this.reviewsCount.set(result.reviewsCount);
           this.nextSkip.set(result.nextSkip);
           this.hasMore.set(result.hasMore);
+          this.entityOwnedByCurrentUser.set(result.isEntityOwnedByCurrentUser);
           this.loadingMore.set(false);
         },
         error: () => {
@@ -144,6 +160,37 @@ export class ReviewsPageComponent {
     return review.id;
   }
 
+  protected hasLongReview(body: string | null | undefined): boolean {
+    const value = (body ?? '').trim();
+    const lineCount = value ? value.split(/\r\n|\r|\n/).length : 0;
+    return value.length > this.collapsedReviewLength || lineCount > this.collapsedReviewLines;
+  }
+
+  protected isReviewExpanded(reviewId: string | number): boolean {
+    return this.expandedReviewIds().has(String(reviewId));
+  }
+
+  protected toggleReviewExpanded(reviewId: string | number): void {
+    const key = String(reviewId);
+    this.expandedReviewIds.update(current => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  protected canCurrentUserEditReview(review: { isOwnReview?: boolean }): boolean {
+    return !!review.isOwnReview && !this.entityOwnedByCurrentUser();
+  }
+
+  protected canCurrentUserReportReview(review: { isOwnReview?: boolean }): boolean {
+    return !review.isOwnReview && !this.entityOwnedByCurrentUser();
+  }
+
   private loadReviews(entityTypeParam: string | null, entityIdParam: string | null): void {
     const entityType = this.normalizeEntityType(entityTypeParam);
     const entityId = parseInt(entityIdParam ?? '', 10);
@@ -154,7 +201,9 @@ export class ReviewsPageComponent {
       this.reviewsCount.set(0);
       this.nextSkip.set(0);
       this.hasMore.set(false);
+      this.entityOwnedByCurrentUser.set(false);
       this.loadingMore.set(false);
+      this.expandedReviewIds.set(new Set());
       this.loadState.set('notFound');
       return;
     }
@@ -167,6 +216,7 @@ export class ReviewsPageComponent {
     this.loadState.set('loading');
     this.loadingMore.set(false);
     this.hasMore.set(false);
+    this.entityOwnedByCurrentUser.set(false);
 
     this.reviewsService.getReviews(entityType, entityId, 0, this.pageSize)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -178,6 +228,8 @@ export class ReviewsPageComponent {
           this.reviewsCount.set(result.reviewsCount);
           this.nextSkip.set(result.nextSkip);
           this.hasMore.set(result.hasMore);
+          this.entityOwnedByCurrentUser.set(result.isEntityOwnedByCurrentUser);
+          this.expandedReviewIds.set(new Set());
           this.loadState.set('loaded');
         },
         error: () => {
@@ -187,7 +239,9 @@ export class ReviewsPageComponent {
           this.reviewsCount.set(0);
           this.nextSkip.set(0);
           this.hasMore.set(false);
+          this.entityOwnedByCurrentUser.set(false);
           this.loadingMore.set(false);
+          this.expandedReviewIds.set(new Set());
           this.loadState.set('error');
         },
       });
@@ -202,7 +256,7 @@ export class ReviewsPageComponent {
   }
 
   private normalizeEntityType(value: string | null): ReviewsEntityType | null {
-    if (value === 'place' || value === 'stay' || value === 'event') return value;
+    if (value === 'place' || value === 'stay' || value === 'event' || value === 'destination' || value === 'location') return value;
     return null;
   }
 

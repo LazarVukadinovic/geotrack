@@ -30,6 +30,7 @@ export interface RegionalDestinationListItemDto {
 export interface RegionalDestinationDetailDto extends RegionalDestinationListItemDto {
   latitude: number;
   longitude: number;
+  canDelete?: boolean;
 }
 
 export interface RegionalDestinationListResponse {
@@ -91,4 +92,6 @@ export interface RegionalDestinationUpdateRequest {
   tagIds?: number[] | null;
   cardImageUrl?: string | null;
   coverImageUrl?: string | null;
+  galleryImageUrls?: string[] | null;
+  galleryImageFiles?: File[];
 }

@@ -28,6 +28,7 @@ describe('StepPreviewComponent', () => {
     details: {
       description: 'A test contribution.',
       openingHoursEnabled: false,
+      open24Hours: false,
       openingHours: '',
       operatingHours: [],
       phone: '',

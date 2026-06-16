@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Geotrack.Application.Services;
 using Geotrack.Domain.Entities;
 using Geotrack.Domain.Entities.Analytics;
@@ -157,6 +159,101 @@ public static class SeedData
     // Koristi se za slike konvertovane Sharp skriptom (scripts/convert-images.mjs)
     // Primer: SeedWebp("kopaonik-vrh")  →  /media/seed/kopaonik-vrh.webp
     private static string SeedWebp(string fileName) => $"/media/seed/{fileName}.webp";
+
+
+    private static readonly JsonSerializerOptions SeedOperatingHoursJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    private sealed record SeedOperatingHourEntry(
+        string DayOfWeek,
+        bool IsOpen,
+        string? OpenTime,
+        string? CloseTime);
+
+    private static string BuildDailyHoursJson(string hours)
+        => BuildHoursJson(
+            ("Monday", hours),
+            ("Tuesday", hours),
+            ("Wednesday", hours),
+            ("Thursday", hours),
+            ("Friday", hours),
+            ("Saturday", hours),
+            ("Sunday", hours));
+
+    private static string BuildHoursJson(params (string days, string hours)[] schedule)
+    {
+        var entries = new List<SeedOperatingHourEntry>();
+
+        foreach (var (days, rawHours) in schedule)
+        {
+            var day = NormalizeSeedOpeningHoursDay(days);
+            var hours = NormalizeSeedOpeningHoursText(rawHours);
+
+            if (string.IsNullOrWhiteSpace(hours) ||
+                string.Equals(hours, "Closed", StringComparison.OrdinalIgnoreCase))
+            {
+                entries.Add(new SeedOperatingHourEntry(day, false, null, null));
+                continue;
+            }
+
+            if (IsSeedOpen24Hours(hours))
+            {
+                entries.Add(new SeedOperatingHourEntry(day, true, "00:00", "00:00"));
+                continue;
+            }
+
+            var addedSlot = false;
+            foreach (var slot in hours.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var parts = slot.Split(" - ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (parts.Length == 2 && IsSeedClock(parts[0]) && IsSeedClock(parts[1]))
+                {
+                    entries.Add(new SeedOperatingHourEntry(day, true, parts[0], parts[1]));
+                    addedSlot = true;
+                }
+            }
+
+            if (!addedSlot)
+            {
+                entries.Add(new SeedOperatingHourEntry(day, false, null, null));
+            }
+        }
+
+        return JsonSerializer.Serialize(entries, SeedOperatingHoursJsonOptions);
+    }
+
+    private static string NormalizeSeedOpeningHoursDay(string value)
+        => value.Trim().ToLowerInvariant() switch
+        {
+            "mon" or "monday" => "Monday",
+            "tue" or "tuesday" => "Tuesday",
+            "wed" or "wednesday" => "Wednesday",
+            "thu" or "thursday" => "Thursday",
+            "fri" or "friday" => "Friday",
+            "sat" or "saturday" => "Saturday",
+            "sun" or "sunday" => "Sunday",
+            var other => CultureInfo.InvariantCulture.TextInfo.ToTitleCase(other)
+        };
+
+    private static string NormalizeSeedOpeningHoursText(string value)
+    {
+        var normalized = value.Trim()
+            .Replace('–', '-')
+            .Replace('—', '-');
+
+        normalized = Regex.Replace(normalized, @"\s*-\s*", " - ");
+        normalized = Regex.Replace(normalized, @"\s*,\s*", ", ");
+        return normalized;
+    }
+
+    private static bool IsSeedOpen24Hours(string value)
+        => value.Contains("24", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(value, "00:00 - 00:00", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSeedClock(string value)
+        => TimeSpan.TryParseExact(value, @"hh\:mm", CultureInfo.InvariantCulture, out _);
 
     public static async Task InitializeAsync(AppDbContext db)
     {
@@ -914,28 +1011,6 @@ public static class SeedData
             if (changed) await db.SaveChangesAsync();
         }
 
-        static string BuildHoursJson(params (string days, string hours)[] schedule)
-        {
-            var entries = schedule.Select(s =>
-            {
-                var h = s.hours.Trim();
-                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
-                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
-                var norm = h.Replace("–", " - ");
-                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
-                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
-                if (parts.Length >= 2)
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
-                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
-            });
-            return "[" + string.Join(",", entries) + "]";
-        }
-
-        static string BuildDailyHoursJson(string hours)
-            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
-
         await UpdatePlaceHoursAsync(banjeBeach, "06:00 - 22:00", BuildDailyHoursJson("06:00 - 22:00"));
         await UpdatePlaceHoursAsync(nautika, "12:00 - 23:00", BuildDailyHoursJson("12:00 - 23:00"));
         await UpdatePlaceHoursAsync(konobaPupo, "11:00 - 23:00", BuildDailyHoursJson("11:00 - 23:00"));
@@ -1325,7 +1400,7 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
-        await ForceSetDestinationImageAsync(dubrovnik.Id, dubrovnik.Name, SeedWebp("dubrovnik"));
+        await ForceSetDestinationImageAsync(dubrovnik.Id, dubrovnik.Name, SeedWebp("dubrovnik"), SeedWebp("dubrovnik4"));
 
         var keptPlaces = await db.Places
             .Where(place => dubrovnikLocationIds.Contains(place.LocationId) && keptPlaceNames.Contains(place.Name))
@@ -1470,32 +1545,47 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
-        async Task ForceSetDestinationImageAsync(int destinationId, string destinationName, string url)
+        async Task ForceSetDestinationImageAsync(int destinationId, string destinationName, params string[] urls)
         {
             var existing = await db.EntityImages
                 .Where(x => x.TargetType == EntityImageTargetType.Destination && x.DestinationId == destinationId)
+                .OrderBy(x => x.SortOrder)
+                .ThenBy(x => x.Id)
                 .ToListAsync();
 
-            if (existing.Count == 1 && existing[0].Url == url)
+            var existingUrlSet = new HashSet<string>(existing.Select(x => x.Url), StringComparer.OrdinalIgnoreCase);
+            var nextSortOrder = existing.Count == 0 ? -1 : existing.Max(x => x.SortOrder);
+            var changed = false;
+
+            for (var i = 0; i < urls.Length; i++)
             {
-                return;
+                var url = urls[i];
+                if (!existingUrlSet.Add(url))
+                {
+                    continue;
+                }
+
+                nextSortOrder++;
+                var isFirstImageForEntity = existing.Count == 0 && nextSortOrder == 0;
+                db.EntityImages.Add(new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Destination,
+                    DestinationId = destinationId,
+                    Url = url,
+                    Caption = destinationName,
+                    AltText = destinationName,
+                    IsMain = isFirstImageForEntity,
+                    ImageRole = isFirstImageForEntity ? EntityImageRole.Cover : EntityImageRole.Gallery,
+                    SortOrder = nextSortOrder,
+                    CreatedAt = DateTime.UtcNow.AddMilliseconds(nextSortOrder)
+                });
+                changed = true;
             }
 
-            db.EntityImages.RemoveRange(existing);
-            db.EntityImages.Add(new EntityImage
+            if (changed)
             {
-                TargetType = EntityImageTargetType.Destination,
-                DestinationId = destinationId,
-                Url = url,
-                Caption = destinationName,
-                AltText = destinationName,
-                IsMain = true,
-                ImageRole = EntityImageRole.Cover,
-                SortOrder = 0,
-                CreatedAt = DateTime.UtcNow
-            });
-
-            await db.SaveChangesAsync();
+                await db.SaveChangesAsync();
+            }
         }
 
         async Task ForceSetPlaceImageAsync(Place place, string url)
@@ -1783,27 +1873,6 @@ public static class SeedData
 
     private static async Task EnsureInitialDubrovnikPlaceHoursAsync(AppDbContext db)
     {
-        static string BuildHoursJson(params (string day, string hours)[] schedule)
-        {
-            var entries = schedule.Select(s =>
-            {
-                var h = s.hours.Trim();
-                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
-                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
-                var norm = h.Replace("–", " - ");
-                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
-                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
-                if (parts.Length >= 2)
-                    return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
-                return $"{{\"dayOfWeek\":\"{s.day}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
-            });
-            return "[" + string.Join(",", entries) + "]";
-        }
-
-        static string BuildDailyHoursJson(string hours)
-            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
 
         var placeHours = new[]
         {
@@ -4505,12 +4574,14 @@ public static class SeedData
         async Task ForceSetDestinationImageAsync(Destination destination, string url)
         {
             var existing = await db.EntityImages.Where(x =>
-                x.TargetType == EntityImageTargetType.Destination &&
-                x.DestinationId == destination.Id).ToListAsync();
+                    x.TargetType == EntityImageTargetType.Destination &&
+                    x.DestinationId == destination.Id)
+                .ToListAsync();
 
-            if (existing.Count == 1 && existing[0].Url == url) return;
+            if (existing.Any(x => string.Equals(x.Url, url, StringComparison.OrdinalIgnoreCase))) return;
 
-            db.EntityImages.RemoveRange(existing);
+            var nextSortOrder = existing.Count == 0 ? 0 : existing.Max(x => x.SortOrder) + 1;
+            var isFirstImageForEntity = existing.Count == 0;
 
             db.EntityImages.Add(new EntityImage
             {
@@ -4519,13 +4590,159 @@ public static class SeedData
                 Url = url,
                 Caption = destination.Name,
                 AltText = destination.Name,
+                IsMain = isFirstImageForEntity,
+                ImageRole = isFirstImageForEntity ? EntityImageRole.Cover : EntityImageRole.Gallery,
+                SortOrder = nextSortOrder,
+                CreatedAt = now.AddMilliseconds(nextSortOrder)
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task ForceSetLocationImageAsync(Location location, string url)
+        {
+            await ForceSetLocationImagesAsync(location, url);
+        }
+
+        async Task ForceSetTerritoryImagesAsync(Territory territory, params string[] urls)
+        {
+            var existing = await db.EntityImages.Where(x =>
+                    x.TargetType == EntityImageTargetType.Territory &&
+                    x.TerritoryId == territory.Id)
+                .ToListAsync();
+
+            var existingUrlSet = new HashSet<string>(existing.Select(x => x.Url), StringComparer.OrdinalIgnoreCase);
+            var nextSortOrder = existing.Count == 0 ? -1 : existing.Max(x => x.SortOrder);
+            var changed = false;
+
+            foreach (var url in urls)
+            {
+                if (!existingUrlSet.Add(url))
+                {
+                    continue;
+                }
+
+                nextSortOrder++;
+                var isFirstImageForEntity = existing.Count == 0 && nextSortOrder == 0;
+                db.EntityImages.Add(new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Territory,
+                    TerritoryId = territory.Id,
+                    Url = url,
+                    Caption = territory.Name,
+                    AltText = territory.Name,
+                    IsMain = isFirstImageForEntity,
+                    ImageRole = isFirstImageForEntity ? EntityImageRole.Cover : EntityImageRole.Gallery,
+                    SortOrder = nextSortOrder,
+                    CreatedAt = now.AddMilliseconds(nextSortOrder)
+                });
+                changed = true;
+            }
+
+            if (changed)
+            {
+                await db.SaveChangesAsync();
+            }
+        }
+
+        async Task ForceSetLocationImagesAsync(Location location, params string[] urls)
+        {
+            var orderedUrls = urls
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Select(url => url.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (orderedUrls.Count == 0)
+            {
+                return;
+            }
+
+            var existing = await db.EntityImages
+                .Where(x => x.TargetType == EntityImageTargetType.Location && x.LocationId == location.Id)
+                .ToListAsync();
+            if (existing.Count > 0)
+            {
+                db.EntityImages.RemoveRange(existing);
+                await db.SaveChangesAsync();
+            }
+
+            var primaryUrl = orderedUrls[0];
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Location,
+                LocationId = location.Id,
+                Url = primaryUrl,
+                Caption = location.Name,
+                AltText = location.Name,
                 IsMain = true,
                 ImageRole = EntityImageRole.Cover,
                 SortOrder = 0,
                 CreatedAt = now
             });
 
+            var nextSortOrder = 1;
+            foreach (var galleryUrl in orderedUrls.Skip(1))
+            {
+                db.EntityImages.Add(new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Location,
+                    LocationId = location.Id,
+                    Url = galleryUrl,
+                    Caption = location.Name,
+                    AltText = location.Name,
+                    IsMain = false,
+                    ImageRole = EntityImageRole.Gallery,
+                    SortOrder = nextSortOrder,
+                    CreatedAt = now.AddMilliseconds(nextSortOrder)
+                });
+
+                nextSortOrder++;
+            }
+
             await db.SaveChangesAsync();
+        }
+
+        async Task AddDestinationGalleryImagesByUrlIfMissingAsync(Destination destination, params string[] urls)
+        {
+            var existingImages = await db.EntityImages
+                .Where(x => x.TargetType == EntityImageTargetType.Destination && x.DestinationId == destination.Id)
+                .ToListAsync();
+
+            var existingUrlSet = new HashSet<string>(
+                existingImages.Select(x => x.Url),
+                StringComparer.OrdinalIgnoreCase);
+
+            var nextSortOrder = existingImages.Count == 0 ? -1 : existingImages.Max(x => x.SortOrder);
+            var changed = false;
+
+            foreach (var url in urls)
+            {
+                if (!existingUrlSet.Add(url))
+                {
+                    continue;
+                }
+
+                nextSortOrder++;
+                db.EntityImages.Add(new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Destination,
+                    DestinationId = destination.Id,
+                    Url = url,
+                    Caption = destination.Name,
+                    AltText = destination.Name,
+                    IsMain = false,
+                    ImageRole = EntityImageRole.Gallery,
+                    SortOrder = nextSortOrder,
+                    CreatedAt = now.AddMilliseconds(nextSortOrder)
+                });
+                changed = true;
+            }
+
+            if (changed)
+            {
+                await db.SaveChangesAsync();
+            }
         }
 
         async Task ForceSetPlaceImageAsync(Place place, string url)
@@ -4598,28 +4815,6 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
-        static string BuildHoursJson(params (string days, string hours)[] schedule)
-        {
-            var entries = schedule.Select(s =>
-            {
-                var h = s.hours.Trim();
-                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
-                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
-                var norm = h.Replace("–", " - ");
-                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
-                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
-                if (parts.Length >= 2)
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
-                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
-            });
-            return "[" + string.Join(",", entries) + "]";
-        }
-
-        static string BuildDailyHoursJson(string hours)
-            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
-
         async Task AddEntityImagesIfMissingAsync(EntityImageTargetType targetType, string title, int? destinationId = null, int? placeId = null, int? eventId = null, params string[] urls)
         {
             var exists = await db.EntityImages.AnyAsync(x =>
@@ -4656,6 +4851,11 @@ public static class SeedData
 
         var serbia = await EnsureSerbiaTerritoryAsync(db, now);
         await EnsureSerbiaTerritoryManagerAsync(db, serbia);
+        await ForceSetTerritoryImagesAsync(serbia,
+            SeedWebp("krupajsko_vrelo"),
+            SeedWebp("uvac"),
+            SeedWebp("srbija"),
+            SeedWebp("golubacka-tvrdjava"));
 
         var serbiaRegions = await EnsureSerbiaAdm1RegionsFromCandidatesAsync(db, serbia, now);
         var fallbackRegions = await EnsureSerbiaFallbackAdm1RegionsAsync(db, serbia, now);
@@ -4762,6 +4962,13 @@ public static class SeedData
         await AddLocationTagsIfMissingAsync(dorcol, "local-area", "walkable-area", "casual");
         await AddLocationTagsIfMissingAsync(savamala, "waterfront-area", "local-area", "art");
         await AddLocationTagsIfMissingAsync(ada, "waterfront-area", "family-friendly", "nature");
+        await ForceSetLocationImagesAsync(stariGrad,
+            SeedWebp("bg-stari-grad"),
+            SeedWebp("narodni-muzej-bg-2"),
+            SeedWebp("narodno-pozoriste-bg2"));
+        await ForceSetLocationImageAsync(ada, SeedWebp("ada-bg"));
+        await ForceSetLocationImageAsync(dorcol, SeedWebp("dorcol"));
+        await ForceSetLocationImageAsync(savamala, SeedWebp("savamala"));
 
         var kalemegdan = await EnsurePlaceAsync("Kalemegdan Fortress", "Historic fortress and park above the rivers", "Kalemegdan, Beograd", ptLandmark, stariGrad, "A large fortress park where the Sava and Danube meet, with viewpoints, museums and long walking paths.", 44.8231, 20.4502, "Open 24h", 4.8, 1240);
         var skadarlija = await EnsurePlaceAsync("Skadarlija Restaurant Street", "Traditional restaurants and old-town atmosphere", "Skadarlija, Beograd", ptRestaurant, stariGrad, "A cobbled dining street known for traditional restaurants, music and evening walks.", 44.8175, 20.4643, "11:00 - 00:00", 4.6, 720);
@@ -4813,6 +5020,9 @@ public static class SeedData
                 "Each July it hosts the EXIT Music Festival, one of Europe's largest summer music events.");
         await AddLocationTagsIfMissingAsync(nsCenter, "walkable-area", "local-area", "casual");
         await AddLocationTagsIfMissingAsync(petrovaradin, "panoramic-view", "history", "fortress");
+        await ForceSetLocationImageAsync(nsCenter, SeedWebp("centar_grada_novi_sad"));
+        await AddSeedLocationGalleryImageAsync(db, now, nsCenter, SeedWebp("srpsko_narodno_pozoriste_ns"));
+        await ForceSetLocationImagesAsync(petrovaradin, SeedWebp("petorvaradin2"), SeedWebp("petrovaradin3"));
         var fortress = await EnsurePlaceAsync("Petrovaradin Fortress", "Fortress above the Danube", "Petrovaradin, Novi Sad", ptLandmark, petrovaradin, "Historic fortress with river views, galleries, tunnels and festival grounds.", 45.2528, 19.8625, "Open 24h", 4.8, 840);
         var strand = await EnsurePlaceAsync("Strand Beach", "Urban beach on the Danube", "Strand, Novi Sad", ptBeach, nsCenter, "A popular city beach and summer recreation area on the Danube.", 45.2399, 19.8379, "08:00 - 23:00", 4.5, 320);
         var fishZelenish = await EnsurePlaceAsync("Fish & Zelenish", "Modern local restaurant", "Novi Sad Center", ptRestaurant, nsCenter, "A central restaurant with local produce, fish, vegetables and relaxed service.", 45.2561, 19.8455, "12:00 - 23:00", 4.7, 230);
@@ -4852,6 +5062,8 @@ public static class SeedData
                 "The Gold Gondola connects Zlatibor Center to the upper cable car station near Tornik summit in about 20 minutes.");
         await AddLocationTagsIfMissingAsync(zlatiborCenter, "family-friendly", "relaxed-area", "local-area");
         await AddLocationTagsIfMissingAsync(tornik, "panoramic-view", "hiking", "nature");
+        await ForceSetLocationImageAsync(zlatiborCenter, SeedWebp("zlatibor-centar"));
+        await ForceSetLocationImageAsync(tornik, SeedWebp("tornik2"));
         var goldGondola = await EnsurePlaceAsync("Gold Gondola Zlatibor", "Long panoramic gondola ride", "Zlatibor Center", ptLandmark, zlatiborCenter, "Panoramic gondola route toward Tornik with mountain and lake views.", 43.7304, 19.6971, "09:00 - 17:00", 4.7, 500);
         var tornikViewpoint = await EnsurePlaceAsync("Tornik Viewpoint", "Mountain viewpoint and outdoor area", "Tornik, Zlatibor", ptNature, tornik, "High viewpoint area for mountain scenery, hiking and seasonal outdoor activities.", 43.6862, 19.6545, "Open 24h", 4.7, 260);
         await RemovePlaceIfExistsAsync("Zlatibor Mountain Lodge");
@@ -4886,6 +5098,8 @@ public static class SeedData
                 "A monument to Pančić stands near the summit, and the peak is a common hiking goal from the ski centre base.");
         await AddLocationTagsIfMissingAsync(skiCenter, "family-friendly", "local-area", "nature");
         await AddLocationTagsIfMissingAsync(pancic, "panoramic-view", "hiking", "nature");
+        await ForceSetLocationImageAsync(skiCenter, SeedWebp("kopaonik-ski-centar"));
+        await ForceSetLocationImagesAsync(pancic, SeedWebp("kopaonik-pancicev-vrh"), SeedWebp("pancicev-vrh2"));
         var skiCenterPlace = await EnsurePlaceAsync("Kopaonik Ski Center", "Main ski and outdoor activity area", "Kopaonik", ptNature, skiCenter, "Main mountain activity area for skiing, walking, viewpoints and seasonal outdoor activities.", 43.2856, 20.8095, "08:00 - 17:00", 4.7, 640);
         var hotelGrand = await EnsurePlaceAsync("Hotel Grand Kopaonik", "Central mountain hotel", "Kopaonik Center", ptStay, skiCenter, "Central mountain hotel near the ski area and resort services.", 43.2858, 20.8101, "Open 24h", 4.6, 420);
         var grandStay = await EnsureStayAsync(hotelGrand, hotelStayType, 180m, "15:00", "11:00");
@@ -4922,6 +5136,8 @@ public static class SeedData
                 "The area is ideal for scenic drives along the lake road, short lakeside walks and birdwatching in a peaceful setting.");
         await AddLocationTagsIfMissingAsync(mitrovac, "nature", "quiet-area", "family-friendly");
         await AddLocationTagsIfMissingAsync(zaovine, "waterfront", "nature", "panoramic-view");
+        await ForceSetLocationImageAsync(mitrovac, SeedWebp("mitrovac2"));
+        await ForceSetLocationImagesAsync(zaovine, SeedWebp("zaovine"), SeedWebp("zaovine2"), SeedWebp("zaovine3"));
         var banjskaStena = await EnsurePlaceAsync("Banjska Stena Viewpoint", "Iconic Tara viewpoint", "Tara National Park", ptNature, mitrovac, "A well-known viewpoint above the Drina canyon and one of Tara's classic short hikes.", 43.9534, 19.3909, "Open 24h", 4.9, 510);
         var zaovineLake = await EnsurePlaceAsync("Zaovine Lake", "Mountain lake and quiet nature area", "Zaovine, Tara", ptNature, zaovine, "A quiet lake area for scenic drives, short walks and nature-focused stays.", 43.8768, 19.3956, "Open 24h", 4.8, 330);
         await AddPlaceTagsIfMissingAsync(banjskaStena, "panoramic-view", "hiking", "nature", "walking-route");
@@ -4963,6 +5179,9 @@ public static class SeedData
         await AddLocationTagsIfMissingAsync(kgCenter, "walkable-area", "local-area");
         await AddLocationTagsIfMissingAsync(kgSumarice, "nature", "history", "family-friendly");
         await AddLocationTagsIfMissingAsync(kgBubanj, "waterfront", "nature", "quiet-area");
+        await ForceSetLocationImageAsync(kgSumarice, SeedWebp("sumarice2"));
+        await ForceSetLocationImageAsync(kgBubanj, SeedWebp("jezero-bubanj2"));
+        await ForceSetLocationImageAsync(kgCenter, SeedWebp("kg2"));
         var spomenPark = await EnsurePlaceAsync("Spomen park Šumarice", "Memorial park dedicated to the victims of the 1941 massacre", "Park Šumarice, Kragujevac", ptLandmark, kgSumarice, "Šumarice Memorial Park is one of the most significant memorial parks in Serbia, dedicated to the 2,778 victims shot on 21 October 1941. The park covers 352 hectares and is adorned with monumental sculptures and memorials. The Museum of October 21 is also located within the park.", 44.01592, 20.88570, "Open 24h", 4.9, 420);
         var muzej21 = await EnsurePlaceAsync("Muzej 21. oktobar", "Memorial museum dedicated to the victims of 21 October 1941", "Park Šumarice, Kragujevac", ptMuseum, kgSumarice, "The Museum of October 21 in Šumarice Memorial Park is dedicated to the memory of 2,778 Kragujevac civilians, including students and teachers, shot on 21 October 1941. The moving exhibition of photographs, documents and personal belongings leaves a lasting impression on every visitor.", 44.0215005480748, 20.894342132628374, "09:00 - 18:00", 4.9, 378);
         var knezevansenal = await EnsurePlaceAsync("Knežev Arsenal", "National museum in a historic 1836 building", "Vojvode Putnika 1, Kragujevac", ptMuseum, kgCenter, "Knežev Arsenal, also known as the National Museum of Kragujevac, is housed in the historic 1836 Prince's Office building. The fourth-oldest national museum in Serbia preserves a rich collection of artefacts from the history, art and industrial heritage of Šumadija.", 44.00709093991931, 20.912182474605068, null, 4.6, 280);
@@ -5006,17 +5225,29 @@ public static class SeedData
         await UpdatePlaceHoursAsync(toroRestoran, "08:00–00:00", BuildDailyHoursJson("08:00–00:00"));
         await UpdatePlaceHoursAsync(prvaGimnazija, "Mon–Fri 07:00–20:00",
             BuildHoursJson(("Monday", "07:00–20:00"), ("Tuesday", "07:00–20:00"), ("Wednesday", "07:00–20:00"), ("Thursday", "07:00–20:00"), ("Friday", "07:00–20:00"), ("Saturday", "Closed"), ("Sunday", "Closed")));
-        await UpdatePlaceHoursAsync(knjazTeatar, "Mon–Sat 10:00–14:00, 18:00–20:00",
-            BuildHoursJson(("Monday", "10:00–14:00, 18:00–20:00"), ("Tuesday", "10:00–14:00, 18:00–20:00"), ("Wednesday", "10:00–14:00, 18:00–20:00"), ("Thursday", "10:00–14:00, 18:00–20:00"), ("Friday", "10:00–14:00, 18:00–20:00"), ("Saturday", "10:00–14:00, 18:00–20:00"), ("Sunday", "Closed")));
-        await ForceSetDestinationImageAsync(kragujevac, SeedWebp("kg"));
-        await ForceSetDestinationImageAsync(beograd, SeedWebp("bg"));
+        await UpdatePlaceHoursAsync(knjazTeatar, "Mon–Sat 10:00–20:00",
+            BuildHoursJson(("Monday", "10:00–20:00"), ("Tuesday", "10:00–20:00"), ("Wednesday", "10:00–20:00"), ("Thursday", "10:00–20:00"), ("Friday", "10:00–20:00"), ("Saturday", "10:00–20:00"), ("Sunday", "Closed")));
+        await AddDestinationGalleryImagesByUrlIfMissingAsync(kragujevac,
+            SeedWebp("kragujevac"),
+            SeedWebp("stara-crkva-kragujevac"));
+        await AddDestinationGalleryImagesByUrlIfMissingAsync(beograd,
+            SeedWebp("zemun"),
+            SeedWebp("pobednik"),
+            SeedWebp("knez-mihailova"),
+            SeedWebp("hram-svetog-save"),
+            SeedWebp("beograd"),
+            SeedWebp("bg2"));
         await ForceSetDestinationImageAsync(noviSad, SeedWebp("ns"));
+        await AddDestinationGalleryImagesByUrlIfMissingAsync(noviSad, SeedWebp("novi-sad2"));
         await ForceSetDestinationImageAsync(kopaonik, SeedWebp("kop"));
         await ForceSetDestinationImageAsync(tara, SeedWebp("tara"));
         await ForceSetDestinationImageAsync(zlatibor, SeedWebp("zlatibor"));
         var dubrovnikDest = await db.Destinations.FirstOrDefaultAsync(d => d.Name == "Dubrovnik");
         if (dubrovnikDest is not null)
+        {
             await ForceSetDestinationImageAsync(dubrovnikDest, SeedWebp("dubrovnik"));
+            await AddDestinationGalleryImagesByUrlIfMissingAsync(dubrovnikDest, SeedWebp("dubrovnik4"));
+        }
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, spomenPark.Name, placeId: spomenPark.Id, urls: new[] { SeedWebp("spomen-park-sumarice") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, muzej21.Name, placeId: muzej21.Id, urls: new[] { SeedWebp("muzej21") });
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, knezevansenal.Name, placeId: knezevansenal.Id, urls: new[] { SeedWebp("knezev-arsenal"), SeedWebp("knezev-arsenal") });
@@ -5397,6 +5628,9 @@ public static class SeedData
         {
             return;
         }
+
+        var croatia = await EnsureCroatiaTerritoryAsync(db, now);
+        await db.SaveChangesAsync();
 
         async Task<LocationType> EnsureLocationTypeAsync(string name, string description)
         {
@@ -5852,6 +6086,242 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
+        async Task ForceSetTerritoryImagesAsync(Territory territory, params string[] urls)
+        {
+            var existing = await db.EntityImages.Where(x =>
+                    x.TargetType == EntityImageTargetType.Territory &&
+                    x.TerritoryId == territory.Id)
+                .ToListAsync();
+
+            var existingUrlSet = new HashSet<string>(existing.Select(x => x.Url), StringComparer.OrdinalIgnoreCase);
+            var nextSortOrder = existing.Count == 0 ? -1 : existing.Max(x => x.SortOrder);
+            var changed = false;
+
+            foreach (var url in urls)
+            {
+                if (!existingUrlSet.Add(url))
+                {
+                    continue;
+                }
+
+                nextSortOrder++;
+                var isFirstImageForEntity = existing.Count == 0 && nextSortOrder == 0;
+                db.EntityImages.Add(new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Territory,
+                    TerritoryId = territory.Id,
+                    Url = url,
+                    Caption = territory.Name,
+                    AltText = territory.Name,
+                    IsMain = isFirstImageForEntity,
+                    ImageRole = isFirstImageForEntity ? EntityImageRole.Cover : EntityImageRole.Gallery,
+                    SortOrder = nextSortOrder,
+                    CreatedAt = now.AddMilliseconds(nextSortOrder)
+                });
+                changed = true;
+            }
+
+            if (changed)
+            {
+                await db.SaveChangesAsync();
+            }
+        }
+
+        async Task ForceSetLocationImagesAsync(Location location, params string[] urls)
+        {
+            var orderedUrls = urls
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Select(url => url.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (orderedUrls.Count == 0)
+            {
+                return;
+            }
+
+            var existing = await db.EntityImages
+                .Where(x => x.TargetType == EntityImageTargetType.Location && x.LocationId == location.Id)
+                .OrderBy(x => x.SortOrder)
+                .ThenBy(x => x.Id)
+                .ToListAsync();
+
+            var primaryUrl = orderedUrls[0];
+            var changed = false;
+
+            bool SameUrl(EntityImage image, string url) =>
+                string.Equals(image.Url, url, StringComparison.OrdinalIgnoreCase);
+
+            void ApplyImageMetadata(EntityImage image, string role, int sortOrder, bool isMain)
+            {
+                if (image.Url != primaryUrl && (role == EntityImageRole.Cover || role == EntityImageRole.Card))
+                {
+                    image.Url = primaryUrl;
+                    changed = true;
+                }
+
+                if (image.Caption != location.Name)
+                {
+                    image.Caption = location.Name;
+                    changed = true;
+                }
+
+                if (image.AltText != location.Name)
+                {
+                    image.AltText = location.Name;
+                    changed = true;
+                }
+
+                if (image.ImageRole != role)
+                {
+                    image.ImageRole = role;
+                    changed = true;
+                }
+
+                if (image.SortOrder != sortOrder)
+                {
+                    image.SortOrder = sortOrder;
+                    changed = true;
+                }
+
+                if (image.IsMain != isMain)
+                {
+                    image.IsMain = isMain;
+                    changed = true;
+                }
+            }
+
+            foreach (var image in existing)
+            {
+                if (image.ImageRole is EntityImageRole.Cover or EntityImageRole.Card)
+                {
+                    image.ImageRole = EntityImageRole.Gallery;
+                    image.IsMain = false;
+                    changed = true;
+                }
+            }
+
+            var coverImage = existing.FirstOrDefault(image => SameUrl(image, primaryUrl));
+            if (coverImage is null)
+            {
+                coverImage = new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Location,
+                    LocationId = location.Id,
+                    Url = primaryUrl,
+                    CreatedAt = now
+                };
+                db.EntityImages.Add(coverImage);
+                existing.Add(coverImage);
+                changed = true;
+            }
+            ApplyImageMetadata(coverImage, EntityImageRole.Cover, 0, true);
+
+            var cardImage = existing.FirstOrDefault(image =>
+                !ReferenceEquals(image, coverImage) && SameUrl(image, primaryUrl));
+
+            if (cardImage is null)
+            {
+                cardImage = new EntityImage
+                {
+                    TargetType = EntityImageTargetType.Location,
+                    LocationId = location.Id,
+                    Url = primaryUrl,
+                    CreatedAt = now.AddMilliseconds(1)
+                };
+                db.EntityImages.Add(cardImage);
+                existing.Add(cardImage);
+                changed = true;
+            }
+            ApplyImageMetadata(cardImage, EntityImageRole.Card, 1, false);
+
+            var nextSortOrder = 2;
+            foreach (var galleryUrl in orderedUrls.Skip(1))
+            {
+                var galleryImage = existing.FirstOrDefault(image =>
+                    !ReferenceEquals(image, coverImage) &&
+                    !ReferenceEquals(image, cardImage) &&
+                    SameUrl(image, galleryUrl));
+
+                if (galleryImage is null)
+                {
+                    galleryImage = new EntityImage
+                    {
+                        TargetType = EntityImageTargetType.Location,
+                        LocationId = location.Id,
+                        Url = galleryUrl,
+                        CreatedAt = now.AddMilliseconds(nextSortOrder)
+                    };
+                    db.EntityImages.Add(galleryImage);
+                    existing.Add(galleryImage);
+                    changed = true;
+                }
+
+                if (galleryImage.Caption != location.Name)
+                {
+                    galleryImage.Caption = location.Name;
+                    changed = true;
+                }
+
+                if (galleryImage.AltText != location.Name)
+                {
+                    galleryImage.AltText = location.Name;
+                    changed = true;
+                }
+
+                if (galleryImage.ImageRole != EntityImageRole.Gallery)
+                {
+                    galleryImage.ImageRole = EntityImageRole.Gallery;
+                    changed = true;
+                }
+
+                if (galleryImage.SortOrder != nextSortOrder)
+                {
+                    galleryImage.SortOrder = nextSortOrder;
+                    changed = true;
+                }
+
+                if (galleryImage.IsMain)
+                {
+                    galleryImage.IsMain = false;
+                    changed = true;
+                }
+
+                nextSortOrder++;
+            }
+
+            foreach (var image in existing
+                         .Where(image => !orderedUrls.Contains(image.Url, StringComparer.OrdinalIgnoreCase))
+                         .OrderBy(image => image.SortOrder)
+                         .ThenBy(image => image.Id))
+            {
+                if (image.ImageRole != EntityImageRole.Gallery)
+                {
+                    image.ImageRole = EntityImageRole.Gallery;
+                    changed = true;
+                }
+
+                if (image.IsMain)
+                {
+                    image.IsMain = false;
+                    changed = true;
+                }
+
+                if (image.SortOrder < nextSortOrder)
+                {
+                    image.SortOrder = nextSortOrder;
+                    changed = true;
+                }
+
+                nextSortOrder++;
+            }
+
+            if (changed)
+            {
+                await db.SaveChangesAsync();
+            }
+        }
+
         async Task AddPlaceImagesIfMissingAsync(Place place, params (string Url, string Caption)[] images)
         {
             if (await db.EntityImages.AnyAsync(x => x.TargetType == EntityImageTargetType.Place && x.PlaceId == place.Id))
@@ -5938,28 +6408,6 @@ public static class SeedData
             if (changed) await db.SaveChangesAsync();
         }
 
-        static string BuildHoursJson(params (string days, string hours)[] schedule)
-        {
-            var entries = schedule.Select(s =>
-            {
-                var h = s.hours.Trim();
-                if (string.Equals(h, "Closed", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":false,\"openTime\":null,\"closeTime\":null}}";
-                if (h.Contains("24", StringComparison.OrdinalIgnoreCase))
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"00:00\",\"closeTime\":\"00:00\"}}";
-                var norm = h.Replace("–", " - ");
-                var firstSlot = norm.Split(new[] { ", " }, StringSplitOptions.None)[0].Trim();
-                var parts = firstSlot.Split(new[] { " - " }, StringSplitOptions.None);
-                if (parts.Length >= 2)
-                    return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{parts[0].Trim()}\",\"closeTime\":\"{parts[1].Trim()}\"}}";
-                return $"{{\"dayOfWeek\":\"{s.days}\",\"isOpen\":true,\"openTime\":\"{h}\",\"closeTime\":\"\"}}";
-            });
-            return "[" + string.Join(",", entries) + "]";
-        }
-
-        static string BuildDailyHoursJson(string hours)
-            => BuildHoursJson(("Monday", hours), ("Tuesday", hours), ("Wednesday", hours), ("Thursday", hours), ("Friday", hours), ("Saturday", hours), ("Sunday", hours));
-
         var neighborhoodType = await EnsureLocationTypeAsync("Neighborhood", "City neighborhood");
         var districtType = await EnsureLocationTypeAsync("District", "City district");
         var viewpointType = await EnsureLocationTypeAsync("Viewpoint Area", "Hill, viewpoint or scenic surrounding area");
@@ -6017,6 +6465,25 @@ public static class SeedData
         await AddLocationTagsIfMissingAsync(srd, "panoramic-view", "nature");
         await AddLocationTagsIfMissingAsync(lokrum, "island-escape", "nature");
         await AddLocationTagsIfMissingAsync(trsteno, "relaxed-area", "nature");
+
+        var croatiaTerritory = await EnsureCroatiaTerritoryAsync(db, now);
+        await db.SaveChangesAsync();
+
+        await SetSeedTerritoryImagesAsync(db, now, croatiaTerritory,
+            SeedWebp("zagreb"),
+            SeedWebp("hrvatska"),
+            SeedWebp("hrvatska2"),
+            SeedWebp("hrvatska3"));
+        await SetSeedLocationImagesAsync(db, now, oldTown, SeedWebp("dubrovnik-old-town"), SeedWebp("old-town2"), SeedWebp("dubrovnik-old-town3"));
+        await SetSeedLocationImagesAsync(db, now, gruz, SeedWebp("gruz"), SeedWebp("gruz2"));
+        await SetSeedLocationImagesAsync(db, now, lapad, SeedWebp("lapad-"), SeedWebp("lapad2"));
+        await SetSeedLocationImagesAsync(db, now, lokrum, SeedWebp("lokrum"), SeedWebp("lokrum2"));
+        await SetSeedLocationImageAsync(db, now, srd, SeedWebp("Mt-Srdj"));
+        await AddSeedLocationGalleryImageAsync(db, now, srd, SeedWebp("srdj3"));
+        await SetSeedLocationImagesAsync(db, now, pile, SeedWebp("pile-dubrovnik"));
+        await SetSeedLocationImagesAsync(db, now, ploce, SeedWebp("ploce-dubrovnik"));
+        await SetSeedLocationImageAsync(db, now, trsteno, SeedWebp("trsteno-dubrovnik"));
+        await AddSeedLocationGalleryImageAsync(db, now, trsteno, SeedWebp("trsteno-dubrovnik2"));
 
         var ptBeach = await EnsurePlaceTypeAsync("Beach", "Beaches and coastal swimming areas");
         var ptRestaurant = await EnsurePlaceTypeAsync("Restaurant", "Dining establishments", isOwnable: true);
@@ -6647,6 +7114,145 @@ public static class SeedData
         {
             await AddEventImagesIfMissingAsync(eventEntity, (imageA, eventEntity.Name));
         }
+    }
+
+    private static async Task SetSeedLocationImageAsync(AppDbContext db, DateTime now, Location location, string url)
+    {
+        await SetSeedLocationImagesAsync(db, now, location, url);
+    }
+
+    private static async Task AddSeedLocationGalleryImageAsync(AppDbContext db, DateTime now, Location location, string url)
+    {
+        var galleryUrl = url.Trim();
+        if (string.IsNullOrWhiteSpace(galleryUrl))
+        {
+            return;
+        }
+
+        var existing = await db.EntityImages
+            .Where(x => x.TargetType == EntityImageTargetType.Location && x.LocationId == location.Id)
+            .ToListAsync();
+
+        if (existing.Any(x => string.Equals(x.Url, galleryUrl, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        var nextSortOrder = existing.Count == 0 ? 0 : existing.Max(x => x.SortOrder) + 1;
+
+        db.EntityImages.Add(new EntityImage
+        {
+            TargetType = EntityImageTargetType.Location,
+            LocationId = location.Id,
+            Url = galleryUrl,
+            Caption = location.Name,
+            AltText = location.Name,
+            IsMain = false,
+            ImageRole = EntityImageRole.Gallery,
+            SortOrder = nextSortOrder,
+            CreatedAt = now.AddMilliseconds(nextSortOrder)
+        });
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SetSeedTerritoryImagesAsync(AppDbContext db, DateTime now, Territory territory, params string[] urls)
+    {
+        var existing = await db.EntityImages.Where(x =>
+                x.TargetType == EntityImageTargetType.Territory &&
+                x.TerritoryId == territory.Id)
+            .ToListAsync();
+
+        var existingUrlSet = new HashSet<string>(existing.Select(x => x.Url), StringComparer.OrdinalIgnoreCase);
+        var nextSortOrder = existing.Count == 0 ? -1 : existing.Max(x => x.SortOrder);
+        var changed = false;
+
+        foreach (var url in urls)
+        {
+            if (!existingUrlSet.Add(url))
+            {
+                continue;
+            }
+
+            nextSortOrder++;
+            var isFirstImageForEntity = existing.Count == 0 && nextSortOrder == 0;
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Territory,
+                TerritoryId = territory.Id,
+                Url = url,
+                Caption = territory.Name,
+                AltText = territory.Name,
+                IsMain = isFirstImageForEntity,
+                ImageRole = isFirstImageForEntity ? EntityImageRole.Cover : EntityImageRole.Gallery,
+                SortOrder = nextSortOrder,
+                CreatedAt = now.AddMilliseconds(nextSortOrder)
+            });
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static async Task SetSeedLocationImagesAsync(AppDbContext db, DateTime now, Location location, params string[] urls)
+    {
+        var orderedUrls = urls
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Select(url => url.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (orderedUrls.Count == 0)
+        {
+            return;
+        }
+
+        var existing = await db.EntityImages
+            .Where(x => x.TargetType == EntityImageTargetType.Location && x.LocationId == location.Id)
+            .ToListAsync();
+        if (existing.Count > 0)
+        {
+            db.EntityImages.RemoveRange(existing);
+            await db.SaveChangesAsync();
+        }
+
+        var primaryUrl = orderedUrls[0];
+        db.EntityImages.Add(new EntityImage
+        {
+            TargetType = EntityImageTargetType.Location,
+            LocationId = location.Id,
+            Url = primaryUrl,
+            Caption = location.Name,
+            AltText = location.Name,
+            IsMain = true,
+            ImageRole = EntityImageRole.Cover,
+            SortOrder = 0,
+            CreatedAt = now
+        });
+
+        var nextSortOrder = 1;
+        foreach (var galleryUrl in orderedUrls.Skip(1))
+        {
+            db.EntityImages.Add(new EntityImage
+            {
+                TargetType = EntityImageTargetType.Location,
+                LocationId = location.Id,
+                Url = galleryUrl,
+                Caption = location.Name,
+                AltText = location.Name,
+                IsMain = false,
+                ImageRole = EntityImageRole.Gallery,
+                SortOrder = nextSortOrder,
+                CreatedAt = now.AddMilliseconds(nextSortOrder)
+            });
+
+            nextSortOrder++;
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private static async Task EnsureExploreDemoPlaceTagsAsync(AppDbContext db, IReadOnlyDictionary<string, Tag> tagLookup)

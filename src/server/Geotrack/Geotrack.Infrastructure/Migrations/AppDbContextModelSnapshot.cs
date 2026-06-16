@@ -592,6 +592,9 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ContactPhone")
+                        .HasColumnType("text");
+
                     b.Property<Point>("Coordinates")
                         .HasColumnType("geography (point)");
 
@@ -2583,10 +2586,6 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<string>("OwnershipProofOriginalFileName")
                         .HasColumnType("text");
 
-                    b.Property<string>("Region")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
                     b.Property<DateTime?>("OwnershipProofUploadedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2602,6 +2601,10 @@ namespace Geotrack.Infrastructure.Migrations
 
                     b.Property<decimal?>("PricePerNight")
                         .HasColumnType("decimal(10,2)");
+
+                    b.Property<string>("Region")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<int?>("RestaurantTypeId")
                         .HasColumnType("integer");

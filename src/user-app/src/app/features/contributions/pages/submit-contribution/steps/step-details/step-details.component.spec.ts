@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { StepDetailsComponent } from './step-details.component';
+import { DetailsData, StepDetailsComponent } from './step-details.component';
 
 describe('StepDetailsComponent', () => {
   let component: StepDetailsComponent;
@@ -44,5 +44,34 @@ describe('StepDetailsComponent', () => {
     component.updatePartnerUrl('booking', 'https://booking.example/stays/validation-villa');
 
     expect(component.isValid()).toBe(true);
+  });
+
+  it('emits a seven-day midnight schedule when open 24 hours is enabled', () => {
+    const savedValues: DetailsData[] = [];
+    component.saved.subscribe(value => savedValues.push(value));
+    component.form.openingHoursEnabled = true;
+    component.form.open24Hours = true;
+
+    component.onContinue();
+
+    expect(savedValues[0].openingHours).toBe('Open 24 hours');
+    expect(savedValues[0].operatingHours).toHaveLength(7);
+    expect(savedValues[0].operatingHours.every(hour =>
+      hour.isOpen && hour.openTime === '00:00' && hour.closeTime === '00:00')).toBe(true);
+  });
+
+  it('allows disabling open 24 hours and restores editable day hours', () => {
+    const changedValues: DetailsData[] = [];
+    component.changed.subscribe(value => changedValues.push(value));
+    component.form.openingHoursEnabled = true;
+    component.toggleOpen24Hours();
+    expect(component.form.open24Hours).toBe(true);
+
+    component.toggleOpen24Hours();
+
+    expect(component.form.open24Hours).toBe(false);
+    expect(changedValues.at(-1)?.open24Hours).toBe(false);
+    expect(changedValues.at(-1)?.operatingHours.some(hour =>
+      hour.openTime === '09:00' && hour.closeTime === '17:00')).toBe(true);
   });
 });

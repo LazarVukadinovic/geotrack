@@ -1307,62 +1307,16 @@ public class ExploreService : IExploreService
         bool operatingHoursEnabled,
         string? operatingHoursJson)
     {
-        if (!operatingHoursEnabled || string.IsNullOrWhiteSpace(operatingHoursJson))
-        {
+        var status = OperatingHoursStatusCalculator.Evaluate(operatingHoursEnabled, operatingHoursJson);
+        if (!status.HasValue)
             return null;
-        }
 
-        try
+        var isOpen = status == OperatingHoursStatus.Open;
+        return new ExploreFeedItemStatusBadgeDto
         {
-            var hours = JsonSerializer.Deserialize<List<OperatingHourEntry>>(
-                operatingHoursJson,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-            if (hours is null || hours.Count == 0)
-            {
-                return null;
-            }
-
-            var today = DateTime.UtcNow.DayOfWeek.ToString();
-            var todayHours = hours.FirstOrDefault(hour =>
-                string.Equals(hour.DayOfWeek, today, StringComparison.OrdinalIgnoreCase));
-
-            if (todayHours is null)
-            {
-                return null;
-            }
-
-            if (!todayHours.IsOpen)
-            {
-                return new ExploreFeedItemStatusBadgeDto
-                {
-                    Label = "Closed",
-                    Tone = "muted"
-                };
-            }
-
-            if (!TimeSpan.TryParse(todayHours.OpenTime, out var openTime) ||
-                !TimeSpan.TryParse(todayHours.CloseTime, out var closeTime))
-            {
-                return null;
-            }
-
-            var now = DateTime.UtcNow.TimeOfDay;
-            var isOpen = now >= openTime && now < closeTime;
-
-            return new ExploreFeedItemStatusBadgeDto
-            {
-                Label = isOpen ? "Open" : "Closed",
-                Tone = isOpen ? "success" : "muted"
-            };
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
+            Label = isOpen ? "Open" : "Closed",
+            Tone = isOpen ? "success" : "muted"
+        };
     }
 
     private static string HumanizeSectionKey(string key)
@@ -2443,14 +2397,6 @@ public class ExploreService : IExploreService
         public ExploreFeedItemStatusBadgeDto? StatusBadge { get; set; }
         public bool IsSaved { get; set; }
         public List<ExploreFeedSectionTagDto> Tags { get; set; } = new();
-    }
-
-    private sealed class OperatingHourEntry
-    {
-        public string? DayOfWeek { get; set; }
-        public bool IsOpen { get; set; }
-        public string? OpenTime { get; set; }
-        public string? CloseTime { get; set; }
     }
 
     private sealed class ResolvedDestinationCandidate

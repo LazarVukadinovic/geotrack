@@ -28,6 +28,8 @@ public class PlaceDetailDto
     public List<ReviewDto> Reviews { get; set; } = new();
     public List<PlaceRelatedEventDto> RelatedEvents { get; set; } = new();
     public List<SimilarPlaceDto> Similar { get; set; } = new();
+    public List<SimilarPlaceDto> SimilarInDestination { get; set; } = new();
+    public List<SimilarPlaceDto> SimilarInTerritory { get; set; } = new();
     public bool IsSaved { get; set; }
     public bool IsOwnable { get; set; }
     public bool IsOwnedByCurrentUser { get; set; }
@@ -80,5 +82,7 @@ public class SimilarPlaceDto
     public string? Image { get; set; }
     public double? Rating { get; set; }
     public string? Distance { get; set; }
+    public int? DestinationId { get; set; }
+    public string? DestinationName { get; set; }
     public bool IsSaved { get; set; }
 }

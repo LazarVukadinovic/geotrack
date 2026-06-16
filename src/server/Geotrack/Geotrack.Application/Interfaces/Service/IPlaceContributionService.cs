@@ -50,8 +50,9 @@ public interface IPlaceContributionService
         string? note,
         string? internalNote = null,
         string? sourceArea = null);
-    Task<PlaceContributionDetailDto> ApproveForContentManagerAsync(int contributionId, int reviewerUserId, int regionId, int? existingDestinationId, string? newDestinationName, string? newLocationName, string? note);
+    Task<PlaceContributionDetailDto> ApproveForContentManagerAsync(int contributionId, int reviewerUserId, int regionId, int? existingDestinationId, string? newDestinationName, double? newDestinationLatitude, double? newDestinationLongitude, string? newLocationName, string? note);
     Task<ContributionRegionOptionsDto> GetRegionOptionsAsync();
+    Task<ContentManagerDestinationCenterValidationResultDto> ValidateDestinationCenterAsync(int regionId, double latitude, double longitude);
     Task<ContributionLocationOptionsDto> GetDestinationLocationOptionsAsync(int destinationId);
     Task AddDestinationCardImageAsync(int destinationId, byte[] imageBytes);
     Task AddLocationCardImageAsync(int locationId, byte[] imageBytes);

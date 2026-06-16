@@ -31,6 +31,9 @@ export interface EventDetail {
   id: string;
   title: string;
   location: string;
+  destinationId?: string | null;
+  destinationName?: string | null;
+  parentEntityType: string;
   locationId?: string | null;
   locationName?: string | null;
   placeId?: string | null;
@@ -47,4 +50,12 @@ export interface EventDetail {
   similar: EventSimilar[];
   isSaved: boolean;
   ticketUrl?: string | null;
+  startsAt: string;
+  endsAt: string;
+  isAllDay: boolean;
+  isRecurring: boolean;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  attendanceLimit?: number | null;
+  ageRestriction?: string | null;
 }
