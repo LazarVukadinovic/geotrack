@@ -35,6 +35,7 @@ import {
   buildPlaceReturnQueryParams,
 } from '../../../../core/models/admin-map.model';
 import {
+  RegionalDestinationBoundarySuggestionDto,
   RegionalDestinationCreateRequest,
   RegionalDestinationTagDto,
   RegionalDestinationUpdateRequest,
@@ -58,6 +59,7 @@ interface ClassItem {
 interface DestinationFormDraft {
   activeRegionId: number | null;
   destinationName: string;
+  boundarySearchQuery: string;
   summary: string;
   descriptionHtml: string;
   selectedTagIds: number[];
@@ -132,7 +134,15 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   scopeValidationPending = false;
 
   destinationName = '';
+  boundarySearchQuery = '';
   summary = '';
+  boundarySuggestions: RegionalDestinationBoundarySuggestionDto[] = [];
+  selectedBoundary: RegionalDestinationBoundarySuggestionDto | null = null;
+  existingBoundaryPresent = false;
+  existingBoundaryDisplayName: string | null = null;
+  existingBoundarySource: string | null = null;
+  boundarySearchLoading = false;
+  boundaryUploadLoading = false;
   tagInput = '';
   tagFilter = '';
 
@@ -169,6 +179,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private modalMap: any = null;
   private miniRegionBoundaryLayer: any = null;
   private modalRegionBoundaryLayer: any = null;
+  private miniSelectedBoundaryLayer: any = null;
+  private modalSelectedBoundaryLayer: any = null;
   private miniMapCenterMarker: any = null;
   private modalCenterMarker: any = null;
   private assignedRegionsSubscription: Subscription | null = null;
@@ -177,6 +189,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   private tagsSubscription: Subscription | null = null;
   private tagSearchSubscription: Subscription | null = null;
   private createSubscription: Subscription | null = null;
+  private boundarySubscription: Subscription | null = null;
   private editDestinationId: number | null = null;
   private originalLatitude: number | null = null;
   private originalLongitude: number | null = null;
@@ -229,6 +242,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.tagsSubscription?.unsubscribe();
     this.tagSearchSubscription?.unsubscribe();
     this.createSubscription?.unsubscribe();
+    this.boundarySubscription?.unsubscribe();
     this.unregisterDraftSource?.();
 
     if (this.tagSearchHandle) {
@@ -268,6 +282,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       !this.scopeValidationPending &&
       this.scopeValidationResult?.isAllowed === true &&
       !this.isScopeValidationRejected &&
+      (Boolean(this.selectedBoundary) || this.existingBoundaryPresent) &&
       mediaReady &&
       !this.regionLoading &&
       !this.tagsLoading &&
@@ -377,6 +392,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
 
     this.setActiveRegion(regionId, true);
     this.resetZone();
+    this.clearSelectedBoundary();
     this.loadAssignedRegionMap(regionId);
     this.feedbackMessage = 'Region changed. Destination center was cleared.';
     this.notifyStateChanged();
@@ -416,9 +432,13 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.destinationsService.getDestination(this.activeRegionId, this.editDestinationId).subscribe({
       next: (dto) => {
         this.destinationName = dto.name ?? '';
+        this.boundarySearchQuery = dto.name ?? '';
         this.summary = dto.summary ?? '';
         this.originalLatitude = dto.latitude ?? null;
         this.originalLongitude = dto.longitude ?? null;
+        this.existingBoundaryPresent = dto.hasBoundary === true;
+        this.existingBoundaryDisplayName = dto.boundaryDisplayName ?? null;
+        this.existingBoundarySource = dto.boundarySource ?? null;
         if (this.hasValidCoordinatePair(dto.latitude, dto.longitude)) {
           this.centerLat = dto.latitude;
           this.centerLng = dto.longitude;
@@ -685,6 +705,87 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.lightboxService.open(images, index);
   }
 
+  searchBoundarySuggestions(): void {
+    const regionId = this.activeRegionId;
+    const query = this.boundarySearchQuery.trim() || this.destinationName.trim();
+    if (!regionId) {
+      this.errorMessage = 'Select an assigned region first.';
+      return;
+    }
+    if (query.length < 2) {
+      this.errorMessage = 'Enter a destination or boundary name before searching.';
+      return;
+    }
+
+    this.boundarySearchQuery = query;
+    this.boundarySearchLoading = true;
+    this.errorMessage = null;
+    this.feedbackMessage = null;
+    this.boundarySubscription?.unsubscribe();
+    this.boundarySubscription = this.destinationsService
+      .searchBoundarySuggestions(regionId, query, this.centerLat, this.centerLng)
+      .pipe(finalize(() => {
+        this.boundarySearchLoading = false;
+        this.notifyStateChanged();
+      }))
+      .subscribe({
+        next: suggestions => {
+          this.boundarySuggestions = suggestions;
+          this.feedbackMessage = suggestions.length > 0
+            ? `Found ${suggestions.length} boundary suggestion${suggestions.length === 1 ? '' : 's'}. Select the correct one.`
+            : 'No matching polygon was found. Try an official/local name (for example “Grad Dubrovnik”) or upload GeoJSON.';
+          this.notifyStateChanged();
+        },
+        error: error => this.handleActionError(error),
+      });
+  }
+
+  onBoundaryFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (!file || !this.activeRegionId) return;
+
+    this.boundaryUploadLoading = true;
+    this.errorMessage = null;
+    this.boundarySubscription?.unsubscribe();
+    this.boundarySubscription = this.destinationsService.uploadBoundary(this.activeRegionId, file)
+      .pipe(finalize(() => {
+        this.boundaryUploadLoading = false;
+        this.notifyStateChanged();
+      }))
+      .subscribe({
+        next: boundary => this.selectBoundary(boundary),
+        error: error => this.handleActionError(error),
+      });
+  }
+
+  selectBoundary(boundary: RegionalDestinationBoundarySuggestionDto): void {
+    const hadCenter = this.hasValidCenter();
+    this.selectedBoundary = boundary;
+
+    if (!hadCenter) {
+      this.centerLat = boundary.centerLatitude;
+      this.centerLng = boundary.centerLongitude;
+    }
+
+    this.zoneConfirmed = true;
+    this.errorMessage = null;
+    this.feedbackMessage = `Boundary selected: ${boundary.displayName}`;
+    this.validateSelectedPoint(this.centerLat as number, this.centerLng as number);
+    this.refreshSelectedBoundaryLayers();
+    this.showZoneOnMiniMap();
+    this.showCenterOnModalMap();
+    this.notifyStateChanged();
+  }
+
+  clearSelectedBoundary(): void {
+    this.selectedBoundary = null;
+    this.boundarySuggestions = [];
+    this.refreshSelectedBoundaryLayers();
+    this.notifyStateChanged();
+  }
+
   openZoneModal(): void {
     this.zoneModalOpen = true;
     this.notifyStateChanged();
@@ -878,6 +979,11 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
+    if (!this.selectedBoundary) {
+      this.errorMessage = 'Select a suggested boundary or upload a GeoJSON boundary.';
+      return null;
+    }
+
     if (!this.hasValidCenter()) {
       this.errorMessage = 'Choose a destination center point before publishing.';
       return null;
@@ -905,6 +1011,13 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       status: 'Published',
       latitude: this.centerLat,
       longitude: this.centerLng,
+      boundary: {
+        shapeType: this.selectedBoundary.geometryType,
+        geoJson: this.selectedBoundary.geoJson,
+        source: this.selectedBoundary.source,
+        externalKey: this.selectedBoundary.externalKey ?? null,
+        displayName: this.selectedBoundary.displayName,
+      },
       tagIds: this.selectedTagIdList(),
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
@@ -935,6 +1048,11 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       return null;
     }
 
+    if (!this.existingBoundaryPresent && !this.selectedBoundary) {
+      this.errorMessage = 'Select a suggested boundary or upload a GeoJSON boundary.';
+      return null;
+    }
+
     if (this.scopeValidationPending || this.isScopeValidationRejected) {
       this.errorMessage = this.scopeValidationPending
         ? 'Location validation is still running.'
@@ -950,6 +1068,17 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       description: descriptionHtml || null,
       latitude: this.centerLat,
       longitude: this.centerLng,
+      ...(this.selectedBoundary
+        ? {
+            boundary: {
+              shapeType: this.selectedBoundary.geometryType,
+              geoJson: this.selectedBoundary.geoJson,
+              source: this.selectedBoundary.source,
+              externalKey: this.selectedBoundary.externalKey ?? null,
+              displayName: this.selectedBoundary.displayName,
+            },
+          }
+        : {}),
       tagIds: this.selectedTagIdList(),
       galleryImageUrls: this.galleryImages.filter(image => !image.file).map(image => image.url),
       galleryImageFiles: this.galleryImages.filter(image => image.file).map(image => image.file),
@@ -1009,6 +1138,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.mapTileLayer.addTo(L, this.miniMap);
 
     this.refreshMiniRegionBoundaryLayer();
+    this.refreshMiniSelectedBoundaryLayer();
     this.applyRegionViewportToMiniMap();
   }
 
@@ -1023,6 +1153,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.mapTileLayer.addTo(L, this.modalMap);
 
     this.refreshModalRegionBoundaryLayer();
+    this.refreshModalSelectedBoundaryLayer();
     applyAssignedRegionViewport(this.modalMap, this.regionViewport, 9, 11);
 
     this.modalMap.on('click', (event: any) => {
@@ -1047,12 +1178,14 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       this.modalMap = null;
       this.modalCenterMarker = null;
       this.modalRegionBoundaryLayer = null;
+      this.modalSelectedBoundaryLayer = null;
     }
   }
 
   private refreshRegionBoundaryLayers(): void {
     this.refreshMiniRegionBoundaryLayer();
     this.refreshModalRegionBoundaryLayer();
+    this.refreshSelectedBoundaryLayers();
   }
 
   private refreshMiniRegionBoundaryLayer(): void {
@@ -1071,6 +1204,45 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       this.modalRegionBoundaryLayer,
       this.regionBoundaryZone,
     );
+  }
+
+  private refreshSelectedBoundaryLayers(): void {
+    this.refreshMiniSelectedBoundaryLayer();
+    this.refreshModalSelectedBoundaryLayer();
+  }
+
+  private refreshMiniSelectedBoundaryLayer(): void {
+    this.miniSelectedBoundaryLayer = this.renderSelectedBoundary(
+      this.miniMap,
+      this.miniSelectedBoundaryLayer,
+      false,
+    );
+  }
+
+  private refreshModalSelectedBoundaryLayer(): void {
+    this.modalSelectedBoundaryLayer = this.renderSelectedBoundary(
+      this.modalMap,
+      this.modalSelectedBoundaryLayer,
+      true,
+    );
+  }
+
+  private renderSelectedBoundary(map: any, currentLayer: any, fitBounds: boolean): any {
+    if (currentLayer && map) map.removeLayer(currentLayer);
+    if (!map || typeof L === 'undefined' || !this.selectedBoundary) return null;
+
+    try {
+      const layer = L.geoJSON(JSON.parse(this.selectedBoundary.geoJson), {
+        style: { color: '#2563eb', weight: 3, fillColor: '#60a5fa', fillOpacity: 0.18 },
+      }).addTo(map);
+      if (fitBounds && layer.getBounds?.().isValid?.()) {
+        map.fitBounds(layer.getBounds(), { padding: [24, 24] });
+      }
+      return layer;
+    } catch {
+      this.errorMessage = 'Selected boundary could not be displayed.';
+      return null;
+    }
   }
 
   private applyRegionViewportToMiniMap(): void {
@@ -1517,6 +1689,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     return {
       activeRegionId: this.activeRegionId,
       destinationName: this.destinationName,
+      boundarySearchQuery: this.boundarySearchQuery,
       summary: this.summary,
       descriptionHtml,
       selectedTagIds: [...this.selectedTagIds],
@@ -1540,6 +1713,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     }
 
     this.destinationName = payload.destinationName ?? this.destinationName;
+    this.boundarySearchQuery = payload.boundarySearchQuery ?? payload.destinationName ?? this.boundarySearchQuery;
     this.summary = payload.summary ?? this.summary;
     this.centerLat = payload.centerLat;
     this.centerLng = payload.centerLng;

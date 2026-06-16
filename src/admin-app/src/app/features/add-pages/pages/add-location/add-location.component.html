@@ -48,24 +48,14 @@
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">
-                  Parent Destination <span class="text-red-500">*</span>
+                  Destination (resolved from center) <span class="text-red-500">*</span>
                 </label>
-                <select
-                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none disabled:bg-gray-100 disabled:text-gray-400"
-                  style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
-                  [(ngModel)]="parentDestinationId"
-                  [disabled]="!activeRegionId || parentDestinationsLoading || parentDestinations.length === 0"
-                >
-                  <option [ngValue]="null">
-                    {{ parentDestinationsLoading ? 'Loading destinations...' : 'Select parent destination...' }}
-                  </option>
-                  @for (destination of parentDestinations; track destination.id) {
-                    <option [ngValue]="destination.id">{{ destination.displayName }}</option>
-                  }
-                </select>
-                @if (!parentDestinationsLoading && activeRegionId && parentDestinations.length === 0) {
-                  <p class="text-[11px] text-amber-600 mt-1">Create a destination in this region before publishing a location.</p>
-                }
+                <input
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-500 bg-gray-100 outline-none"
+                  [value]="resolvedDestinationName"
+                  readonly
+                />
+                <p class="text-[11px] text-gray-500 mt-1">The destination is locked to the polygon containing the selected center point.</p>
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">

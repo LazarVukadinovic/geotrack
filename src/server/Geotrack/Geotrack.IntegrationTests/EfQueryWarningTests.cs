@@ -62,7 +62,17 @@ public sealed class EfQueryWarningTests
             Options.Create(new RegionalScopeValidationOptions()));
 
         var sanitizer = new NoopContentHtmlSanitizer();
-        var destinations = new RegionalDestinationService(strictDb, scopeValidation, sanitizer);
+        var destinationResolver = new DestinationBoundaryResolver(strictDb);
+        using var httpServices = new ServiceCollection()
+            .AddHttpClient()
+            .BuildServiceProvider();
+        var destinations = new RegionalDestinationService(
+            strictDb,
+            scopeValidation,
+            sanitizer,
+            httpServices.GetRequiredService<IHttpClientFactory>(),
+            destinationResolver,
+            NullLogger<RegionalDestinationService>.Instance);
         var destinationList = await destinations.GetDestinationsAsync(
             fixture.ManagerUserId,
             fixture.RegionId,
@@ -76,7 +86,7 @@ public sealed class EfQueryWarningTests
             fixture.RegionId,
             fixture.DestinationId);
 
-        var locations = new RegionalLocationService(strictDb, scopeValidation, sanitizer);
+        var locations = new RegionalLocationService(strictDb, scopeValidation, sanitizer, destinationResolver);
         var locationList = await locations.GetLocationsAsync(
             fixture.ManagerUserId,
             fixture.RegionId,
@@ -90,7 +100,7 @@ public sealed class EfQueryWarningTests
             fixture.RegionId,
             fixture.LocationId);
 
-        var places = new RegionalPlaceService(strictDb, scopeValidation, sanitizer);
+        var places = new RegionalPlaceService(strictDb, scopeValidation, sanitizer, destinationResolver);
         var placeList = await places.GetPlacesAsync(
             fixture.ManagerUserId,
             fixture.RegionId,
@@ -267,7 +277,8 @@ public sealed class EfQueryWarningTests
             new NoopUserNotificationService(),
             new NoopAdminNotificationService(),
             new NoopContentHtmlSanitizer(),
-            new NoopModerationAuditService());
+            new NoopModerationAuditService(),
+            new DestinationBoundaryResolver(strictDb));
 
         var mine = await service.GetForUserAsync(fixture.ManagerUserId);
         var pending = await service.GetPendingReviewAsync();

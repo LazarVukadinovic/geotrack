@@ -227,11 +227,11 @@ public class ContributionsController : ControllerBase
     }
 
     [HttpGet("resolve-location")]
-    public async Task<ActionResult<ResolveContributionLocationDto?>> ResolveLocation(
+    public async Task<ActionResult<ResolveContributionLocationDto>> ResolveLocation(
         [FromQuery] double latitude,
         [FromQuery] double longitude)
     {
-        return Ok(await _contributions.ResolveNearestLocationAsync(latitude, longitude));
+        return Ok(await _contributions.ResolveDestinationLocationsAsync(latitude, longitude));
     }
 
     [HttpGet("place-types")]

@@ -21,6 +21,7 @@ import { CoverImageCropperComponent } from '../../../../shared/components/cover-
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { PlacesListService } from '../../../../core/services/places-list.service';
+import { DestinationsListService } from '../../../../core/services/destinations-list.service';
 import { RegionalMediaService } from '../../../../core/services/regional-media.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
@@ -291,6 +292,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly dashboardService: DashboardService,
     private readonly lightboxService: LightboxService,
     private readonly placesService: PlacesListService,
+    private readonly destinationsService: DestinationsListService,
     private readonly regionalMedia: RegionalMediaService,
     private readonly auth: AuthService,
     private readonly http: HttpClient,
@@ -874,7 +876,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.parentLocationId = typeof value === 'number' ? value : null;
     this.onParentLocationChanged();
-    this.revalidatePinnedCoordinatesIfPresent();
   }
 
   onClassItemChange(item: ClassItem): void {
@@ -2191,7 +2192,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private revalidatePinnedCoordinatesIfPresent(): void {
     const coordinates = this.readPinnedCoordinates();
 
-    if (!coordinates || !this.pinConfirmed || !this.activeRegionId || !this.parentLocationId) {
+    if (!coordinates || !this.pinConfirmed || !this.activeRegionId) {
       return;
     }
 
@@ -2201,7 +2202,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private scopeValidationKey(latitude: number, longitude: number): string {
     return [
       this.activeRegionId ?? 'none',
-      this.parentLocationId ?? 'none',
       latitude.toFixed(6),
       longitude.toFixed(6),
       this.isEditMode ? 'Update' : 'Create',
@@ -2278,11 +2278,15 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private validateSelectedPoint(latitude: number, longitude: number): void {
-    if (!this.activeRegionId || !this.parentLocationId || !this.hasValidCoordinates(latitude, longitude)) {
+    if (!this.activeRegionId || !this.hasValidCoordinates(latitude, longitude)) {
       this.clearScopeValidation();
+      this.parentDestinationId = null;
+      this.parentLocationId = null;
+      this.parentLocations = [];
       return;
     }
 
+    const regionId = this.activeRegionId;
     const validationKey = this.scopeValidationKey(latitude, longitude);
     this.validationSubscription?.unsubscribe();
     this.lastScopeValidationKey = validationKey;
@@ -2290,39 +2294,71 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.scopeValidationTone = null;
     this.scopeValidationMessage = null;
     this.scopeValidationPending = true;
-    if (!this.pinModalOpen) {
-      this.pinConfirmed = false;
-    }
+    if (!this.pinModalOpen) this.pinConfirmed = false;
     this.notifyStateChanged();
-    this.validationSubscription = this.adminMapService.validateEntityLocation({
-      regionId: this.activeRegionId,
-      entityType: 'Place',
-      operationType: this.isEditMode ? 'Update' : 'Create',
-      latitude,
-      longitude,
-      locationId: this.parentLocationId,
+
+    this.validationSubscription = forkJoin({
+      scope: this.adminMapService.validateEntityLocation({
+        regionId,
+        entityType: 'Place',
+        operationType: this.isEditMode ? 'Update' : 'Create',
+        latitude,
+        longitude,
+      }),
+      destination: this.destinationsService.resolveDestination(regionId, latitude, longitude),
     }).subscribe({
-      next: result => {
-        if (this.lastScopeValidationKey !== validationKey) {
+      next: ({ scope, destination }) => {
+        if (this.lastScopeValidationKey !== validationKey) return;
+        this.scopeValidationPending = false;
+        this.applyScopeValidationResult(scope);
+
+        if (!destination.isResolved || !destination.destinationId) {
+          this.parentDestinationId = null;
+          this.parentLocationId = null;
+          this.parentLocations = [];
+          this.scopeValidationResult = null;
+          this.scopeValidationTone = 'error';
+          this.scopeValidationMessage = destination.message;
+          this.pinConfirmed = false;
+          this.notifyStateChanged();
           return;
         }
-        this.scopeValidationPending = false;
-        this.applyScopeValidationResult(result);
+
+        const destinationChanged = this.parentDestinationId !== destination.destinationId;
+        this.parentDestinationId = destination.destinationId;
+        if (!this.parentDestinations.some(item => item.id === destination.destinationId)) {
+          this.parentDestinations = this.normalizeParentDestinations([
+            ...this.parentDestinations,
+            {
+              id: destination.destinationId,
+              name: destination.destinationName ?? `Destination #${destination.destinationId}`,
+              displayName: destination.destinationName ?? `Destination #${destination.destinationId}`,
+              status: 'Published',
+            },
+          ]);
+        }
+
+        if (destinationChanged) {
+          this.parentLocationId = null;
+          this.parentLocations = [];
+          this.loadParentLocations();
+        } else if (this.parentLocations.length === 0) {
+          this.loadParentLocations();
+        }
         this.notifyStateChanged();
       },
       error: error => {
-        if (this.lastScopeValidationKey !== validationKey) {
-          return;
-        }
+        if (this.lastScopeValidationKey !== validationKey) return;
         this.scopeValidationPending = false;
-        if (!this.pinModalOpen) {
-          this.pinConfirmed = false;
-        }
+        this.pinConfirmed = false;
+        this.parentDestinationId = null;
+        this.parentLocationId = null;
+        this.parentLocations = [];
         this.scopeValidationResult = null;
         this.scopeValidationTone = 'error';
         this.scopeValidationMessage = this.extractErrorMessage(
           error,
-          'Unable to validate this location against your assigned region.',
+          'Unable to resolve a destination from the selected coordinates.',
         );
         this.notifyStateChanged();
       },
@@ -2707,7 +2743,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       : 'Recovered a saved draft. Image files must be selected again.';
 
     const coordinates = this.readPinnedCoordinates();
-    if (coordinates && this.pinConfirmed && this.activeRegionId && this.parentLocationId) {
+    if (coordinates && this.pinConfirmed && this.activeRegionId) {
       setTimeout(() => this.revalidatePinnedCoordinatesIfPresent(), 0);
     }
 
@@ -2753,7 +2789,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const restoredTransientMedia = this.restoreTransientMediaIfPresent();
 
     const coordinates = this.readPinnedCoordinates();
-    if (coordinates && this.pinConfirmed && this.activeRegionId && this.parentLocationId) {
+    if (coordinates && this.pinConfirmed && this.activeRegionId) {
       setTimeout(() => this.revalidatePinnedCoordinatesIfPresent(), 0);
     }
 

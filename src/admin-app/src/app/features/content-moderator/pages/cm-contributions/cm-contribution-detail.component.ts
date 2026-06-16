@@ -69,7 +69,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
 
   destinations: CmDestinationOption[] = [];
   destinationsLoading = false;
-  destinationChoice: DestinationChoice = 'new';
+  destinationChoice: DestinationChoice = 'existing';
   selectedDestinationId: number | null = null;
   newDestinationName = '';
   newDestinationLatitude: number | null = null;
@@ -134,16 +134,15 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
    * go through the plain approve endpoint even though a suggested region is auto-selected.
    */
   get usesCmApprove(): boolean {
-    return !this.isOwnershipClaim && !!this.selectedRegionId;
+    return !this.isOwnershipClaim && this.requiresLocationAssignment && !!this.selectedRegionId;
   }
 
   get canApprove(): boolean {
     if (!this.contribution) return false;
-    if (!this.usesCmApprove) return true;
+    if (this.isOwnershipClaim || !this.requiresLocationAssignment) return true;
     if (!this.selectedRegionId) return false;
     if (!this.newLocationName.trim()) return false;
-    if (this.destinationChoice === 'existing') return !!this.selectedDestinationId;
-    return !!this.newDestinationName.trim() && this.destinationCenterConfirmed;
+    return !!this.selectedDestinationId;
   }
 
   get isDescriptionLong(): boolean {
@@ -244,7 +243,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
           this.contribution = c;
           this.newDestinationName = c.suggestedDestinationName || c.city || '';
           this.newLocationName = c.suggestedLocationName || '';
-          this.loadRegions();
+          if (!c.locationId) this.loadRegions();
           this.cdr.markForCheck();
         },
         error: err => {
@@ -282,7 +281,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     this.selectedDestinationId = null;
     this.destinations = [];
     this.locations = [];
-    this.destinationChoice = 'new';
+    this.destinationChoice = 'existing';
     this.clearDestinationCenter();
     this.loadDestinationRegionMapContext();
     this.cdr.markForCheck();
@@ -297,7 +296,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
       .subscribe({
         next: destinations => {
           this.destinations = destinations;
-          this.destinationChoice = 'new';
+          this.destinationChoice = 'existing';
           this.cdr.markForCheck();
         },
         error: () => { this.cdr.markForCheck(); },
@@ -316,7 +315,7 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
     this.destinations = [];
     this.locations = [];
     this.selectedDestinationId = null;
-    this.destinationChoice = 'new';
+    this.destinationChoice = 'existing';
     this.clearDestinationCenter();
     this.clearDestinationRegionMapContext();
     this.cdr.markForCheck();
@@ -413,10 +412,10 @@ export class CmContributionDetailComponent implements OnInit, OnDestroy {
       ? this.service.approveWithRegion(
           this.contribution.id,
           this.selectedRegionId!,
-          this.destinationChoice === 'existing' ? this.selectedDestinationId : null,
-          this.destinationChoice === 'new' ? this.newDestinationName.trim() : null,
-          this.destinationChoice === 'new' ? this.newDestinationLatitude : null,
-          this.destinationChoice === 'new' ? this.newDestinationLongitude : null,
+          this.selectedDestinationId,
+          null,
+          null,
+          null,
           this.newLocationName.trim(),
           this.reviewerNote,
         )

@@ -4,8 +4,15 @@ using Geotrack.Application.Security;
 using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
+using Geotrack.Infrastructure.Spatial;
+using System.Globalization;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
+using Microsoft.Extensions.Logging;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -17,22 +24,36 @@ public class RegionalDestinationService : IRegionalDestinationService
     private const string DraftStatus = "Draft";
     private const string ArchivedStatus = "Archived";
     private const string ManagedRegionalImagePrefix = "/media/uploads/regional/";
+    private const string NominatimBaseUrl = "https://nominatim.openstreetmap.org";
+    private const int MaxBoundaryUploadBytes = 5 * 1024 * 1024;
     private static string ExistingEditRoute(int destinationId) => $"/destinations/edit/{destinationId}";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
     private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
+    private static readonly SemaphoreSlim NominatimRequestGate = new(1, 1);
+    private static readonly TimeSpan NominatimMinimumRequestInterval = TimeSpan.FromMilliseconds(1100);
+    private static DateTimeOffset NominatimLastRequestStartedAt = DateTimeOffset.MinValue;
 
     private readonly AppDbContext _db;
     private readonly RegionalScopeValidationService _scopeValidation;
     private readonly IContentHtmlSanitizer _htmlSanitizer;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly DestinationBoundaryResolver _destinationBoundaryResolver;
+    private readonly ILogger<RegionalDestinationService> _logger;
 
     public RegionalDestinationService(
         AppDbContext db,
         RegionalScopeValidationService scopeValidation,
-        IContentHtmlSanitizer htmlSanitizer)
+        IContentHtmlSanitizer htmlSanitizer,
+        IHttpClientFactory httpClientFactory,
+        DestinationBoundaryResolver destinationBoundaryResolver,
+        ILogger<RegionalDestinationService> logger)
     {
         _db = db;
         _scopeValidation = scopeValidation;
         _htmlSanitizer = htmlSanitizer;
+        _httpClientFactory = httpClientFactory;
+        _destinationBoundaryResolver = destinationBoundaryResolver;
+        _logger = logger;
     }
 
     public async Task<RegionalDestinationListResponseDto> GetDestinationsAsync(
@@ -85,6 +106,11 @@ public class RegionalDestinationService : IRegionalDestinationService
                 CreatedByUserId = destination.CreatedByUserId,
                 BoundaryNote = destination.BoundaryNote,
                 BoundaryShapeType = destination.BoundaryShapeType,
+                HasBoundary = EF.Property<Geometry?>(destination, BoundaryGeometryPropertyName) != null,
+                BoundarySource = destination.BoundarySource,
+                BoundaryExternalKey = destination.BoundaryExternalKey,
+                BoundaryDisplayName = destination.BoundaryDisplayName,
+                BoundaryImportedAt = destination.BoundaryImportedAt,
                 CreatedAt = destination.CreatedAt,
                 UpdatedAt = destination.UpdatedAt,
                 PublishedAt = destination.PublishedAt,
@@ -164,6 +190,11 @@ public class RegionalDestinationService : IRegionalDestinationService
                 CreatedByUserId = destination.CreatedByUserId,
                 BoundaryNote = destination.BoundaryNote,
                 BoundaryShapeType = destination.BoundaryShapeType,
+                HasBoundary = EF.Property<Geometry?>(destination, BoundaryGeometryPropertyName) != null,
+                BoundarySource = destination.BoundarySource,
+                BoundaryExternalKey = destination.BoundaryExternalKey,
+                BoundaryDisplayName = destination.BoundaryDisplayName,
+                BoundaryImportedAt = destination.BoundaryImportedAt,
                 CreatedAt = destination.CreatedAt,
                 UpdatedAt = destination.UpdatedAt,
                 PublishedAt = destination.PublishedAt,
@@ -216,6 +247,198 @@ public class RegionalDestinationService : IRegionalDestinationService
         return dto;
     }
 
+    public async Task<RegionalDestinationBoundarySuggestionsDto> SearchBoundarySuggestionsAsync(
+        int userId,
+        int regionId,
+        string query,
+        double? latitude = null,
+        double? longitude = null,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureAssignedRegionAsync(userId, regionId);
+
+        var normalizedQuery = (query ?? string.Empty).Trim();
+        if (normalizedQuery.Length < 2)
+            throw new InvalidOperationException("Enter at least two characters to search for a boundary.");
+        if (normalizedQuery.Length > 200)
+            throw new InvalidOperationException("Boundary search query is too long.");
+        if (latitude.HasValue != longitude.HasValue)
+            throw new InvalidOperationException("Latitude and longitude must be provided together.");
+
+        Point? requestedCenter = null;
+        if (latitude.HasValue && longitude.HasValue)
+        {
+            ValidateLatitude(latitude.Value);
+            ValidateLongitude(longitude.Value);
+            requestedCenter = Wgs84GeometryFactory.CreatePoint(new Coordinate(longitude.Value, latitude.Value));
+            requestedCenter.SRID = 4326;
+        }
+
+        var context = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.Id == regionId)
+            .Select(region => new BoundarySearchContext
+            {
+                RegionName = region.Name,
+                TerritoryName = region.Territory.Name,
+                CountryCode = region.Territory.CountryCode,
+                RegionBoundary = EF.Property<Geometry?>(region, BoundaryGeometryPropertyName)
+            })
+            .SingleAsync(cancellationToken);
+
+        var regionBoundary = context.RegionBoundary;
+        if (regionBoundary is null || regionBoundary.IsEmpty || !regionBoundary.IsValid)
+            throw new InvalidOperationException("The assigned region does not have a valid boundary.");
+
+        // A selected center is a strong disambiguation signal, but never trust a point outside
+        // the manager's region when looking for candidate boundaries.
+        if (requestedCenter is not null && !regionBoundary.Covers(requestedCenter))
+            requestedCenter = null;
+
+        List<NominatimBoundaryResult> providerResults;
+        try
+        {
+            providerResults = await SearchNominatimBoundariesAsync(
+                context,
+                normalizedQuery,
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            _logger.LogWarning(ex, "Destination boundary provider search failed for region {RegionId}.", regionId);
+            throw new InvalidOperationException(
+                "Boundary suggestions are temporarily unavailable. You can upload a GeoJSON boundary instead.");
+        }
+
+        var candidates = new Dictionary<string, BoundarySuggestionCandidate>(StringComparer.OrdinalIgnoreCase);
+        foreach (var providerResult in providerResults)
+        {
+            AddNominatimBoundaryCandidate(
+                candidates,
+                providerResult,
+                normalizedQuery,
+                regionBoundary,
+                requestedCenter,
+                isReverseLookup: false);
+        }
+
+        // Nominatim often stores a city both as a place node and as an administrative relation.
+        // Always add one center-based city-level lookup when a center is available, even if the
+        // text search found some polygons. This prevents a minor similarly named polygon from
+        // suppressing the actual municipality/city boundary. A town-level lookup is only needed
+        // when nothing usable was found at all.
+        if (requestedCenter is not null)
+        {
+            foreach (var zoom in candidates.Count == 0 ? new[] { 10, 12 } : new[] { 10 })
+            {
+                var countBeforeLookup = candidates.Count;
+                try
+                {
+                    var reverseResult = await ReverseNominatimBoundaryAsync(
+                        requestedCenter.Y,
+                        requestedCenter.X,
+                        context.CountryCode,
+                        zoom,
+                        cancellationToken);
+
+                    if (reverseResult is not null)
+                    {
+                        AddNominatimBoundaryCandidate(
+                            candidates,
+                            reverseResult,
+                            normalizedQuery,
+                            regionBoundary,
+                            requestedCenter,
+                            isReverseLookup: true);
+                    }
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Destination boundary reverse lookup failed for region {RegionId} at zoom {Zoom}.",
+                        regionId,
+                        zoom);
+                }
+
+                if (candidates.Count > countBeforeLookup || candidates.Count > 0)
+                    break;
+            }
+        }
+
+        return new RegionalDestinationBoundarySuggestionsDto
+        {
+            Items = candidates.Values
+                .OrderByDescending(candidate => candidate.Score)
+                .ThenBy(candidate => candidate.Dto.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .Take(8)
+                .Select(candidate => candidate.Dto)
+                .ToList()
+        };
+    }
+
+    public async Task<RegionalDestinationBoundarySuggestionDto> ParseUploadedBoundaryAsync(
+        int userId,
+        int regionId,
+        string fileName,
+        byte[] content,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureAssignedRegionAsync(userId, regionId);
+
+        if (content is null || content.Length == 0)
+            throw new InvalidOperationException("GeoJSON file is required.");
+        if (content.Length > MaxBoundaryUploadBytes)
+            throw new InvalidOperationException("GeoJSON boundary file must be 5 MB or smaller.");
+
+        var extension = Path.GetExtension(fileName ?? string.Empty);
+        if (!extension.Equals(".geojson", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Boundary upload must be a .geojson or .json file.");
+        }
+
+        string geoJson;
+        try
+        {
+            geoJson = new System.Text.UTF8Encoding(false, true).GetString(content);
+        }
+        catch (DecoderFallbackException)
+        {
+            throw new InvalidOperationException("Boundary file must use UTF-8 encoding.");
+        }
+
+        var geometry = DestinationBoundaryGeometry.ParseGeoJson(geoJson);
+        await EnsureBoundaryInsideRegionAsync(regionId, geometry, cancellationToken);
+
+        var center = geometry.InteriorPoint;
+        return new RegionalDestinationBoundarySuggestionDto
+        {
+            Source = "UploadedGeoJson",
+            DisplayName = Path.GetFileName(fileName),
+            GeometryType = geometry.GeometryType,
+            GeoJson = DestinationBoundaryGeometry.ToGeoJson(geometry),
+            CenterLatitude = center.Y,
+            CenterLongitude = center.X
+        };
+    }
+
+    public async Task<DestinationCoordinateResolutionDto> ResolveDestinationAsync(
+        int userId,
+        int regionId,
+        double latitude,
+        double longitude,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureAssignedRegionAsync(userId, regionId);
+        var resolution = await _destinationBoundaryResolver.ResolveInRegionAsync(
+            regionId,
+            latitude,
+            longitude,
+            cancellationToken);
+        return DestinationBoundaryResolver.ToDto(resolution);
+    }
+
     public async Task<RegionalDestinationDetailDto> CreateDestinationAsync(
         int userId,
         RegionalDestinationCreateRequestDto request)
@@ -229,8 +452,13 @@ public class RegionalDestinationService : IRegionalDestinationService
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
         var description = NormalizeRichDescription(request.Description, 8000, "Description is too long.");
         var status = NormalizeCreateStatus(request.Status);
-        var boundary = BuildBoundary(request.Boundary);
+        var boundary = BuildBoundary(request.Boundary)
+            ?? throw new InvalidOperationException("A destination boundary is required. Select a suggested boundary or upload a GeoJSON file.");
         var coordinates = ResolveCoordinates(request, boundary);
+        var centerPoint = Wgs84GeometryFactory.CreatePoint(new Coordinate(coordinates.Longitude, coordinates.Latitude));
+        centerPoint.SRID = 4326;
+        if (!boundary.Geometry.Covers(centerPoint))
+            throw new InvalidOperationException("Destination center must be inside the selected boundary.");
         await _scopeValidation.EnsurePointAllowedAsync(
             userId,
             request.RegionId,
@@ -238,15 +466,8 @@ public class RegionalDestinationService : IRegionalDestinationService
             coordinates.Latitude,
             coordinates.Longitude,
             "Create");
-        if (boundary is not null)
-        {
-            await _scopeValidation.EnsureGeometryAllowedAsync(
-                userId,
-                request.RegionId,
-                "Destination",
-                boundary.Geometry,
-                "Create");
-        }
+        await EnsureBoundaryInsideRegionAsync(request.RegionId, boundary.Geometry);
+        await EnsureBoundaryDoesNotOverlapDestinationsAsync(request.RegionId, boundary.Geometry);
         var destinationTypeId = await ResolveDestinationTypeIdAsync(request.DestinationTypeId);
         var tagIds = await ValidateDestinationTagIdsAsync(request.TagIds);
         var now = DateTime.UtcNow;
@@ -269,18 +490,25 @@ public class RegionalDestinationService : IRegionalDestinationService
                 CreatedByUserId = userId,
                 PublishedAt = status == PublishedStatus ? now : null,
                 BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long."),
-                BoundaryShapeType = boundary?.ShapeType,
+                BoundaryShapeType = boundary.ShapeType,
+                BoundarySource = boundary.Source,
+                BoundaryExternalKey = boundary.ExternalKey,
+                BoundaryDisplayName = boundary.DisplayName,
+                BoundaryImportedAt = now,
                 CreatedAt = now,
                 DestinationTags = tagIds
                     .Select(tagId => new DestinationTag { TagId = tagId })
                     .ToList()
             };
 
-            _db.Destinations.Add(destination);
-            if (boundary is not null)
+            if (!string.IsNullOrWhiteSpace(boundary.ExternalKey) &&
+                await _db.Destinations.AnyAsync(item => item.BoundaryExternalKey == boundary.ExternalKey))
             {
-                _db.Entry(destination).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = boundary.Geometry;
+                throw new InvalidOperationException("This boundary is already assigned to another destination.");
             }
+
+            _db.Destinations.Add(destination);
+            _db.Entry(destination).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = boundary.Geometry;
 
             await _db.SaveChangesAsync();
 
@@ -315,7 +543,41 @@ public class RegionalDestinationService : IRegionalDestinationService
         }
 
         ApplyUpdate(destination, request);
-        if (request.Latitude.HasValue || request.Longitude.HasValue)
+
+        var replacementBoundary = BuildBoundary(request.Boundary);
+        var effectiveBoundary = replacementBoundary?.Geometry
+            ?? _db.Entry(destination).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue;
+
+        if (replacementBoundary is not null)
+        {
+            await EnsureBoundaryInsideRegionAsync(regionId, replacementBoundary.Geometry);
+            await EnsureBoundaryDoesNotOverlapDestinationsAsync(
+                regionId,
+                replacementBoundary.Geometry,
+                destinationId);
+
+            if (!string.IsNullOrWhiteSpace(replacementBoundary.ExternalKey) &&
+                await _db.Destinations.AnyAsync(item =>
+                    item.Id != destinationId &&
+                    item.BoundaryExternalKey == replacementBoundary.ExternalKey))
+            {
+                throw new InvalidOperationException("This boundary is already assigned to another destination.");
+            }
+
+            _db.Entry(destination).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = replacementBoundary.Geometry;
+            destination.BoundaryShapeType = replacementBoundary.ShapeType;
+            destination.BoundarySource = replacementBoundary.Source;
+            destination.BoundaryExternalKey = replacementBoundary.ExternalKey;
+            destination.BoundaryDisplayName = replacementBoundary.DisplayName;
+            destination.BoundaryImportedAt = DateTime.UtcNow;
+            destination.BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long.");
+        }
+        else if (request.BoundaryNote is not null)
+        {
+            destination.BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long.");
+        }
+
+        if (request.Latitude.HasValue || request.Longitude.HasValue || replacementBoundary is not null)
         {
             await _scopeValidation.EnsurePointAllowedAsync(
                 userId,
@@ -324,6 +586,14 @@ public class RegionalDestinationService : IRegionalDestinationService
                 destination.Latitude,
                 destination.Longitude,
                 "Update");
+
+            if (effectiveBoundary is not null && !effectiveBoundary.IsEmpty)
+            {
+                var centerPoint = Wgs84GeometryFactory.CreatePoint(new Coordinate(destination.Longitude, destination.Latitude));
+                centerPoint.SRID = 4326;
+                if (!effectiveBoundary.Covers(centerPoint))
+                    throw new InvalidOperationException("Destination center must be inside the selected boundary.");
+            }
         }
 
         if (request.TagIds is not null)
@@ -406,6 +676,66 @@ public class RegionalDestinationService : IRegionalDestinationService
             Name = tag.Name,
             Slug = tag.Slug
         };
+    }
+
+    private async Task EnsureBoundaryInsideRegionAsync(
+        int regionId,
+        Geometry boundary,
+        CancellationToken cancellationToken = default)
+    {
+        var regionBoundary = await _db.Regions
+            .AsNoTracking()
+            .Where(region => region.Id == regionId)
+            .Select(region => EF.Property<Geometry?>(region, BoundaryGeometryPropertyName))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (regionBoundary is null || regionBoundary.IsEmpty || !regionBoundary.IsValid)
+            throw new InvalidOperationException("The assigned region does not have a valid boundary.");
+
+        if (!regionBoundary.Covers(boundary))
+        {
+            // Suggested boundaries are clipped to the region and then serialized to GeoJSON with
+            // seven decimal places. Allow only a tiny round-trip tolerance so points lying exactly
+            // on the region edge do not fail after serialization.
+            const double serializationToleranceDegrees = 0.000001d;
+            if (!regionBoundary.Buffer(serializationToleranceDegrees).Covers(boundary))
+                throw new InvalidOperationException("Destination boundary must be completely inside the assigned region.");
+        }
+    }
+
+    private async Task EnsureBoundaryDoesNotOverlapDestinationsAsync(
+        int regionId,
+        Geometry boundary,
+        int? excludedDestinationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _db.Destinations
+            .AsNoTracking()
+            .Where(destination => destination.RegionId == regionId)
+            .Where(destination => EF.Property<Geometry?>(destination, BoundaryGeometryPropertyName) != null)
+            .Where(destination => EF.Property<Geometry>(destination, BoundaryGeometryPropertyName).Intersects(boundary));
+
+        if (excludedDestinationId.HasValue)
+            query = query.Where(destination => destination.Id != excludedDestinationId.Value);
+
+        var candidates = await query
+            .Select(destination => new DestinationBoundaryConflictCandidate
+            {
+                Id = destination.Id,
+                Name = destination.Name,
+                Boundary = EF.Property<Geometry>(destination, BoundaryGeometryPropertyName)
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var candidate in candidates)
+        {
+            var intersection = candidate.Boundary.Intersection(boundary);
+            if (!intersection.IsEmpty && intersection.Area > 0d)
+            {
+                throw new InvalidOperationException(
+                    $"Destination boundary overlaps destination '{candidate.Name}'. Destination boundaries may share an edge, but their areas cannot overlap.");
+            }
+        }
     }
 
     private async Task EnsureAssignedRegionAsync(int userId, int regionId)
@@ -594,6 +924,19 @@ public class RegionalDestinationService : IRegionalDestinationService
         if (boundary is null)
             return null;
 
+        if (!string.IsNullOrWhiteSpace(boundary.GeoJson))
+        {
+            var geometry = DestinationBoundaryGeometry.ParseGeoJson(boundary.GeoJson);
+            var source = NormalizeBoundarySource(boundary.Source);
+            var externalKey = NormalizeOptionalText(boundary.ExternalKey, 160, "Boundary external key is too long.");
+            var displayName = NormalizeOptionalText(boundary.DisplayName, 500, "Boundary display name is too long.");
+
+            if (source == "OpenStreetMap" && string.IsNullOrWhiteSpace(externalKey))
+                throw new InvalidOperationException("OpenStreetMap boundary is missing its external key.");
+
+            return new BoundaryResult(geometry.GeometryType, geometry, source, externalKey, displayName);
+        }
+
         var shapeType = NormalizeShapeType(boundary.ShapeType);
         var coordinates = boundary.Coordinates ?? new List<RegionalDestinationCoordinateDto>();
 
@@ -612,9 +955,7 @@ public class RegionalDestinationService : IRegionalDestinationService
         var first = ringCoordinates[0];
         var last = ringCoordinates[^1];
         if (!CoordinatesEqual(first, last))
-        {
             ringCoordinates.Add(new Coordinate(first.X, first.Y));
-        }
 
         var uniquePointCount = ringCoordinates
             .Take(ringCoordinates.Count - 1)
@@ -631,7 +972,21 @@ public class RegionalDestinationService : IRegionalDestinationService
         if (polygon.IsEmpty || !polygon.IsValid || polygon.Area <= 0)
             throw new InvalidOperationException("Boundary geometry is invalid.");
 
-        return new BoundaryResult(shapeType, polygon);
+        var normalized = DestinationBoundaryGeometry.NormalizePolygonal(new Geometry[] { polygon })
+            ?? throw new InvalidOperationException("Boundary geometry is invalid.");
+        return new BoundaryResult(shapeType, normalized, "Manual", null, "Manually drawn boundary");
+    }
+
+    private static string NormalizeBoundarySource(string? value)
+    {
+        var normalized = NormalizeToken(value ?? string.Empty);
+        return normalized switch
+        {
+            "openstreetmap" or "osm" => "OpenStreetMap",
+            "uploadedgeojson" or "uploaded" or "geojson" => "UploadedGeoJson",
+            "manual" => "Manual",
+            _ => throw new InvalidOperationException("Boundary source is invalid.")
+        };
     }
 
     private static DestinationCoordinates ResolveCoordinates(
@@ -642,8 +997,8 @@ public class RegionalDestinationService : IRegionalDestinationService
         {
             if (boundary is not null)
             {
-                var centroid = boundary.Geometry.Centroid;
-                return new DestinationCoordinates(centroid.Y, centroid.X);
+                var center = boundary.Geometry.InteriorPoint;
+                return new DestinationCoordinates(center.Y, center.X);
             }
 
             throw new InvalidOperationException("Destination center coordinates are required.");
@@ -747,6 +1102,11 @@ public class RegionalDestinationService : IRegionalDestinationService
             CreatedByUserId = row.CreatedByUserId,
             BoundaryNote = row.BoundaryNote,
             BoundaryShapeType = row.BoundaryShapeType,
+            HasBoundary = row.HasBoundary,
+            BoundarySource = row.BoundarySource,
+            BoundaryExternalKey = row.BoundaryExternalKey,
+            BoundaryDisplayName = row.BoundaryDisplayName,
+            BoundaryImportedAt = row.BoundaryImportedAt,
             Tags = row.Tags,
             CreatedAt = row.CreatedAt,
             PublishedAt = row.PublishedAt,
@@ -778,6 +1138,11 @@ public class RegionalDestinationService : IRegionalDestinationService
             CreatedByUserId = item.CreatedByUserId,
             BoundaryNote = item.BoundaryNote,
             BoundaryShapeType = item.BoundaryShapeType,
+            HasBoundary = item.HasBoundary,
+            BoundarySource = item.BoundarySource,
+            BoundaryExternalKey = item.BoundaryExternalKey,
+            BoundaryDisplayName = item.BoundaryDisplayName,
+            BoundaryImportedAt = item.BoundaryImportedAt,
             Tags = item.Tags,
             CreatedAt = item.CreatedAt,
             PublishedAt = item.PublishedAt,
@@ -1053,7 +1418,7 @@ public class RegionalDestinationService : IRegionalDestinationService
             .Replace("_", string.Empty, StringComparison.Ordinal)
             .ToLowerInvariant();
 
-    private sealed record BoundaryResult(string ShapeType, Geometry Geometry);
+    private sealed record BoundaryResult(string ShapeType, Geometry Geometry, string Source, string? ExternalKey, string? DisplayName);
 
     private sealed record DestinationCoordinates(double Latitude, double Longitude);
 
@@ -1073,6 +1438,11 @@ public class RegionalDestinationService : IRegionalDestinationService
         public int? CreatedByUserId { get; set; }
         public string? BoundaryNote { get; set; }
         public string? BoundaryShapeType { get; set; }
+        public bool HasBoundary { get; set; }
+        public string? BoundarySource { get; set; }
+        public string? BoundaryExternalKey { get; set; }
+        public string? BoundaryDisplayName { get; set; }
+        public DateTime? BoundaryImportedAt { get; set; }
         public List<RegionalDestinationTagDto> Tags { get; set; } = new();
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
@@ -1084,4 +1454,410 @@ public class RegionalDestinationService : IRegionalDestinationService
         public string? CoverImageUrl { get; set; }
         public List<string> GalleryImageUrls { get; set; } = new();
     }
+    private async Task<List<NominatimBoundaryResult>> SearchNominatimBoundariesAsync(
+        BoundarySearchContext context,
+        string query,
+        CancellationToken cancellationToken)
+    {
+        var regionBoundary = context.RegionBoundary
+            ?? throw new InvalidOperationException("The assigned region does not have a valid boundary.");
+        var envelope = regionBoundary.EnvelopeInternal;
+        var language = string.IsNullOrWhiteSpace(context.CountryCode)
+            ? "en"
+            : $"en,{context.CountryCode.Trim().ToLowerInvariant()}";
+
+        // Keep the text query broad. The country code is a hard filter and the region envelope is
+        // only a ranking hint. bounded=1 was intentionally removed because OSM and geoBoundaries
+        // coastlines/admin lines often differ slightly and were excluding valid city relations.
+        var url = $"{NominatimBaseUrl}/search?format=jsonv2" +
+                  "&polygon_geojson=1&polygon_threshold=0.00005" +
+                  "&addressdetails=1&namedetails=1&extratags=1" +
+                  "&dedupe=0&limit=40" +
+                  $"&q={Uri.EscapeDataString(query)}" +
+                  $"&viewbox={FormatCoordinate(envelope.MinX)},{FormatCoordinate(envelope.MaxY)},{FormatCoordinate(envelope.MaxX)},{FormatCoordinate(envelope.MinY)}" +
+                  $"&accept-language={Uri.EscapeDataString(language)}";
+
+        if (!string.IsNullOrWhiteSpace(context.CountryCode))
+            url += $"&countrycodes={Uri.EscapeDataString(context.CountryCode.Trim().ToLowerInvariant())}";
+
+        return await GetNominatimJsonAsync<List<NominatimBoundaryResult>>(url, cancellationToken)
+            ?? new List<NominatimBoundaryResult>();
+    }
+
+    private async Task<NominatimBoundaryResult?> ReverseNominatimBoundaryAsync(
+        double latitude,
+        double longitude,
+        string? countryCode,
+        int zoom,
+        CancellationToken cancellationToken)
+    {
+        var language = string.IsNullOrWhiteSpace(countryCode)
+            ? "en"
+            : $"en,{countryCode.Trim().ToLowerInvariant()}";
+        var url = $"{NominatimBaseUrl}/reverse?format=jsonv2" +
+                  $"&lat={FormatCoordinate(latitude)}&lon={FormatCoordinate(longitude)}" +
+                  $"&zoom={zoom}&layer=address" +
+                  "&polygon_geojson=1&polygon_threshold=0.00005" +
+                  "&addressdetails=1&namedetails=1&extratags=1" +
+                  $"&accept-language={Uri.EscapeDataString(language)}";
+
+        return await GetNominatimJsonAsync<NominatimBoundaryResult>(url, cancellationToken);
+    }
+
+    private async Task<T?> GetNominatimJsonAsync<T>(string url, CancellationToken cancellationToken)
+    {
+        await NominatimRequestGate.WaitAsync(cancellationToken);
+        try
+        {
+            var elapsed = DateTimeOffset.UtcNow - NominatimLastRequestStartedAt;
+            var remainingDelay = NominatimMinimumRequestInterval - elapsed;
+            if (remainingDelay > TimeSpan.Zero)
+                await Task.Delay(remainingDelay, cancellationToken);
+
+            NominatimLastRequestStartedAt = DateTimeOffset.UtcNow;
+            var client = _httpClientFactory.CreateClient("DestinationBoundaryProvider");
+            return await client.GetFromJsonAsync<T>(url, cancellationToken);
+        }
+        finally
+        {
+            NominatimRequestGate.Release();
+        }
+    }
+
+    private static void AddNominatimBoundaryCandidate(
+        IDictionary<string, BoundarySuggestionCandidate> candidates,
+        NominatimBoundaryResult providerResult,
+        string query,
+        Geometry regionBoundary,
+        Point? requestedCenter,
+        bool isReverseLookup)
+    {
+        if (providerResult.GeoJson.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+            return;
+
+        var externalKey = TryBuildOsmExternalKey(providerResult.OsmType, providerResult.OsmId);
+        if (externalKey is null)
+            return;
+
+        Geometry providerGeometry;
+        try
+        {
+            providerGeometry = DestinationBoundaryGeometry.ParseGeoJson(providerResult.GeoJson.GetRawText());
+        }
+        catch (InvalidOperationException)
+        {
+            // Point/line search results are expected and are not destination boundaries.
+            return;
+        }
+
+        if (!TryConstrainBoundaryToRegion(
+                providerGeometry,
+                regionBoundary,
+                requestedCenter,
+                out var geometry,
+                out var overlapRatio))
+        {
+            return;
+        }
+
+        var score = CalculateBoundaryCandidateScore(
+            providerResult,
+            query,
+            geometry,
+            regionBoundary,
+            overlapRatio,
+            requestedCenter is not null,
+            isReverseLookup);
+        if (score < 35d)
+            return;
+
+        Point center;
+        if (requestedCenter is not null && geometry.Covers(requestedCenter))
+            center = requestedCenter;
+        else
+            center = geometry.InteriorPoint;
+
+        var dto = new RegionalDestinationBoundarySuggestionDto
+        {
+            Source = "OpenStreetMap",
+            ExternalKey = externalKey,
+            DisplayName = NormalizeProviderDisplayName(providerResult.DisplayName ?? providerResult.Name, query),
+            Category = providerResult.Category,
+            ProviderType = providerResult.AddressType ?? providerResult.Type,
+            GeometryType = geometry.GeometryType,
+            GeoJson = DestinationBoundaryGeometry.ToGeoJson(geometry),
+            CenterLatitude = center.Y,
+            CenterLongitude = center.X
+        };
+
+        if (!candidates.TryGetValue(externalKey, out var existing) || score > existing.Score)
+            candidates[externalKey] = new BoundarySuggestionCandidate(dto, score);
+    }
+
+    private static bool TryConstrainBoundaryToRegion(
+        Geometry candidate,
+        Geometry regionBoundary,
+        Point? requestedCenter,
+        out Geometry constrained,
+        out double overlapRatio)
+    {
+        constrained = null!;
+        overlapRatio = 0d;
+
+        var normalizedCandidate = DestinationBoundaryGeometry.NormalizePolygonal(new[] { candidate });
+        if (normalizedCandidate is null || normalizedCandidate.IsEmpty || !normalizedCandidate.IsValid)
+            return false;
+
+        try
+        {
+            // If the manager selected a center, only keep polygons that actually contain it.
+            // This removes similarly named places elsewhere in the same county/country.
+            if (requestedCenter is not null && !normalizedCandidate.Covers(requestedCenter))
+                return false;
+
+            if (regionBoundary.Covers(normalizedCandidate))
+            {
+                constrained = normalizedCandidate;
+                overlapRatio = 1d;
+                return true;
+            }
+
+            if (!regionBoundary.Intersects(normalizedCandidate))
+                return false;
+
+            var intersection = normalizedCandidate.Intersection(regionBoundary);
+            var normalizedIntersection = DestinationBoundaryGeometry.NormalizePolygonal(new[] { intersection });
+            if (normalizedIntersection is null || normalizedIntersection.IsEmpty || !normalizedIntersection.IsValid)
+                return false;
+
+            var candidateArea = normalizedCandidate.Area;
+            if (candidateArea <= 0d)
+                return false;
+
+            overlapRatio = normalizedIntersection.Area / candidateArea;
+
+            // OSM administrative polygons and geoBoundaries regions often disagree along coasts
+            // and may include different water areas. Keep a conservative minimum overlap, then
+            // clip the candidate to the assigned region. A selected center makes the match safer.
+            var minimumOverlap = requestedCenter is null ? 0.10d : 0.05d;
+            if (!double.IsFinite(overlapRatio) || overlapRatio < minimumOverlap)
+                return false;
+
+            if (requestedCenter is not null && !normalizedIntersection.Covers(requestedCenter))
+                return false;
+
+            constrained = normalizedIntersection;
+            return true;
+        }
+        catch (TopologyException)
+        {
+            return false;
+        }
+    }
+
+    private static double CalculateBoundaryCandidateScore(
+        NominatimBoundaryResult result,
+        string query,
+        Geometry geometry,
+        Geometry regionBoundary,
+        double overlapRatio,
+        bool hasRequestedCenter,
+        bool isReverseLookup)
+    {
+        var names = new List<string?>
+        {
+            result.Name,
+            result.DisplayName?.Split(',', 2)[0]
+        };
+
+        if (result.NameDetails is not null)
+            names.AddRange(result.NameDetails.Values);
+        if (result.Address is not null)
+            names.AddRange(result.Address.Values);
+
+        var nameScore = names
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => CalculateBoundaryNameMatchScore(value!, query))
+            .DefaultIfEmpty(0d)
+            .Max();
+
+        var score = nameScore;
+        var category = NormalizeBoundarySearchText(result.Category ?? string.Empty);
+        var type = NormalizeBoundarySearchText(result.Type ?? string.Empty);
+        var addressType = NormalizeBoundarySearchText(result.AddressType ?? string.Empty);
+
+        if (category == "boundary" && type == "administrative")
+            score += 24d;
+        if (addressType is "city" or "town" or "village" or "municipality" or "borough")
+            score += 28d;
+        if (type is "city" or "town" or "village" or "municipality" or "protected area" or "national park" or "nature reserve" or "mountain range")
+            score += 20d;
+        if (category is "natural" or "leisure")
+            score += 12d;
+        if (string.Equals(result.OsmType, "relation", StringComparison.OrdinalIgnoreCase))
+            score += 6d;
+        if (hasRequestedCenter)
+            score += 14d;
+        if (isReverseLookup)
+            score += 8d;
+        if (result.Importance.HasValue && double.IsFinite(result.Importance.Value))
+            score += Math.Clamp(result.Importance.Value, 0d, 1d) * 10d;
+
+        score += Math.Clamp(overlapRatio, 0d, 1d) * 8d;
+
+        if (regionBoundary.Area > 0d)
+        {
+            var regionCoverage = geometry.Area / regionBoundary.Area;
+            if (regionCoverage > 0.85d)
+                score -= 42d;
+            else if (regionCoverage > 0.50d)
+                score -= 20d;
+        }
+
+        return score;
+    }
+
+    private static double CalculateBoundaryNameMatchScore(string candidate, string query)
+    {
+        var normalizedCandidate = NormalizeBoundarySearchText(candidate);
+        var normalizedQuery = NormalizeBoundarySearchText(query);
+        if (normalizedCandidate.Length == 0 || normalizedQuery.Length == 0)
+            return 0d;
+        if (normalizedCandidate == normalizedQuery)
+            return 120d;
+
+        var paddedCandidate = $" {normalizedCandidate} ";
+        var paddedQuery = $" {normalizedQuery} ";
+        if (paddedCandidate.Contains(paddedQuery, StringComparison.Ordinal))
+            return 96d;
+        if (normalizedCandidate.StartsWith(normalizedQuery + " ", StringComparison.Ordinal) ||
+            normalizedCandidate.EndsWith(" " + normalizedQuery, StringComparison.Ordinal))
+        {
+            return 92d;
+        }
+        if (normalizedCandidate.Contains(normalizedQuery, StringComparison.Ordinal))
+            return 82d;
+
+        var queryTokens = normalizedQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var candidateTokens = normalizedCandidate
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.Ordinal);
+        if (queryTokens.Length == 0)
+            return 0d;
+
+        var matchedTokens = queryTokens.Count(candidateTokens.Contains);
+        if (matchedTokens == queryTokens.Length)
+            return 74d;
+
+        return 55d * matchedTokens / queryTokens.Length;
+    }
+
+    private static string NormalizeBoundarySearchText(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var decomposed = value.Trim().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+        var previousWasSpace = true;
+
+        foreach (var character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
+                continue;
+
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(char.ToLowerInvariant(character));
+                previousWasSpace = false;
+            }
+            else if (!previousWasSpace)
+            {
+                builder.Append(' ');
+                previousWasSpace = true;
+            }
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    private static string FormatCoordinate(double value) => value.ToString("0.#######", CultureInfo.InvariantCulture);
+
+    private static string? TryBuildOsmExternalKey(string? osmType, long osmId)
+    {
+        var normalizedType = (osmType ?? string.Empty).Trim().ToLowerInvariant();
+        if (osmId <= 0 ||
+            (normalizedType != "node" && normalizedType != "way" && normalizedType != "relation"))
+        {
+            return null;
+        }
+
+        return $"osm:{normalizedType}:{osmId}";
+    }
+
+    private static string NormalizeProviderDisplayName(string? displayName, string fallback)
+    {
+        var normalized = (displayName ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+            normalized = fallback;
+        return normalized.Length <= 500 ? normalized : normalized[..500];
+    }
+
+    private sealed record BoundarySuggestionCandidate(
+        RegionalDestinationBoundarySuggestionDto Dto,
+        double Score);
+
+    private sealed class BoundarySearchContext
+    {
+        public string RegionName { get; set; } = string.Empty;
+        public string TerritoryName { get; set; } = string.Empty;
+        public string? CountryCode { get; set; }
+        public Geometry? RegionBoundary { get; set; }
+    }
+
+    private sealed class DestinationBoundaryConflictCandidate
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public Geometry Boundary { get; set; } = null!;
+    }
+
+    private sealed class NominatimBoundaryResult
+    {
+        [JsonPropertyName("osm_type")]
+        public string? OsmType { get; set; }
+
+        [JsonPropertyName("osm_id")]
+        [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+        public long OsmId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("display_name")]
+        public string? DisplayName { get; set; }
+
+        [JsonPropertyName("category")]
+        public string? Category { get; set; }
+
+        [JsonPropertyName("type")]
+        public string? Type { get; set; }
+
+        [JsonPropertyName("addresstype")]
+        public string? AddressType { get; set; }
+
+        [JsonPropertyName("importance")]
+        [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+        public double? Importance { get; set; }
+
+        [JsonPropertyName("address")]
+        public Dictionary<string, string?>? Address { get; set; }
+
+        [JsonPropertyName("namedetails")]
+        public Dictionary<string, string?>? NameDetails { get; set; }
+
+        [JsonPropertyName("geojson")]
+        public JsonElement GeoJson { get; set; }
+    }
+
 }

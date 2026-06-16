@@ -496,6 +496,15 @@ public class AppDbContext : DbContext
             entity.Property(x => x.BoundaryShapeType)
                 .HasMaxLength(32);
 
+            entity.Property(x => x.BoundarySource)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.BoundaryExternalKey)
+                .HasMaxLength(160);
+
+            entity.Property(x => x.BoundaryDisplayName)
+                .HasMaxLength(500);
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
@@ -524,10 +533,14 @@ public class AppDbContext : DbContext
                 .HasMethod("GIST");
 
             entity.Property<Geometry?>("BoundaryGeometry")
-                .HasColumnType("geography (polygon)");
+                .HasColumnType("geography (geometry)");
 
             entity.HasIndex("BoundaryGeometry")
                 .HasMethod("GIST");
+
+            entity.HasIndex(x => x.BoundaryExternalKey)
+                .IsUnique()
+                .HasFilter("\"BoundaryExternalKey\" IS NOT NULL");
         });
     }
 

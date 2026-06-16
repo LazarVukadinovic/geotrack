@@ -3,6 +3,9 @@ import { Injectable } from '@angular/core';
 import { Observable, map, throwError } from 'rxjs';
 import {
   DestinationSort,
+  DestinationCoordinateResolutionDto,
+  RegionalDestinationBoundarySuggestionDto,
+  RegionalDestinationBoundarySuggestionsDto,
   RegionalDestinationCreateRequest,
   RegionalDestinationDetailDto,
   RegionalDestinationListItemDto,
@@ -104,6 +107,50 @@ export class DestinationsListService {
 
   createDestination(payload: RegionalDestinationCreateRequest): Observable<RegionalDestinationDetailDto> {
     return this.http.post<RegionalDestinationDetailDto>(this.endpoint, this.buildCreateFormData(payload));
+  }
+
+  searchBoundarySuggestions(
+    regionId: number,
+    query: string,
+    latitude?: number | null,
+    longitude?: number | null,
+  ): Observable<RegionalDestinationBoundarySuggestionDto[]> {
+    let params = new HttpParams()
+      .set('regionId', String(regionId))
+      .set('query', query.trim());
+
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      params = params
+        .set('latitude', String(latitude))
+        .set('longitude', String(longitude));
+    }
+
+    return this.http
+      .get<RegionalDestinationBoundarySuggestionsDto>('/api/admin/regional/destination-boundaries/suggestions', { params })
+      .pipe(map(response => response.items ?? []));
+  }
+
+  uploadBoundary(regionId: number, file: File): Observable<RegionalDestinationBoundarySuggestionDto> {
+    const params = new HttpParams().set('regionId', String(regionId));
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<RegionalDestinationBoundarySuggestionDto>(
+      '/api/admin/regional/destination-boundaries/upload',
+      formData,
+      { params },
+    );
+  }
+
+  resolveDestination(
+    regionId: number,
+    latitude: number,
+    longitude: number,
+  ): Observable<DestinationCoordinateResolutionDto> {
+    const params = new HttpParams()
+      .set('regionId', String(regionId))
+      .set('latitude', String(latitude))
+      .set('longitude', String(longitude));
+    return this.http.get<DestinationCoordinateResolutionDto>('/api/admin/regional/destinations/resolve', { params });
   }
 
   updateDestination(

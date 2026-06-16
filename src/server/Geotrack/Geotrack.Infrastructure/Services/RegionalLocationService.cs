@@ -5,10 +5,6 @@ using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Microsoft.EntityFrameworkCore;
-using Coordinate = NetTopologySuite.Geometries.Coordinate;
-using Geometry = NetTopologySuite.Geometries.Geometry;
-using GeometryFactory = NetTopologySuite.Geometries.GeometryFactory;
-using PrecisionModel = NetTopologySuite.Geometries.PrecisionModel;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -21,21 +17,22 @@ public class RegionalLocationService : IRegionalLocationService
     private const string ArchivedStatus = "Archived";
     private const string ManagedRegionalImagePrefix = "/media/uploads/regional/";
     private static string ExistingEditRoute(int locationId) => $"/locations/edit/{locationId}";
-    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
-    private static readonly GeometryFactory Wgs84GeometryFactory = new(new PrecisionModel(), 4326);
 
     private readonly AppDbContext _db;
     private readonly RegionalScopeValidationService _scopeValidation;
     private readonly IContentHtmlSanitizer _htmlSanitizer;
+    private readonly DestinationBoundaryResolver _destinationBoundaryResolver;
 
     public RegionalLocationService(
         AppDbContext db,
         RegionalScopeValidationService scopeValidation,
-        IContentHtmlSanitizer htmlSanitizer)
+        IContentHtmlSanitizer htmlSanitizer,
+        DestinationBoundaryResolver destinationBoundaryResolver)
     {
         _db = db;
         _scopeValidation = scopeValidation;
         _htmlSanitizer = htmlSanitizer;
+        _destinationBoundaryResolver = destinationBoundaryResolver;
     }
 
     public async Task<RegionalLocationListResponseDto> GetLocationsAsync(
@@ -232,29 +229,14 @@ public class RegionalLocationService : IRegionalLocationService
 
         await EnsureAssignedRegionAsync(userId, request.RegionId);
 
-        var destination = await _db.Destinations
-            .AsNoTracking()
-            .Select(item => new
-            {
-                item.Id,
-                item.RegionId,
-                BoundaryGeometry = EF.Property<Geometry?>(item, BoundaryGeometryPropertyName)
-            })
-            .SingleOrDefaultAsync(item =>
-                item.Id == request.DestinationId &&
-                item.RegionId == request.RegionId)
-            ?? throw new InvalidOperationException("Destination is invalid for the selected region.");
+        if (request.Boundary is not null || !string.IsNullOrWhiteSpace(request.BoundaryNote))
+            throw new InvalidOperationException("Locations use only a center point; location boundaries are not accepted.");
 
         var name = NormalizeRequiredText(request.Name, "Location name is required.", 200, "Location name is too long.");
         var summary = NormalizeOptionalText(request.Summary, 160, "Summary is too long.");
         var description = _htmlSanitizer.SanitizeRichText(request.Description);
         var status = NormalizeCreateStatus(request.Status);
-        var boundary = BuildBoundary(request.Boundary);
-        if (boundary is not null)
-        {
-            EnsureLocationBoundaryInsideParentDestination(boundary.Geometry, destination.BoundaryGeometry);
-        }
-        var coordinates = ResolveCoordinates(request, boundary);
+        var coordinates = ResolveCoordinates(request);
         await _scopeValidation.EnsurePointAllowedAsync(
             userId,
             request.RegionId,
@@ -262,19 +244,14 @@ public class RegionalLocationService : IRegionalLocationService
             coordinates.Latitude,
             coordinates.Longitude,
             "Create");
-        EnsurePointInsideParentDestination(
+
+        var resolvedDestination = await _destinationBoundaryResolver.ResolveRequiredInRegionAsync(
+            request.RegionId,
             coordinates.Latitude,
-            coordinates.Longitude,
-            destination.BoundaryGeometry);
-        if (boundary is not null)
-        {
-            await _scopeValidation.EnsureGeometryAllowedAsync(
-                userId,
-                request.RegionId,
-                "Location",
-                boundary.Geometry,
-                "Create");
-        }
+            coordinates.Longitude);
+        if (request.DestinationId > 0 && request.DestinationId != resolvedDestination.DestinationId)
+            throw new InvalidOperationException("Destination does not match the destination boundary at the selected coordinates.");
+
         var locationTypeId = await ResolveLocationTypeIdAsync(request.LocationTypeId);
         var tagIds = await ValidateLocationTagIdsAsync(request.TagIds);
         var now = DateTime.UtcNow;
@@ -290,14 +267,14 @@ public class RegionalLocationService : IRegionalLocationService
                 Summary = summary,
                 Description = description,
                 Status = status,
-                DestinationId = destination.Id,
+                DestinationId = resolvedDestination.DestinationId!.Value,
                 LocationTypeId = locationTypeId,
                 Latitude = coordinates.Latitude,
                 Longitude = coordinates.Longitude,
                 CreatedByUserId = userId,
                 PublishedAt = status == PublishedStatus ? now : null,
-                BoundaryNote = NormalizeOptionalText(request.BoundaryNote, 500, "Boundary note is too long."),
-                BoundaryShapeType = boundary?.ShapeType,
+                BoundaryNote = null,
+                BoundaryShapeType = null,
                 CreatedAt = now,
                 LocationTags = tagIds
                     .Select(tagId => new LocationTag { TagId = tagId })
@@ -305,11 +282,6 @@ public class RegionalLocationService : IRegionalLocationService
             };
 
             _db.Locations.Add(location);
-            if (boundary is not null)
-            {
-                _db.Entry(location).Property<Geometry?>(BoundaryGeometryPropertyName).CurrentValue = boundary.Geometry;
-            }
-
             await _db.SaveChangesAsync();
 
             _db.EntityImages.AddRange(AddRequiredCreateImages(request, location.Id, location.Name, now));
@@ -337,18 +309,6 @@ public class RegionalLocationService : IRegionalLocationService
             .SingleOrDefaultAsync(item => item.Id == locationId && item.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Location not found.");
 
-        var parentDestinationChanged = request.DestinationId.HasValue;
-        if (request.DestinationId.HasValue)
-        {
-            var destination = await _db.Destinations
-                .SingleOrDefaultAsync(item =>
-                    item.Id == request.DestinationId.Value &&
-                    item.RegionId == regionId)
-                ?? throw new InvalidOperationException("Destination is invalid for the selected region.");
-
-            location.DestinationId = destination.Id;
-        }
-
         if (request.LocationTypeId.HasValue &&
             !await _db.LocationTypes.AnyAsync(item => item.Id == request.LocationTypeId.Value))
         {
@@ -356,7 +316,7 @@ public class RegionalLocationService : IRegionalLocationService
         }
 
         ApplyUpdate(location, request);
-        if (parentDestinationChanged || request.Latitude.HasValue || request.Longitude.HasValue)
+        if (request.DestinationId.HasValue || request.Latitude.HasValue || request.Longitude.HasValue)
         {
             await _scopeValidation.EnsurePointAllowedAsync(
                 userId,
@@ -365,15 +325,19 @@ public class RegionalLocationService : IRegionalLocationService
                 location.Latitude,
                 location.Longitude,
                 "Update");
-            var parentDestinationBoundary = await _db.Destinations
-                .AsNoTracking()
-                .Where(item => item.Id == location.DestinationId)
-                .Select(item => EF.Property<Geometry?>(item, BoundaryGeometryPropertyName))
-                .SingleAsync();
-            EnsurePointInsideParentDestination(
+
+            var resolvedDestination = await _destinationBoundaryResolver.ResolveRequiredInRegionAsync(
+                regionId,
                 location.Latitude,
-                location.Longitude,
-                parentDestinationBoundary);
+                location.Longitude);
+            if (request.DestinationId.HasValue &&
+                request.DestinationId.Value > 0 &&
+                request.DestinationId.Value != resolvedDestination.DestinationId)
+            {
+                throw new InvalidOperationException("Destination does not match the destination boundary at the selected coordinates.");
+            }
+
+            location.DestinationId = resolvedDestination.DestinationId!.Value;
         }
 
         if (request.TagIds is not null)
@@ -695,91 +659,10 @@ public class RegionalLocationService : IRegionalLocationService
         return tagIds;
     }
 
-    private static void EnsurePointInsideParentDestination(
-        double latitude,
-        double longitude,
-        Geometry? parentDestinationBoundary)
-    {
-        if (parentDestinationBoundary is null || parentDestinationBoundary.IsEmpty)
-            return;
-
-        var point = Wgs84GeometryFactory.CreatePoint(new Coordinate(longitude, latitude));
-        point.SRID = 4326;
-
-        if (!parentDestinationBoundary.Covers(point))
-            throw new InvalidOperationException("Location coordinates must be inside parent destination boundary.");
-    }
-
-    private static void EnsureLocationBoundaryInsideParentDestination(
-        Geometry locationBoundary,
-        Geometry? parentDestinationBoundary)
-    {
-        if (parentDestinationBoundary is null || parentDestinationBoundary.IsEmpty || !parentDestinationBoundary.IsValid)
-            throw new InvalidOperationException("Parent destination must have a boundary before adding location zones.");
-
-        if (!parentDestinationBoundary.Covers(locationBoundary))
-            throw new InvalidOperationException("Location boundary must be inside parent destination boundary.");
-    }
-
-    private static BoundaryResult? BuildBoundary(RegionalLocationBoundaryDto? boundary)
-    {
-        if (boundary is null)
-            return null;
-
-        var shapeType = NormalizeShapeType(boundary.ShapeType);
-        var coordinates = boundary.Coordinates ?? new List<RegionalLocationCoordinateDto>();
-
-        if (coordinates.Count < 3)
-            throw new InvalidOperationException("Boundary geometry must contain at least three points.");
-
-        var ringCoordinates = coordinates
-            .Select(point =>
-            {
-                ValidateLatitude(point.Latitude);
-                ValidateLongitude(point.Longitude);
-                return new Coordinate(point.Longitude, point.Latitude);
-            })
-            .ToList();
-
-        var first = ringCoordinates[0];
-        var last = ringCoordinates[^1];
-        if (!CoordinatesEqual(first, last))
-        {
-            ringCoordinates.Add(new Coordinate(first.X, first.Y));
-        }
-
-        var uniquePointCount = ringCoordinates
-            .Take(ringCoordinates.Count - 1)
-            .Select(coordinate => $"{Math.Round(coordinate.X, 7)}:{Math.Round(coordinate.Y, 7)}")
-            .Distinct(StringComparer.Ordinal)
-            .Count();
-
-        if (uniquePointCount < 3 || ringCoordinates.Count < 4)
-            throw new InvalidOperationException("Boundary geometry must contain at least three distinct points.");
-
-        var polygon = Wgs84GeometryFactory.CreatePolygon(ringCoordinates.ToArray());
-        polygon.SRID = 4326;
-
-        if (polygon.IsEmpty || !polygon.IsValid || polygon.Area <= 0)
-            throw new InvalidOperationException("Boundary geometry is invalid.");
-
-        return new BoundaryResult(shapeType, polygon);
-    }
-
-    private static LocationCoordinates ResolveCoordinates(
-        RegionalLocationCreateRequestDto request,
-        BoundaryResult? boundary)
+    private static LocationCoordinates ResolveCoordinates(RegionalLocationCreateRequestDto request)
     {
         if (!request.Latitude.HasValue || !request.Longitude.HasValue)
-        {
-            if (boundary is not null)
-            {
-                var centroid = boundary.Geometry.Centroid;
-                return new LocationCoordinates(centroid.Y, centroid.X);
-            }
-
             throw new InvalidOperationException("A location center point is required.");
-        }
 
         ValidateLatitude(request.Latitude.Value);
         ValidateLongitude(request.Longitude.Value);
@@ -797,18 +680,6 @@ public class RegionalLocationService : IRegionalLocationService
             "published" or "publish" => PublishedStatus,
             "draft" => DraftStatus,
             _ => throw new InvalidOperationException("Location status is invalid.")
-        };
-    }
-
-    private static string NormalizeShapeType(string? value)
-    {
-        var normalized = NormalizeToken(value ?? string.Empty);
-        return normalized switch
-        {
-            "polygon" => "Polygon",
-            "rectangle" => "Rectangle",
-            "circle" => "Circle",
-            _ => throw new InvalidOperationException("Boundary shape type is invalid.")
         };
     }
 
@@ -848,10 +719,6 @@ public class RegionalLocationService : IRegionalLocationService
         if (!double.IsFinite(longitude) || longitude is < -180 or > 180)
             throw new InvalidOperationException("Longitude is invalid.");
     }
-
-    private static bool CoordinatesEqual(Coordinate first, Coordinate second) =>
-        Math.Abs(first.X - second.X) < 0.0000001 &&
-        Math.Abs(first.Y - second.Y) < 0.0000001;
 
     private static RegionalLocationListItemDto MapListItem(LocationProjection row)
     {
@@ -1181,8 +1048,6 @@ public class RegionalLocationService : IRegionalLocationService
     }
 
     private static string BuildInternalReferenceId(int locationId) => $"LOC-{locationId:D6}";
-
-    private sealed record BoundaryResult(string ShapeType, Geometry Geometry);
 
     private sealed record LocationCoordinates(double Latitude, double Longitude);
 

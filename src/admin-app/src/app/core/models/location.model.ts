@@ -73,16 +73,6 @@ export interface RegionalLocationTypeDto {
   description?: string | null;
 }
 
-export interface RegionalLocationCoordinateDto {
-  latitude: number;
-  longitude: number;
-}
-
-export interface RegionalLocationBoundaryDto {
-  shapeType: 'Polygon' | 'Rectangle' | 'Circle';
-  coordinates: RegionalLocationCoordinateDto[];
-}
-
 export interface RegionalLocationCreateRequest {
   regionId: number;
   destinationId: number;
@@ -93,8 +83,6 @@ export interface RegionalLocationCreateRequest {
   locationTypeId?: number | null;
   latitude?: number | null;
   longitude?: number | null;
-  boundaryNote?: string | null;
-  boundary?: RegionalLocationBoundaryDto | null;
   tagIds: number[];
   cardImageFile?: File | null;
   coverImageFile?: File | null;

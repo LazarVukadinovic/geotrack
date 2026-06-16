@@ -26,8 +26,6 @@ public class PlaceContributionService : IPlaceContributionService
     private const int MaxBookingPartnerUrlLength = 500;
     private const int MaxImageUrlLength = 1000;
     private const int MaxBookingPartnerIdLength = 80;
-    private const double MaxContributionLocationMatchDistanceKm = 15d;
-    private const double MaxContributionDestinationMatchDistanceKm = 40d;
     private const string ManagedContributionMediaPrefix = "/media/uploads/contributions/";
     private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
 
@@ -59,6 +57,7 @@ public class PlaceContributionService : IPlaceContributionService
     private readonly IAdminNotificationService _adminNotificationService;
     private readonly IContentHtmlSanitizer _htmlSanitizer;
     private readonly IModerationAuditService _auditService;
+    private readonly DestinationBoundaryResolver _destinationBoundaryResolver;
 
     public PlaceContributionService(
         AppDbContext db,
@@ -66,7 +65,8 @@ public class PlaceContributionService : IPlaceContributionService
         IUserNotificationService notificationService,
         IAdminNotificationService adminNotificationService,
         IContentHtmlSanitizer htmlSanitizer,
-        IModerationAuditService auditService)
+        IModerationAuditService auditService,
+        DestinationBoundaryResolver destinationBoundaryResolver)
     {
         _db = db;
         _mediaStorage = mediaStorage;
@@ -74,6 +74,7 @@ public class PlaceContributionService : IPlaceContributionService
         _adminNotificationService = adminNotificationService;
         _htmlSanitizer = htmlSanitizer;
         _auditService = auditService;
+        _destinationBoundaryResolver = destinationBoundaryResolver;
     }
 
     public async Task<GetPlaceContributionsResponseDto> GetForUserAsync(int userId)
@@ -972,52 +973,30 @@ public class PlaceContributionService : IPlaceContributionService
 
         var now = DateTime.UtcNow;
 
-        Destination destination;
-
-        if (existingDestinationId.HasValue)
+        if (!existingDestinationId.HasValue || existingDestinationId.Value <= 0)
         {
-            // Use an existing destination — verify it belongs to the chosen region
-            destination = await _db.Destinations
-                .SingleOrDefaultAsync(d => d.Id == existingDestinationId.Value && d.RegionId == regionId)
-                ?? throw new KeyNotFoundException("Destination not found in the selected region.");
+            throw new InvalidOperationException(
+                "An existing destination with a valid boundary is required. Create the destination boundary before approving this legacy contribution.");
         }
-        else
+
+        var resolvedDestination = await _destinationBoundaryResolver.ResolvePublicAsync(
+            contribution.Latitude.Value,
+            contribution.Longitude.Value);
+        if (!resolvedDestination.IsResolved || !resolvedDestination.DestinationId.HasValue)
+            throw new InvalidOperationException(resolvedDestination.Message);
+
+        if (resolvedDestination.RegionId != regionId || resolvedDestination.DestinationId != existingDestinationId.Value)
         {
-            // Create a new destination with the provided (or auto-derived) name
-            var destName = NormalizeOptional(newDestinationName)
-                ?? NormalizeOptional(contribution.City)
-                ?? region.Name;
-
-            if (!newDestinationLatitude.HasValue || !newDestinationLongitude.HasValue ||
-                !HasUsableCoordinates(newDestinationLatitude.Value, newDestinationLongitude.Value))
-            {
-                throw new InvalidOperationException("Confirm the new destination centre on the map before approving.");
-            }
-
-            var centreValidation = await ValidateDestinationCenterAsync(
-                regionId,
-                newDestinationLatitude.Value,
-                newDestinationLongitude.Value);
-            if (!centreValidation.IsAllowed)
-                throw new InvalidOperationException(centreValidation.Message);
-
-            var destinationType = await ResolveDestinationTypeAsync();
-            destination = new Destination
-            {
-                Name = destName,
-                SearchText = destName.ToLowerInvariant(),
-                Description = string.Empty,
-                Latitude = newDestinationLatitude.Value,
-                Longitude = newDestinationLongitude.Value,
-                RegionId = regionId,
-                DestinationTypeId = destinationType.Id,
-                Status = "Published",
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-            _db.Destinations.Add(destination);
-            await _db.SaveChangesAsync();
+            throw new InvalidOperationException(
+                "The selected destination does not contain the contribution coordinates.");
         }
+
+        var destination = await _db.Destinations
+            .SingleOrDefaultAsync(d =>
+                d.Id == existingDestinationId.Value &&
+                d.RegionId == regionId &&
+                d.Status == "Published")
+            ?? throw new KeyNotFoundException("Published destination not found in the selected region.");
 
         var locationName = NormalizeOptional(newLocationName)
             ?? throw new InvalidOperationException("Location name is required.");
@@ -1073,8 +1052,6 @@ public class PlaceContributionService : IPlaceContributionService
 
         var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
         var result = MapDetail(saved, includeReviewNote: true);
-        if (!existingDestinationId.HasValue)
-            result.CreatedDestinationId = destination.Id;
         if (locationIsNew)
             result.CreatedLocationId = location.Id;
         return result;
@@ -1309,11 +1286,17 @@ public class PlaceContributionService : IPlaceContributionService
             return;
         }
 
+        var isContentManager = await IsContentManagerAsync(reviewerUserId);
+        if (isContentManager)
+        {
+            if (RequiresTargetPlaceReviewScope(contribution.Type))
+                _ = await ResolveTargetPlaceRegionIdAsync(contribution);
+
+            return;
+        }
+
         if (!contribution.LocationId.HasValue)
         {
-            var isContentManager = await IsContentManagerAsync(reviewerUserId);
-            if (isContentManager)
-                return;
             throw new UnauthorizedAccessException("This contribution has no assigned region and can only be reviewed by a content manager.");
         }
 
@@ -1324,9 +1307,6 @@ public class PlaceContributionService : IPlaceContributionService
 
         if (!regionHasManager)
         {
-            var isContentManager = await IsContentManagerAsync(reviewerUserId);
-            if (isContentManager)
-                return;
             throw new UnauthorizedAccessException("This contribution's region has no assigned manager and can only be reviewed by a content manager.");
         }
 
@@ -1810,38 +1790,28 @@ public class PlaceContributionService : IPlaceContributionService
 
     private async Task<ContributionLocationResolution> ResolveContributionLocationAsync(UpsertPlaceContributionDto request)
     {
-        if (request.LocationId.HasValue)
-        {
-            var location = await _db.Locations
-                .AsNoTracking()
-                .Where(existingLocation => existingLocation.Id == request.LocationId.Value)
-                .Select(existingLocation => new { existingLocation.Id, existingLocation.Latitude, existingLocation.Longitude })
-                .FirstOrDefaultAsync()
-                ?? throw new KeyNotFoundException("Location not found.");
-
-            var latitude = request.Latitude ?? location.Latitude;
-            var longitude = request.Longitude ?? location.Longitude;
-
-            if (!HasUsableCoordinates(latitude, longitude))
-                throw new InvalidOperationException("Please choose a valid location before submitting.");
-
-            // Discard the locationId if the pin is too far from the location — the frontend
-            // may have resolved it from a different city/region within the old 50 km radius.
-            if (HasUsableCoordinates(location.Latitude, location.Longitude))
-            {
-                var distanceKm = HaversineKilometers(latitude, longitude, location.Latitude, location.Longitude);
-                if (distanceKm > MaxContributionLocationMatchDistanceKm)
-                    return new ContributionLocationResolution(null, latitude, longitude);
-            }
-
-            return new ContributionLocationResolution(location.Id, latitude, longitude);
-        }
-
         if (!HasUsableCoordinates(request.Latitude, request.Longitude))
-            throw new InvalidOperationException("Please choose a valid location before submitting.");
+            throw new InvalidOperationException("Please choose valid coordinates before submitting.");
+        if (!request.LocationId.HasValue || request.LocationId.Value <= 0)
+            throw new InvalidOperationException("Please select a location from the destination location list.");
 
-        var nearestLocationId = await ResolveNearestKnownLocationIdAsync(request.Latitude!.Value, request.Longitude!.Value);
-        return new ContributionLocationResolution(nearestLocationId, request.Latitude!.Value, request.Longitude!.Value);
+        var latitude = request.Latitude!.Value;
+        var longitude = request.Longitude!.Value;
+        var destination = await _destinationBoundaryResolver.ResolvePublicAsync(latitude, longitude);
+        if (!destination.IsResolved || !destination.DestinationId.HasValue)
+            throw new InvalidOperationException(destination.Message);
+
+        var location = await _db.Locations
+            .AsNoTracking()
+            .Where(existingLocation =>
+                existingLocation.Id == request.LocationId.Value &&
+                existingLocation.DestinationId == destination.DestinationId.Value &&
+                existingLocation.Status == "Published")
+            .Select(existingLocation => new { existingLocation.Id })
+            .SingleOrDefaultAsync()
+            ?? throw new InvalidOperationException("Selected location must belong to the destination resolved from the coordinates.");
+
+        return new ContributionLocationResolution(location.Id, latitude, longitude);
     }
 
     private async Task<int?> ResolvePlaceTypeIdAsync(string name)
@@ -1895,121 +1865,18 @@ public class PlaceContributionService : IPlaceContributionService
         return stayType.Id;
     }
 
-    private async Task<int?> ResolveLegacyLocationIdAsync(UpsertPlaceContributionDto request)
-    {
-        if (!HasUsableCoordinates(request.Latitude, request.Longitude))
-            return null;
-
-        return await ResolveNearestKnownLocationIdAsync(request.Latitude!.Value, request.Longitude!.Value);
-    }
-
-    public async Task<ResolveContributionLocationDto?> ResolveNearestLocationAsync(double latitude, double longitude)
+    public async Task<ResolveContributionLocationDto> ResolveDestinationLocationsAsync(double latitude, double longitude)
     {
         if (!HasUsableCoordinates(latitude, longitude))
-            return null;
-
-        var locations = await _db.Locations
-            .AsNoTracking()
-            .Include(l => l.Destination)
-                .ThenInclude(d => d.Region)
-            .Select(l => new
-            {
-                l.Id,
-                l.Name,
-                l.Latitude,
-                l.Longitude,
-                DestinationName = l.Destination.Name,
-                RegionName = (string?)l.Destination.Region.Name
-            })
-            .ToListAsync();
-
-        var closestLocation = locations
-            .Select(l => new { Location = l, DistanceKm = HaversineKilometers(latitude, longitude, l.Latitude, l.Longitude) })
-            .Where(x => x.DistanceKm <= MaxContributionLocationMatchDistanceKm)
-            .OrderBy(x => x.DistanceKm)
-            .ThenBy(x => x.Location.Id)
-            .FirstOrDefault();
-
-        if (closestLocation != null)
         {
             return new ResolveContributionLocationDto
             {
-                LocationId = closestLocation.Location.Id,
-                LocationName = closestLocation.Location.Name,
-                DestinationName = closestLocation.Location.DestinationName,
-                RegionName = closestLocation.Location.RegionName,
+                IsResolved = false,
+                Message = "Please choose valid coordinates."
             };
         }
 
-        var destinations = await _db.Destinations
-            .AsNoTracking()
-            .Include(d => d.Region)
-            .Select(d => new { d.Id, d.Name, d.Latitude, d.Longitude, RegionName = (string?)d.Region.Name })
-            .ToListAsync();
-
-        var closestDestination = destinations
-            .Select(d => new { Dest = d, DistanceKm = HaversineKilometers(latitude, longitude, d.Latitude, d.Longitude) })
-            .Where(x => x.DistanceKm <= MaxContributionDestinationMatchDistanceKm)
-            .OrderBy(x => x.DistanceKm)
-            .ThenBy(x => x.Dest.Id)
-            .FirstOrDefault();
-
-        if (closestDestination != null)
-        {
-            return new ResolveContributionLocationDto
-            {
-                LocationId = null,
-                LocationName = null,
-                DestinationName = closestDestination.Dest.Name,
-                RegionName = closestDestination.Dest.RegionName,
-            };
-        }
-
-        return null;
-    }
-
-    private async Task<int?> ResolveNearestKnownLocationIdAsync(double latitude, double longitude)
-    {
-        var locations = await _db.Locations
-            .AsNoTracking()
-            .Select(location => new CoordinateCandidate(location.Id, location.Latitude, location.Longitude))
-            .ToListAsync();
-
-        return locations
-            .Select(location => new
-            {
-                location.Id,
-                DistanceKm = HaversineKilometers(latitude, longitude, location.Latitude, location.Longitude)
-            })
-            .Where(location => location.DistanceKm <= MaxContributionLocationMatchDistanceKm)
-            .OrderBy(location => location.DistanceKm)
-            .ThenBy(location => location.Id)
-            .Select(location => (int?)location.Id)
-            .FirstOrDefault();
-    }
-
-    private async Task<DestinationCandidate?> ResolveNearestKnownDestinationAsync(double latitude, double longitude)
-    {
-        var destinations = await _db.Destinations
-            .AsNoTracking()
-            .Select(destination => new DestinationCandidate(
-                destination.Id,
-                destination.Name,
-                destination.Latitude,
-                destination.Longitude))
-            .ToListAsync();
-
-        return destinations
-            .Select(destination => new
-            {
-                Destination = destination,
-                DistanceKm = HaversineKilometers(latitude, longitude, destination.Latitude, destination.Longitude)
-            })
-            .Where(destination => destination.DistanceKm <= MaxContributionDestinationMatchDistanceKm)
-            .OrderBy(destination => destination.DistanceKm)
-            .ThenBy(destination => destination.Destination.Id)
-            .Select(destination => destination.Destination)
-            .FirstOrDefault();
+        return await _destinationBoundaryResolver.ResolveContributionAsync(latitude, longitude);
     }
 
     private async Task<DestinationType> ResolveDestinationTypeAsync()
@@ -2052,20 +1919,33 @@ public class PlaceContributionService : IPlaceContributionService
         return locationType;
     }
 
-    private static Location? SelectBestLocation(IEnumerable<Location> locations, double? latitude, double? longitude)
+    private async Task EnsureContributionLocationMatchesResolvedDestinationAsync(PlaceContribution contribution)
     {
-        var candidates = locations.ToList();
-        if (candidates.Count == 0)
-            return null;
-
-        if (latitude.HasValue && longitude.HasValue)
+        if (!contribution.LocationId.HasValue ||
+            !contribution.Latitude.HasValue ||
+            !contribution.Longitude.HasValue)
         {
-            return candidates
-                .OrderBy(location => Math.Pow(location.Latitude - latitude.Value, 2) + Math.Pow(location.Longitude - longitude.Value, 2))
-                .First();
+            throw new InvalidOperationException("Contribution location and coordinates are required.");
         }
 
-        return candidates.OrderBy(location => location.Id).First();
+        var resolution = await _destinationBoundaryResolver.ResolvePublicAsync(
+            contribution.Latitude.Value,
+            contribution.Longitude.Value);
+        if (!resolution.IsResolved || !resolution.DestinationId.HasValue)
+            throw new InvalidOperationException(resolution.Message);
+
+        var locationMatches = await _db.Locations
+            .AsNoTracking()
+            .AnyAsync(location =>
+                location.Id == contribution.LocationId.Value &&
+                location.DestinationId == resolution.DestinationId.Value &&
+                location.Status == "Published");
+
+        if (!locationMatches)
+        {
+            throw new InvalidOperationException(
+                "The selected location no longer belongs to the destination resolved from the contribution coordinates.");
+        }
     }
 
     private async Task<Place> PublishNewPlaceAsync(PlaceContribution contribution, DateTime now)
@@ -2078,6 +1958,8 @@ public class PlaceContributionService : IPlaceContributionService
 
         if (!contribution.Latitude.HasValue || !contribution.Longitude.HasValue)
             throw new InvalidOperationException("Coordinates are required.");
+
+        await EnsureContributionLocationMatchesResolvedDestinationAsync(contribution);
 
         var place = new Place
         {
@@ -2817,6 +2699,8 @@ public class PlaceContributionService : IPlaceContributionService
             HasOwnershipProofDocument = listItem.HasOwnershipProofDocument,
             PlaceTypeId = contribution.PlaceTypeId,
             LocationId = contribution.LocationId,
+            DestinationId = contribution.Location?.DestinationId,
+            DestinationName = contribution.Location?.Destination?.Name,
             RestaurantTypeId = contribution.RestaurantTypeId,
             StayTypeId = contribution.StayTypeId,
             Address = contribution.Address,
@@ -3484,13 +3368,6 @@ public class PlaceContributionService : IPlaceContributionService
         if (request.LocationId is <= 0)
             throw new InvalidOperationException("Please choose a valid location before submitting.");
 
-        if (!request.LocationId.HasValue &&
-            (!HasUsableCoordinates(request.Latitude, request.Longitude) ||
-             string.IsNullOrWhiteSpace(request.City) ||
-             string.IsNullOrWhiteSpace(request.Country)))
-        {
-            throw new InvalidOperationException("Please choose a valid location before submitting.");
-        }
 
         _ = NormalizeContactEmail(request.ContactEmail);
         _ = NormalizeWebsite(request.Website);
@@ -3823,27 +3700,6 @@ public class PlaceContributionService : IPlaceContributionService
     private static bool IsFinite(double value) =>
         !double.IsNaN(value) && !double.IsInfinity(value);
 
-    private static double HaversineKilometers(
-        double latitude1,
-        double longitude1,
-        double latitude2,
-        double longitude2)
-    {
-        const double earthRadiusKm = 6371.0088d;
-        var dLat = DegreesToRadians(latitude2 - latitude1);
-        var dLon = DegreesToRadians(longitude2 - longitude1);
-        var lat1 = DegreesToRadians(latitude1);
-        var lat2 = DegreesToRadians(latitude2);
-
-        var a =
-            Math.Pow(Math.Sin(dLat / 2d), 2d) +
-            Math.Cos(lat1) * Math.Cos(lat2) * Math.Pow(Math.Sin(dLon / 2d), 2d);
-
-        return 2d * earthRadiusKm * Math.Asin(Math.Min(1d, Math.Sqrt(a)));
-    }
-
-    private static double DegreesToRadians(double value) => value * Math.PI / 180d;
-
     private static List<string> NormalizeStayAmenityValues(IEnumerable<string> values)
     {
         return values
@@ -4092,10 +3948,6 @@ public class PlaceContributionService : IPlaceContributionService
             .Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
 
     private sealed record ResolvedBookingPartner(int BookingPartnerId, string? Url);
-
-    private sealed record CoordinateCandidate(int Id, double Latitude, double Longitude);
-
-    private sealed record DestinationCandidate(int Id, string Name, double Latitude, double Longitude);
 
     private sealed record ContributionReferenceResolution(
         int? PlaceTypeId,

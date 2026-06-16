@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
@@ -36,6 +36,10 @@ public class Destination
     public DateTime? PublishedAt { get; set; }
     public string? BoundaryNote { get; set; }
     public string? BoundaryShapeType { get; set; }
+    public string? BoundarySource { get; set; }
+    public string? BoundaryExternalKey { get; set; }
+    public string? BoundaryDisplayName { get; set; }
+    public DateTime? BoundaryImportedAt { get; set; }
 
     public ICollection<EntityImage> Images { get; set; } = new List<EntityImage>();
 

@@ -35,7 +35,7 @@ public interface IPlaceContributionService
         string? ownershipProofOriginalFileName,
         string? ownershipProofContentType);
 
-    Task<ResolveContributionLocationDto?> ResolveNearestLocationAsync(double latitude, double longitude);
+    Task<ResolveContributionLocationDto> ResolveDestinationLocationsAsync(double latitude, double longitude);
     Task DeleteAsync(int userId, int contributionId);
     Task<PlaceContributionDetailDto> ApproveAsync(
         int contributionId,

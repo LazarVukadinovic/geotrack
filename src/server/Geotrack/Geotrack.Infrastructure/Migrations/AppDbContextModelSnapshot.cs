@@ -337,13 +337,28 @@ namespace Geotrack.Infrastructure.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<Geometry>("BoundaryGeometry")
-                        .HasColumnType("geography (polygon)");
+                        .HasColumnType("geography (geometry)");
+
+                    b.Property<string>("BoundaryDisplayName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("BoundaryExternalKey")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTime?>("BoundaryImportedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("BoundaryNote")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
                     b.Property<string>("BoundaryShapeType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("BoundarySource")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
@@ -407,6 +422,10 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BoundaryExternalKey")
+                        .IsUnique()
+                        .HasFilter("\"BoundaryExternalKey\" IS NOT NULL");
 
                     b.HasIndex("BoundaryGeometry");
 

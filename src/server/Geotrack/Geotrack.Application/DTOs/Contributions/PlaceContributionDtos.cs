@@ -33,10 +33,13 @@ public class ContributionFeatureOptionsDto
 
 public class ResolveContributionLocationDto
 {
-    public int? LocationId { get; set; }
-    public string? LocationName { get; set; }
+    public bool IsResolved { get; set; }
+    public bool IsAmbiguous { get; set; }
+    public int? DestinationId { get; set; }
     public string? DestinationName { get; set; }
     public string? RegionName { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public List<ContributionLocationOptionDto> Locations { get; set; } = new();
 }
 
 public class PlaceContributionImageDto
@@ -92,6 +95,8 @@ public class PlaceContributionDetailDto : PlaceContributionListItemDto
 {
     public int? PlaceTypeId { get; set; }
     public int? LocationId { get; set; }
+    public int? DestinationId { get; set; }
+    public string? DestinationName { get; set; }
     public int? RestaurantTypeId { get; set; }
     public int? StayTypeId { get; set; }
     public string? Address { get; set; }

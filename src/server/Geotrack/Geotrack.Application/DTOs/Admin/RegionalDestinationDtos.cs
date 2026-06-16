@@ -15,6 +15,11 @@ public class RegionalDestinationListItemDto
     public int? CreatedByUserId { get; set; }
     public string? BoundaryNote { get; set; }
     public string? BoundaryShapeType { get; set; }
+    public bool HasBoundary { get; set; }
+    public string? BoundarySource { get; set; }
+    public string? BoundaryExternalKey { get; set; }
+    public string? BoundaryDisplayName { get; set; }
+    public DateTime? BoundaryImportedAt { get; set; }
     public List<RegionalDestinationTagDto> Tags { get; set; } = new();
     public DateTime? LastUpdatedAt { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -50,6 +55,8 @@ public class RegionalDestinationUpdateRequestDto
     public int? DestinationTypeId { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public string? BoundaryNote { get; set; }
+    public RegionalDestinationBoundaryDto? Boundary { get; set; }
     public List<int>? TagIds { get; set; }
     public string? CardImageUrl { get; set; }
     public string? CoverImageUrl { get; set; }
@@ -82,6 +89,10 @@ public class RegionalDestinationBoundaryDto
 {
     public string? ShapeType { get; set; }
     public List<RegionalDestinationCoordinateDto> Coordinates { get; set; } = new();
+    public string? GeoJson { get; set; }
+    public string? Source { get; set; }
+    public string? ExternalKey { get; set; }
+    public string? DisplayName { get; set; }
 }
 
 public class RegionalDestinationCoordinateDto

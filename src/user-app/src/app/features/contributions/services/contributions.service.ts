@@ -11,11 +11,22 @@ import {
 } from './contribution-amenities';
 import { isOpen24HoursSchedule } from '../../../shared/utils/opening-hours';
 
+export interface ResolveLocationOption {
+  id: number;
+  name: string;
+  destinationId: number;
+  destinationName: string;
+  status: string;
+}
+
 export interface ResolveLocationResult {
-  locationId: number | null;
-  locationName: string | null;
+  isResolved: boolean;
+  isAmbiguous: boolean;
+  destinationId: number | null;
   destinationName: string | null;
   regionName: string | null;
+  message: string;
+  locations: ResolveLocationOption[];
 }
 
 export type ContributionStatus = 'PendingReview' | 'Approved' | 'Rejected';

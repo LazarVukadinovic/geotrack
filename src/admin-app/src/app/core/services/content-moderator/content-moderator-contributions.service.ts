@@ -54,6 +54,8 @@ export interface CmOperatingHour {
 export interface CmContributionDetail extends CmContributionListItem {
   placeTypeId: number | null;
   locationId: number | null;
+  destinationId: number | null;
+  destinationName: string | null;
   address: string | null;
   city: string | null;
   region: string | null;
@@ -121,6 +123,8 @@ interface ApiContributionItem {
   updatedAt?: string | null;
   placeTypeId?: number | null;
   locationId?: number | null;
+  destinationId?: number | null;
+  destinationName?: string | null;
   address?: string | null;
   city?: string | null;
   region?: string | null;
@@ -295,6 +299,8 @@ function mapDetail(item: ApiContributionItem): CmContributionDetail {
     ...mapListItem(item),
     placeTypeId: item.placeTypeId ?? null,
     locationId: item.locationId ?? null,
+    destinationId: item.destinationId ?? null,
+    destinationName: item.destinationName ?? null,
     address: item.address ?? null,
     city: item.city ?? null,
     region: item.region ?? null,

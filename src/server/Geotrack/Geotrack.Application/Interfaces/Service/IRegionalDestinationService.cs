@@ -15,6 +15,28 @@ public interface IRegionalDestinationService
 
     Task<RegionalDestinationDetailDto> GetDestinationAsync(int userId, int regionId, int destinationId);
 
+    Task<RegionalDestinationBoundarySuggestionsDto> SearchBoundarySuggestionsAsync(
+        int userId,
+        int regionId,
+        string query,
+        double? latitude = null,
+        double? longitude = null,
+        CancellationToken cancellationToken = default);
+
+    Task<RegionalDestinationBoundarySuggestionDto> ParseUploadedBoundaryAsync(
+        int userId,
+        int regionId,
+        string fileName,
+        byte[] content,
+        CancellationToken cancellationToken = default);
+
+    Task<DestinationCoordinateResolutionDto> ResolveDestinationAsync(
+        int userId,
+        int regionId,
+        double latitude,
+        double longitude,
+        CancellationToken cancellationToken = default);
+
     Task<RegionalDestinationDetailDto> CreateDestinationAsync(
         int userId,
         RegionalDestinationCreateRequestDto request);

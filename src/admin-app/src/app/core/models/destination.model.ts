@@ -15,6 +15,11 @@ export interface RegionalDestinationListItemDto {
   createdByUserId?: number | null;
   boundaryNote?: string | null;
   boundaryShapeType?: string | null;
+  hasBoundary?: boolean;
+  boundarySource?: string | null;
+  boundaryExternalKey?: string | null;
+  boundaryDisplayName?: string | null;
+  boundaryImportedAt?: string | null;
   tags?: RegionalDestinationTagDto[];
   lastUpdatedAt?: string | null;
   createdAt?: string | null;
@@ -61,8 +66,38 @@ export interface RegionalDestinationCoordinateDto {
 }
 
 export interface RegionalDestinationBoundaryDto {
-  shapeType: 'Polygon' | 'Rectangle' | 'Circle';
-  coordinates: RegionalDestinationCoordinateDto[];
+  shapeType?: string | null;
+  coordinates?: RegionalDestinationCoordinateDto[];
+  geoJson?: string | null;
+  source?: 'OpenStreetMap' | 'UploadedGeoJson' | 'Manual' | string | null;
+  externalKey?: string | null;
+  displayName?: string | null;
+}
+
+export interface RegionalDestinationBoundarySuggestionDto {
+  source: string;
+  externalKey?: string | null;
+  displayName: string;
+  category?: string | null;
+  providerType?: string | null;
+  geometryType: string;
+  geoJson: string;
+  centerLatitude: number;
+  centerLongitude: number;
+}
+
+export interface RegionalDestinationBoundarySuggestionsDto {
+  items: RegionalDestinationBoundarySuggestionDto[];
+}
+
+export interface DestinationCoordinateResolutionDto {
+  isResolved: boolean;
+  isAmbiguous: boolean;
+  destinationId?: number | null;
+  destinationName?: string | null;
+  regionId?: number | null;
+  regionName?: string | null;
+  message: string;
 }
 
 export interface RegionalDestinationCreateRequest {
@@ -89,6 +124,8 @@ export interface RegionalDestinationUpdateRequest {
   destinationTypeId?: number | null;
   latitude?: number | null;
   longitude?: number | null;
+  boundaryNote?: string | null;
+  boundary?: RegionalDestinationBoundaryDto | null;
   tagIds?: number[] | null;
   cardImageUrl?: string | null;
   coverImageUrl?: string | null;

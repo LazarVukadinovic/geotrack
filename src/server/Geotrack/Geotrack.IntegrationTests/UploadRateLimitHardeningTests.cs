@@ -375,8 +375,12 @@ public sealed class UploadRateLimitHardeningTests
             string? ownershipProofContentType) =>
             Task.FromResult(new PlaceContributionDetailDto { Id = contributionId });
 
-        public Task<ResolveContributionLocationDto?> ResolveNearestLocationAsync(double latitude, double longitude) =>
-            Task.FromResult<ResolveContributionLocationDto?>(null);
+        public Task<ResolveContributionLocationDto> ResolveDestinationLocationsAsync(double latitude, double longitude) =>
+            Task.FromResult(new ResolveContributionLocationDto
+            {
+                IsResolved = false,
+                Message = "No destination boundary contains these coordinates."
+            });
 
         public Task DeleteAsync(int userId, int contributionId) => Task.CompletedTask;
 

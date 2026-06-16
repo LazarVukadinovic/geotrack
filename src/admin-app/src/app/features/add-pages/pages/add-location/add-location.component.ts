@@ -20,8 +20,8 @@ import { TopbarComponent } from '../../../../shared/components/topbar/topbar.com
 import { CoverImageCropperComponent } from '../../../../shared/components/cover-image-cropper/cover-image-cropper.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
-import { ZoneDrawService, DrawTool } from '../../../../core/services/zone-draw.service';
 import { LocationsListService } from '../../../../core/services/locations-list.service';
+import { DestinationsListService } from '../../../../core/services/destinations-list.service';
 import { RegionalMediaService } from '../../../../core/services/regional-media.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
@@ -36,7 +36,6 @@ import {
   buildPlaceReturnQueryParams,
 } from '../../../../core/models/admin-map.model';
 import {
-  RegionalLocationBoundaryDto,
   RegionalLocationCreateRequest,
   RegionalLocationParentDestinationDto,
   RegionalLocationTagDto,
@@ -54,7 +53,6 @@ import {
 
 declare const L: any;
 
-type BoundaryShapeType = 'Polygon' | 'Rectangle' | 'Circle';
 
 interface ClassItem {
   tag: RegionalLocationTagDto;
@@ -67,7 +65,6 @@ interface LocationFormDraft {
   summary: string;
   parentDestinationId: number | null;
   locationTypeId: number | null;
-  boundaryNote: string;
   descriptionHtml: string;
   selectedTagIds: number[];
   centerLat: number | null;
@@ -140,7 +137,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   summary = '';
   parentDestinationId: number | null = null;
   locationTypeId: number | null = null;
-  boundaryNote = '';
   tagInput = '';
   tagFilter = '';
 
@@ -170,11 +166,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
   zoneModalOpen = false;
   zoneConfirmed = false;
-  zoneAreaKm2: number | null = null;
   centerLat: number | null = null;
   centerLng: number | null = null;
-  drawTool: DrawTool = 'polygon';
-  confirmedShapeType: BoundaryShapeType | null = null;
 
   isEditMode = false;
 
@@ -184,9 +177,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   private modalMap: any = null;
   private miniRegionBoundaryLayer: any = null;
   private modalRegionBoundaryLayer: any = null;
-  private drawnLayer: any = null;
-  private confirmedLayer: any = null;
-  private drawControl: any = null;
   private assignedRegionsSubscription: Subscription | null = null;
   private regionMapSubscription: Subscription | null = null;
   private validationSubscription: Subscription | null = null;
@@ -209,8 +199,8 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly route: ActivatedRoute,
     private readonly dashboardService: DashboardService,
     private readonly lightboxService: LightboxService,
-    private readonly zoneDrawService: ZoneDrawService,
     private readonly locationsService: LocationsListService,
+    private readonly destinationsService: DestinationsListService,
     private readonly regionalMedia: RegionalMediaService,
     private readonly auth: AuthService,
     private readonly adminMapService: AdminMapService,
@@ -275,6 +265,11 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.activeRegion?.displayName ?? '';
   }
 
+  get resolvedDestinationName(): string {
+    return this.parentDestinations.find(item => item.id === this.parentDestinationId)?.displayName
+      ?? (this.parentDestinationId ? `Destination #${this.parentDestinationId}` : 'Set the location center to resolve destination');
+  }
+
   get canPublish(): boolean {
     const mediaReady = this.isEditMode || (Boolean(this.cardImageFile) && Boolean(this.coverImageFile));
     return Boolean(this.activeRegionId) &&
@@ -337,7 +332,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get drawHint(): string {
-    return this.zoneDrawService.drawHints[this.drawTool];
+    return 'Click the map to place the location center point.';
   }
 
   get isScopeValidationRejected(): boolean {
@@ -507,7 +502,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         this.summary = dto.summary ?? '';
         this.parentDestinationId = dto.destinationId ?? null;
         this.locationTypeId = dto.locationTypeId ?? null;
-        this.boundaryNote = dto.boundaryNote ?? '';
         this.centerLat = dto.latitude ?? null;
         this.centerLng = dto.longitude ?? null;
         this.zoneConfirmed = this.hasValidCenter();
@@ -782,15 +776,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     this.closeZoneModal();
   }
 
-  setDrawTool(tool: DrawTool): void {
-    this.drawTool = tool;
-    if (this.modalMap) {
-      this.clearZone();
-      this.activateDrawTool();
-    }
-    this.notifyStateChanged();
-  }
-
   clearZone(): void {
     this.centerLat = null;
     this.centerLng = null;
@@ -976,7 +961,7 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
-    if (!this.isAddPlaceReturnFlow() && (this.scopeValidationPending || this.scopeValidationResult?.isAllowed !== true)) {
+    if (this.scopeValidationPending || this.scopeValidationResult?.isAllowed !== true) {
       this.errorMessage = this.scopeValidationPending
         ? 'Location validation is still running.'
         : this.scopeValidationMessage ?? 'Selected location could not be validated against your assigned regional scope.';
@@ -1048,16 +1033,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       tagIds: this.selectedTagIdList(),
       galleryImageUrls: this.galleryImages.filter(image => !image.file).map(image => image.url),
       galleryImageFiles: this.galleryImages.filter(image => image.file).map(image => image.file),
-    };
-  }
-
-  private createBoundaryPayload(zone: [number, number][]): RegionalLocationBoundaryDto | null {
-    const shapeType = this.confirmedShapeType;
-    if (!shapeType || zone.length < 3) return null;
-
-    return {
-      shapeType,
-      coordinates: zone.map(([latitude, longitude]) => ({ latitude, longitude })),
     };
   }
 
@@ -1150,8 +1125,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.modalMap) {
       this.modalMap.remove();
       this.modalMap = null;
-      this.drawnLayer = null;
-      this.drawControl = null;
       this.modalRegionBoundaryLayer = null;
     }
   }
@@ -1182,28 +1155,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   private applyRegionViewportToMiniMap(): void {
     if (!this.miniMap || this.hasValidCenter()) return;
     applyAssignedRegionViewport(this.miniMap, this.regionViewport, 8, 11);
-  }
-
-  private activateDrawTool(): void {
-    if (!this.modalMap || typeof L === 'undefined') return;
-
-    if (this.drawControl) {
-      this.drawControl.disable();
-      this.drawControl = null;
-    }
-
-    this.drawControl = this.zoneDrawService.activateDrawTool(
-      this.modalMap,
-      this.drawTool,
-      layer => {
-        if (this.drawnLayer) {
-          this.modalMap.removeLayer(this.drawnLayer);
-        }
-        this.drawnLayer = layer;
-        this.modalMap.addLayer(this.drawnLayer);
-        this.notifyStateChanged();
-      },
-    );
   }
 
   private showZoneOnMiniMap(): void {
@@ -1265,11 +1216,9 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private resetZone(): void {
     this.zoneConfirmed = false;
-    this.zoneAreaKm2 = null;
     this.centerLat = null;
     this.centerLng = null;
-    this.confirmedLayer = null;
-    this.confirmedShapeType = null;
+    if (!this.isEditMode) this.parentDestinationId = null;
     this.clearScopeValidation();
 
     if (this.miniMap) {
@@ -1284,36 +1233,64 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
   private validateSelectedPoint(latitude: number, longitude: number): void {
     if (!this.activeRegionId || !this.hasValidCoordinatePair(latitude, longitude)) {
       this.clearScopeValidation();
+      this.parentDestinationId = null;
       return;
     }
 
+    const regionId = this.activeRegionId;
     this.validationSubscription?.unsubscribe();
     this.scopeValidationResult = null;
     this.scopeValidationTone = null;
     this.scopeValidationMessage = null;
     this.scopeValidationPending = true;
+    this.parentDestinationId = null;
     this.notifyStateChanged();
-    this.validationSubscription = this.adminMapService.validateEntityLocation({
-      regionId: this.activeRegionId,
-      entityType: 'Location',
-      operationType: this.isEditMode ? 'Update' : 'Create',
-      latitude,
-      longitude,
-      destinationId: this.parentDestinationId,
+
+    this.validationSubscription = forkJoin({
+      scope: this.adminMapService.validateEntityLocation({
+        regionId,
+        entityType: 'Location',
+        operationType: this.isEditMode ? 'Update' : 'Create',
+        latitude,
+        longitude,
+      }),
+      destination: this.destinationsService.resolveDestination(regionId, latitude, longitude),
     }).subscribe({
-      next: result => {
+      next: ({ scope, destination }) => {
         this.scopeValidationPending = false;
-        this.applyScopeValidationResult(result);
+        this.applyScopeValidationResult(scope);
+        if (!destination.isResolved || !destination.destinationId) {
+          this.parentDestinationId = null;
+          this.scopeValidationResult = null;
+          this.scopeValidationTone = 'error';
+          this.scopeValidationMessage = destination.message;
+          this.zoneConfirmed = false;
+        } else {
+          this.parentDestinationId = destination.destinationId;
+          if (!this.parentDestinations.some(item => item.id === destination.destinationId)) {
+            this.parentDestinations = [
+              ...this.parentDestinations,
+              {
+                id: destination.destinationId,
+                name: destination.destinationName ?? `Destination #${destination.destinationId}`,
+                displayName: destination.destinationName ?? `Destination #${destination.destinationId}`,
+                status: 'Published',
+              },
+            ];
+          }
+        }
         this.notifyStateChanged();
       },
       error: error => {
         this.scopeValidationPending = false;
+        this.parentDestinationId = null;
         this.scopeValidationResult = null;
         this.scopeValidationTone = 'error';
         this.scopeValidationMessage = this.extractErrorMessage(
           error,
-          'Unable to validate this location against your assigned region.',
+          'Unable to resolve a destination from the selected coordinates.',
         );
+        this.zoneConfirmed = false;
         this.notifyStateChanged();
       },
     });
@@ -1552,17 +1529,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private shapeTypeFromDrawTool(tool: DrawTool): BoundaryShapeType {
-    switch (tool) {
-      case 'rectangle':
-        return 'Rectangle';
-      case 'circle':
-        return 'Circle';
-      default:
-        return 'Polygon';
-    }
-  }
-
   private isAllowedImage(file: File): boolean {
     const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
     if (!allowed.has(file.type)) {
@@ -1666,7 +1632,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     const hasDraft =
       Boolean(this.locationName.trim()) ||
       Boolean(this.summary.trim()) ||
-      Boolean(this.boundaryNote.trim()) ||
       Boolean(descriptionHtml) ||
       Boolean(this.parentDestinationId) ||
       Boolean(this.locationTypeId) ||
@@ -1684,7 +1649,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       summary: this.summary,
       parentDestinationId: this.parentDestinationId,
       locationTypeId: this.locationTypeId,
-      boundaryNote: this.boundaryNote,
       descriptionHtml,
       selectedTagIds: [...this.selectedTagIds],
       centerLat: this.centerLat,
@@ -1711,7 +1675,6 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
     this.summary = payload.summary ?? this.summary;
     this.parentDestinationId = payload.parentDestinationId;
     this.locationTypeId = payload.locationTypeId;
-    this.boundaryNote = payload.boundaryNote ?? this.boundaryNote;
     this.centerLat = payload.centerLat;
     this.centerLng = payload.centerLng;
     this.zoneConfirmed = Boolean(payload.zoneConfirmed && this.hasValidCenter());

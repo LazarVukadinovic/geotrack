@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Net;
 using System.Text.RegularExpressions;
 using Geotrack.Application.DTOs.Admin;
@@ -10,7 +10,6 @@ using Geotrack.Domain.Entities.Reviews;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 using Microsoft.EntityFrameworkCore;
-using NetTopologySuite.Geometries;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -22,20 +21,22 @@ public class RegionalPlaceService : IRegionalPlaceService
     private const string ArchivedStatus = "Archived";
     private const string ManagedRegionalImagePrefix = "/media/uploads/regional/";
     private static string ExistingEditRoute(int placeId) => $"/places/edit/{placeId}";
-    private const string BoundaryGeometryPropertyName = "BoundaryGeometry";
 
     private readonly AppDbContext _db;
     private readonly RegionalScopeValidationService _scopeValidation;
     private readonly IContentHtmlSanitizer _htmlSanitizer;
+    private readonly DestinationBoundaryResolver _destinationBoundaryResolver;
 
     public RegionalPlaceService(
         AppDbContext db,
         RegionalScopeValidationService scopeValidation,
-        IContentHtmlSanitizer htmlSanitizer)
+        IContentHtmlSanitizer htmlSanitizer,
+        DestinationBoundaryResolver destinationBoundaryResolver)
     {
         _db = db;
         _scopeValidation = scopeValidation;
         _htmlSanitizer = htmlSanitizer;
+        _destinationBoundaryResolver = destinationBoundaryResolver;
     }
 
     public async Task<RegionalPlaceListResponseDto> GetPlacesAsync(
@@ -307,20 +308,33 @@ public class RegionalPlaceService : IRegionalPlaceService
 
         await EnsureAssignedRegionAsync(userId, request.RegionId);
 
+        var coordinates = ResolveRequiredCoordinates(request.Latitude, request.Longitude);
+        await _scopeValidation.EnsurePointAllowedAsync(
+            userId,
+            request.RegionId,
+            "Place coordinates",
+            coordinates.Latitude,
+            coordinates.Longitude,
+            "Create");
+
+        var resolvedDestination = await _destinationBoundaryResolver.ResolveRequiredInRegionAsync(
+            request.RegionId,
+            coordinates.Latitude,
+            coordinates.Longitude);
+
         var location = await _db.Locations
             .AsNoTracking()
             .Where(item =>
                 item.Id == request.LocationId &&
+                item.DestinationId == resolvedDestination.DestinationId &&
                 item.Destination.RegionId == request.RegionId)
             .Select(item => new
             {
                 item.Id,
-                item.DestinationId,
-                LocationBoundaryGeometry = EF.Property<Geometry?>(item, BoundaryGeometryPropertyName),
-                DestinationBoundaryGeometry = EF.Property<Geometry?>(item.Destination, BoundaryGeometryPropertyName)
+                item.DestinationId
             })
             .SingleOrDefaultAsync()
-            ?? throw new InvalidOperationException("Parent location is invalid for the selected region.");
+            ?? throw new InvalidOperationException("Selected location must belong to the destination resolved from the place coordinates.");
 
         var placeType = await ResolvePlaceTypeAsync(request.PlaceTypeId);
         var isStayPlace = IsStayPlaceType(placeType.Name);
@@ -343,15 +357,6 @@ public class RegionalPlaceService : IRegionalPlaceService
         var summary = NormalizeRequiredText(request.Summary, "Summary is required.", 160, "Summary is too long.");
         var description = NormalizeRichDescription(request.Description, 2000, "Description is too long.");
         var status = NormalizeCreateStatus(request.Status);
-        var coordinates = ResolveRequiredCoordinates(request.Latitude, request.Longitude);
-        ValidateCoordinatesWithinBoundaries(coordinates, location.LocationBoundaryGeometry, location.DestinationBoundaryGeometry);
-        await _scopeValidation.EnsurePointAllowedAsync(
-            userId,
-            request.RegionId,
-            "Place coordinates",
-            coordinates.Latitude,
-            coordinates.Longitude,
-            "Create");
         var tagIds = await ValidatePlaceTagIdsAsync(request.TagIds);
         var operatingHours = NormalizeOperatingHours(request.OperatingHoursEnabled, request.OperatingHours);
         var now = DateTime.UtcNow;
@@ -429,17 +434,7 @@ public class RegionalPlaceService : IRegionalPlaceService
             .SingleOrDefaultAsync(item => item.Id == placeId && item.Location.Destination.RegionId == regionId)
             ?? throw new KeyNotFoundException("Place not found.");
 
-        var parentLocationChanged = request.LocationId.HasValue;
-        if (request.LocationId.HasValue)
-        {
-            var location = await _db.Locations
-                .SingleOrDefaultAsync(item =>
-                    item.Id == request.LocationId.Value &&
-                    item.Destination.RegionId == regionId)
-                ?? throw new InvalidOperationException("Location is invalid for the selected region.");
-
-            place.LocationId = location.Id;
-        }
+        var requestedLocationId = request.LocationId ?? place.LocationId;
 
         if (request.PlaceTypeId.HasValue &&
             !await _db.PlaceTypes.AnyAsync(item => item.Id == request.PlaceTypeId.Value))
@@ -497,14 +492,9 @@ public class RegionalPlaceService : IRegionalPlaceService
         }
 
         ApplyUpdate(place, request);
-        if (parentLocationChanged || request.Latitude.HasValue || request.Longitude.HasValue)
+        if (request.LocationId.HasValue || request.Latitude.HasValue || request.Longitude.HasValue)
         {
-            var parentBoundaries = await GetParentBoundariesAsync(place.LocationId, regionId);
             var coordinates = new PlaceCoordinates(place.Latitude, place.Longitude);
-            ValidateCoordinatesWithinBoundaries(
-                coordinates,
-                parentBoundaries.LocationBoundaryGeometry,
-                parentBoundaries.DestinationBoundaryGeometry);
             await _scopeValidation.EnsurePointAllowedAsync(
                 userId,
                 regionId,
@@ -512,6 +502,22 @@ public class RegionalPlaceService : IRegionalPlaceService
                 coordinates.Latitude,
                 coordinates.Longitude,
                 "Update");
+
+            var resolvedDestination = await _destinationBoundaryResolver.ResolveRequiredInRegionAsync(
+                regionId,
+                coordinates.Latitude,
+                coordinates.Longitude);
+
+            var locationExists = await _db.Locations
+                .AsNoTracking()
+                .AnyAsync(location =>
+                    location.Id == requestedLocationId &&
+                    location.DestinationId == resolvedDestination.DestinationId &&
+                    location.Destination.RegionId == regionId);
+            if (!locationExists)
+                throw new InvalidOperationException("Selected location must belong to the destination resolved from the place coordinates.");
+
+            place.LocationId = requestedLocationId;
         }
 
         if (request.OperatingHoursEnabled.HasValue || request.OperatingHours is not null)
@@ -1139,41 +1145,6 @@ public class RegionalPlaceService : IRegionalPlaceService
         return new PlaceCoordinates(latitude.Value, longitude.Value);
     }
 
-    private async Task<ParentBoundaryResult> GetParentBoundariesAsync(int locationId, int regionId)
-    {
-        return await _db.Locations
-            .AsNoTracking()
-            .Where(location =>
-                location.Id == locationId &&
-                location.Destination.RegionId == regionId)
-            .Select(location => new ParentBoundaryResult
-            {
-                LocationBoundaryGeometry = EF.Property<Geometry?>(location, BoundaryGeometryPropertyName),
-                DestinationBoundaryGeometry = EF.Property<Geometry?>(location.Destination, BoundaryGeometryPropertyName)
-            })
-            .SingleOrDefaultAsync()
-            ?? throw new InvalidOperationException("Parent location is invalid for the selected region.");
-    }
-
-    private static void ValidateCoordinatesWithinBoundaries(
-        PlaceCoordinates coordinates,
-        Geometry? locationBoundary,
-        Geometry? destinationBoundary)
-    {
-        var point = new Point(coordinates.Longitude, coordinates.Latitude) { SRID = 4326 };
-
-        if (HasUsableBoundary(locationBoundary) && !locationBoundary!.Covers(point))
-            throw new InvalidOperationException("Place coordinates must be inside the parent location boundary.");
-
-        if (HasUsableBoundary(destinationBoundary) && !destinationBoundary!.Covers(point))
-            throw new InvalidOperationException("Place coordinates must be inside the parent destination boundary.");
-    }
-
-    private static bool HasUsableBoundary(Geometry? geometry) =>
-        geometry is not null &&
-        !geometry.IsEmpty &&
-        geometry.IsValid;
-
     private static OperatingHoursResult NormalizeOperatingHours(
         bool enabled,
         IReadOnlyCollection<RegionalPlaceOperatingHourDto>? hours)
@@ -1743,12 +1714,6 @@ public class RegionalPlaceService : IRegionalPlaceService
     private static string BuildInternalReferenceId(int placeId) => $"PLC-{placeId:D6}";
 
     private sealed record PlaceCoordinates(double Latitude, double Longitude);
-
-    private sealed class ParentBoundaryResult
-    {
-        public Geometry? LocationBoundaryGeometry { get; set; }
-        public Geometry? DestinationBoundaryGeometry { get; set; }
-    }
 
     private sealed record OperatingHoursResult(
         bool Enabled,

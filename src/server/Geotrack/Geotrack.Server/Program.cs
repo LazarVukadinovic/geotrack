@@ -264,6 +264,12 @@ builder.Services.AddScoped<RegionalBoundaryGuard>();
 builder.Services.AddScoped<RegionalScopeValidationService>();
 builder.Services.AddScoped<IRegionalScopeValidationService>(serviceProvider =>
     serviceProvider.GetRequiredService<RegionalScopeValidationService>());
+builder.Services.AddScoped<DestinationBoundaryResolver>();
+builder.Services.AddHttpClient("DestinationBoundaryProvider", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("GeoTrack/1.0 (destination-boundary-search)");
+});
 builder.Services.AddScoped<IRegionalDestinationService, RegionalDestinationService>();
 builder.Services.AddScoped<IRegionalLocationService, RegionalLocationService>();
 builder.Services.AddScoped<IRegionalPlaceService, RegionalPlaceService>();

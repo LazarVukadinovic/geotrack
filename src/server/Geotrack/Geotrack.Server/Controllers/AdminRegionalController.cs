@@ -381,12 +381,13 @@ public class AdminRegionalController : ControllerBase
     }
 
     [HttpPost("media/images")]
+    [Consumes("multipart/form-data")]
     [EnableRateLimiting("uploads")]
     [RequestSizeLimit(UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
     public async Task<ActionResult<RegionalImageUploadResponseDto>> UploadImages(
         [FromQuery] int regionId,
-        [FromForm] List<IFormFile>? files,
+        List<IFormFile>? files,
         CancellationToken cancellationToken = default)
     {
         if (regionId <= 0)
@@ -495,6 +496,91 @@ public class AdminRegionalController : ControllerBase
         try
         {
             return Ok(await _destinations.GetDestinationAsync(GetCurrentUserId(), regionId, id));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("destination-boundaries/suggestions")]
+    public async Task<ActionResult<RegionalDestinationBoundarySuggestionsDto>>
+      SearchDestinationBoundarySuggestions(
+          [FromQuery] int regionId,
+          [FromQuery] string query,
+          [FromQuery] double? latitude,
+          [FromQuery] double? longitude,
+          CancellationToken cancellationToken)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        if (latitude.HasValue != longitude.HasValue)
+        {
+            return BadRequest(new
+            {
+                message = "latitude and longitude must be provided together."
+            });
+        }
+
+        try
+        {
+            return Ok(await _destinations.SearchBoundarySuggestionsAsync(
+                GetCurrentUserId(),
+                regionId,
+                query,
+                latitude,
+                longitude,
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("destination-boundaries/upload")]
+    [Consumes("multipart/form-data")]
+    [EnableRateLimiting("uploads")]
+    [RequestSizeLimit(6 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 6 * 1024 * 1024)]
+    public async Task<ActionResult<RegionalDestinationBoundarySuggestionDto>> UploadDestinationBoundary(
+        [FromQuery] int regionId,
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+        if (file is null)
+            return BadRequest(new { message = "GeoJSON file is required." });
+
+        try
+        {
+            await using var stream = new MemoryStream();
+            await file.CopyToAsync(stream, cancellationToken);
+            return Ok(await _destinations.ParseUploadedBoundaryAsync(
+                GetCurrentUserId(), regionId, file.FileName, stream.ToArray(), cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("destinations/resolve")]
+    public async Task<ActionResult<DestinationCoordinateResolutionDto>> ResolveDestination(
+        [FromQuery] int regionId,
+        [FromQuery] double latitude,
+        [FromQuery] double longitude,
+        CancellationToken cancellationToken)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        try
+        {
+            return Ok(await _destinations.ResolveDestinationAsync(
+                GetCurrentUserId(), regionId, latitude, longitude, cancellationToken));
         }
         catch (Exception ex)
         {

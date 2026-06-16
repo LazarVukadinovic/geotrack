@@ -5,7 +5,7 @@ import { HttpClient } from '@angular/common/http';
 import maplibregl, { Map as MapLibreMap, MapStyleImageMissingEvent } from 'maplibre-gl';
 import { firstValueFrom } from 'rxjs';
 import { MapApiService } from '../../../../../../core/services/map-api.service';
-import { ContributionsService } from '../../../../services/contributions.service';
+import { ContributionsService, ResolveLocationOption } from '../../../../services/contributions.service';
 import { BackgroundImageFallbackDirective } from '../../../../../../shared/directives/background-image-fallback.directive';
 import { PhotoGalleryComponent } from '../../../../../../shared/components/photo-gallery/photo-gallery.component';
 import type { EntityImage } from '../../../../../../core/models/entity-image.model';
@@ -37,6 +37,8 @@ export interface BasicsData {
   region: string;
   country: string;
   locationId?: number | null;
+  destinationId?: number | null;
+  destinationName?: string | null;
   imageUrl: string;
   cardImageUrl: string;
   cardImageFile?: File | null;
@@ -84,6 +86,8 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   pickerLng = signal<number | null>(null);
   isGeocoding = signal(false);
   locationStatus = signal('');
+  locationOptions = signal<ResolveLocationOption[]>([]);
+  destinationName = signal('');
   submitAttempted = signal(false);
   private pickerMap?: MapLibreMap;
   private pickerResizeObserver?: ResizeObserver;
@@ -91,12 +95,14 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   private pickerMapResizeFrame: number | null = null;
   private addressGeocodeTimeout: number | null = null;
   private addressGeocodeRequestId = 0;
+  private destinationResolveRequestId = 0;
+  private hydratedLocationKey = '';
   private lastGeocodedAddressKey = '';
   private suppressAddressGeocode = false;
 
   form: BasicsData = {
     name: '', placeType: 'Landmark', placeTypeId: null, stayType: 'Hotel', address: '', city: '',
-    region: '', country: '', imageUrl: '', cardImageUrl: '', cardImageFile: null, coverImageFile: null, galleryImageUrls: [], galleryImageFiles: [], ownershipProofFile: null,
+    region: '', country: '', locationId: null, destinationId: null, destinationName: null, imageUrl: '', cardImageUrl: '', cardImageFile: null, coverImageFile: null, galleryImageUrls: [], galleryImageFiles: [], ownershipProofFile: null,
     ownershipProofDocumentUrl: null, ownershipProofOriginalFileName: null,
     lat: null, lng: null, imgBgPosition: '50% 50%', imgBgSize: 'cover',
     cardImgBgPosition: '50% 50%', cardImgBgSize: 'cover',
@@ -113,7 +119,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     this.form.placeType = type.name;
     this.form.placeTypeId = type.id;
     this.ownershipProofError.set('');
-    }
+  }
 
   isPlaceTypeSelected(type: ContributionPlaceTypeOption): boolean {
     return (this.form.placeTypeId !== null && this.form.placeTypeId > 0 && this.form.placeTypeId === type.id) ||
@@ -492,34 +498,117 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     lng: number,
     options: { fillAddress: boolean } = { fillAddress: true },
   ): Promise<void> {
+    const requestId = ++this.destinationResolveRequestId;
     this.form.lat = lat;
     this.form.lng = lng;
     this.pickerLat.set(lat);
     this.pickerLng.set(lng);
+    this.form.locationId = null;
+    this.form.destinationId = null;
+    this.form.destinationName = null;
+    this.locationOptions.set([]);
+    this.destinationName.set('');
 
     this.suppressAddressGeocode = true;
     try {
       const [geocode, resolved] = await Promise.all([
-        firstValueFrom(this.mapApi.reverseGeocode(lat, lng)),
+        firstValueFrom(this.mapApi.reverseGeocode(lat, lng)).catch(() => null),
         firstValueFrom(this.contributions.resolveLocation(lat, lng)).catch(() => null),
       ]);
 
-      if (options.fillAddress && geocode.address) this.form.address = geocode.address;
+      if (requestId !== this.destinationResolveRequestId)
+        return;
 
-      // Geographic names always come from reverse geocoding — never from the hierarchy lookup,
-      // which would wrongly show a nearby city (e.g. Kragujevac for a pin in Čačak).
-      if (geocode.city) this.form.city = geocode.city;
-      if (geocode.region) this.form.region = geocode.region;
-      if (geocode.country) this.form.country = geocode.country;
+      if (geocode) {
+        if (options.fillAddress && geocode.address) this.form.address = geocode.address;
+        if (geocode.city) this.form.city = geocode.city;
+        if (geocode.region) this.form.region = geocode.region;
+        if (geocode.country) this.form.country = geocode.country;
+      }
 
-      // locationId is used only for regional-manager routing — null is valid and handled by backend.
-      this.form.locationId = resolved?.locationId ?? null;
-
+      this.applyDestinationResolution(resolved, null);
       this.lastGeocodedAddressKey = this.addressLookupKey();
-      this.locationStatus.set('Location set.');
     } finally {
-      this.suppressAddressGeocode = false;
+      if (requestId === this.destinationResolveRequestId)
+        this.suppressAddressGeocode = false;
     }
+  }
+
+  private hydrateResolvedLocationFromData(data: BasicsData): void {
+    if (!this.hasUsableCoordinates(data.lat, data.lng))
+      return;
+
+    const latitude = data.lat as number;
+    const longitude = data.lng as number;
+    const savedLocationId = Number.isFinite(Number(data.locationId)) && Number(data.locationId) > 0
+      ? Number(data.locationId)
+      : null;
+    const hydrationKey = `${latitude.toFixed(7)}:${longitude.toFixed(7)}:${savedLocationId ?? ''}`;
+    if (hydrationKey === this.hydratedLocationKey)
+      return;
+
+    this.hydratedLocationKey = hydrationKey;
+    const requestId = ++this.destinationResolveRequestId;
+    this.locationStatus.set('Checking destination boundary...');
+
+    firstValueFrom(this.contributions.resolveLocation(latitude, longitude))
+      .then(resolved => {
+        if (requestId !== this.destinationResolveRequestId)
+          return;
+
+        this.applyDestinationResolution(resolved, savedLocationId);
+      })
+      .catch(() => {
+        if (requestId !== this.destinationResolveRequestId)
+          return;
+
+        this.form.destinationId = null;
+        this.form.destinationName = null;
+        this.form.locationId = null;
+        this.destinationName.set('');
+        this.locationOptions.set([]);
+        this.locationStatus.set('Could not check the destination boundary right now.');
+      });
+  }
+
+  private applyDestinationResolution(
+    resolved: { isResolved: boolean; destinationId: number | null; destinationName: string | null; message: string; locations: ResolveLocationOption[] } | null,
+    preferredLocationId: number | null,
+  ): void {
+    if (!resolved?.isResolved || !resolved.destinationId) {
+      this.form.destinationId = null;
+      this.form.destinationName = null;
+      this.form.locationId = null;
+      this.destinationName.set('');
+      this.locationOptions.set([]);
+      this.locationStatus.set(resolved?.message ?? 'No destination boundary contains these coordinates.');
+      return;
+    }
+
+    const locations = resolved.locations ?? [];
+    const selectedLocation = preferredLocationId !== null && locations.some(location => location.id === preferredLocationId)
+      ? preferredLocationId
+      : null;
+
+    this.form.destinationId = resolved.destinationId;
+    this.form.destinationName = resolved.destinationName ?? null;
+    this.form.locationId = selectedLocation;
+    this.destinationName.set(resolved.destinationName ?? 'Resolved destination');
+    this.locationOptions.set(locations);
+    this.locationStatus.set(
+      locations.length === 0
+        ? 'Destination found, but it has no published locations.'
+        : selectedLocation !== null
+          ? 'Destination and saved location confirmed.'
+          : preferredLocationId !== null
+            ? 'Destination found, but the saved location is no longer available. Select another location.'
+            : 'Destination found. Select a location below.',
+    );
+  }
+
+  onLocationSelected(value: number | string | null): void {
+    const id = Number(value);
+    this.form.locationId = Number.isFinite(id) && id > 0 ? id : null;
   }
 
   async confirmCoordinates(): Promise<void> {
@@ -547,7 +636,11 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
     const baseValid = !!this.form.name.trim() &&
       !!this.form.city.trim() &&
       !!this.form.country.trim() &&
-      (this.locationLocked() || this.hasConfirmedLocation());
+      (this.locationLocked() || (
+        this.hasConfirmedLocation() &&
+        !!this.form.destinationId &&
+        !!this.form.locationId
+      ));
     if (!baseValid) return false;
     if (!this.form.cardImageFile && !this.form.cardImageUrl) return false;
     if (!this.form.coverImageFile && !this.form.imageUrl) return false;
@@ -639,7 +732,10 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
   }
 
   showLocationError(): boolean {
-    return this.submitAttempted() && !this.hasConfirmedLocation();
+    return this.submitAttempted() && (
+      !this.hasConfirmedLocation() ||
+      (!this.locationLocked() && (!this.form.destinationId || !this.form.locationId))
+    );
   }
 
   canConfirmPickerLocation(): boolean {
@@ -764,6 +860,7 @@ export class StepBasicsComponent implements OnInit, OnDestroy {
         if (d.imgBgSize) this.bgSize.set(d.imgBgSize);
         if (d.cardImgBgPosition) this.cardBgPosition.set(d.cardImgBgPosition);
         if (d.cardImgBgSize) this.cardBgSize.set(d.cardImgBgSize);
+        this.hydrateResolvedLocationFromData(d);
       }
     });
 

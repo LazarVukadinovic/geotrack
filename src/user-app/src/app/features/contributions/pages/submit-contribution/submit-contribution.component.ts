@@ -435,7 +435,11 @@ function hasValidContributionLocation(basics: BasicsData): boolean {
     basics.lat <= 90 &&
     basics.lng >= -180 &&
     basics.lng <= 180 &&
-    (basics.lat !== 0 || basics.lng !== 0);
+    (basics.lat !== 0 || basics.lng !== 0) &&
+    typeof basics.destinationId === 'number' &&
+    basics.destinationId > 0 &&
+    typeof basics.locationId === 'number' &&
+    basics.locationId > 0;
 }
 
 function toTitleCase(value: string): string {
