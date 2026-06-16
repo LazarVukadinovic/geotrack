@@ -14,6 +14,18 @@ export interface FeaturesData {
 interface ContributionFeatureOption {
   id: string;
   label: string;
+  tagTypeId?: number | null;
+  tagTypeName?: string | null;
+  tagTypeSlug?: string | null;
+  tagTypeLabel?: string | null;
+  tagTypeOrder?: number | null;
+}
+
+interface ContributionFeatureGroup {
+  key: string;
+  label: string;
+  order: number;
+  options: ContributionFeatureOption[];
 }
 
 interface ContributionFeatureOptionsResponse {
@@ -42,7 +54,7 @@ export class StepFeaturesComponent implements OnInit {
 
   private readonly backendAmenities = signal<ContributionAmenityOption[] | null>(null);
   private readonly backendAmenityIdsByPlaceType = signal<Record<string, string[]> | null>(null);
-  private readonly backendCharacteristics = signal<string[]>([]);
+  private readonly backendCharacteristics = signal<ContributionFeatureOption[]>([]);
   private readonly backendCharacteristicIdsByPlaceType = signal<Record<string, string[]> | null>(null);
 
   readonly availableCharacteristics = computed(() => {
@@ -51,13 +63,17 @@ export class StepFeaturesComponent implements OnInit {
     const typeKey = characteristicKey(this.placeType() ?? '');
     const ids = idsByType?.[typeKey];
 
-    if (!ids || ids.length === 0) {
+    if (ids === undefined) {
       return characteristics;
     }
 
-    const allowed = new Set(ids);
-    return characteristics.filter(tag => allowed.has(characteristicKey(tag)));
+    const allowed = new Set(ids.map(characteristicKey));
+    return characteristics.filter(option => allowed.has(characteristicKey(option.id)));
   });
+
+  readonly characteristicGroups = computed<ContributionFeatureGroup[]>(() =>
+    groupCharacteristics(this.availableCharacteristics()),
+  );
 
   readonly availableAmenities = computed(() => {
     const backendAmenities = this.backendAmenities();
@@ -69,7 +85,7 @@ export class StepFeaturesComponent implements OnInit {
 
     const typeKey = characteristicKey(this.placeType() ?? '');
     const ids = backendIdsByType?.[typeKey];
-    if (!ids || ids.length === 0) {
+    if (ids === undefined) {
       return backendAmenities;
     }
 
@@ -97,7 +113,7 @@ export class StepFeaturesComponent implements OnInit {
       const options = this.availableCharacteristics();
       if (options.length === 0) return;
 
-      const available = new Set(options.map(characteristicKey));
+      const available = new Set(options.map(option => characteristicKey(option.label)));
       this.selectedTags = this.selectedTags.filter(tag => available.has(characteristicKey(tag)));
     });
 
@@ -110,15 +126,18 @@ export class StepFeaturesComponent implements OnInit {
     });
   }
 
-  toggleTag(tag: string): void {
-    const key = characteristicKey(tag);
-    if (this.isTagSelected(tag)) this.selectedTags = this.selectedTags.filter(t => characteristicKey(t) !== key);
-    else this.selectedTags = [...this.selectedTags, tag];
+  toggleTag(option: ContributionFeatureOption): void {
+    const key = characteristicKey(option.label);
+    if (this.isTagSelected(option)) {
+      this.selectedTags = this.selectedTags.filter(tag => characteristicKey(tag) !== key);
+    } else {
+      this.selectedTags = [...this.selectedTags, option.label];
+    }
     this.changed.emit(this.currentData());
   }
 
-  isTagSelected(tag: string): boolean {
-    const key = characteristicKey(tag);
+  isTagSelected(option: ContributionFeatureOption): boolean {
+    const key = characteristicKey(option.label);
     return this.selectedTags.some(selected => characteristicKey(selected) === key);
   }
 
@@ -152,9 +171,7 @@ export class StepFeaturesComponent implements OnInit {
   private loadFeatureOptions(): void {
     this.http.get<ContributionFeatureOptionsResponse>('/api/contributions/feature-options').subscribe({
       next: (response) => {
-        const characteristics = normalizeOptions(response.characteristics)
-          .map(option => option.label)
-          .filter(Boolean);
+        const characteristics = normalizeOptions(response.characteristics);
         this.backendCharacteristics.set(characteristics);
 
         const characteristicIdsByType: Record<string, string[]> = {};
@@ -205,10 +222,46 @@ function normalizeOptions(values: readonly ContributionFeatureOption[] | null | 
     const key = characteristicKey(label || id);
     if (!id || !label || !key || seen.has(key)) continue;
     seen.add(key);
-    normalized.push({ id, label });
+    normalized.push({
+      id,
+      label,
+      tagTypeId: option.tagTypeId ?? null,
+      tagTypeName: option.tagTypeName?.trim() || null,
+      tagTypeSlug: option.tagTypeSlug?.trim() || null,
+      tagTypeLabel: option.tagTypeLabel?.trim() || null,
+      tagTypeOrder: typeof option.tagTypeOrder === 'number' && Number.isFinite(option.tagTypeOrder)
+        ? option.tagTypeOrder
+        : null,
+    });
   }
 
   return normalized;
+}
+
+function groupCharacteristics(options: readonly ContributionFeatureOption[]): ContributionFeatureGroup[] {
+  const groups = new Map<string, ContributionFeatureGroup>();
+
+  for (const option of options) {
+    const label = option.tagTypeLabel || option.tagTypeName || 'Other characteristics';
+    const key = option.tagTypeId != null
+      ? `type-${option.tagTypeId}`
+      : option.tagTypeSlug || 'uncategorized';
+    const order = option.tagTypeOrder ?? 1000;
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.options.push(option);
+    } else {
+      groups.set(key, { key, label, order, options: [option] });
+    }
+  }
+
+  return [...groups.values()]
+    .map(group => ({
+      ...group,
+      options: [...group.options].sort((a, b) => a.label.localeCompare(b.label)),
+    }))
+    .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
 }
 
 function normalizeAmenityOptions(values: readonly ContributionFeatureOption[] | null | undefined): ContributionFeatureOption[] {
@@ -234,9 +287,9 @@ function dedupeOptions(values: readonly ContributionFeatureOption[]): Contributi
 
 function normalizeCharacteristicTags(
   values: readonly string[] | null | undefined,
-  options: readonly string[],
+  options: readonly ContributionFeatureOption[],
 ): string[] {
-  const optionByKey = new Map(options.map(option => [characteristicKey(option), option]));
+  const optionByKey = new Map(options.map(option => [characteristicKey(option.label), option.label]));
   const normalized: string[] = [];
   const seen = new Set<string>();
 

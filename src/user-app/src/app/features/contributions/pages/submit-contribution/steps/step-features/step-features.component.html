@@ -2,19 +2,34 @@
 
   <div class="bg-white rounded-2xl p-5">
     <h3 class="text-base font-bold text-slate-800 mb-1">Place Characteristics</h3>
-    <p class="text-xs text-slate-500 mb-4">Select tags that best describe the vibe and setting.</p>
-    <div class="flex flex-wrap gap-2 justify-center">
-      <button *ngFor="let tag of availableCharacteristics()"
-        (click)="toggleTag(tag)"
-        class="px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200"
-        [class.bg-[#e8722a]]="isTagSelected(tag)"
-        [class.border-[#e8722a]]="isTagSelected(tag)"
-        [class.text-white]="isTagSelected(tag)"
-        [class.bg-white]="!isTagSelected(tag)"
-        [class.border-slate-200]="!isTagSelected(tag)"
-        [class.text-slate-600]="!isTagSelected(tag)">
-        {{ tag }}
-      </button>
+    <p class="text-xs text-slate-500 mb-4">Choose tags by category. Only categories and tags valid for this place type are shown.</p>
+
+    <div class="flex flex-col gap-4">
+      <section *ngFor="let group of characteristicGroups()" class="rounded-2xl border border-slate-100 bg-slate-50/70 overflow-hidden">
+        <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-100 bg-white/80">
+          <h4 class="text-xs font-extrabold uppercase tracking-[0.08em] text-slate-600">{{ group.label }}</h4>
+          <span class="px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-bold text-slate-400">{{ group.options.length }}</span>
+        </div>
+        <div class="flex flex-wrap gap-2 p-3">
+          <button *ngFor="let option of group.options"
+            type="button"
+            (click)="toggleTag(option)"
+            class="px-3.5 py-2 rounded-full text-sm font-semibold border transition-all duration-200"
+            [class.bg-[#e8722a]]="isTagSelected(option)"
+            [class.border-[#e8722a]]="isTagSelected(option)"
+            [class.text-white]="isTagSelected(option)"
+            [class.shadow-sm]="isTagSelected(option)"
+            [class.bg-white]="!isTagSelected(option)"
+            [class.border-slate-200]="!isTagSelected(option)"
+            [class.text-slate-600]="!isTagSelected(option)">
+            {{ option.label }}
+          </button>
+        </div>
+      </section>
+
+      <p *ngIf="characteristicGroups().length === 0" class="py-5 text-center text-sm text-slate-400">
+        No characteristics are available for this place type.
+      </p>
     </div>
   </div>
 

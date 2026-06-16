@@ -20,6 +20,11 @@ public class ContributionFeatureOptionDto
 {
     public string Id { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
+    public int? TagTypeId { get; set; }
+    public string? TagTypeName { get; set; }
+    public string? TagTypeSlug { get; set; }
+    public string? TagTypeLabel { get; set; }
+    public int? TagTypeOrder { get; set; }
 }
 
 public class ContributionFeatureOptionsDto

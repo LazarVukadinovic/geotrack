@@ -176,6 +176,11 @@ public class RegionalPlaceTagDto
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
+    public int? TagTypeId { get; set; }
+    public string? TagTypeName { get; set; }
+    public string? TagTypeSlug { get; set; }
+    public string? TagTypeLabel { get; set; }
+    public int? TagTypeOrder { get; set; }
 }
 
 public class RegionalPlaceAmenityDto

@@ -248,13 +248,18 @@ public class PlaceContributionService : IPlaceContributionService
     {
         var characteristics = await _db.Tags
             .AsNoTracking()
-            .Where(tag => tag.ForPlace)
+            .Where(tag => tag.ForPlace && (tag.TagType == null || tag.TagType.ForPlace))
             .OrderBy(tag => tag.TagType != null ? tag.TagType.FilterOrder : 1000)
             .ThenBy(tag => tag.Name)
             .Select(tag => new ContributionFeatureOptionDto
             {
                 Id = tag.Slug,
-                Label = tag.Name
+                Label = tag.Name,
+                TagTypeId = tag.TagTypeId,
+                TagTypeName = tag.TagType != null ? tag.TagType.Name : null,
+                TagTypeSlug = tag.TagType != null ? tag.TagType.Slug : null,
+                TagTypeLabel = tag.TagType != null ? tag.TagType.FilterLabel ?? tag.TagType.Name : null,
+                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000
             })
             .ToListAsync();
 
@@ -278,7 +283,9 @@ public class PlaceContributionService : IPlaceContributionService
             })
             .ToListAsync();
 
-        characteristics = MergeFeatureOptions(DefaultContributionCharacteristics(), characteristics);
+        characteristics = characteristics.Count > 0
+            ? characteristics
+            : DefaultContributionCharacteristics();
         amenities = ExcludeAmenityFeatureOptions(
             MergeFeatureOptions(amenities, DefaultContributionAmenities()),
             "family",
@@ -293,14 +300,14 @@ public class PlaceContributionService : IPlaceContributionService
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var characteristicIdsByPlaceType = await BuildContributionCharacteristicIdsByPlaceTypeAsync(characteristics);
 
         return new ContributionFeatureOptionsDto
         {
             Characteristics = characteristics,
             Amenities = amenities,
             StayAmenities = stayAmenities,
-            CharacteristicIdsByPlaceType = BuildContributionCharacteristicIdsByPlaceType(
-                characteristics.Select(option => option.Id).ToList()),
+            CharacteristicIdsByPlaceType = characteristicIdsByPlaceType,
             AmenityIdsByPlaceType = BuildContributionAmenityIdsByPlaceType(allAmenityIds)
         };
     }
@@ -3150,6 +3157,50 @@ public class PlaceContributionService : IPlaceContributionService
         FeatureOption("sea-view", "Sea View")
     };
 
+    private async Task<Dictionary<string, List<string>>> BuildContributionCharacteristicIdsByPlaceTypeAsync(
+        IReadOnlyCollection<ContributionFeatureOptionDto> options)
+    {
+        var placeTypes = await _db.PlaceTypes
+            .AsNoTracking()
+            .Select(placeType => new { placeType.Id, placeType.Name })
+            .ToListAsync();
+        var restrictions = await _db.TagTypePlaceTypes
+            .AsNoTracking()
+            .Select(link => new { link.PlaceTypeId, link.TagTypeId })
+            .ToListAsync();
+
+        if (placeTypes.Count == 0 || restrictions.Count == 0)
+        {
+            return BuildContributionCharacteristicIdsByPlaceType(
+                options.Select(option => option.Id).ToList());
+        }
+
+        var globallyRestrictedTagTypeIds = restrictions
+            .Select(link => link.TagTypeId)
+            .ToHashSet();
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var placeType in placeTypes)
+        {
+            var allowedTagTypeIds = restrictions
+                .Where(link => link.PlaceTypeId == placeType.Id)
+                .Select(link => link.TagTypeId)
+                .ToHashSet();
+
+            result[Slugify(placeType.Name)] = options
+                .Where(option =>
+                    option.TagTypeId is null ||
+                    !globallyRestrictedTagTypeIds.Contains(option.TagTypeId.Value) ||
+                    allowedTagTypeIds.Contains(option.TagTypeId.Value))
+                .Select(option => option.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        return result;
+    }
+
     private static Dictionary<string, List<string>> BuildContributionCharacteristicIdsByPlaceType(IReadOnlyCollection<string> availableIds)
     {
         string[] Pick(params string[] ids) =>
@@ -3219,7 +3270,12 @@ public class PlaceContributionService : IPlaceContributionService
             result.Add(new ContributionFeatureOptionDto
             {
                 Id = id,
-                Label = label
+                Label = label,
+                TagTypeId = option.TagTypeId,
+                TagTypeName = option.TagTypeName,
+                TagTypeSlug = option.TagTypeSlug,
+                TagTypeLabel = option.TagTypeLabel,
+                TagTypeOrder = option.TagTypeOrder
             });
         }
 

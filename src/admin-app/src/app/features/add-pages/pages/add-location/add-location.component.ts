@@ -51,6 +51,7 @@ import {
   renderAssignedRegionBoundary,
 } from '../../shared/regional-creation-map';
 
+import { groupSelectableTags, SelectableTagGroup } from '../../shared/tag-grouping';
 declare const L: any;
 
 
@@ -299,14 +300,12 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  get visibleClassItems(): ClassItem[] {
-    const query = this.tagFilter.trim().toLocaleLowerCase();
-    if (!query) return this.classItems;
+  get visibleTagGroups(): SelectableTagGroup<RegionalLocationTagDto>[] {
+    return groupSelectableTags(this.classItems, this.tagFilter);
+  }
 
-    return this.classItems.filter(item =>
-      item.tag.name.toLocaleLowerCase().includes(query) ||
-      item.tag.slug.toLocaleLowerCase().includes(query),
-    );
+  get visibleClassItems(): ClassItem[] {
+    return this.visibleTagGroups.flatMap(group => group.items);
   }
 
   get showClassificationToggle(): boolean {

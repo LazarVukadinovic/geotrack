@@ -48,6 +48,7 @@ import {
   renderAssignedRegionBoundary,
 } from '../../shared/regional-creation-map';
 
+import { groupSelectableTags, SelectableTagGroup } from '../../shared/tag-grouping';
 declare const L: any;
 
 type EventParentType = 'location' | 'place' | 'destination';
@@ -350,14 +351,12 @@ export class NewEventComponent implements OnInit, AfterViewInit, OnDestroy {
     return typeof parent?.longitude === 'number' ? parent.longitude : null;
   }
 
-  get visibleClassItems(): ClassItem[] {
-    const query = this.tagFilter.trim().toLocaleLowerCase();
-    if (!query) return this.classItems;
+  get visibleTagGroups(): SelectableTagGroup<RegionalEventTagDto>[] {
+    return groupSelectableTags(this.classItems, this.tagFilter);
+  }
 
-    return this.classItems.filter(item =>
-      item.tag.name.toLocaleLowerCase().includes(query) ||
-      item.tag.slug.toLocaleLowerCase().includes(query),
-    );
+  get visibleClassItems(): ClassItem[] {
+    return this.visibleTagGroups.flatMap(group => group.items);
   }
 
   get canToggleClassification(): boolean {

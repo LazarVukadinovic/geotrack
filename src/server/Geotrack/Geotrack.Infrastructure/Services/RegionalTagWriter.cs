@@ -15,7 +15,9 @@ internal static partial class RegionalTagWriter
         var name = NormalizeName(rawName);
         var slug = Slugify(name);
 
-        var tag = await db.Tags.SingleOrDefaultAsync(item => item.Slug == slug);
+        var tag = await db.Tags
+            .Include(item => item.TagType)
+            .SingleOrDefaultAsync(item => item.Slug == slug);
         var now = DateTime.UtcNow;
 
         if (tag is not null)

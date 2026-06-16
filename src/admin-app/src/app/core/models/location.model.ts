@@ -58,6 +58,11 @@ export interface RegionalLocationTagDto {
   id: number;
   name: string;
   slug: string;
+  tagTypeId?: number | null;
+  tagTypeName?: string | null;
+  tagTypeSlug?: string | null;
+  tagTypeLabel?: string | null;
+  tagTypeOrder?: number | null;
 }
 
 export interface RegionalLocationParentDestinationDto {

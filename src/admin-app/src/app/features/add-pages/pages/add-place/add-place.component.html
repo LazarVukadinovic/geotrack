@@ -820,17 +820,41 @@
                 placeholder="Filter existing tags..."
                 [(ngModel)]="tagFilter"
               />
-              <div class="max-h-44 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 gap-2" style="scrollbar-width: thin;">
-                @for (item of visibleClassItems; track item.tag.id) {
-                  <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer rounded-lg border border-gray-200 px-2.5 py-2 hover:bg-gray-50">
-                    <input
-                      type="checkbox"
-                      [ngModel]="item.checked"
-                      (ngModelChange)="item.checked = $event; onClassItemChange(item)"
-                      class="w-4 h-4 accent-blue-700 flex-shrink-0"
-                    />
-                    <span class="min-w-0 leading-snug whitespace-normal break-words">{{ item.tag.name }}</span>
-                  </label>
+              <div class="max-h-64 overflow-y-auto pr-1 space-y-3" style="scrollbar-width: thin;">
+                @for (group of visibleTagGroups; track group.key) {
+                  <section class="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                    <div class="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50 px-3 py-2">
+                      <span class="text-[11px] font-bold uppercase tracking-wide text-gray-600">{{ group.label }}</span>
+                      <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-400 ring-1 ring-gray-200">
+                        {{ group.items.length }}
+                      </span>
+                    </div>
+                    <div class="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2">
+                      @for (item of group.items; track item.tag.id) {
+                        <label
+                          class="flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors"
+                          [class.border-blue-200]="item.checked"
+                          [class.bg-blue-50]="item.checked"
+                          [class.text-blue-900]="item.checked"
+                          [class.border-gray-200]="!item.checked"
+                          [class.text-gray-700]="!item.checked"
+                        >
+                          <input
+                            type="checkbox"
+                            [ngModel]="item.checked"
+                            (ngModelChange)="item.checked = $event; onClassItemChange(item)"
+                            class="mt-0.5 h-4 w-4 flex-shrink-0 accent-blue-700"
+                          />
+                          <span class="min-w-0 break-words leading-snug">{{ item.tag.name }}</span>
+                        </label>
+                      }
+                    </div>
+                  </section>
+                }
+                @if (visibleTagGroups.length === 0) {
+                  <p class="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400">
+                    No tags match this filter.
+                  </p>
                 }
               </div>
             }

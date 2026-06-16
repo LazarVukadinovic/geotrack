@@ -194,6 +194,45 @@
   />
 }
 
+  @if (!locationLocked()) {
+  <div class="step-basics__pin-card step-basics__pin-card--desktop">
+    <div class="step-basics__section-copy">
+      <span class="step-basics__section-icon step-basics__section-icon--pin" aria-hidden="true">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
+        </svg>
+      </span>
+      <div>
+        <p class="step-basics__section-title">Pin Coordinates <span class="text-red-500">*</span></p>
+        <p class="step-basics__section-help">Set the exact location of this place on the map.</p>
+      </div>
+    </div>
+
+    <div>
+        <button type="button" (click)="openMapPicker()"
+          class="step-basics__pin-button-desktop w-full py-6 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:bg-slate-50 transition-colors">
+          <svg class="w-5 h-5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
+          </svg>
+          <span *ngIf="hasConfirmedLocation()" class="text-xs text-[#e8722a] font-medium">
+            {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
+          </span>
+          <span *ngIf="!hasConfirmedLocation()" class="text-xs text-slate-400">Tap to set exact location on map</span>
+        </button>
+        <p *ngIf="locationStatus()" class="mt-2 text-center text-xs font-semibold"
+          [class.text-[#e8722a]]="hasConfirmedLocation()"
+          [class.text-slate-400]="!hasConfirmedLocation()">
+          {{ locationStatus() }}
+        </p>
+        <p *ngIf="showLocationError()" class="step-basics__location-error step-basics__location-error--desktop mt-2 ml-1 text-xs font-semibold text-red-500">
+          Choose coordinates inside a destination and select a location.
+        </p>
+    </div>
+  </div>
+  }
+
   <div class="step-basics__form-grid flex flex-col gap-6">
     <section class="step-basics__card step-basics__info-card flex flex-col gap-6">
       <div class="step-basics__card-heading">
@@ -207,12 +246,12 @@
 
       <!-- Place Name -->
       <div class="step-basics__field">
-        <label class="ml-1 text-sm font-bold text-slate-700 mb-2 block">Place Name</label>
+        <label class="ml-1 text-sm font-bold text-slate-700 mb-2 block">Place Name <span class="text-red-500">*</span></label>
         <div class="step-basics__input-shell bg-white border border-slate-200 rounded-2xl flex items-center gap-3 px-4 py-3.5">
           <svg class="w-4 h-4 text-slate-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
           </svg>
-          <input id="contribution-place-name" name="placeName" type="text" autocomplete="organization" inputmode="text" enterkeyhint="next" autocapitalize="words" autocorrect="off" spellcheck="false" [(ngModel)]="form.name" placeholder="e.g. Azure Infinity Villa"
+          <input id="contribution-place-name" name="placeName" type="text" autocomplete="organization" inputmode="text" enterkeyhint="next" autocapitalize="words" autocorrect="off" spellcheck="false" [(ngModel)]="form.name" required aria-required="true" placeholder="e.g. Azure Infinity Villa"
             class="flex-1 text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent"/>
         </div>
       </div>
@@ -362,7 +401,45 @@
         </svg>
         <label class="text-sm font-bold text-slate-700">Location Details</label>
       </div>
-      <div class="step-basics__location-fields bg-white border border-slate-200 rounded-2xl overflow-hidden">
+      <!-- Pin Coordinates -->
+      @if (locationLocked()) {
+        <div class="mt-3 w-full py-4 px-4 border border-slate-200 rounded-2xl flex items-center gap-3 bg-slate-50">
+          <svg class="w-4 h-4 text-slate-400 flex-none" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+          <span class="text-sm text-slate-500">
+            @if (hasConfirmedLocation()) {
+              {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
+            } @else {
+              Location locked
+            }
+          </span>
+          <span class="ml-auto text-xs text-slate-400 font-medium">Locked</span>
+        </div>
+      } @else {
+        <button (click)="openMapPicker()"
+          class="step-basics__pin-card--mobile mt-3 w-full py-6 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:bg-slate-50 transition-colors">
+          <svg class="w-5 h-5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
+          </svg>
+          <span class="text-sm font-semibold text-slate-600">Pin Coordinates <span class="text-red-500">*</span></span>
+          <span *ngIf="hasConfirmedLocation()" class="text-xs text-[#e8722a] font-medium">
+            {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
+          </span>
+          <span *ngIf="!hasConfirmedLocation()" class="text-xs text-slate-400">Tap to set exact location on map</span>
+        </button>
+        <p *ngIf="locationStatus()" class="mt-2 text-center text-xs font-semibold"
+          [class.text-[#e8722a]]="hasConfirmedLocation()"
+          [class.text-slate-400]="!hasConfirmedLocation()">
+          {{ locationStatus() }}
+        </p>
+        <p *ngIf="showLocationError()" class="step-basics__location-error mt-2 ml-1 text-xs font-semibold text-red-500">
+          Choose coordinates inside a destination and select a location.
+        </p>
+      }
+
+      <div class="step-basics__location-fields mt-3 bg-white border border-slate-200 rounded-2xl overflow-hidden">
         <div class="step-basics__address-row px-4 py-3.5 border-b border-slate-100">
           <input id="contribution-address" name="streetAddress" type="text" autocomplete="street-address" inputmode="text" enterkeyhint="next" autocapitalize="words" autocorrect="off" spellcheck="false" [(ngModel)]="form.address" placeholder="Street address"
             (ngModelChange)="onAddressFieldsChanged()"
@@ -429,84 +506,11 @@
         </div>
       }
 
-      <!-- Pin Coordinates -->
-      @if (locationLocked()) {
-        <div class="mt-3 w-full py-4 px-4 border border-slate-200 rounded-2xl flex items-center gap-3 bg-slate-50">
-          <svg class="w-4 h-4 text-slate-400 flex-none" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-          </svg>
-          <span class="text-sm text-slate-500">
-            @if (hasConfirmedLocation()) {
-              {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
-            } @else {
-              Location locked
-            }
-          </span>
-          <span class="ml-auto text-xs text-slate-400 font-medium">Locked</span>
-        </div>
-      } @else {
-        <button (click)="openMapPicker()"
-          class="step-basics__pin-card--mobile mt-3 w-full py-6 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:bg-slate-50 transition-colors">
-          <svg class="w-5 h-5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
-          </svg>
-          <span class="text-sm font-semibold text-slate-600">Pin Coordinates</span>
-          <span *ngIf="hasConfirmedLocation()" class="text-xs text-[#e8722a] font-medium">
-            {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
-          </span>
-          <span *ngIf="!hasConfirmedLocation()" class="text-xs text-slate-400">Tap to set exact location on map</span>
-        </button>
-        <p *ngIf="locationStatus()" class="mt-2 text-center text-xs font-semibold"
-          [class.text-[#e8722a]]="hasConfirmedLocation()"
-          [class.text-slate-400]="!hasConfirmedLocation()">
-          {{ locationStatus() }}
-        </p>
-        <p *ngIf="showLocationError()" class="step-basics__location-error mt-2 ml-1 text-xs font-semibold text-red-500">
-          Choose coordinates inside a destination and select a location.
-        </p>
-      }
+
     </section>
   </div>
 
-  @if (!locationLocked()) {
-  <div class="step-basics__pin-card step-basics__pin-card--desktop">
-    <div class="step-basics__section-copy">
-      <span class="step-basics__section-icon step-basics__section-icon--pin" aria-hidden="true">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-            d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
-        </svg>
-      </span>
-      <div>
-        <p class="step-basics__section-title">Pin Coordinates</p>
-        <p class="step-basics__section-help">Set the exact location of this place on the map.</p>
-      </div>
-    </div>
 
-    <div>
-        <button type="button" (click)="openMapPicker()"
-          class="step-basics__pin-button-desktop w-full py-6 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:bg-slate-50 transition-colors">
-          <svg class="w-5 h-5 text-[#e8722a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
-          </svg>
-          <span *ngIf="hasConfirmedLocation()" class="text-xs text-[#e8722a] font-medium">
-            {{ form.lat!.toFixed(5) }}, {{ form.lng!.toFixed(5) }}
-          </span>
-          <span *ngIf="!hasConfirmedLocation()" class="text-xs text-slate-400">Tap to set exact location on map</span>
-        </button>
-        <p *ngIf="locationStatus()" class="mt-2 text-center text-xs font-semibold"
-          [class.text-[#e8722a]]="hasConfirmedLocation()"
-          [class.text-slate-400]="!hasConfirmedLocation()">
-          {{ locationStatus() }}
-        </p>
-        <p *ngIf="showLocationError()" class="step-basics__location-error step-basics__location-error--desktop mt-2 ml-1 text-xs font-semibold text-red-500">
-          Choose coordinates inside a destination and select a location.
-        </p>
-    </div>
-  </div>
-  }
 
   <div class="step-basics__actions mt-auto">
     <button (click)="onContinue()" [disabled]="!isValid()"

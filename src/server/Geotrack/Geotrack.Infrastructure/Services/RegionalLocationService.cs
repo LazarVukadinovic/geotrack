@@ -414,7 +414,7 @@ public class RegionalLocationService : IRegionalLocationService
 
         var query = _db.Tags
             .AsNoTracking()
-            .Where(tag => tag.ForLocation);
+            .Where(tag => tag.ForLocation && (tag.TagType == null || tag.TagType.ForLocation));
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -425,13 +425,20 @@ public class RegionalLocationService : IRegionalLocationService
         }
 
         return await query
-            .OrderBy(tag => tag.Name)
-            .Take(50)
+            .OrderBy(tag => tag.TagType != null ? tag.TagType.FilterOrder : 1000)
+            .ThenBy(tag => tag.TagType != null ? tag.TagType.Name : string.Empty)
+            .ThenBy(tag => tag.Name)
+            .Take(100)
             .Select(tag => new RegionalLocationTagDto
             {
                 Id = tag.Id,
                 Name = tag.Name,
-                Slug = tag.Slug
+                Slug = tag.Slug,
+                TagTypeId = tag.TagTypeId,
+                TagTypeName = tag.TagType != null ? tag.TagType.Name : null,
+                TagTypeSlug = tag.TagType != null ? tag.TagType.Slug : null,
+                TagTypeLabel = tag.TagType != null ? tag.TagType.FilterLabel ?? tag.TagType.Name : null,
+                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000
             })
             .ToListAsync();
     }
@@ -451,7 +458,12 @@ public class RegionalLocationService : IRegionalLocationService
         {
             Id = tag.Id,
             Name = tag.Name,
-            Slug = tag.Slug
+            Slug = tag.Slug,
+            TagTypeId = tag.TagTypeId,
+            TagTypeName = tag.TagType?.Name,
+            TagTypeSlug = tag.TagType?.Slug,
+            TagTypeLabel = tag.TagType?.FilterLabel ?? tag.TagType?.Name,
+            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000
         };
     }
 

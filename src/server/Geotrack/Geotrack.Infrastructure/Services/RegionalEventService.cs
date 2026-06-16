@@ -564,7 +564,7 @@ public class RegionalEventService : IRegionalEventService
 
         var query = _db.Tags
             .AsNoTracking()
-            .Where(tag => tag.ForEvent);
+            .Where(tag => tag.ForEvent && (tag.TagType == null || tag.TagType.ForEvent));
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -575,13 +575,20 @@ public class RegionalEventService : IRegionalEventService
         }
 
         return await query
-            .OrderBy(tag => tag.Name)
-            .Take(50)
+            .OrderBy(tag => tag.TagType != null ? tag.TagType.FilterOrder : 1000)
+            .ThenBy(tag => tag.TagType != null ? tag.TagType.Name : string.Empty)
+            .ThenBy(tag => tag.Name)
+            .Take(100)
             .Select(tag => new RegionalEventTagDto
             {
                 Id = tag.Id,
                 Name = tag.Name,
-                Slug = tag.Slug
+                Slug = tag.Slug,
+                TagTypeId = tag.TagTypeId,
+                TagTypeName = tag.TagType != null ? tag.TagType.Name : null,
+                TagTypeSlug = tag.TagType != null ? tag.TagType.Slug : null,
+                TagTypeLabel = tag.TagType != null ? tag.TagType.FilterLabel ?? tag.TagType.Name : null,
+                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000
             })
             .ToListAsync();
     }
@@ -601,7 +608,12 @@ public class RegionalEventService : IRegionalEventService
         {
             Id = tag.Id,
             Name = tag.Name,
-            Slug = tag.Slug
+            Slug = tag.Slug,
+            TagTypeId = tag.TagTypeId,
+            TagTypeName = tag.TagType?.Name,
+            TagTypeSlug = tag.TagType?.Slug,
+            TagTypeLabel = tag.TagType?.FilterLabel ?? tag.TagType?.Name,
+            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000
         };
     }
 

@@ -637,7 +637,7 @@ public class RegionalDestinationService : IRegionalDestinationService
 
         var query = _db.Tags
             .AsNoTracking()
-            .Where(tag => tag.ForDestination);
+            .Where(tag => tag.ForDestination && (tag.TagType == null || tag.TagType.ForDestination));
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -648,13 +648,20 @@ public class RegionalDestinationService : IRegionalDestinationService
         }
 
         return await query
-            .OrderBy(tag => tag.Name)
-            .Take(50)
+            .OrderBy(tag => tag.TagType != null ? tag.TagType.FilterOrder : 1000)
+            .ThenBy(tag => tag.TagType != null ? tag.TagType.Name : string.Empty)
+            .ThenBy(tag => tag.Name)
+            .Take(100)
             .Select(tag => new RegionalDestinationTagDto
             {
                 Id = tag.Id,
                 Name = tag.Name,
-                Slug = tag.Slug
+                Slug = tag.Slug,
+                TagTypeId = tag.TagTypeId,
+                TagTypeName = tag.TagType != null ? tag.TagType.Name : null,
+                TagTypeSlug = tag.TagType != null ? tag.TagType.Slug : null,
+                TagTypeLabel = tag.TagType != null ? tag.TagType.FilterLabel ?? tag.TagType.Name : null,
+                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000
             })
             .ToListAsync();
     }
@@ -674,7 +681,12 @@ public class RegionalDestinationService : IRegionalDestinationService
         {
             Id = tag.Id,
             Name = tag.Name,
-            Slug = tag.Slug
+            Slug = tag.Slug,
+            TagTypeId = tag.TagTypeId,
+            TagTypeName = tag.TagType?.Name,
+            TagTypeSlug = tag.TagType?.Slug,
+            TagTypeLabel = tag.TagType?.FilterLabel ?? tag.TagType?.Name,
+            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000
         };
     }
 
