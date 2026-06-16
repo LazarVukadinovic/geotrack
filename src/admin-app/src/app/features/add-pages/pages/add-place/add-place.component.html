@@ -89,6 +89,7 @@
                   class="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm text-gray-700 bg-white outline-none appearance-none disabled:bg-gray-100 disabled:text-gray-400"
                   style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 10px center;"
                   [(ngModel)]="placeTypeId"
+                  (ngModelChange)="onPlaceTypeSelection($event)"
                   [disabled]="placeTypesLoading || placeTypes.length === 0"
                 >
                   <option [ngValue]="null">

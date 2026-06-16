@@ -477,9 +477,14 @@ public class PlaceService : IPlaceService
             Distance = detailDistance,
             PricePerNight = place.Stay?.PricePerNight,
             About = DisplayTextSafety.CleanOptionalRichMultiline(place.Description),
-            Website = null,
-            ContactEmail = place.ContactEmail,
-            PhoneNumber = place.Number,
+            Website = DisplayTextSafety.CleanOptional(place.Website),
+            ContactEmail = DisplayTextSafety.CleanOptional(place.ContactEmail),
+            PhoneNumber = DisplayTextSafety.CleanOptional(place.Number),
+            AdmissionPriceRange = DisplayTextSafety.CleanOptional(place.AdmissionPriceRange),
+            BestTimeToVisit = DisplayTextSafety.CleanOptional(place.BestTimeToVisit),
+            VisitorTips = DisplayTextSafety.CleanOptional(place.VisitorTips),
+            AccessNotes = DisplayTextSafety.CleanOptional(place.AccessNotes),
+            AccessibilityNotes = DisplayTextSafety.CleanOptional(place.AccessibilityNotes),
             BookingPartners = bookingPartners,
             Amenities = stayAmenities
                 .GroupBy(a => new { a.Label, a.Icon })
@@ -1073,6 +1078,11 @@ public class PlaceService : IPlaceService
             AddTermVariants(terms, normalized);
             AddTermVariants(terms, normalized.Replace(" ", "-"));
             AddTermVariants(terms, normalized.Replace("-", " "));
+
+            if (normalized is "nature-reserve" or "nature-reserves")
+            {
+                AddTermVariants(terms, "nature");
+            }
         }
 
         return terms.ToList();
@@ -2185,19 +2195,40 @@ public class PlaceService : IPlaceService
             })
             .ToList();
 
-        var website = DisplayTextSafety.CleanOptional(place.Website);
-        if (!string.IsNullOrWhiteSpace(website) &&
-            !partners.Any(partner =>
-                IsOfficialWebsitePartner(partner.Name) ||
-                string.Equals(partner.Url, website, StringComparison.OrdinalIgnoreCase)))
+        var bookingExternalLink = DisplayTextSafety.CleanOptional(place.BookingExternalLink);
+        if (!string.IsNullOrWhiteSpace(bookingExternalLink) &&
+            !partners.Any(partner => string.Equals(partner.Url, bookingExternalLink, StringComparison.OrdinalIgnoreCase)))
         {
-            partners.Add(new BookingPartnerDto
+            var (fallbackName, fallbackVariant) = InferHotelBookingPartner(bookingExternalLink);
+            partners.Insert(0, new BookingPartnerDto
             {
                 Id = 0,
-                Name = "Official Website",
-                Variant = "muted",
-                Url = website
+                Name = fallbackName,
+                Variant = fallbackVariant,
+                Url = bookingExternalLink
             });
+        }
+
+        var website = DisplayTextSafety.CleanOptional(place.Website);
+        if (!string.IsNullOrWhiteSpace(website))
+        {
+            var officialWebsitePartner = partners.FirstOrDefault(partner => IsOfficialWebsitePartner(partner.Name));
+            if (officialWebsitePartner is not null)
+            {
+                officialWebsitePartner.Name = "Official Website";
+                officialWebsitePartner.Variant = "muted";
+                officialWebsitePartner.Url = website;
+            }
+            else if (!partners.Any(partner => string.Equals(partner.Url, website, StringComparison.OrdinalIgnoreCase)))
+            {
+                partners.Add(new BookingPartnerDto
+                {
+                    Id = 0,
+                    Name = "Official Website",
+                    Variant = "muted",
+                    Url = website
+                });
+            }
         }
 
         return partners;
@@ -2205,6 +2236,20 @@ public class PlaceService : IPlaceService
 
     private static string NormalizeHotelBookingPartnerName(string name) =>
         IsOfficialWebsitePartner(name) ? "Official Website" : name;
+
+    private static (string Name, string Variant) InferHotelBookingPartner(string url)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            var host = uri.Host.ToLowerInvariant();
+            if (host == "booking.com" || host.EndsWith(".booking.com", StringComparison.Ordinal))
+                return ("Booking.com", "dark");
+            if (host == "airbnb.com" || host.EndsWith(".airbnb.com", StringComparison.Ordinal))
+                return ("Airbnb", "brand");
+        }
+
+        return ("Booking link", "dark");
+    }
 
     private static bool IsOfficialWebsitePartner(string? name)
     {

@@ -53,11 +53,6 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   deleteTarget: PlaceListItem | null = null;
   isDeleting    = false;
   deleteError: string | null = null;
-  ownerFormOpen = false;
-  ownerIdentifier = '';
-  ownerError = '';
-  ownerSuccess = '';
-  isAddingOwner = false;
 
   private miniMap:     any = null;
   private modalMap:    any = null;
@@ -229,48 +224,6 @@ export class PlaceDetailComponent implements OnInit, AfterViewInit, OnDestroy {
       .map(owner => owner.displayName || owner.username || owner.email)
       .filter(Boolean)
       .join(', ');
-  }
-
-  toggleOwnerForm(): void {
-    this.ownerFormOpen = !this.ownerFormOpen;
-    this.ownerError = '';
-    this.ownerSuccess = '';
-
-    if (!this.ownerFormOpen) {
-      this.ownerIdentifier = '';
-    }
-  }
-
-  addOwner(): void {
-    if (!this.item || this.isAddingOwner) return;
-
-    const emailOrUsername = this.ownerIdentifier.trim();
-    if (!emailOrUsername) {
-      this.ownerError = 'Enter owner email or username.';
-      this.ownerSuccess = '';
-      return;
-    }
-
-    this.isAddingOwner = true;
-    this.ownerError = '';
-    this.ownerSuccess = '';
-
-    this.svc.addOwner(this.item.regionId, this.item.id, { emailOrUsername }).subscribe({
-      next: dto => {
-        this.setItem(this.svc.toListItem(dto));
-        this.ownerIdentifier = '';
-        this.ownerFormOpen = false;
-        this.ownerSuccess = 'Owner added.';
-        this.isAddingOwner = false;
-        this.cdr.markForCheck();
-      },
-      error: err => {
-        this.ownerError = err?.error?.message || err?.message || 'Could not add owner.';
-        this.ownerSuccess = '';
-        this.isAddingOwner = false;
-        this.cdr.markForCheck();
-      },
-    });
   }
 
   closeMapModal(): void {

@@ -292,32 +292,6 @@
                 Add Event
               </button>
 
-              <button *ngIf="isOwnable" (click)="toggleOwnerForm()"
-                      class="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold
-                             text-emerald-700 bg-white border border-emerald-200 hover:bg-emerald-50 transition-colors cursor-pointer">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                  <path d="M19 8v6M16 11h6"/>
-                </svg>
-                {{ hasOwner ? 'Add Another Owner' : 'Add Owner' }}
-              </button>
-
-              <div *ngIf="ownerFormOpen" class="rounded-lg border border-gray-200 bg-gray-50 p-3 flex flex-col gap-2">
-                <label class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Owner email or username</label>
-                <input
-                  class="w-full rounded-md border border-gray-300 px-2.5 py-2 text-xs text-gray-700 outline-none focus:border-emerald-500"
-                  [(ngModel)]="ownerIdentifier"
-                  placeholder="user@example.com"
-                />
-                <button type="button" (click)="addOwner()" [disabled]="isAddingOwner"
-                        class="w-full rounded-md border-none bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
-                  {{ isAddingOwner ? 'Adding...' : 'Confirm owner' }}
-                </button>
-                <p *ngIf="ownerError" class="text-xs text-red-600">{{ ownerError }}</p>
-              </div>
-              <p *ngIf="ownerSuccess" class="text-xs font-medium text-emerald-600">{{ ownerSuccess }}</p>
-
               <button (click)="promptDelete()"
                       [disabled]="item.canDelete === false"
                       [class.opacity-50]="item.canDelete === false"

@@ -205,9 +205,6 @@
             }
           </div>
         }
-
-
-        <!-- ── About ──────────────────────────────────────────────────── -->
         <div class="pd__detail-grid">
           <div class="pd__detail-main">
             <div class="pd__divider pd__divider--about"></div>
@@ -650,11 +647,11 @@
           </div>
         </section>
 
-        @if (p.website || p.contactEmail || p.phoneNumber) {
+        @if (hasOperationalInformation()) {
           <div class="pd__divider pd__divider--contact"></div>
 
           <section class="pd__section pd__section--contact">
-            <h2 class="pd__section-title text-[18px] font-extrabold text-[#1a2b4c]">Contact</h2>
+            <h2 class="pd__section-title text-[18px] font-extrabold text-[#1a2b4c]">Operational information</h2>
             <div class="flex flex-col gap-2.5">
               @if (p.website) {
                 <div class="flex items-center gap-3 py-3 border-b border-[#f0f1f5] last:border-b-0">

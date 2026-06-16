@@ -382,7 +382,9 @@ public class RegionalPlaceService : IRegionalPlaceService
                 Website = NormalizeUrl(request.Website, "Website URL is invalid."),
                 Number = NormalizePhone(request.ContactPhone),
                 AdmissionPriceRange = NormalizeOptionalText(request.AdmissionPriceRange, 200, "Admission / price range is too long."),
-                BookingExternalLink = NormalizeUrl(request.BookingExternalLink, "Booking / external link is invalid."),
+                BookingExternalLink = isStayPlace
+                    ? NormalizeUrl(request.BookingExternalLink, "Booking / external link is invalid.")
+                    : null,
                 OperatingHoursEnabled = operatingHours.Enabled,
                 OperatingHoursJson = operatingHours.Json,
                 OpeningHours = operatingHours.Enabled ? BuildOpeningHoursSummary(operatingHours.Hours) : null,
@@ -435,6 +437,7 @@ public class RegionalPlaceService : IRegionalPlaceService
             ?? throw new KeyNotFoundException("Place not found.");
 
         var requestedLocationId = request.LocationId ?? place.LocationId;
+        var parentLocationChanged = request.LocationId.HasValue && request.LocationId.Value != place.LocationId;
 
         if (request.PlaceTypeId.HasValue &&
             !await _db.PlaceTypes.AnyAsync(item => item.Id == request.PlaceTypeId.Value))
@@ -490,9 +493,19 @@ public class RegionalPlaceService : IRegionalPlaceService
             var stayTypeId = resolvedStayTypeId ?? await ResolveStayTypeIdAsync(null);
             place.Stay = new Stay { StayTypeId = stayTypeId };
         }
+        else if (!becomingStay && place.Stay is not null)
+        {
+            _db.Stays.Remove(place.Stay);
+            place.Stay = null;
+        }
 
         ApplyUpdate(place, request);
-        if (request.LocationId.HasValue || request.Latitude.HasValue || request.Longitude.HasValue)
+        if (!becomingStay)
+        {
+            place.BookingExternalLink = null;
+        }
+
+        if (parentLocationChanged || request.Latitude.HasValue || request.Longitude.HasValue)
         {
             var coordinates = new PlaceCoordinates(place.Latitude, place.Longitude);
             await _scopeValidation.EnsurePointAllowedAsync(
