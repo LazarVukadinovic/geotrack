@@ -168,7 +168,7 @@ export class LocalPlacesCategoryService {
 
   private buildParams(categoryKey: string, destinationId: number, skip: number, take: number): HttpParams {
     let params = new HttpParams()
-      .set('category', categoryKey)
+      .set('category', this.normalizeCategoryKey(categoryKey))
       .set('destinationId', destinationId)
       .set('skip', skip)
       .set('take', take);
@@ -188,6 +188,11 @@ export class LocalPlacesCategoryService {
     }
 
     return params;
+  }
+
+  private normalizeCategoryKey(categoryKey: string): string {
+    const normalized = categoryKey.trim().toLowerCase();
+    return normalized === 'nature-reserves' || normalized === 'nature-reserve' ? 'nature' : normalized;
   }
 
   private buildLocationKey(destId: number, mode: string, loc: { latitude: number; longitude: number } | null): string {

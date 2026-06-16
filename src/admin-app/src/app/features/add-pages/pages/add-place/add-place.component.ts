@@ -404,6 +404,20 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       name === 'accommodation' || name === 'accommodations';
   }
 
+  onPlaceTypeSelection(value: number | null): void {
+    this.placeTypeId = value;
+
+    if (this.isStayType) {
+      if (!this.stayTypeId) {
+        this.stayTypeId = this.stayTypes[0]?.id ?? null;
+      }
+      return;
+    }
+
+    this.stayTypeId = null;
+    this.bookingLink = '';
+  }
+
   get selectedStayTypeName(): string {
     return this.stayTypes.find(t => t.id === this.stayTypeId)?.name ?? '';
   }
@@ -454,7 +468,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       Boolean(this.placeTypeId) &&
       this.placeName.trim().length > 0 &&
       this.summary.trim().length > 0 &&
-      this.pinConfirmed &&
+      (this.isEditMode || this.pinConfirmed) &&
       !this.regionBoundaryMissingMessage &&
       !this.scopeValidationPending &&
       !this.isScopeValidationRejected &&
@@ -797,6 +811,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
           this.modalPinLat = dto.latitude;
           this.modalPinLng = dto.longitude;
           this.pinConfirmed = this.hasValidCoordinates(dto.latitude, dto.longitude);
+          this.validateSelectedPoint(dto.latitude, dto.longitude);
           setTimeout(() => this.updateMiniMapPin(dto.latitude, dto.longitude), 0);
         }
 
@@ -1563,7 +1578,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       website,
       contactPhone,
       admissionPriceRange: this.admissionPrice.trim() || null,
-      bookingExternalLink: bookingLink,
+      bookingExternalLink: this.isStayType ? bookingLink : null,
       operatingHoursEnabled: this.opsEnabled,
       operatingHours,
       tagIds: this.selectedTagIdList(),
@@ -1622,9 +1637,15 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     const coordinates = this.readPinnedCoordinates();
-    if (!coordinates || !this.pinConfirmed) {
-      this.errorMessage = 'Pin the place on the map before updating.';
+    if (!coordinates) {
+      this.errorMessage = 'Place coordinates are required before updating.';
       return null;
+    }
+
+    // In edit mode an existing valid pin is already confirmed by the loaded data.
+    // Do not force the regional manager to click the map again just to save text/type changes.
+    if (!this.pinConfirmed) {
+      this.pinConfirmed = true;
     }
 
     const currentValidationKey = this.scopeValidationKey(coordinates.latitude, coordinates.longitude);
@@ -1672,7 +1693,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       website,
       phoneNumber: contactPhone,
       admissionPriceRange: this.admissionPrice.trim() || null,
-      bookingExternalLink: bookingLink,
+      bookingExternalLink: this.isStayType ? bookingLink : null,
       operatingHoursEnabled: this.opsEnabled,
       operatingHours,
       tagIds: this.selectedTagIdList(),

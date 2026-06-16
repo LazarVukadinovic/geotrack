@@ -23,6 +23,7 @@ import type { PlaceDetail } from '../../../../core/models/place.model';
 import type { MapEntityMarker, MapEntityType } from '../../../../core/services/map-api.service';
 import { DescriptionRichHtmlPipe } from '../../../../shared/pipes/description-rich-html.pipe';
 import { isLongDescription } from '../../../../shared/utils/description-formatting';
+import { isOpen24HoursSchedule, isOpen24HoursText } from '../../../../shared/utils/opening-hours';
 
 @Component({
   selector: 'app-place-detail-page',
@@ -136,18 +137,19 @@ export class PlaceDetailPageComponent {
   protected readonly is24Hours = computed(() => {
     const p = this.place();
     if (!p) return false;
-    const schedule = p.openingHoursSchedule;
-    if (schedule && schedule.length > 0) {
-      return schedule.every(day => day.hours === '00:00 - 00:00');
-    }
-    const hours = (p.openingHours ?? '').toLowerCase().trim();
-    return hours.includes('24');
+    return isOpen24HoursSchedule(p.openingHoursSchedule ?? []) || isOpen24HoursText(p.openingHours);
   });
 
   protected readonly computedOpenStatus = computed(() => {
     const p = this.place();
     if (!p) return '';
     return p.openStatus ?? '';
+  });
+
+
+  protected readonly hasOperationalInformation = computed(() => {
+    const p = this.place();
+    return !!p && !!(p.website || p.contactEmail || p.phoneNumber);
   });
 
   private readonly locationRequestKey = computed(() => {
