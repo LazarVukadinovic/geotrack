@@ -875,7 +875,17 @@ public class ExploreService : IExploreService
                 string.Equals(ToCategoryKey(tag.Name), sectionKey, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        if (matchedTags.Count == 0)
+        var possiblePlaceTypes = await _db.PlaceTypes
+            .AsNoTracking()
+            .Select(placeType => new { placeType.Id, placeType.Name })
+            .ToListAsync();
+
+        var matchedPlaceTypes = possiblePlaceTypes
+            .Where(placeType =>
+                string.Equals(ToCategoryKey(placeType.Name), sectionKey, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (matchedTags.Count == 0 && matchedPlaceTypes.Count == 0)
         {
             return new ExploreSectionPageDto
             {
@@ -890,14 +900,16 @@ public class ExploreService : IExploreService
         }
 
         var tagIds = matchedTags.Select(tag => tag.Id).ToList();
-        var title = DisplayTextSafety.CleanRequired(matchedTags.First().Name, HumanizeSectionKey(sectionKey));
+        var placeTypeIds = matchedPlaceTypes.Select(placeType => placeType.Id).ToList();
+        var titleSource = matchedPlaceTypes.FirstOrDefault()?.Name ?? matchedTags.FirstOrDefault()?.Name;
+        var title = DisplayTextSafety.CleanRequired(titleSource, HumanizeSectionKey(sectionKey));
 
         var query = PublicPlaces(_db.Places.AsNoTracking())
             .Where(p =>
                 p.Stay == null &&
                 p.Location.DestinationId == destination.Id &&
                 EF.Property<Point?>(p, SpatialPointFactory.CoordinatesPropertyName) != null &&
-                p.PlaceTags.Any(pt => tagIds.Contains(pt.TagId)))
+                (placeTypeIds.Contains(p.PlaceTypeId) || p.PlaceTags.Any(pt => tagIds.Contains(pt.TagId))))
             .Select(p => new SectionPlaceProjection
             {
                 Id = p.Id,

@@ -3,10 +3,12 @@ export const OPEN_24_HOURS_LABEL = 'Open 24 hours';
 export interface OperatingHourLike {
   dayOfWeek?: string;
   name?: string;
+  day?: string;
   isOpen?: boolean;
   open?: boolean;
   openTime?: string | null;
   closeTime?: string | null;
+  hours?: string | null;
 }
 
 export function isOpen24HoursText(value: string | null | undefined): boolean {
@@ -18,7 +20,12 @@ export function isOpen24HoursSchedule(hours: readonly OperatingHourLike[]): bool
 
   return hours.every(hour => {
     const isOpen = hour.isOpen ?? hour.open;
-    return isOpen === true && hour.openTime === '00:00' && hour.closeTime === '00:00';
+    if (isOpen === true && hour.openTime === '00:00' && hour.closeTime === '00:00') {
+      return true;
+    }
+
+    const normalizedHours = (hour.hours ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+    return normalizedHours === '00:00 - 00:00' || normalizedHours === 'open 24 hours';
   });
 }
 

@@ -23,6 +23,11 @@ public class HotelDetailDto
     public string? Website { get; set; }
     public string? ContactEmail { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? AdmissionPriceRange { get; set; }
+    public string? BestTimeToVisit { get; set; }
+    public string? VisitorTips { get; set; }
+    public string? AccessNotes { get; set; }
+    public string? AccessibilityNotes { get; set; }
     public List<BookingPartnerDto> BookingPartners { get; set; } = new();
     public List<AmenityDto> Amenities { get; set; } = new();
     public List<ReviewDto> Reviews { get; set; } = new();

@@ -247,7 +247,7 @@
               <div class="hd__divider hd__divider--contact"></div>
 
               <section class="hd__section hd__section--contact">
-                <h2 class="hd__section-title text-[18px] font-extrabold text-[#1a2b4c]">Contact</h2>
+                <h2 class="hd__section-title text-[18px] font-extrabold text-[#1a2b4c]">Operational information</h2>
                 <div class="flex flex-col gap-2.5">
                   @if (h.contactEmail) {
                     <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'mailto:' + h.contactEmail">
@@ -260,6 +260,46 @@
                       <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Phone</span>
                       <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ h.phoneNumber }}</span>
                     </a>
+                  }
+                </div>
+              </section>
+            }
+
+            @if (h.admissionPriceRange || h.bestTimeToVisit || h.visitorTips || h.accessNotes || h.accessibilityNotes) {
+              <div class="hd__divider hd__divider--visit"></div>
+
+              <section class="hd__section hd__section--visit">
+                <h2 class="hd__section-title text-[18px] font-extrabold text-[#1a2b4c]">Context &amp; Visit Information</h2>
+                <div class="flex flex-col gap-2.5">
+                  @if (h.admissionPriceRange) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Admission / price</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ h.admissionPriceRange }}</span>
+                    </div>
+                  }
+                  @if (h.bestTimeToVisit) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Best time to visit</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ h.bestTimeToVisit }}</span>
+                    </div>
+                  }
+                  @if (h.visitorTips) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Visitor tips</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ h.visitorTips }}</span>
+                    </div>
+                  }
+                  @if (h.accessNotes) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Access</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ h.accessNotes }}</span>
+                    </div>
+                  }
+                  @if (h.accessibilityNotes) {
+                    <div class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0">
+                      <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Accessibility</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-words">{{ h.accessibilityNotes }}</span>
+                    </div>
                   }
                 </div>
               </section>

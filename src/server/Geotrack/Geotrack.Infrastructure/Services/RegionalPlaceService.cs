@@ -377,7 +377,9 @@ public class RegionalPlaceService : IRegionalPlaceService
                 Website = NormalizeUrl(request.Website, "Website URL is invalid."),
                 Number = NormalizePhone(request.ContactPhone),
                 AdmissionPriceRange = NormalizeOptionalText(request.AdmissionPriceRange, 200, "Admission / price range is too long."),
-                BookingExternalLink = NormalizeUrl(request.BookingExternalLink, "Booking / external link is invalid."),
+                BookingExternalLink = isStayPlace
+                    ? NormalizeUrl(request.BookingExternalLink, "Booking / external link is invalid.")
+                    : null,
                 OperatingHoursEnabled = operatingHours.Enabled,
                 OperatingHoursJson = operatingHours.Json,
                 OpeningHours = operatingHours.Enabled ? BuildOpeningHoursSummary(operatingHours.Hours) : null,
@@ -495,8 +497,17 @@ public class RegionalPlaceService : IRegionalPlaceService
             var stayTypeId = resolvedStayTypeId ?? await ResolveStayTypeIdAsync(null);
             place.Stay = new Stay { StayTypeId = stayTypeId };
         }
+        else if (!becomingStay && place.Stay is not null)
+        {
+            _db.Stays.Remove(place.Stay);
+            place.Stay = null;
+        }
 
         ApplyUpdate(place, request);
+        if (!becomingStay)
+        {
+            place.BookingExternalLink = null;
+        }
         if (parentLocationChanged || request.Latitude.HasValue || request.Longitude.HasValue)
         {
             var parentBoundaries = await GetParentBoundariesAsync(place.LocationId, regionId);

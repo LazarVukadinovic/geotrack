@@ -72,6 +72,11 @@ export interface HotelDetail {
   website?: string | null;
   contactEmail?: string | null;
   phoneNumber?: string | null;
+  admissionPriceRange?: string | null;
+  bestTimeToVisit?: string | null;
+  visitorTips?: string | null;
+  accessNotes?: string | null;
+  accessibilityNotes?: string | null;
   bookingPartners: HotelBookingPartner[];
   amenities: HotelAmenity[];
   reviews: HotelReview[];

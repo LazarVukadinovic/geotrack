@@ -29,6 +29,11 @@ interface ApiHotelDetail {
   website?: string | null;
   contactEmail?: string | null;
   phoneNumber?: string | null;
+  admissionPriceRange?: string | null;
+  bestTimeToVisit?: string | null;
+  visitorTips?: string | null;
+  accessNotes?: string | null;
+  accessibilityNotes?: string | null;
   about?: string;
   bookingPartners: { id: number; name: string; variant: string; url?: string | null }[];
   amenities: { id: number; label: string; icon: string }[];
@@ -128,6 +133,11 @@ export class HotelDetailService {
           website: dto.website ?? null,
           contactEmail: dto.contactEmail ?? null,
           phoneNumber: dto.phoneNumber ?? null,
+          admissionPriceRange: dto.admissionPriceRange ?? null,
+          bestTimeToVisit: dto.bestTimeToVisit ?? null,
+          visitorTips: dto.visitorTips ?? null,
+          accessNotes: dto.accessNotes ?? null,
+          accessibilityNotes: dto.accessibilityNotes ?? null,
           bookingPartners: dto.bookingPartners.map(b => ({
             id: String(b.id),
             name: b.name,
