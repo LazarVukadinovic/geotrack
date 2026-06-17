@@ -240,25 +240,40 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
 
   loadTerritories(): void {
     this.isLoading = true;
+    this.fetchTerritoryPage(1, []);
+  }
+
+  // Territories are countries/ADM0 entities, so the full set can exceed a single
+  // page. Walk every page (the backend caps pageSize at 250) and accumulate the
+  // results so the list always shows all territories the badge counts.
+  private fetchTerritoryPage(page: number, accumulated: Territory[]): void {
+    const pageSize = 250;
     this.svc.getPage$({
-      page: 1,
-      pageSize: 100,
+      page,
+      pageSize,
       search: this.listSearch,
       sortField: this.listSortField,
       sortDir: this.listSortDir,
       countryFilter: [],
     }).pipe(takeUntil(this.destroy$)).subscribe({
-      next: page => {
-        this.territories      = page.items;
-        this.totalTerritories = page.total;
-        this.isLoading        = false;
+      next: result => {
+        const items = [...accumulated, ...result.items];
+        this.totalTerritories = result.total;
+
+        if (result.items.length > 0 && items.length < result.total) {
+          this.fetchTerritoryPage(page + 1, items);
+          return;
+        }
+
+        this.territories = items;
+        this.isLoading   = false;
         this.buildCountryAssignments();
         this.cdr.detectChanges();
       },
       error: () => {
-        this.territories = [];
-        this.totalTerritories = 0;
-        this.isLoading = false;
+        this.territories      = accumulated;
+        this.totalTerritories = accumulated.length;
+        this.isLoading        = false;
         this.buildCountryAssignments();
         this.cdr.detectChanges();
       },
