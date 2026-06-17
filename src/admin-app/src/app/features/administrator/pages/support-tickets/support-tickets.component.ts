@@ -91,6 +91,14 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
     dismissedCount: 0,
     allCount: 0,
   };
+  // Accumulated counts — updated per tab load when backend doesn't return cross-filter counts
+  private accCounts: AdminSupportTicketListCounts = {
+    openCount: 0,
+    inProgressCount: 0,
+    resolvedCount: 0,
+    dismissedCount: 0,
+    allCount: 0,
+  };
   totalCount = 0;
   nextSkip: number | null = null;
   hasMore = false;
@@ -155,8 +163,26 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
         this.totalCount = page.totalCount;
         this.nextSkip = page.nextSkip;
         this.hasMore = page.hasMore;
-        this.counts = page.counts;
-        this.supportReportsCount = page.counts.openCount + page.counts.inProgressCount;
+        const backendTotal = page.counts.openCount + page.counts.inProgressCount +
+          page.counts.resolvedCount + page.counts.dismissedCount;
+        if (backendTotal > 0) {
+          this.accCounts = { ...page.counts };
+        } else {
+          switch (this.statusFilter) {
+            case 'open':       this.accCounts.openCount       = page.totalCount; break;
+            case 'inProgress': this.accCounts.inProgressCount = page.totalCount; break;
+            case 'resolved':   this.accCounts.resolvedCount   = page.totalCount; break;
+            case 'dismissed':  this.accCounts.dismissedCount  = page.totalCount; break;
+            case 'all':        this.accCounts.allCount        = page.totalCount; break;
+          }
+          if (this.statusFilter !== 'all') {
+            this.accCounts.allCount =
+              this.accCounts.openCount + this.accCounts.inProgressCount +
+              this.accCounts.resolvedCount + this.accCounts.dismissedCount;
+          }
+        }
+        this.counts = { ...this.accCounts };
+        this.supportReportsCount = this.counts.openCount + this.counts.inProgressCount;
         this.cdr.markForCheck();
       },
     });
@@ -241,6 +267,27 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
     this.statusFilter = status;
     this.openDropdownId = null;
     this.resetAndLoad();
+  }
+
+  toggleCategory(): void {
+    const next = !this.categoryOpen;
+    this.categoryOpen = next;
+    if (next) { this.priorityOpen = false; this.sortOpen = false; }
+    this.cdr.markForCheck();
+  }
+
+  togglePriority(): void {
+    const next = !this.priorityOpen;
+    this.priorityOpen = next;
+    if (next) { this.categoryOpen = false; this.sortOpen = false; }
+    this.cdr.markForCheck();
+  }
+
+  toggleSort(): void {
+    const next = !this.sortOpen;
+    this.sortOpen = next;
+    if (next) { this.categoryOpen = false; this.priorityOpen = false; }
+    this.cdr.markForCheck();
   }
 
   applyCategory(value: AdminSupportTicketCategoryFilter): void {
@@ -512,8 +559,33 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
         this.totalCount = page.totalCount;
         this.nextSkip = page.nextSkip;
         this.hasMore = page.hasMore;
-        this.counts = page.counts;
-        this.supportReportsCount = page.counts.openCount + page.counts.inProgressCount;
+
+        // Merge backend counts with accumulated counts.
+        // If backend returns real cross-filter counts use them directly;
+        // otherwise accumulate per-tab totals from totalCount.
+        const backendTotal = page.counts.openCount + page.counts.inProgressCount +
+          page.counts.resolvedCount + page.counts.dismissedCount;
+        if (backendTotal > 0) {
+          this.accCounts = { ...page.counts };
+        } else {
+          // Backend doesn't populate counts — derive from totalCount for active tab
+          switch (this.statusFilter) {
+            case 'open':       this.accCounts.openCount       = page.totalCount; break;
+            case 'inProgress': this.accCounts.inProgressCount = page.totalCount; break;
+            case 'resolved':   this.accCounts.resolvedCount   = page.totalCount; break;
+            case 'dismissed':  this.accCounts.dismissedCount  = page.totalCount; break;
+            case 'all':
+              this.accCounts.allCount = page.totalCount;
+              break;
+          }
+          if (this.statusFilter !== 'all') {
+            this.accCounts.allCount =
+              this.accCounts.openCount + this.accCounts.inProgressCount +
+              this.accCounts.resolvedCount + this.accCounts.dismissedCount;
+          }
+        }
+        this.counts = { ...this.accCounts };
+        this.supportReportsCount = this.counts.openCount + this.counts.inProgressCount;
       },
       error: error => {
         if (sequence !== this.loadSequence) {
