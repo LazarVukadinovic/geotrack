@@ -2181,6 +2181,12 @@ namespace Geotrack.Infrastructure.Migrations
                     b.Property<bool>("ForPlace")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("ForRegion")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ForTerritory")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ImageUrl")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -2246,6 +2252,12 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("ForPlace")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ForRegion")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ForTerritory")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsFilterable")

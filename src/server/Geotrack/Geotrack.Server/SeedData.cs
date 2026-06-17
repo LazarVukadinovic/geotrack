@@ -120,6 +120,8 @@ public static class SeedData
         bool ForLocation = false,
         bool ForPlace = false,
         bool ForEvent = false,
+        bool ForRegion = false,
+        bool ForTerritory = false,
         string Description = "",
         string[]? AllowedPlaceTypes = null,
         bool IsFilterable = false,
@@ -134,6 +136,8 @@ public static class SeedData
         bool ForLocation = false,
         bool ForPlace = false,
         bool ForEvent = false,
+        bool ForRegion = false,
+        bool ForTerritory = false,
         bool CanGenerateExploreSection = false,
         string Description = "");
 
@@ -3025,6 +3029,8 @@ public static class SeedData
                     ForLocation = definition.ForLocation,
                     ForPlace = definition.ForPlace,
                     ForEvent = definition.ForEvent,
+                    ForRegion = definition.ForRegion,
+                    ForTerritory = definition.ForTerritory,
                     IsFilterable = definition.IsFilterable,
                     FilterLabel = definition.FilterLabel,
                     FilterOrder = definition.FilterOrder,
@@ -3042,6 +3048,8 @@ public static class SeedData
                 tagType.ForLocation = definition.ForLocation;
                 tagType.ForPlace = definition.ForPlace;
                 tagType.ForEvent = definition.ForEvent;
+                tagType.ForRegion = definition.ForRegion;
+                tagType.ForTerritory = definition.ForTerritory;
                 tagType.IsFilterable = definition.IsFilterable;
                 tagType.FilterLabel = definition.FilterLabel;
                 tagType.FilterOrder = definition.FilterOrder;
@@ -3101,6 +3109,8 @@ public static class SeedData
                     ForLocation = definition.ForLocation,
                     ForPlace = definition.ForPlace,
                     ForEvent = definition.ForEvent,
+                    ForRegion = definition.ForRegion,
+                    ForTerritory = definition.ForTerritory,
                     CanGenerateExploreSection = definition.CanGenerateExploreSection,
                     CreatedAt = now
                 };
@@ -3117,6 +3127,8 @@ public static class SeedData
                 tag.ForLocation = definition.ForLocation;
                 tag.ForPlace = definition.ForPlace;
                 tag.ForEvent = definition.ForEvent;
+                tag.ForRegion = definition.ForRegion;
+                tag.ForTerritory = definition.ForTerritory;
                 tag.CanGenerateExploreSection = definition.CanGenerateExploreSection;
                 tag.UpdatedAt = now;
             }
@@ -3145,6 +3157,10 @@ public static class SeedData
         // Entity-level tags stay useful for Explore sections, recommendations and details,
         // but they are not destination discovery filters.
         new("Location Character", "location-character", ForLocation: true, Description: "Area-level character and context.", IsFilterable: true, FilterLabel: "Character", FilterOrder: 20),
+
+        // Hierarchy-level tag scopes. Countries are represented by Territory entities in the domain model.
+        new("Region Character", "region-character", ForRegion: true, Description: "Tags that describe a region's geography and character."),
+        new("Country Character", "country-character", ForTerritory: true, Description: "Tags that describe a country's geography and character."),
 
         new("Cuisine", "cuisine", ForPlace: true, Description: "Food cuisine tags for restaurants and cafes.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"], IsFilterable: true, FilterLabel: "Cuisine", FilterOrder: 20),
         new("Dining Style", "dining-style", ForPlace: true, Description: "Dining style and service level.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"], IsFilterable: true, FilterLabel: "Dining style", FilterOrder: 30),
@@ -3214,6 +3230,22 @@ public static class SeedData
         new("Beach Access", "beach-access", "location-character", ForLocation: true),
         new("Relaxed Area", "relaxed-area", "location-character", ForLocation: true),
         new("Local Area", "local-area", "location-character", ForLocation: true),
+
+        // Region tags.
+        new("Coastal Region", "region-coastal", "region-character", ForRegion: true),
+        new("Mountain Region", "region-mountain", "region-character", ForRegion: true),
+        new("Historic Region", "region-historic", "region-character", ForRegion: true),
+        new("Urban Region", "region-urban", "region-character", ForRegion: true),
+        new("Rural Region", "region-rural", "region-character", ForRegion: true),
+        new("Wine Region", "region-wine", "region-character", ForRegion: true),
+
+        // Country tags. Countries use the Territory scope in the backend.
+        new("Coastal Country", "country-coastal", "country-character", ForTerritory: true),
+        new("Landlocked Country", "country-landlocked", "country-character", ForTerritory: true),
+        new("Island Country", "country-island", "country-character", ForTerritory: true),
+        new("Mountainous Country", "country-mountainous", "country-character", ForTerritory: true),
+        new("Mediterranean Country", "country-mediterranean", "country-character", ForTerritory: true),
+        new("Balkan Country", "country-balkan", "country-character", ForTerritory: true),
 
         new("Seafood", "seafood", "cuisine", ForPlace: true),
         new("Mediterranean", "mediterranean", "cuisine", ForPlace: true),

@@ -12,6 +12,8 @@ public class TagType
     public bool ForLocation { get; set; }
     public bool ForPlace { get; set; }
     public bool ForEvent { get; set; }
+    public bool ForRegion { get; set; }
+    public bool ForTerritory { get; set; }
 
     public bool IsFilterable { get; set; }
     public string? FilterLabel { get; set; }

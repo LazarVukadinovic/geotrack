@@ -696,6 +696,20 @@ if (shouldAutoMigrate || shouldSeedOperationalUsers || shouldSeedDemoContent || 
     });
 }
 
+// Interest topics and their tag taxonomy are required reference data for onboarding
+// and the My Interests page. Keep this independent from optional demo/public seeds so
+// production or local databases cannot remain stuck with an old, partial catalogue.
+using (var interestCatalogScope = app.Services.CreateScope())
+{
+    var interestCatalogDb = interestCatalogScope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var interestCatalogStrategy = interestCatalogDb.Database.CreateExecutionStrategy();
+
+    await interestCatalogStrategy.ExecuteAsync(async () =>
+    {
+        await SeedData.EnsureInterestCatalogAsync(interestCatalogDb);
+    });
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler(errorApp =>

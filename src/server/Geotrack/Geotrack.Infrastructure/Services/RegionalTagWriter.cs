@@ -62,7 +62,8 @@ internal static partial class RegionalTagWriter
     };
 
     private static bool HasAnyScope(Tag tag) =>
-        tag.ForDestination || tag.ForLocation || tag.ForPlace || tag.ForEvent;
+        tag.ForDestination || tag.ForLocation || tag.ForPlace || tag.ForEvent ||
+        tag.ForRegion || tag.ForTerritory;
 
     private static void ApplyOnlyScope(Tag tag, RegionalTagScope scope)
     {
@@ -70,6 +71,8 @@ internal static partial class RegionalTagWriter
         tag.ForLocation = scope == RegionalTagScope.Location;
         tag.ForPlace = scope == RegionalTagScope.Place;
         tag.ForEvent = scope == RegionalTagScope.Event;
+        tag.ForRegion = false;
+        tag.ForTerritory = false;
     }
 
     private static string NormalizeName(string? value)

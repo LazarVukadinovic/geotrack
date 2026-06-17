@@ -13,6 +13,8 @@ public class Tag
     public bool ForLocation { get; set; }
     public bool ForPlace { get; set; }
     public bool ForEvent { get; set; }
+    public bool ForRegion { get; set; }
+    public bool ForTerritory { get; set; }
 
     public bool CanGenerateExploreSection { get; set; }
 
