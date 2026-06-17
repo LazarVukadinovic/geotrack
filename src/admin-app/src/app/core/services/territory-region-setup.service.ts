@@ -170,9 +170,13 @@ export class TerritoryRegionSetupService {
             markSessionChecked: true,
           });
         }),
-        catchError(() => {
+        catchError(error => {
+          const serverMessage = typeof error?.error?.message === 'string'
+            ? error.error.message.trim()
+            : '';
+
           this.patchState({
-            setupError: 'Unable to initialize regions. Please try again.',
+            setupError: serverMessage || 'Unable to import ADM1 boundaries and initialize regions. Please try again.',
             modalOpen: true,
           });
           return EMPTY;
@@ -246,8 +250,7 @@ export class TerritoryRegionSetupService {
     return Boolean(
       !status.onboardingCompleted &&
       status.requiresInitialSync &&
-      status.canSync &&
-      !status.missingCandidateData,
+      status.canSync,
     );
   }
 

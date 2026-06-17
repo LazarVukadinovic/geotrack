@@ -61,8 +61,8 @@ import {
             <p *ngIf="!setupStatus?.missingCandidateData">
               GeoTrack will initialize official ADM1 regions from boundary data. This only needs to be done once.
             </p>
-            <p *ngIf="setupStatus?.missingCandidateData" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 font-semibold text-amber-800">
-              Region boundary data is not available yet. Contact an administrator to import ADM1 boundaries.
+            <p *ngIf="setupStatus?.missingCandidateData" class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 font-semibold text-blue-800">
+              ADM1 boundary data has not been imported yet. Get Started will import it for {{ setupStatus?.countryIso3 }} and create the official regions automatically.
             </p>
           </div>
 
@@ -100,7 +100,7 @@ import {
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
               </svg>
-              {{ setupSyncing ? 'Initializing regions...' : 'Get Started' }}
+              {{ setupActionLabel }}
             </button>
           </div>
         </ng-container>
@@ -144,7 +144,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   get setupIntroText(): string {
     if (this.setupStatus?.missingCandidateData) {
-      return 'Your territory cannot be initialized until ADM1 boundary data is available.';
+      return 'GeoTrack needs to import ADM1 boundary data and initialize regions for your assigned territory.';
     }
 
     return 'Before you can manage assignments and regional coverage, GeoTrack needs to initialize regions for your assigned territory.';
@@ -162,9 +162,20 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return Boolean(
       !this.setupStatus?.onboardingCompleted &&
       this.setupStatus?.requiresInitialSync &&
-      this.setupStatus.canSync &&
-      !this.setupStatus.missingCandidateData,
+      this.setupStatus.canSync,
     );
+  }
+
+  get setupActionLabel(): string {
+    if (this.setupSyncing) {
+      return this.setupStatus?.missingCandidateData
+        ? 'Importing boundaries and initializing regions...'
+        : 'Initializing regions...';
+    }
+
+    return this.setupStatus?.missingCandidateData
+      ? 'Import & Get Started'
+      : 'Get Started';
   }
 
   startSetup(): void {

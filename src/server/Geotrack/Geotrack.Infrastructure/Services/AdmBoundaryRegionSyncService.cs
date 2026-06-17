@@ -91,7 +91,10 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
         }
 
         var updateAvailable = dryRunSummary is not null && HasSyncWork(dryRunSummary);
-        var canSync = hasCandidateData;
+        // The Territory Manager endpoint can import the assigned country's local ADM1
+        // source automatically before syncing, so missing candidates must not disable
+        // the initial Get Started action.
+        var canSync = hasCandidateData || requiresInitialSync;
         var canUpdate = hasCandidateData && !requiresInitialSync && updateAvailable;
 
         return new TerritoryRegionSetupStatusDto
@@ -128,6 +131,44 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
         if (territoryId <= 0)
             throw new InvalidOperationException("territoryId must be positive.");
 
+        if (dryRun)
+        {
+            return await SyncRegionsFromAdm1CandidatesCoreAsync(
+                territoryId,
+                true,
+                forceUpdateGeometry,
+                createMissingRegions,
+                linkExistingRegions,
+                cancellationToken);
+        }
+
+        // EnableRetryOnFailure makes manually-started transactions invalid unless the
+        // complete transaction is executed through the DbContext execution strategy.
+        // Keep all reads and writes in the same retriable unit and clear tracked state
+        // before a possible retry so a repeated attempt starts cleanly.
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            _db.ChangeTracker.Clear();
+
+            return await SyncRegionsFromAdm1CandidatesCoreAsync(
+                territoryId,
+                false,
+                forceUpdateGeometry,
+                createMissingRegions,
+                linkExistingRegions,
+                cancellationToken);
+        });
+    }
+
+    private async Task<RegionSyncSummaryDto> SyncRegionsFromAdm1CandidatesCoreAsync(
+        int territoryId,
+        bool dryRun,
+        bool forceUpdateGeometry,
+        bool createMissingRegions,
+        bool linkExistingRegions,
+        CancellationToken cancellationToken)
+    {
         var territory = await LoadTerritoryAsync(territoryId, cancellationToken)
             ?? throw new KeyNotFoundException("Territory was not found.");
         var countryIso3 = ResolveCountryIso3(territory)
@@ -837,7 +878,7 @@ public sealed class AdmBoundaryRegionSyncService : IAdmBoundaryRegionSyncService
         RegionSyncSummaryDto? dryRunSummary)
     {
         if (missingCandidateData)
-            return "ADM1 boundary data is missing for this territory. Ask an administrator to import boundary data.";
+            return "ADM1 boundary data has not been imported yet. Get Started will import it for this territory and initialize official regions.";
 
         if (requiresInitialSync)
             return "Initialize official ADM1 regions before managing assignments for this territory.";
