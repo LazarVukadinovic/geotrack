@@ -1527,6 +1527,10 @@
 
 .pd__similar-card--large .pd__similar-title {
   font-size: 14px;
+  line-height: 1.3;
+  /* Always reserve two lines so the title block has a consistent height
+     whether the name is short or wraps — keeps the Explore button aligned. */
+  min-height: 2.6em;
   margin-bottom: 4px;
   white-space: normal;
   overflow: hidden;
