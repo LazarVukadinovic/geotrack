@@ -27,6 +27,18 @@
   display: none;
 }
 
+/*
+ * Leaflet assigns high z-indexes to its internal panes (markers ~600,
+ * popups/tooltips ~700). Because the map element is absolutely positioned
+ * without a z-index, those panes would otherwise share the stage's stacking
+ * context and paint over the UI overlays (the more-filters popup, the
+ * destination card, etc.). Giving the map its own stacking context keeps every
+ * pin and map popup contained behind those overlays.
+ */
+#map {
+  z-index: 0;
+}
+
 .map-page__status-card {
   left: var(--map-status-gutter);
   right: var(--map-status-gutter);

@@ -467,22 +467,6 @@
           </section>
         }
 
-        <!-- ── Territory: similar countries ──────────────────────────────── -->
-        @if (d.type === 'territory' && d.similarCountries.length > 0) {
-          <div class="ehd__divider"></div>
-          <section class="ehd__section ehd__section--last">
-            <h2 class="ehd__section-title">Similar countries</h2>
-            <p class="ehd__section-note">Discover other countries to explore.</p>
-            <div class="ehd__similar-viewport">
-              <div class="ehd__similar-track" role="list">
-                @for (item of d.similarCountries; track item.id) {
-                  <ng-container *ngTemplateOutlet="entityCard; context: { item }"></ng-container>
-                }
-              </div>
-            </div>
-          </section>
-        }
-
       </div><!-- /.ehd__card -->
     </div><!-- /.ehd__scroll -->
 

@@ -268,8 +268,8 @@ public class DestinationService : IDestinationService
             .Where(l => l.Status == PublishedStatus)
             .SelectMany(l => l.Places)
             .Where(p => p.Status == PublishedStatus)
-            .OrderByDescending(p => p.AverageRating ?? 0d)
-            .ThenByDescending(p => p.ReviewCount)
+            .OrderByDescending(p => p.PlaceReviews.Count > 0 ? p.PlaceReviews.Average(review => review.Rating) : 0d)
+            .ThenByDescending(p => p.PlaceReviews.Count)
             .ThenBy(p => p.Name)
             .Take(SectionPreviewLimit * 2)
             .Select(MapDestinationPlaceItem)
@@ -278,14 +278,22 @@ public class DestinationService : IDestinationService
 
     private static DestinationSectionPlaceItemDto MapDestinationPlaceItem(Place place)
     {
+        // Compute the rating live from the place's reviews (same as the place
+        // detail page) so the card on the destination page always matches the
+        // place's own page, regardless of the denormalized AverageRating column.
+        var reviewCount = place.PlaceReviews.Count;
+        var averageRating = reviewCount > 0
+            ? Math.Round(place.PlaceReviews.Average(review => review.Rating), 1)
+            : 0d;
+
         return new DestinationSectionPlaceItemDto
         {
             Id = place.Id,
             Name = place.Name,
             Image = PickCardImage(place.Images),
             LocationId = place.LocationId,
-            AverageRating = Math.Round(place.AverageRating ?? 0d, 2),
-            ReviewCount = place.ReviewCount
+            AverageRating = averageRating,
+            ReviewCount = reviewCount
         };
     }
 

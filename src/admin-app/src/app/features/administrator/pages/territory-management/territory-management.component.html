@@ -517,24 +517,30 @@
           <button
             type="button"
             (click)="selectEditManager(null)"
-            class="w-full flex items-center gap-3 px-4 py-3 text-left border-0 border-b border-l-4 border-gray-50 bg-white hover:bg-blue-50/40 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-300"
-            [class.bg-blue-50]="!editAssignedManagerId"
-            [class.border-l-blue-600]="!editAssignedManagerId"
+            class="w-full flex items-center gap-3 px-4 py-3 text-left border-0 border-b border-l-4 border-gray-50 bg-white hover:bg-red-50/40 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-300"
+            [class.bg-red-50]="!editAssignedManagerId"
+            [class.border-l-red-600]="!editAssignedManagerId"
             [class.ring-1]="!editAssignedManagerId"
             [class.ring-inset]="!editAssignedManagerId"
-            [class.ring-blue-200]="!editAssignedManagerId"
+            [class.ring-red-200]="!editAssignedManagerId"
           >
-            <span class="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 text-lg font-light flex-shrink-0 bg-gray-100">--</span>
+            <span
+              class="w-10 h-10 rounded-full flex items-center justify-center text-lg font-light flex-shrink-0"
+              [class.bg-gray-100]="editAssignedManagerId"
+              [class.text-gray-500]="editAssignedManagerId"
+              [class.bg-red-100]="!editAssignedManagerId"
+              [class.text-red-600]="!editAssignedManagerId"
+            >--</span>
             <span class="min-w-0 flex-1">
               <span class="flex items-center gap-2 min-w-0">
-                <span class="text-sm font-semibold text-gray-900 truncate">Unassigned</span>
+                <span class="text-sm font-semibold truncate" [class.text-gray-900]="editAssignedManagerId" [class.text-red-700]="!editAssignedManagerId">Unassigned</span>
                 @if (!editAssignedManagerId) {
-                  <svg class="w-4 h-4 text-blue-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <svg class="w-4 h-4 text-red-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
                 }
               </span>
-              <span class="block text-xs text-gray-500 truncate">No Territory Manager will be assigned</span>
+              <span class="block text-xs truncate" [class.text-gray-500]="editAssignedManagerId" [class.text-red-500]="!editAssignedManagerId">No Territory Manager will be assigned</span>
             </span>
           </button>
 
