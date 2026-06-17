@@ -102,13 +102,10 @@ export interface EventListState {
   sort: EventSort;
   status: string;
   destinationId: number | null;
-  locationId: number | null;
-  placeId: number | null;
   eventTypeId: number | null;
   dateFilter: string;
   dateFrom: string;
   dateTo: string;
-  priceFilter: string;
   tagIds: number[];
   displayCount: number;
   scrollTop: number;

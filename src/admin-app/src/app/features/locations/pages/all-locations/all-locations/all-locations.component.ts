@@ -207,8 +207,9 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
 
   @HostListener('document:click')
   onDocumentClick(): void {
-    if (this.sortOpen) {
+    if (this.sortOpen || this.moreFiltersOpen) {
       this.sortOpen = false;
+      this.moreFiltersOpen = false;
       this.notifyStateChanged();
     }
   }

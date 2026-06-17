@@ -22,7 +22,6 @@ import {
   DestinationsListService,
 } from '../../../../../core/services/destinations-list.service';
 import {
-  ContentIssueFilter,
   DestinationSort,
   DestinationStatusFilter,
   RegionalDestinationTagDto,
@@ -73,7 +72,6 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
   statusFilter: DestinationStatusFilter = 'all';
   selectedDestinationTypeId: number | null = null;
   selectedTagIds: number[] = [];
-  selectedIssues: ContentIssueFilter[] = [];
   destinationTypes: RegionalDestinationTypeDto[] = [];
   filterTags: RegionalDestinationTagDto[] = [];
   moreFiltersOpen = false;
@@ -83,9 +81,6 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     { label: 'Published', value: 'published' },
     { label: 'Draft', value: 'draft' },
     { label: 'Archived', value: 'archived' },
-  ];
-  readonly issueOptions: { label: string; value: ContentIssueFilter }[] = [
-    { label: 'Missing boundary', value: 'missingBoundary' },
   ];
 
   deleteTarget: DestinationListItem | null = null;
@@ -117,7 +112,6 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
       this.statusFilter = (saved.status as DestinationStatusFilter) ?? 'all';
       this.selectedDestinationTypeId = saved.destinationTypeId ?? null;
       this.selectedTagIds = [...(saved.tagIds ?? [])];
-      this.selectedIssues = [...((saved.issues ?? []) as ContentIssueFilter[])];
       this.pendingScrollTop = saved.scrollTop;
     }
 
@@ -161,8 +155,7 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     return (
       (this.statusFilter !== 'all' ? 1 : 0) +
       (this.selectedDestinationTypeId ? 1 : 0) +
-      this.selectedTagIds.length +
-      this.selectedIssues.length
+      this.selectedTagIds.length
     );
   }
 
@@ -203,8 +196,9 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
 
   @HostListener('document:click')
   onDocumentClick(): void {
-    if (this.sortOpen) {
+    if (this.sortOpen || this.moreFiltersOpen) {
       this.sortOpen = false;
+      this.moreFiltersOpen = false;
       this.notifyStateChanged();
     }
   }
@@ -313,20 +307,8 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     this.onFilterChange();
   }
 
-  toggleIssue(issue: ContentIssueFilter): void {
-    this.selectedIssues = this.selectedIssues.includes(issue)
-      ? this.selectedIssues.filter((value) => value !== issue)
-      : [...this.selectedIssues, issue];
-    this.onFilterChange();
-  }
-
   removeTag(tagId: number): void {
     this.selectedTagIds = this.selectedTagIds.filter((id) => id !== tagId);
-    this.onFilterChange();
-  }
-
-  removeIssue(issue: ContentIssueFilter): void {
-    this.selectedIssues = this.selectedIssues.filter((value) => value !== issue);
     this.onFilterChange();
   }
 
@@ -334,15 +316,10 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     return this.filterTags.find((tag) => tag.id === tagId)?.name ?? `Tag ${tagId}`;
   }
 
-  issueLabel(issue: ContentIssueFilter): string {
-    return this.issueOptions.find((option) => option.value === issue)?.label ?? issue;
-  }
-
   clearAllFilters(): void {
     this.statusFilter = 'all';
     this.selectedDestinationTypeId = null;
     this.selectedTagIds = [];
-    this.selectedIssues = [];
     this.onFilterChange();
   }
 
@@ -503,7 +480,6 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
         status: this.statusFilter,
         destinationTypeId: this.selectedDestinationTypeId,
         tagIds: this.selectedTagIds,
-        issues: this.selectedIssues,
         sort: this.currentSort,
         skip,
         take: PAGE_SIZE,
@@ -587,7 +563,6 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
       status: this.statusFilter,
       destinationTypeId: this.selectedDestinationTypeId,
       tagIds: [...this.selectedTagIds],
-      issues: [...this.selectedIssues],
       displayCount: this.items.length,
       scrollTop: this.scrollContainer?.nativeElement?.scrollTop ?? 0,
     });
@@ -632,7 +607,6 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     this.statusFilter = 'all';
     this.selectedDestinationTypeId = null;
     this.selectedTagIds = [];
-    this.selectedIssues = [];
     this.moreFiltersOpen = false;
   }
 
@@ -651,12 +625,6 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
         .getAll('tagId')
         .map((value) => Number(value))
         .filter((value) => Number.isFinite(value) && value > 0);
-    if (params.has('issue'))
-      this.selectedIssues = params
-        .getAll('issue')
-        .filter((value) =>
-          this.issueOptions.some((option) => option.value === value),
-        ) as ContentIssueFilter[];
   }
 
   private syncUrl(): void {
@@ -668,7 +636,7 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
         status: this.statusFilter !== 'all' ? this.statusFilter : null,
         destinationTypeId: this.selectedDestinationTypeId,
         tagId: this.selectedTagIds.length ? this.selectedTagIds : null,
-        issue: this.selectedIssues.length ? this.selectedIssues : null,
+        issue: null,
       },
       queryParamsHandling: 'merge',
       replaceUrl: true,

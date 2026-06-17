@@ -1,5 +1,4 @@
 import { RegionalEntityImageDto } from './regional-image.model';
-import { ContentIssueFilter } from './destination.model';
 
 export type PlaceSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
 export type PlaceStatusFilter = 'all' | 'published' | 'draft' | 'archived';
@@ -88,7 +87,6 @@ export interface RegionalPlaceListParams {
   locationId?: number | null;
   placeTypeId?: number | null;
   tagIds?: number[];
-  issues?: ContentIssueFilter[];
   sort?: PlaceSort;
   skip?: number;
   take?: number;

@@ -73,7 +73,6 @@ export interface DestinationListState {
   status: string;
   destinationTypeId: number | null;
   tagIds: number[];
-  issues: string[];
   displayCount: number;
   scrollTop: number;
 }
@@ -104,7 +103,6 @@ export class DestinationsListService {
     if (params.destinationTypeId)
       httpParams = httpParams.set('destinationTypeId', String(params.destinationTypeId));
     for (const tagId of params.tagIds ?? []) httpParams = httpParams.append('tagId', String(tagId));
-    for (const issue of params.issues ?? []) httpParams = httpParams.append('issue', issue);
 
     return this.http.get<RegionalDestinationListResponse>(this.endpoint, { params: httpParams });
   }

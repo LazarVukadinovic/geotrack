@@ -3144,16 +3144,16 @@ public static class SeedData
 
         // Entity-level tags stay useful for Explore sections, recommendations and details,
         // but they are not destination discovery filters.
-        new("Location Character", "location-character", ForLocation: true, Description: "Area-level character and context."),
+        new("Location Character", "location-character", ForLocation: true, Description: "Area-level character and context.", IsFilterable: true, FilterLabel: "Character", FilterOrder: 20),
 
-        new("Cuisine", "cuisine", ForPlace: true, Description: "Food cuisine tags for restaurants and cafes.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"]),
-        new("Dining Style", "dining-style", ForPlace: true, Description: "Dining style and service level.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"]),
-        new("Stay Style", "stay-style", ForPlace: true, Description: "Accommodation style and positioning.", AllowedPlaceTypes: ["Stay"]),
+        new("Cuisine", "cuisine", ForPlace: true, Description: "Food cuisine tags for restaurants and cafes.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"], IsFilterable: true, FilterLabel: "Cuisine", FilterOrder: 20),
+        new("Dining Style", "dining-style", ForPlace: true, Description: "Dining style and service level.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar"], IsFilterable: true, FilterLabel: "Dining style", FilterOrder: 30),
+        new("Stay Style", "stay-style", ForPlace: true, Description: "Accommodation style and positioning.", AllowedPlaceTypes: ["Stay"], IsFilterable: true, FilterLabel: "Stay style", FilterOrder: 40),
 
-        new("Activity", "activity", ForPlace: true, Description: "Activity tags that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Museum", "Gallery"]),
-        new("Explore Topic", "explore-topic", ForPlace: true, Description: "Broad place topics that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Museum", "Gallery", "Attraction"]),
-        new("Setting", "setting", ForPlace: true, Description: "Physical setting or atmosphere.", AllowedPlaceTypes: ["Beach", "Restaurant", "Cafe", "Bar", "Landmark", "Nature", "Stay", "Museum", "Gallery"]),
-        new("Price Level", "price-level", ForPlace: true, Description: "Simple price positioning.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar", "Stay"]),
+        new("Activity", "activity", ForPlace: true, Description: "Activity tags that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Museum", "Gallery"], IsFilterable: true, FilterLabel: "Activities", FilterOrder: 50),
+        new("Explore Topic", "explore-topic", ForPlace: true, Description: "Broad place topics that can become Explore homepage sections.", AllowedPlaceTypes: ["Beach", "Nature", "Landmark", "Museum", "Gallery", "Attraction"], IsFilterable: true, FilterLabel: "Topics", FilterOrder: 60),
+        new("Setting", "setting", ForPlace: true, Description: "Physical setting or atmosphere.", AllowedPlaceTypes: ["Beach", "Restaurant", "Cafe", "Bar", "Landmark", "Nature", "Stay", "Museum", "Gallery"], IsFilterable: true, FilterLabel: "Setting", FilterOrder: 70),
+        new("Price Level", "price-level", ForPlace: true, Description: "Simple price positioning.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar", "Stay"], IsFilterable: true, FilterLabel: "Price level", FilterOrder: 80),
 
         new("Event Category", "event-category", ForEvent: true, Description: "Event category and format.", IsFilterable: true, FilterLabel: "Event category", FilterOrder: 20),
         new("Event Access", "event-access", ForEvent: true, Description: "Ticketing and access model.", IsFilterable: true, FilterLabel: "Access", FilterOrder: 30)

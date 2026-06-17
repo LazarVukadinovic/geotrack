@@ -100,7 +100,6 @@ export interface PlaceListState {
   locationId: number | null;
   placeTypeId: number | null;
   tagIds: number[];
-  issues: string[];
   displayCount: number;
   scrollTop: number;
 }
@@ -138,7 +137,6 @@ export class PlacesListService {
     if (params.locationId) httpParams = httpParams.set('locationId', String(params.locationId));
     if (params.placeTypeId) httpParams = httpParams.set('placeTypeId', String(params.placeTypeId));
     for (const tagId of params.tagIds ?? []) httpParams = httpParams.append('tagId', String(tagId));
-    for (const issue of params.issues ?? []) httpParams = httpParams.append('issue', issue);
 
     return this.http.get<RegionalPlaceListResponse>(this.endpoint, { params: httpParams });
   }

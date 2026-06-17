@@ -26,7 +26,6 @@ import {
   RegionalPlaceTagDto,
   RegionalPlaceTypeDto,
 } from '../../../../../core/models/place.model';
-import { ContentIssueFilter } from '../../../../../core/models/destination.model';
 import { RegionalAssignedRegion } from '../../../../../core/models/dashboard.model';
 
 const PAGE_SIZE = 25;
@@ -74,7 +73,6 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
   selectedLocationId: number | null = null;
   selectedPlaceTypeId: number | null = null;
   selectedTagIds: number[] = [];
-  selectedIssues: ContentIssueFilter[] = [];
   destinations: RegionalPlaceParentDestinationDto[] = [];
   locations: RegionalPlaceParentLocationDto[] = [];
   placeTypes: RegionalPlaceTypeDto[] = [];
@@ -86,9 +84,6 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     { label: 'Published', value: 'published' },
     { label: 'Draft', value: 'draft' },
     { label: 'Archived', value: 'archived' },
-  ];
-  readonly issueOptions: { label: string; value: ContentIssueFilter }[] = [
-    { label: 'Missing address', value: 'missingAddress' },
   ];
 
   deleteTarget: PlaceListItem | null = null;
@@ -122,7 +117,6 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
       this.selectedLocationId = saved.locationId ?? null;
       this.selectedPlaceTypeId = saved.placeTypeId ?? null;
       this.selectedTagIds = [...(saved.tagIds ?? [])];
-      this.selectedIssues = [...((saved.issues ?? []) as ContentIssueFilter[])];
       this.pendingScrollTop = saved.scrollTop;
     }
     this.restoreFiltersFromUrl();
@@ -172,8 +166,7 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
       (this.selectedDestinationId ? 1 : 0) +
       (this.selectedLocationId ? 1 : 0) +
       (this.selectedPlaceTypeId ? 1 : 0) +
-      this.selectedTagIds.length +
-      this.selectedIssues.length
+      this.selectedTagIds.length
     );
   }
   get selectedDestinationName(): string {
@@ -217,8 +210,9 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
 
   @HostListener('document:click')
   onDocumentClick(): void {
-    if (this.sortOpen) {
+    if (this.sortOpen || this.moreFiltersOpen) {
       this.sortOpen = false;
+      this.moreFiltersOpen = false;
       this.notifyStateChanged();
     }
   }
@@ -336,25 +330,12 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
       : [...this.selectedTagIds, tagId];
     this.onFilterChange();
   }
-  toggleIssue(issue: ContentIssueFilter): void {
-    this.selectedIssues = this.selectedIssues.includes(issue)
-      ? this.selectedIssues.filter((x) => x !== issue)
-      : [...this.selectedIssues, issue];
-    this.onFilterChange();
-  }
   removeTag(tagId: number): void {
     this.selectedTagIds = this.selectedTagIds.filter((id) => id !== tagId);
     this.onFilterChange();
   }
-  removeIssue(issue: ContentIssueFilter): void {
-    this.selectedIssues = this.selectedIssues.filter((x) => x !== issue);
-    this.onFilterChange();
-  }
   tagName(tagId: number): string {
     return this.filterTags.find((tag) => tag.id === tagId)?.name ?? `Tag ${tagId}`;
-  }
-  issueLabel(issue: ContentIssueFilter): string {
-    return this.issueOptions.find((x) => x.value === issue)?.label ?? issue;
   }
   clearAllFilters(): void {
     this.statusFilter = 'all';
@@ -362,7 +343,6 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     this.selectedLocationId = null;
     this.selectedPlaceTypeId = null;
     this.selectedTagIds = [];
-    this.selectedIssues = [];
     this.onFilterChange();
   }
 
@@ -520,7 +500,6 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
         locationId: this.selectedLocationId,
         placeTypeId: this.selectedPlaceTypeId,
         tagIds: this.selectedTagIds,
-        issues: this.selectedIssues,
         sort: this.currentSort,
         skip,
         take: PAGE_SIZE,
@@ -606,7 +585,6 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
       locationId: this.selectedLocationId,
       placeTypeId: this.selectedPlaceTypeId,
       tagIds: [...this.selectedTagIds],
-      issues: [...this.selectedIssues],
       displayCount: this.items.length,
       scrollTop: this.scrollContainer?.nativeElement?.scrollTop ?? 0,
     });
@@ -673,7 +651,6 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     this.selectedLocationId = null;
     this.selectedPlaceTypeId = null;
     this.selectedTagIds = [];
-    this.selectedIssues = [];
     this.moreFiltersOpen = false;
   }
   private restoreFiltersFromUrl(): void {
@@ -693,10 +670,6 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
         .getAll('tagId')
         .map(Number)
         .filter((x) => Number.isFinite(x) && x > 0);
-    if (p.has('issue'))
-      this.selectedIssues = p
-        .getAll('issue')
-        .filter((v) => this.issueOptions.some((x) => x.value === v)) as ContentIssueFilter[];
   }
   private syncUrl(): void {
     this.router.navigate([], {
@@ -709,7 +682,7 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
         locationId: this.selectedLocationId,
         placeTypeId: this.selectedPlaceTypeId,
         tagId: this.selectedTagIds.length ? this.selectedTagIds : null,
-        issue: this.selectedIssues.length ? this.selectedIssues : null,
+        issue: null,
       },
       queryParamsHandling: 'merge',
       replaceUrl: true,

@@ -20,7 +20,6 @@ import { AuthService } from '../../../../../core/services/auth.service';
 import { EventListItem, EventsListService } from '../../../../../core/services/events-list.service';
 import {
   EventDateFilter,
-  EventPriceFilter,
   EventSort,
   EventStatusFilter,
   RegionalEventParentDestinationDto,
@@ -81,7 +80,6 @@ export class AllEventsComponent implements OnInit, OnDestroy {
   dateFilter: EventDateFilter = 'upcoming';
   dateFrom = '';
   dateTo = '';
-  priceFilter: EventPriceFilter = 'all';
   selectedTagIds: number[] = [];
   destinations: RegionalEventParentDestinationDto[] = [];
   locations: RegionalEventParentLocationDto[] = [];
@@ -102,11 +100,6 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     { label: 'Ongoing now', value: 'ongoing' },
     { label: 'Past', value: 'past' },
     { label: 'Custom range', value: 'custom' },
-  ];
-  readonly priceOptions: { label: string; value: EventPriceFilter }[] = [
-    { label: 'Free or paid', value: 'all' },
-    { label: 'Free only', value: 'free' },
-    { label: 'Paid only', value: 'paid' },
   ];
 
   deleteTarget: EventListItem | null = null;
@@ -137,13 +130,10 @@ export class AllEventsComponent implements OnInit, OnDestroy {
       this.currentSort = saved.sort;
       this.statusFilter = (saved.status as EventStatusFilter) ?? 'all';
       this.selectedDestinationId = saved.destinationId ?? null;
-      this.selectedLocationId = saved.locationId ?? null;
-      this.selectedPlaceId = saved.placeId ?? null;
       this.selectedEventTypeId = saved.eventTypeId ?? null;
       this.dateFilter = (saved.dateFilter as EventDateFilter) ?? 'upcoming';
       this.dateFrom = saved.dateFrom ?? '';
       this.dateTo = saved.dateTo ?? '';
-      this.priceFilter = (saved.priceFilter as EventPriceFilter) ?? 'all';
       this.selectedTagIds = [...(saved.tagIds ?? [])];
       this.pendingScrollTop = saved.scrollTop;
     }
@@ -199,11 +189,8 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     return (
       (this.statusFilter !== 'all' ? 1 : 0) +
       (this.selectedDestinationId ? 1 : 0) +
-      (this.selectedLocationId ? 1 : 0) +
-      (this.selectedPlaceId ? 1 : 0) +
       (this.selectedEventTypeId ? 1 : 0) +
       (this.dateFilter !== 'all' ? 1 : 0) +
-      (this.priceFilter !== 'all' ? 1 : 0) +
       this.selectedTagIds.length
     );
   }
@@ -251,8 +238,9 @@ export class AllEventsComponent implements OnInit, OnDestroy {
 
   @HostListener('document:click')
   onDocumentClick(): void {
-    if (this.sortOpen) {
+    if (this.sortOpen || this.moreFiltersOpen) {
       this.sortOpen = false;
+      this.moreFiltersOpen = false;
       this.notifyStateChanged();
     }
   }
@@ -407,7 +395,6 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     this.dateFilter = 'all';
     this.dateFrom = '';
     this.dateTo = '';
-    this.priceFilter = 'all';
     this.selectedTagIds = [];
     this.onFilterChange();
   }
@@ -573,14 +560,11 @@ export class AllEventsComponent implements OnInit, OnDestroy {
         search: this.searchQuery,
         status: this.statusFilter,
         destinationId: this.selectedDestinationId,
-        locationId: this.selectedLocationId,
-        placeId: this.selectedPlaceId,
         eventTypeId: this.selectedEventTypeId,
         dateFilter: this.dateFilter,
         dateFrom:
           this.dateFilter === 'custom' && this.dateFrom ? `${this.dateFrom}T00:00:00Z` : null,
         dateTo: this.dateFilter === 'custom' && this.dateTo ? `${this.dateTo}T23:59:59Z` : null,
-        priceFilter: this.priceFilter,
         tagIds: this.selectedTagIds,
         sort: this.currentSort,
         skip,
@@ -664,13 +648,10 @@ export class AllEventsComponent implements OnInit, OnDestroy {
       sort: this.currentSort,
       status: this.statusFilter,
       destinationId: this.selectedDestinationId,
-      locationId: this.selectedLocationId,
-      placeId: this.selectedPlaceId,
       eventTypeId: this.selectedEventTypeId,
       dateFilter: this.dateFilter,
       dateFrom: this.dateFrom,
       dateTo: this.dateTo,
-      priceFilter: this.priceFilter,
       tagIds: [...this.selectedTagIds],
       displayCount: this.items.length,
       scrollTop: this.scrollContainer?.nativeElement?.scrollTop ?? 0,
@@ -682,8 +663,6 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     this.filterOptionsLoading = true;
     forkJoin({
       destinations: this.eventsService.getParentDestinations(this.activeRegionId, null, 500),
-      locations: this.eventsService.getParentLocations(this.activeRegionId, null, 500),
-      places: this.eventsService.getParentPlaces(this.activeRegionId, null, 500),
       types: this.eventsService.getEventTypes(),
       tags: this.eventsService.getEventTags(),
     })
@@ -694,37 +673,20 @@ export class AllEventsComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: ({ destinations, locations, places, types, tags }) => {
+        next: ({ destinations, types, tags }) => {
           this.destinations = destinations ?? [];
-          this.locations = locations ?? [];
-          this.places = places ?? [];
+          this.locations = [];
+          this.places = [];
+          this.selectedLocationId = null;
+          this.selectedPlaceId = null;
           this.eventTypes = types ?? [];
           this.filterTags = (tags ?? []).filter((tag) => tag.isFilterable);
-          const place = this.places.find((x) => x.id === this.selectedPlaceId);
-          if (place) {
-            this.selectedLocationId = place.locationId;
-            this.selectedDestinationId = place.destinationId;
-          } else {
-            const loc = this.locations.find((x) => x.id === this.selectedLocationId);
-            if (loc) this.selectedDestinationId = loc.destinationId;
-          }
           if (
             this.selectedDestinationId &&
             !this.destinations.some((x) => x.id === this.selectedDestinationId)
           ) {
             this.selectedDestinationId = null;
-            this.selectedLocationId = null;
-            this.selectedPlaceId = null;
           }
-          if (
-            this.selectedLocationId &&
-            !this.locations.some((x) => x.id === this.selectedLocationId)
-          ) {
-            this.selectedLocationId = null;
-            this.selectedPlaceId = null;
-          }
-          if (this.selectedPlaceId && !this.places.some((x) => x.id === this.selectedPlaceId))
-            this.selectedPlaceId = null;
           if (
             this.selectedEventTypeId &&
             !this.eventTypes.some((x) => x.id === this.selectedEventTypeId)
@@ -755,7 +717,6 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     this.dateFilter = 'upcoming';
     this.dateFrom = '';
     this.dateTo = '';
-    this.priceFilter = 'all';
     this.selectedTagIds = [];
     this.moreFiltersOpen = false;
   }
@@ -768,16 +729,12 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     if (status && this.statusOptions.some((x) => x.value === status)) this.statusFilter = status;
     this.selectedDestinationId =
       this.parsePositiveInt(p.get('destinationId')) ?? this.selectedDestinationId;
-    this.selectedLocationId = this.parsePositiveInt(p.get('locationId')) ?? this.selectedLocationId;
-    this.selectedPlaceId = this.parsePositiveInt(p.get('placeId')) ?? this.selectedPlaceId;
     this.selectedEventTypeId =
       this.parsePositiveInt(p.get('eventTypeId')) ?? this.selectedEventTypeId;
     const date = p.get('date') as EventDateFilter | null;
     if (date && this.dateOptions.some((x) => x.value === date)) this.dateFilter = date;
     if (p.has('from')) this.dateFrom = p.get('from') ?? '';
     if (p.has('to')) this.dateTo = p.get('to') ?? '';
-    const price = p.get('price') as EventPriceFilter | null;
-    if (price && this.priceOptions.some((x) => x.value === price)) this.priceFilter = price;
     if (p.has('tagId'))
       this.selectedTagIds = p
         .getAll('tagId')
@@ -792,13 +749,13 @@ export class AllEventsComponent implements OnInit, OnDestroy {
         sort: this.currentSort !== 'newest' ? this.currentSort : null,
         status: this.statusFilter !== 'all' ? this.statusFilter : null,
         destinationId: this.selectedDestinationId,
-        locationId: this.selectedLocationId,
-        placeId: this.selectedPlaceId,
+        locationId: null,
+        placeId: null,
         eventTypeId: this.selectedEventTypeId,
         date: this.dateFilter !== 'upcoming' ? this.dateFilter : null,
         from: this.dateFilter === 'custom' && this.dateFrom ? this.dateFrom : null,
         to: this.dateFilter === 'custom' && this.dateTo ? this.dateTo : null,
-        price: this.priceFilter !== 'all' ? this.priceFilter : null,
+        price: null,
         tagId: this.selectedTagIds.length ? this.selectedTagIds : null,
       },
       queryParamsHandling: 'merge',
