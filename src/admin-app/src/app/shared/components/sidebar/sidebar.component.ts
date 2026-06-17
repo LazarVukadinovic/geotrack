@@ -185,7 +185,6 @@ export class SidebarComponent implements OnInit, OnChanges {
       { label: 'Locations', path: '/content-moderator/locations', icon: 'pin' },
       { label: 'Places', path: '/content-moderator/places', icon: 'home' },
       { label: 'Events', path: '/content-moderator/events', icon: 'calendar' },
-      { label: 'Contributions', path: '/content-moderator/contributions', icon: 'inbox' },
       {
         label: 'Review Management',
         path: '/content-moderator/review-management',

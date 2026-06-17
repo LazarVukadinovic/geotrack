@@ -798,6 +798,10 @@ export class TopbarComponent implements OnInit, OnDestroy {
   }
 
   private resolveNotificationRoute(notification: AdminNotification): string {
+    if (notification.targetType === 'Contribution' && this.notificationAudienceRole === 'ContentModerator') {
+      return '/content-moderator/dashboard';
+    }
+
     if (notification.targetRoute?.startsWith('/') && !notification.targetRoute.startsWith('//')) {
       return notification.targetRoute;
     }

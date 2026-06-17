@@ -511,10 +511,9 @@ public class PlaceContributionService : IPlaceContributionService
 
         _db.PlaceContributions.Add(contribution);
         await _db.SaveChangesAsync();
-        // Contribution/ownership requests are routed to the responsible Regional Manager (and the
-        // Content Moderator as a fallback). Territory Managers no longer receive these.
+        // Contribution/ownership requests are routed to the responsible Regional Manager.
+        // Territory Managers no longer receive these.
         await _adminNotificationService.CreateRegionalContributionPendingReviewNotificationAsync(contribution);
-        await _adminNotificationService.CreateContentManagerContributionPendingReviewNotificationAsync(contribution);
 
         var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
         return MapDetail(saved, includeReviewNote: false);
@@ -707,9 +706,8 @@ public class PlaceContributionService : IPlaceContributionService
         if (isRejectedResubmission)
         {
             // Territory Managers no longer receive contribution/ownership requests; only the
-            // Regional Manager (and Content Moderator fallback) are notified.
+            // Regional Manager is notified.
             await _adminNotificationService.CreateRegionalContributionPendingReviewNotificationAsync(contribution);
-            await _adminNotificationService.CreateContentManagerContributionPendingReviewNotificationAsync(contribution);
         }
 
         var saved = await BaseContributionQuery().SingleAsync(c => c.Id == contribution.Id);
@@ -1324,7 +1322,7 @@ public class PlaceContributionService : IPlaceContributionService
 
         if (!contribution.LocationId.HasValue)
         {
-            throw new UnauthorizedAccessException("This contribution has no assigned region and can only be reviewed by a content manager.");
+            throw new UnauthorizedAccessException("This contribution has no assigned region.");
         }
 
         var contributionRegionIdForCheck = await ResolveContributionRegionIdAsync(contribution);
@@ -1334,7 +1332,7 @@ public class PlaceContributionService : IPlaceContributionService
 
         if (!regionHasManager)
         {
-            throw new UnauthorizedAccessException("This contribution's region has no assigned manager and can only be reviewed by a content manager.");
+            throw new UnauthorizedAccessException("This contribution's region has no assigned regional manager.");
         }
 
         var regionIds = await GetReviewerRegionIdsAsync(reviewerUserId);
