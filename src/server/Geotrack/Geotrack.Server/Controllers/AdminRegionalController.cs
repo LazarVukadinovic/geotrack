@@ -716,9 +716,7 @@ public class AdminRegionalController : ControllerBase
         [FromQuery] string? status = null,
         [FromQuery] int? destinationId = null,
         [FromQuery] int? locationTypeId = null,
-        [FromQuery] string? boundaryState = null,
         [FromQuery(Name = "tagId")] int[]? tagIds = null,
-        [FromQuery(Name = "issue")] string[]? issues = null,
         [FromQuery] string? sort = null,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 25)
@@ -735,9 +733,7 @@ public class AdminRegionalController : ControllerBase
                 status,
                 destinationId,
                 locationTypeId,
-                boundaryState,
                 tagIds,
-                issues,
                 sort,
                 skip,
                 take));

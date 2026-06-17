@@ -5,7 +5,6 @@ using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Microsoft.EntityFrameworkCore;
-using NtsGeometry = NetTopologySuite.Geometries.Geometry;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -43,9 +42,7 @@ public class RegionalLocationService : IRegionalLocationService
         string? status,
         int? destinationId,
         int? locationTypeId,
-        string? boundaryState,
         IReadOnlyCollection<int>? tagIds,
-        IReadOnlyCollection<string>? issues,
         string? sort,
         int skip,
         int take)
@@ -73,29 +70,8 @@ public class RegionalLocationService : IRegionalLocationService
         if (locationTypeId.HasValue && locationTypeId.Value > 0)
             query = query.Where(location => location.LocationTypeId == locationTypeId.Value);
 
-        var normalizedBoundaryState = boundaryState?.Trim().ToLowerInvariant();
-        if (normalizedBoundaryState == "configured")
-            query = query.Where(location => EF.Property<NtsGeometry?>(location, "BoundaryGeometry") != null);
-        else if (normalizedBoundaryState == "missing")
-            query = query.Where(location => EF.Property<NtsGeometry?>(location, "BoundaryGeometry") == null);
-
         foreach (var tagId in (tagIds ?? Array.Empty<int>()).Where(id => id > 0).Distinct())
             query = query.Where(location => location.LocationTags.Any(link => link.TagId == tagId));
-
-        var issueSet = (issues ?? Array.Empty<string>())
-            .Where(issue => !string.IsNullOrWhiteSpace(issue))
-            .Select(issue => issue.Trim().ToLowerInvariant())
-            .ToHashSet();
-        if (issueSet.Count > 0)
-        {
-            var missingCenter = issueSet.Contains("missingcenter");
-            var missingImage = issueSet.Contains("missingimage");
-            var missingDescription = issueSet.Contains("missingdescription");
-            query = query.Where(location =>
-                (missingCenter && location.Latitude == 0 && location.Longitude == 0) ||
-                (missingImage && !location.Images.Any(image => image.TargetType == EntityImageTargetType.Location)) ||
-                (missingDescription && (location.Description == null || location.Description == "")));
-        }
 
         query = ApplySearch(query, search);
         query = ApplySort(query, normalizedSort);

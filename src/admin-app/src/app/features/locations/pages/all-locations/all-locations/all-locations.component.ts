@@ -28,7 +28,6 @@ import {
   RegionalLocationTagDto,
   RegionalLocationTypeDto,
 } from '../../../../../core/models/location.model';
-import { ContentIssueFilter } from '../../../../../core/models/destination.model';
 import { RegionalAssignedRegion } from '../../../../../core/models/dashboard.model';
 
 const PAGE_SIZE = 25;
@@ -74,9 +73,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
   statusFilter: LocationStatusFilter = 'all';
   selectedDestinationId: number | null = null;
   selectedLocationTypeId: number | null = null;
-  boundaryState: 'all' | 'configured' | 'missing' = 'all';
   selectedTagIds: number[] = [];
-  selectedIssues: ContentIssueFilter[] = [];
   destinations: RegionalLocationParentDestinationDto[] = [];
   locationTypes: RegionalLocationTypeDto[] = [];
   filterTags: RegionalLocationTagDto[] = [];
@@ -87,16 +84,6 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     { label: 'Published', value: 'published' },
     { label: 'Draft', value: 'draft' },
     { label: 'Archived', value: 'archived' },
-  ];
-  readonly boundaryOptions = [
-    { label: 'Any boundary state', value: 'all' as const },
-    { label: 'Boundary configured', value: 'configured' as const },
-    { label: 'Boundary missing', value: 'missing' as const },
-  ];
-  readonly issueOptions: { label: string; value: ContentIssueFilter }[] = [
-    { label: 'Missing geographic center', value: 'missingCenter' },
-    { label: 'Missing image', value: 'missingImage' },
-    { label: 'Missing description', value: 'missingDescription' },
   ];
 
   deleteTarget: LocationListItem | null = null;
@@ -128,9 +115,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
       this.statusFilter = (saved.status as LocationStatusFilter) ?? 'all';
       this.selectedDestinationId = saved.destinationId ?? null;
       this.selectedLocationTypeId = saved.locationTypeId ?? null;
-      this.boundaryState = (saved.boundaryState as 'all' | 'configured' | 'missing') ?? 'all';
       this.selectedTagIds = [...(saved.tagIds ?? [])];
-      this.selectedIssues = [...((saved.issues ?? []) as ContentIssueFilter[])];
       this.pendingScrollTop = saved.scrollTop;
     }
 
@@ -175,9 +160,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
       (this.statusFilter !== 'all' ? 1 : 0) +
       (this.selectedDestinationId ? 1 : 0) +
       (this.selectedLocationTypeId ? 1 : 0) +
-      (this.boundaryState !== 'all' ? 1 : 0) +
-      this.selectedTagIds.length +
-      this.selectedIssues.length
+      this.selectedTagIds.length
     );
   }
 
@@ -334,35 +317,19 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     this.onFilterChange();
   }
 
-  toggleIssue(issue: ContentIssueFilter): void {
-    this.selectedIssues = this.selectedIssues.includes(issue)
-      ? this.selectedIssues.filter((value) => value !== issue)
-      : [...this.selectedIssues, issue];
-    this.onFilterChange();
-  }
-
   removeTag(tagId: number): void {
     this.selectedTagIds = this.selectedTagIds.filter((id) => id !== tagId);
     this.onFilterChange();
   }
-  removeIssue(issue: ContentIssueFilter): void {
-    this.selectedIssues = this.selectedIssues.filter((value) => value !== issue);
-    this.onFilterChange();
-  }
   tagName(tagId: number): string {
     return this.filterTags.find((tag) => tag.id === tagId)?.name ?? `Tag ${tagId}`;
-  }
-  issueLabel(issue: ContentIssueFilter): string {
-    return this.issueOptions.find((option) => option.value === issue)?.label ?? issue;
   }
 
   clearAllFilters(): void {
     this.statusFilter = 'all';
     this.selectedDestinationId = null;
     this.selectedLocationTypeId = null;
-    this.boundaryState = 'all';
     this.selectedTagIds = [];
-    this.selectedIssues = [];
     this.onFilterChange();
   }
 
@@ -523,9 +490,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
         status: this.statusFilter,
         destinationId: this.selectedDestinationId,
         locationTypeId: this.selectedLocationTypeId,
-        boundaryState: this.boundaryState,
         tagIds: this.selectedTagIds,
-        issues: this.selectedIssues,
         sort: this.currentSort,
         skip,
         take: PAGE_SIZE,
@@ -609,9 +574,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
       status: this.statusFilter,
       destinationId: this.selectedDestinationId,
       locationTypeId: this.selectedLocationTypeId,
-      boundaryState: this.boundaryState,
       tagIds: [...this.selectedTagIds],
-      issues: [...this.selectedIssues],
       displayCount: this.items.length,
       scrollTop: this.scrollContainer?.nativeElement?.scrollTop ?? 0,
     });
@@ -665,9 +628,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     this.statusFilter = 'all';
     this.selectedDestinationId = null;
     this.selectedLocationTypeId = null;
-    this.boundaryState = 'all';
     this.selectedTagIds = [];
-    this.selectedIssues = [];
     this.moreFiltersOpen = false;
   }
 
@@ -683,20 +644,11 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
       this.parsePositiveInt(params.get('destinationId')) ?? this.selectedDestinationId;
     this.selectedLocationTypeId =
       this.parsePositiveInt(params.get('locationTypeId')) ?? this.selectedLocationTypeId;
-    const boundary = params.get('boundaryState') as 'all' | 'configured' | 'missing' | null;
-    if (boundary && this.boundaryOptions.some((option) => option.value === boundary))
-      this.boundaryState = boundary;
     if (params.has('tagId'))
       this.selectedTagIds = params
         .getAll('tagId')
         .map(Number)
         .filter((value) => Number.isFinite(value) && value > 0);
-    if (params.has('issue'))
-      this.selectedIssues = params
-        .getAll('issue')
-        .filter((value) =>
-          this.issueOptions.some((option) => option.value === value),
-        ) as ContentIssueFilter[];
   }
 
   private syncUrl(): void {
@@ -708,9 +660,10 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
         status: this.statusFilter !== 'all' ? this.statusFilter : null,
         destinationId: this.selectedDestinationId,
         locationTypeId: this.selectedLocationTypeId,
-        boundaryState: this.boundaryState !== 'all' ? this.boundaryState : null,
         tagId: this.selectedTagIds.length ? this.selectedTagIds : null,
-        issue: this.selectedIssues.length ? this.selectedIssues : null,
+        // Remove query parameters produced by the earlier, invalid location filters.
+        boundaryState: null,
+        issue: null,
       },
       queryParamsHandling: 'merge',
       replaceUrl: true,

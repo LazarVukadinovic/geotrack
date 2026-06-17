@@ -74,7 +74,7 @@
           [(ngModel)]="selectedDestinationId"
           (ngModelChange)="onDestinationFilterChange()"
           [disabled]="!activeRegionId || filterOptionsLoading"
-          class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm min-w-44"
+          class="gt-list-filter-control px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm min-w-44"
         >
           <option [ngValue]="null">All destinations</option>
           <option *ngFor="let item of destinations" [ngValue]="item.id">{{ item.name }}</option>
@@ -83,7 +83,7 @@
           [(ngModel)]="selectedLocationId"
           (ngModelChange)="onLocationFilterChange()"
           [disabled]="!activeRegionId || filterOptionsLoading"
-          class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm min-w-44"
+          class="gt-list-filter-control px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm min-w-44"
         >
           <option [ngValue]="null">Any location</option>
           <option *ngFor="let item of filteredLocations" [ngValue]="item.id">
@@ -94,7 +94,7 @@
           [(ngModel)]="selectedPlaceTypeId"
           (ngModelChange)="onFilterChange()"
           [disabled]="!activeRegionId || filterOptionsLoading"
-          class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm min-w-40"
+          class="gt-list-filter-control px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm min-w-40"
         >
           <option [ngValue]="null">All place types</option>
           <option *ngFor="let type of placeTypes" [ngValue]="type.id">{{ type.name }}</option>
@@ -103,7 +103,7 @@
           [(ngModel)]="statusFilter"
           (ngModelChange)="onFilterChange()"
           [disabled]="!activeRegionId"
-          class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm min-w-36"
+          class="gt-list-filter-control px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm min-w-36"
         >
           <option *ngFor="let option of statusOptions" [ngValue]="option.value">
             {{ option.label }}
@@ -112,7 +112,7 @@
         <button
           type="button"
           (click)="moreFiltersOpen = !moreFiltersOpen"
-          class="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600"
+          class="gt-list-filter-control flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600"
         >
           More filters
           <span
@@ -125,7 +125,7 @@
           <button
             type="button"
             (click)="sortOpen = !sortOpen; $event.stopPropagation()"
-            class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600"
+            class="gt-list-filter-control flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 font-medium"
           >
             Sort: {{ currentSortLabel }}
           </button>

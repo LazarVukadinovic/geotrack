@@ -95,17 +95,10 @@ public class RegionalDestinationService : IRegionalDestinationService
             .Where(issue => !string.IsNullOrWhiteSpace(issue))
             .Select(issue => issue.Trim().ToLowerInvariant())
             .ToHashSet();
-        if (issueSet.Count > 0)
+        if (issueSet.Contains("missingboundary"))
         {
-            var missingBoundary = issueSet.Contains("missingboundary");
-            var missingCenter = issueSet.Contains("missingcenter");
-            var missingImage = issueSet.Contains("missingimage");
-            var missingDescription = issueSet.Contains("missingdescription");
             query = query.Where(destination =>
-                (missingBoundary && EF.Property<Geometry?>(destination, BoundaryGeometryPropertyName) == null) ||
-                (missingCenter && destination.Latitude == 0 && destination.Longitude == 0) ||
-                (missingImage && !destination.Images.Any(image => image.TargetType == EntityImageTargetType.Destination)) ||
-                (missingDescription && (destination.Description == null || destination.Description == "")));
+                EF.Property<Geometry?>(destination, BoundaryGeometryPropertyName) == null);
         }
 
         query = ApplySearch(query, search);

@@ -165,3 +165,49 @@
 .gt-rich-description strong { font-weight: 700; }
 .gt-rich-description em { font-style: italic; }
 .gt-rich-description u { text-decoration: underline; }
+
+/* Shared list-toolbar controls: selects, More filters and Sort use identical sizing and colors. */
+.gt-list-filter-control {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  color: #4b5563;
+  font-size: 0.875rem;
+  font-weight: 500;
+  height: 2.5rem;
+  line-height: 1.25rem;
+  padding: 0 0.75rem;
+  transition: border-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+
+.gt-list-filter-control:hover:not(:disabled) {
+  border-color: #d1d5db;
+}
+
+.gt-list-filter-control:focus-visible {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  outline: none;
+}
+
+.gt-list-filter-control:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+button.gt-list-filter-control {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+}
+
+select.gt-list-filter-control {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 0.75rem center;
+  background-repeat: no-repeat;
+  background-size: 0.875rem 0.875rem;
+  cursor: pointer;
+  padding-right: 2.25rem;
+}

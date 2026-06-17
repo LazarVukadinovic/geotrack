@@ -3155,8 +3155,8 @@ public static class SeedData
         new("Setting", "setting", ForPlace: true, Description: "Physical setting or atmosphere.", AllowedPlaceTypes: ["Beach", "Restaurant", "Cafe", "Bar", "Landmark", "Nature", "Stay", "Museum", "Gallery"]),
         new("Price Level", "price-level", ForPlace: true, Description: "Simple price positioning.", AllowedPlaceTypes: ["Restaurant", "Cafe", "Bar", "Stay"]),
 
-        new("Event Category", "event-category", ForEvent: true, Description: "Event category and format."),
-        new("Event Access", "event-access", ForEvent: true, Description: "Ticketing and access model.")
+        new("Event Category", "event-category", ForEvent: true, Description: "Event category and format.", IsFilterable: true, FilterLabel: "Event category", FilterOrder: 20),
+        new("Event Access", "event-access", ForEvent: true, Description: "Ticketing and access model.", IsFilterable: true, FilterLabel: "Access", FilterOrder: 30)
     ];
 
     private static List<SeedTagDefinition> BuildSeedTags() =>

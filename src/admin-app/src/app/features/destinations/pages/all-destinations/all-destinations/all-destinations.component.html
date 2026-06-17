@@ -76,7 +76,7 @@
           [(ngModel)]="selectedDestinationTypeId"
           (ngModelChange)="onFilterChange()"
           [disabled]="!activeRegionId || filterOptionsLoading"
-          class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 outline-none min-w-40"
+          class="gt-list-filter-control px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 outline-none min-w-40"
         >
           <option [ngValue]="null">All destination types</option>
           <option *ngFor="let type of destinationTypes" [ngValue]="type.id">{{ type.name }}</option>
@@ -86,7 +86,7 @@
           [(ngModel)]="statusFilter"
           (ngModelChange)="onFilterChange()"
           [disabled]="!activeRegionId"
-          class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 outline-none min-w-36"
+          class="gt-list-filter-control px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 outline-none min-w-36"
         >
           <option *ngFor="let option of statusOptions" [ngValue]="option.value">
             {{ option.label }}
@@ -97,7 +97,7 @@
           type="button"
           (click)="moreFiltersOpen = !moreFiltersOpen"
           [disabled]="!activeRegionId"
-          class="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:border-gray-300"
+          class="gt-list-filter-control flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:border-gray-300"
         >
           More filters
           <span
@@ -113,7 +113,7 @@
             type="button"
             (click)="sortOpen = !sortOpen; $event.stopPropagation()"
             [disabled]="!activeRegionId || waitingForRegion"
-            class="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300 disabled:opacity-60"
+            class="gt-list-filter-control flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 font-medium hover:border-gray-300 disabled:opacity-60"
           >
             <svg
               class="w-3.5 h-3.5 text-gray-400"

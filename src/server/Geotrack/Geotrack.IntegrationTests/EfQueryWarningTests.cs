@@ -97,9 +97,7 @@ public sealed class EfQueryWarningTests
             status: "all",
             destinationId: null,
             locationTypeId: null,
-            boundaryState: null,
             tagIds: null,
-            issues: null,
             sort: "newest",
             skip: 0,
             take: 5);

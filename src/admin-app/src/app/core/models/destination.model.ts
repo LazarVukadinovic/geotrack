@@ -1,11 +1,6 @@
 export type DestinationSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
 export type DestinationStatusFilter = 'all' | 'published' | 'draft' | 'archived';
-export type ContentIssueFilter =
-  | 'missingBoundary'
-  | 'missingCenter'
-  | 'missingImage'
-  | 'missingDescription'
-  | 'missingAddress';
+export type ContentIssueFilter = 'missingBoundary' | 'missingAddress';
 
 export interface RegionalDestinationListItemDto {
   id: number;

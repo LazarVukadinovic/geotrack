@@ -74,9 +74,7 @@ export interface LocationListState {
   status: string;
   destinationId: number | null;
   locationTypeId: number | null;
-  boundaryState: string;
   tagIds: number[];
-  issues: string[];
   displayCount: number;
   scrollTop: number;
 }
@@ -108,10 +106,7 @@ export class LocationsListService {
       httpParams = httpParams.set('destinationId', String(params.destinationId));
     if (params.locationTypeId)
       httpParams = httpParams.set('locationTypeId', String(params.locationTypeId));
-    if (params.boundaryState && params.boundaryState !== 'all')
-      httpParams = httpParams.set('boundaryState', params.boundaryState);
     for (const tagId of params.tagIds ?? []) httpParams = httpParams.append('tagId', String(tagId));
-    for (const issue of params.issues ?? []) httpParams = httpParams.append('issue', issue);
 
     return this.http.get<RegionalLocationListResponse>(this.endpoint, { params: httpParams });
   }

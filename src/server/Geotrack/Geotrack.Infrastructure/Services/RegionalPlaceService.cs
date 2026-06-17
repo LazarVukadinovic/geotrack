@@ -87,15 +87,9 @@ public class RegionalPlaceService : IRegionalPlaceService
             .Where(issue => !string.IsNullOrWhiteSpace(issue))
             .Select(issue => issue.Trim().ToLowerInvariant())
             .ToHashSet();
-        if (issueSet.Count > 0)
+        if (issueSet.Contains("missingaddress"))
         {
-            var missingImage = issueSet.Contains("missingimage");
-            var missingDescription = issueSet.Contains("missingdescription");
-            var missingAddress = issueSet.Contains("missingaddress");
-            query = query.Where(place =>
-                (missingImage && !place.Images.Any(image => image.TargetType == EntityImageTargetType.Place)) ||
-                (missingDescription && (place.Description == null || place.Description == "")) ||
-                (missingAddress && (place.Address == null || place.Address == "")));
+            query = query.Where(place => place.Address == null || place.Address == "");
         }
 
         query = ApplySearch(query, search);

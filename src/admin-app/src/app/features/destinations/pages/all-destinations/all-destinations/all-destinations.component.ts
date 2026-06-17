@@ -86,9 +86,6 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
   ];
   readonly issueOptions: { label: string; value: ContentIssueFilter }[] = [
     { label: 'Missing boundary', value: 'missingBoundary' },
-    { label: 'Missing geographic center', value: 'missingCenter' },
-    { label: 'Missing image', value: 'missingImage' },
-    { label: 'Missing description', value: 'missingDescription' },
   ];
 
   deleteTarget: DestinationListItem | null = null;

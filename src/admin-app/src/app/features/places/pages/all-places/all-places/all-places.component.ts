@@ -88,8 +88,6 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     { label: 'Archived', value: 'archived' },
   ];
   readonly issueOptions: { label: string; value: ContentIssueFilter }[] = [
-    { label: 'Missing image', value: 'missingImage' },
-    { label: 'Missing description', value: 'missingDescription' },
     { label: 'Missing address', value: 'missingAddress' },
   ];
 
