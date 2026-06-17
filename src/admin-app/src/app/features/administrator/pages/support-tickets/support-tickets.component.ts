@@ -10,8 +10,8 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { Observable, Subject, finalize } from 'rxjs';
-import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
+import { Observable, Subject, finalize, interval } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, takeUntil } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
@@ -133,6 +133,31 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
       distinctUntilChanged(),
       takeUntil(this.destroy$),
     ).subscribe(() => this.resetAndLoad());
+
+    // Poll every 30 seconds to keep counts reactive without page refresh
+    interval(30_000).pipe(
+      takeUntil(this.destroy$),
+      switchMap(() => this.ticketsSvc.getPage$({
+        status: this.statusFilter,
+        category: this.categoryFilter,
+        priority: this.priorityFilter,
+        search: this.searchQuery,
+        sort: this.sort,
+        skip: 0,
+        take: PAGE_SIZE,
+      })),
+    ).subscribe({
+      next: page => {
+        if (this.actionKey) return; // don't overwrite while action is running
+        this.tickets = page.items;
+        this.totalCount = page.totalCount;
+        this.nextSkip = page.nextSkip;
+        this.hasMore = page.hasMore;
+        this.counts = page.counts;
+        this.supportReportsCount = page.counts.openCount;
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   ngOnDestroy(): void {
@@ -240,6 +265,27 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
     this.statusFilter = status;
     this.openDropdownId = null;
     this.resetAndLoad();
+  }
+
+  toggleCategory(): void {
+    const next = !this.categoryOpen;
+    this.categoryOpen = next;
+    if (next) { this.priorityOpen = false; this.sortOpen = false; }
+    this.cdr.markForCheck();
+  }
+
+  togglePriority(): void {
+    const next = !this.priorityOpen;
+    this.priorityOpen = next;
+    if (next) { this.categoryOpen = false; this.sortOpen = false; }
+    this.cdr.markForCheck();
+  }
+
+  toggleSort(): void {
+    const next = !this.sortOpen;
+    this.sortOpen = next;
+    if (next) { this.categoryOpen = false; this.priorityOpen = false; }
+    this.cdr.markForCheck();
   }
 
   applyCategory(value: AdminSupportTicketCategoryFilter): void {
