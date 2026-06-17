@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { ActivatedRoute, convertToParamMap, ParamMap, provideRouter } from '@angular/router';
+import { BehaviorSubject, of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { RegionDetailComponent } from './region-detail.component';
@@ -17,11 +17,19 @@ describe('RegionDetailComponent', () => {
   let component: RegionDetailComponent;
   let fixture: ComponentFixture<RegionDetailComponent>;
   let getContent$: ReturnType<typeof vi.fn>;
+  let routeParamMap: BehaviorSubject<ParamMap>;
+  let regionsService: {
+    getActiveTerritoryId: ReturnType<typeof vi.fn>;
+    setActiveTerritoryId: ReturnType<typeof vi.fn>;
+    getDetail$: ReturnType<typeof vi.fn>;
+    getContent$: ReturnType<typeof vi.fn>;
+  };
 
   const authService = {
     fullName: 'Mika Mikic',
     getUser: vi.fn(() => ({ role: 'Territory Manager', region: '' })),
     isAdministrator: vi.fn(() => false),
+    isContentModerator: vi.fn(() => false),
     isTerritoryManager: vi.fn(() => true),
     canAccessTerritoryAdmin: vi.fn(() => true),
     logout: vi.fn(),
@@ -247,18 +255,26 @@ describe('RegionDetailComponent', () => {
       });
     });
 
-    const regionsService = {
+    regionsService = {
       getActiveTerritoryId: vi.fn(() => 10),
       setActiveTerritoryId: vi.fn(),
       getDetail$: vi.fn(() => of(detail)),
       getContent$,
     };
 
+    routeParamMap = new BehaviorSubject<ParamMap>(convertToParamMap({ id: '11' }));
+
     await TestBed.configureTestingModule({
       imports: [RegionDetailComponent],
       providers: [
         provideRouter([]),
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '11' }) } } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            paramMap: routeParamMap.asObservable(),
+            snapshot: { paramMap: convertToParamMap({ id: '11' }) },
+          },
+        },
         { provide: AuthService, useValue: authService },
         { provide: RegionsService, useValue: regionsService },
         { provide: TerritoryDashboardService, useValue: territoryService },
@@ -271,6 +287,16 @@ describe('RegionDetailComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
+  });
+
+  it('reloads the region when the route id changes', async () => {
+    expect(regionsService.getDetail$).toHaveBeenLastCalledWith('11', 10);
+
+    routeParamMap.next(convertToParamMap({ id: '22' }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(regionsService.getDetail$).toHaveBeenLastCalledWith('22', 10);
   });
 
   it('renders region summary and content tabs', () => {

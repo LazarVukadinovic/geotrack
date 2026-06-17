@@ -392,6 +392,47 @@ describe('TopbarComponent', () => {
     expect(navigateSpy).toHaveBeenCalledWith('/request/detail/contribution/77?regionId=7');
   });
 
+  it('pushes a single history entry then replaces it when opening notifications back to back', () => {
+    notificationsService.getNotifications$.mockReturnValue(of(notificationPage([
+      supportNotification({
+        id: 101,
+        title: 'First region update',
+        targetType: 'Region',
+        targetId: 5,
+        targetRoute: '/territory/regions/5',
+      }),
+      supportNotification({
+        id: 102,
+        title: 'Second region update',
+        targetType: 'Region',
+        targetId: 7,
+        targetRoute: '/territory/regions/7',
+      }),
+    ], 2)));
+
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    notificationBell().click();
+    fixture.detectChanges();
+    notificationItemButton('First region update').click();
+    fixture.detectChanges();
+
+    // The first notification keeps a normal history entry, so back returns to the origin page.
+    expect(navigateSpy).toHaveBeenLastCalledWith('/territory/regions/5');
+
+    // The browser is now sitting on the first notification's destination.
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/territory/regions/5');
+
+    notificationBell().click();
+    fixture.detectChanges();
+    notificationItemButton('Second region update').click();
+    fixture.detectChanges();
+
+    // Opening another notification from that same page replaces the entry instead of stacking it.
+    expect(navigateSpy).toHaveBeenLastCalledWith('/territory/regions/7', { replaceUrl: true });
+  });
+
   it('shows the Regional Manager empty state copy', () => {
     notificationsService.getNotifications$.mockReturnValue(of(notificationPage([], 0)));
     createRegionalManagerComponent(7);
