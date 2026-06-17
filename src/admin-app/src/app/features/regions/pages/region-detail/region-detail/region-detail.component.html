@@ -262,7 +262,7 @@
           >
             <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Name</span>
             <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Parent</span>
-            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Coverage</span>
+            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider text-center">Coverage</span>
             <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Engagement</span>
             <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
           </div>
@@ -330,7 +330,7 @@
                   <p *ngIf="item.startsAt" class="text-xs text-gray-400">{{ formatDate(item.startsAt) }}</p>
                 </div>
 
-                <div class="text-xs text-gray-600">
+                <div class="text-xs text-gray-600 text-center">
                   <ng-container *ngIf="item.entityType === 'destination' || item.entityType === 'destinations'; else compactCounts">
                     {{ item.locationsCount }} locations · {{ item.placesCount }} places · {{ item.eventsCount }} events
                   </ng-container>

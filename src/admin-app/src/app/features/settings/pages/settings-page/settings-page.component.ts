@@ -11,6 +11,7 @@ import { AdminProfileService } from '../../../../core/services/admin-profile.ser
 import { AdminDashboardService } from '../../../../core/services/administrator/admin-dashboard.service';
 import { ContentModeratorDashboardService } from '../../../../core/services/content-moderator/content-moderator-dashboard.service';
 import { buildAvatarDisplayUrl } from '../../../../core/utils/avatar-url';
+import { cleanRoleName } from '../../../../core/utils/role-utils';
 import {
   AdminProfile,
   AdminProfileAssignment,
@@ -829,7 +830,7 @@ export class SettingsComponent implements OnInit {
   }
 
   private normalizeRole(role: string): string {
-    return role.replace(/[\s_-]/g, '').toLowerCase();
+    return cleanRoleName(role).replace(/[\s_-]/g, '').toLowerCase();
   }
 
   private isAdminRoleSet(roles: readonly string[]): boolean {

@@ -17,6 +17,7 @@ import {
   AssignTerritoryManagerRequest,
 } from '../../models/administrator/app-user.model';
 import { buildAvatarDisplayUrl } from '../../utils/avatar-url';
+import { cleanRoleName } from '../../utils/role-utils';
 
 const AVATAR_COLORS = ['#2563eb', '#059669', '#7c3aed', '#d97706', '#dc2626', '#0891b2', '#be185d', '#0f766e'];
 
@@ -412,9 +413,11 @@ export class AppUsersService {
       return 'User';
     }
 
-    return roleName
-      .replace(/([a-z])([A-Z])/g, '$1 $2')
-      .replace(/_/g, ' ');
+    return cleanRoleName(
+      roleName
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/_/g, ' '),
+    );
   }
 
   private toNumber(value: unknown, fallback = 0): number {
