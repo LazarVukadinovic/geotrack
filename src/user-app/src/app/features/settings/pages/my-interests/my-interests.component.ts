@@ -19,6 +19,8 @@ import type {
   styleUrl: './my-interests.component.css',
 })
 export class MyInterestsComponent {
+  private static readonly MAX_ACTIVITY_SUGGESTIONS = 4;
+
   readonly returnTo = signal('/settings');
   readonly isLoading = signal(true);
   readonly isSaving = signal(false);
@@ -30,7 +32,14 @@ export class MyInterestsComponent {
   readonly dismissingInferredTagIds = signal<Set<number>>(new Set());
   readonly visibleInferredTags = computed(() => {
     const selectedIds = new Set(this.selectedTags().map(tag => tag.id));
-    return this.inferredTags().filter(tag => !selectedIds.has(tag.tagId));
+
+    // Activity signals can cover most of the catalogue for an active user. Only promote
+    // the strongest few here; the remaining unselected topics must stay discoverable
+    // in the grouped "Discover More" section below.
+    return this.inferredTags()
+      .filter(tag => !selectedIds.has(tag.tagId))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .slice(0, MyInterestsComponent.MAX_ACTIVITY_SUGGESTIONS);
   });
   readonly availableTags = computed(() => {
     const selectedIds = new Set(this.selectedTags().map(tag => tag.id));
