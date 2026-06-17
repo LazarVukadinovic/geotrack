@@ -61,6 +61,9 @@ public class RegionalDestinationService : IRegionalDestinationService
         int regionId,
         string? search,
         string? status,
+        int? destinationTypeId,
+        IReadOnlyCollection<int>? tagIds,
+        IReadOnlyCollection<string>? issues,
         string? sort,
         int skip,
         int take)
@@ -80,6 +83,29 @@ public class RegionalDestinationService : IRegionalDestinationService
         {
             var statusName = StatusFromToken(normalizedStatus);
             query = query.Where(destination => destination.Status == statusName);
+        }
+
+        if (destinationTypeId.HasValue && destinationTypeId.Value > 0)
+            query = query.Where(destination => destination.DestinationTypeId == destinationTypeId.Value);
+
+        foreach (var tagId in (tagIds ?? Array.Empty<int>()).Where(id => id > 0).Distinct())
+            query = query.Where(destination => destination.DestinationTags.Any(link => link.TagId == tagId));
+
+        var issueSet = (issues ?? Array.Empty<string>())
+            .Where(issue => !string.IsNullOrWhiteSpace(issue))
+            .Select(issue => issue.Trim().ToLowerInvariant())
+            .ToHashSet();
+        if (issueSet.Count > 0)
+        {
+            var missingBoundary = issueSet.Contains("missingboundary");
+            var missingCenter = issueSet.Contains("missingcenter");
+            var missingImage = issueSet.Contains("missingimage");
+            var missingDescription = issueSet.Contains("missingdescription");
+            query = query.Where(destination =>
+                (missingBoundary && EF.Property<Geometry?>(destination, BoundaryGeometryPropertyName) == null) ||
+                (missingCenter && destination.Latitude == 0 && destination.Longitude == 0) ||
+                (missingImage && !destination.Images.Any(image => image.TargetType == EntityImageTargetType.Destination)) ||
+                (missingDescription && (destination.Description == null || destination.Description == "")));
         }
 
         query = ApplySearch(query, search);
@@ -631,6 +657,23 @@ public class RegionalDestinationService : IRegionalDestinationService
         await _db.SaveChangesAsync();
     }
 
+    public async Task<List<RegionalDestinationTypeDto>> GetDestinationTypesAsync(int userId)
+    {
+        await EnsureRegionalManagerRoleAsync(userId);
+
+        return await _db.DestinationTypes
+            .AsNoTracking()
+            .OrderBy(type => type.Name)
+            .ThenBy(type => type.Id)
+            .Select(type => new RegionalDestinationTypeDto
+            {
+                Id = type.Id,
+                Name = type.Name,
+                Description = type.Description
+            })
+            .ToListAsync();
+    }
+
     public async Task<List<RegionalDestinationTagDto>> GetDestinationTagsAsync(int userId, string? search)
     {
         await EnsureRegionalManagerRoleAsync(userId);
@@ -661,7 +704,8 @@ public class RegionalDestinationService : IRegionalDestinationService
                 TagTypeName = tag.TagType != null ? tag.TagType.Name : null,
                 TagTypeSlug = tag.TagType != null ? tag.TagType.Slug : null,
                 TagTypeLabel = tag.TagType != null ? tag.TagType.FilterLabel ?? tag.TagType.Name : null,
-                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000
+                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000,
+                IsFilterable = tag.TagType != null && tag.TagType.IsFilterable
             })
             .ToListAsync();
     }
@@ -686,7 +730,8 @@ public class RegionalDestinationService : IRegionalDestinationService
             TagTypeName = tag.TagType?.Name,
             TagTypeSlug = tag.TagType?.Slug,
             TagTypeLabel = tag.TagType?.FilterLabel ?? tag.TagType?.Name,
-            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000
+            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000,
+            IsFilterable = tag.TagType != null && tag.TagType.IsFilterable
         };
     }
 

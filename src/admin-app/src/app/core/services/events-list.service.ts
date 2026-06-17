@@ -100,6 +100,16 @@ export type EventSortDir = 'asc' | 'desc';
 export interface EventListState {
   searchQuery: string;
   sort: EventSort;
+  status: string;
+  destinationId: number | null;
+  locationId: number | null;
+  placeId: number | null;
+  eventTypeId: number | null;
+  dateFilter: string;
+  dateFrom: string;
+  dateTo: string;
+  priceFilter: string;
+  tagIds: number[];
   displayCount: number;
   scrollTop: number;
 }
@@ -132,6 +142,18 @@ export class EventsListService {
     if (eventType) {
       httpParams = httpParams.set('eventType', eventType);
     }
+    if (params.destinationId)
+      httpParams = httpParams.set('destinationId', String(params.destinationId));
+    if (params.locationId) httpParams = httpParams.set('locationId', String(params.locationId));
+    if (params.placeId) httpParams = httpParams.set('placeId', String(params.placeId));
+    if (params.eventTypeId) httpParams = httpParams.set('eventTypeId', String(params.eventTypeId));
+    if (params.dateFilter && params.dateFilter !== 'all')
+      httpParams = httpParams.set('dateFilter', params.dateFilter);
+    if (params.dateFrom) httpParams = httpParams.set('dateFrom', params.dateFrom);
+    if (params.dateTo) httpParams = httpParams.set('dateTo', params.dateTo);
+    if (params.priceFilter && params.priceFilter !== 'all')
+      httpParams = httpParams.set('priceFilter', params.priceFilter);
+    for (const tagId of params.tagIds ?? []) httpParams = httpParams.append('tagId', String(tagId));
 
     return this.http.get<RegionalEventListResponse>(this.endpoint, { params: httpParams });
   }
@@ -151,16 +173,18 @@ export class EventsListService {
     payload: RegionalEventUpdateRequest,
   ): Observable<RegionalEventDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalEventDetailDto>(`${this.endpoint}/${eventId}`, payload, { params });
+    return this.http.put<RegionalEventDetailDto>(`${this.endpoint}/${eventId}`, payload, {
+      params,
+    });
   }
 
   uploadImages(regionId: number, files: File[]): Observable<string[]> {
     const formData = new FormData();
-    files.forEach(file => formData.append('files', file));
+    files.forEach((file) => formData.append('files', file));
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http
       .post<{ images: { url: string }[] }>('/api/admin/regional/media/images', formData, { params })
-      .pipe(map(response => response.images.map(image => image.url)));
+      .pipe(map((response) => response.images.map((image) => image.url)));
   }
 
   deleteEvent(regionId: number, eventId: string | number): Observable<void> {
@@ -176,7 +200,10 @@ export class EventsListService {
     let params = new HttpParams().set('regionId', String(regionId)).set('take', String(take));
     const query = search?.trim();
     if (query) params = params.set('search', query);
-    return this.http.get<RegionalEventParentDestinationDto[]>('/api/admin/regional/event-parent-destinations', { params });
+    return this.http.get<RegionalEventParentDestinationDto[]>(
+      '/api/admin/regional/event-parent-destinations',
+      { params },
+    );
   }
 
   getParentLocations(
@@ -187,7 +214,10 @@ export class EventsListService {
     let params = new HttpParams().set('regionId', String(regionId)).set('take', String(take));
     const query = search?.trim();
     if (query) params = params.set('search', query);
-    return this.http.get<RegionalEventParentLocationDto[]>('/api/admin/regional/event-parent-locations', { params });
+    return this.http.get<RegionalEventParentLocationDto[]>(
+      '/api/admin/regional/event-parent-locations',
+      { params },
+    );
   }
 
   getParentPlaces(
@@ -198,7 +228,9 @@ export class EventsListService {
     let params = new HttpParams().set('regionId', String(regionId)).set('take', String(take));
     const query = search?.trim();
     if (query) params = params.set('search', query);
-    return this.http.get<RegionalEventParentPlaceDto[]>('/api/admin/regional/event-parent-places', { params });
+    return this.http.get<RegionalEventParentPlaceDto[]>('/api/admin/regional/event-parent-places', {
+      params,
+    });
   }
 
   getEventTags(search: string | null = null): Observable<RegionalEventTagDto[]> {
@@ -215,7 +247,6 @@ export class EventsListService {
   getEventTypes(): Observable<RegionalEventTypeDto[]> {
     return this.http.get<RegionalEventTypeDto[]>('/api/admin/regional/event-types');
   }
-
 
   private buildCreateFormData(payload: RegionalEventCreateRequest): FormData {
     const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
@@ -235,22 +266,25 @@ export class EventsListService {
     return formData;
   }
 
-  toListItem(dto: RegionalEventListItemDto & { galleryImageUrls?: string[] | null }): EventListItem {
+  toListItem(
+    dto: RegionalEventListItemDto & { galleryImageUrls?: string[] | null },
+  ): EventListItem {
     const id = String(dto.id);
     const lastUpdatedIso = dto.lastUpdatedAt ?? dto.createdAt ?? null;
     const eventType = dto.eventType ?? dto.category ?? null;
     const venueName = dto.placeName ?? dto.locationName ?? dto.destinationName ?? undefined;
     const sortedImages = [...(dto.images ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
-    const cardImage = sortedImages.find(image => image.isMain) ?? sortedImages[0] ?? null;
-    const coverImage = sortedImages.find(image => !image.isMain && image.sortOrder === 1) ?? cardImage;
+    const cardImage = sortedImages.find((image) => image.isMain) ?? sortedImages[0] ?? null;
+    const coverImage =
+      sortedImages.find((image) => !image.isMain && image.sortOrder === 1) ?? cardImage;
     const galleryImages = sortedImages
-      .filter(image => !image.isMain && image.sortOrder >= 2)
+      .filter((image) => !image.isMain && image.sortOrder >= 2)
       .map((image, index) => ({
         url: image.url,
         name: image.altText || image.caption || `Gallery image ${index + 1}`,
       }));
     const fallbackGalleryImages = (dto.galleryImageUrls ?? [])
-      .filter(url => !galleryImages.some(image => image.url === url))
+      .filter((url) => !galleryImages.some((image) => image.url === url))
       .map((url, index) => ({ url, name: `Gallery image ${galleryImages.length + index + 1}` }));
     const imageUrl = cardImage?.url ?? dto.imageUrl ?? null;
     const coverImageUrl = coverImage?.url ?? imageUrl ?? undefined;
@@ -263,7 +297,9 @@ export class EventsListService {
       status: dto.status || 'Published',
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
-      imageBg: coverImageUrl ? `url("${coverImageUrl}") center/cover` : this.fallbackGradient(dto.id),
+      imageBg: coverImageUrl
+        ? `url("${coverImageUrl}") center/cover`
+        : this.fallbackGradient(dto.id),
       category: eventType ?? 'Event',
       regionId: dto.regionId,
       regionDisplayName: dto.regionDisplayName,
@@ -301,8 +337,8 @@ export class EventsListService {
       attendanceLimit: dto.attendanceLimit != null ? String(dto.attendanceLimit) : undefined,
       ageRestriction: dto.ageRestriction ?? undefined,
       internalRefId: dto.internalReferenceId ?? undefined,
-      tags: dto.tags?.map(tag => tag.name) ?? [],
-      classification: dto.tags?.map(tag => tag.name) ?? [],
+      tags: dto.tags?.map((tag) => tag.name) ?? [],
+      classification: dto.tags?.map((tag) => tag.name) ?? [],
       duration: dto.duration ?? null,
       organizerName: dto.hostedBy ?? undefined,
       contactPhone: dto.contactPhone ?? undefined,
@@ -320,7 +356,7 @@ export class EventsListService {
   }
 
   rememberItems(items: EventListItem[]): void {
-    items.forEach(item => this.cache.set(String(item.id), item));
+    items.forEach((item) => this.cache.set(String(item.id), item));
   }
 
   getAllItems(): EventListItem[] {
@@ -369,8 +405,8 @@ export class EventsListService {
       skip,
       take: params.pageSize,
     }).pipe(
-      map(response => ({
-        items: response.items.map(item => this.toListItem(item)),
+      map((response) => ({
+        items: response.items.map((item) => this.toListItem(item)),
         total: response.totalCount,
         page: params.page,
         pageSize: response.take,

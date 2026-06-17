@@ -71,6 +71,12 @@ export type LocationSortDir = 'asc' | 'desc';
 export interface LocationListState {
   searchQuery: string;
   sort: LocationSort;
+  status: string;
+  destinationId: number | null;
+  locationTypeId: number | null;
+  boundaryState: string;
+  tagIds: number[];
+  issues: string[];
   displayCount: number;
   scrollTop: number;
 }
@@ -98,22 +104,35 @@ export class LocationsListService {
     if (params.status && params.status !== 'all') {
       httpParams = httpParams.set('status', params.status);
     }
+    if (params.destinationId)
+      httpParams = httpParams.set('destinationId', String(params.destinationId));
+    if (params.locationTypeId)
+      httpParams = httpParams.set('locationTypeId', String(params.locationTypeId));
+    if (params.boundaryState && params.boundaryState !== 'all')
+      httpParams = httpParams.set('boundaryState', params.boundaryState);
+    for (const tagId of params.tagIds ?? []) httpParams = httpParams.append('tagId', String(tagId));
+    for (const issue of params.issues ?? []) httpParams = httpParams.append('issue', issue);
 
     return this.http.get<RegionalLocationListResponse>(this.endpoint, { params: httpParams });
   }
 
-  getLocation(regionId: number, locationId: string | number): Observable<RegionalLocationDetailDto> {
+  getLocation(
+    regionId: number,
+    locationId: string | number,
+  ): Observable<RegionalLocationDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.get<RegionalLocationDetailDto>(`${this.endpoint}/${locationId}`, { params });
   }
 
   createLocation(payload: RegionalLocationCreateRequest): Observable<RegionalLocationDetailDto> {
-    return this.http.post<RegionalLocationDetailDto>(this.endpoint, this.buildCreateFormData(payload)).pipe(
-      map(dto => {
-        this.toListItem(dto);
-        return dto;
-      }),
-    );
+    return this.http
+      .post<RegionalLocationDetailDto>(this.endpoint, this.buildCreateFormData(payload))
+      .pipe(
+        map((dto) => {
+          this.toListItem(dto);
+          return dto;
+        }),
+      );
   }
 
   updateLocation(
@@ -122,12 +141,18 @@ export class LocationsListService {
     payload: RegionalLocationUpdateRequest,
   ): Observable<RegionalLocationDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalLocationDetailDto>(`${this.endpoint}/${locationId}`, this.buildUpdateFormData(payload), { params }).pipe(
-      map(dto => {
-        this.toListItem(dto);
-        return dto;
-      }),
-    );
+    return this.http
+      .put<RegionalLocationDetailDto>(
+        `${this.endpoint}/${locationId}`,
+        this.buildUpdateFormData(payload),
+        { params },
+      )
+      .pipe(
+        map((dto) => {
+          this.toListItem(dto);
+          return dto;
+        }),
+      );
   }
 
   getParentDestinations(
@@ -135,9 +160,7 @@ export class LocationsListService {
     search?: string | null,
     take = 50,
   ): Observable<RegionalLocationParentDestinationDto[]> {
-    let params = new HttpParams()
-      .set('regionId', String(regionId))
-      .set('take', String(take));
+    let params = new HttpParams().set('regionId', String(regionId)).set('take', String(take));
 
     const normalizedSearch = search?.trim();
     if (normalizedSearch) {
@@ -212,7 +235,8 @@ export class LocationsListService {
     const item: LocationListItem = {
       id,
       name: dto.name,
-      summary: dto.summary ?? dto.description ?? (destinationName ? `Part of ${destinationName}` : ''),
+      summary:
+        dto.summary ?? dto.description ?? (destinationName ? `Part of ${destinationName}` : ''),
       description: dto.description ?? null,
       region: dto.regionDisplayName,
       status: dto.status || 'Published',
@@ -220,10 +244,16 @@ export class LocationsListService {
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
       imageUrl: dto.imageUrl ?? dto.cardImageUrl ?? null,
-      imageBg: (dto.coverImageUrl ?? dto.imageUrl) ? `url("${dto.coverImageUrl ?? dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
+      imageBg:
+        (dto.coverImageUrl ?? dto.imageUrl)
+          ? `url("${dto.coverImageUrl ?? dto.imageUrl}") center/cover`
+          : this.fallbackGradient(dto.id),
       coverImageUrl: dto.coverImageUrl ?? dto.imageUrl ?? undefined,
       coverImageName: dto.coverImageUrl ? 'Cover image' : undefined,
-      galleryImages: (dto.galleryImageUrls ?? []).map((url, index) => ({ url, name: `Gallery image ${index + 1}` })),
+      galleryImages: (dto.galleryImageUrls ?? []).map((url, index) => ({
+        url,
+        name: `Gallery image ${index + 1}`,
+      })),
       category: dto.locationType ?? 'Location',
       regionId: dto.regionId,
       regionDisplayName: dto.regionDisplayName,
@@ -235,7 +265,7 @@ export class LocationsListService {
       locationType: dto.locationType ?? null,
       parentDestination: destinationName ?? undefined,
       tagsDto: dto.tags ?? [],
-      tags: (dto.tags ?? []).map(tag => tag.name),
+      tags: (dto.tags ?? []).map((tag) => tag.name),
       createdAt: dto.createdAt ?? null,
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
       detailRoute: dto.detailRoute ?? `/locations/detail/${dto.id}`,
@@ -248,7 +278,7 @@ export class LocationsListService {
   }
 
   rememberItems(items: LocationListItem[]): void {
-    items.forEach(item => this.cache.set(String(item.id), item));
+    items.forEach((item) => this.cache.set(String(item.id), item));
   }
 
   getAllItems(): LocationListItem[] {
@@ -297,8 +327,8 @@ export class LocationsListService {
       skip,
       take: params.pageSize,
     }).pipe(
-      map(response => ({
-        items: response.items.map(item => this.toListItem(item)),
+      map((response) => ({
+        items: response.items.map((item) => this.toListItem(item)),
         total: response.totalCount,
         page: params.page,
         pageSize: response.take,

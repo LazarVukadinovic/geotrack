@@ -1,4 +1,5 @@
 import { RegionalEntityImageDto } from './regional-image.model';
+import { ContentIssueFilter } from './destination.model';
 
 export type LocationSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
 export type LocationStatusFilter = 'all' | 'published' | 'draft' | 'archived';
@@ -49,6 +50,11 @@ export interface RegionalLocationListParams {
   regionId: number;
   search?: string | null;
   status?: LocationStatusFilter;
+  destinationId?: number | null;
+  locationTypeId?: number | null;
+  boundaryState?: 'all' | 'configured' | 'missing';
+  tagIds?: number[];
+  issues?: ContentIssueFilter[];
   sort?: LocationSort;
   skip?: number;
   take?: number;
@@ -63,6 +69,7 @@ export interface RegionalLocationTagDto {
   tagTypeSlug?: string | null;
   tagTypeLabel?: string | null;
   tagTypeOrder?: number | null;
+  isFilterable?: boolean;
 }
 
 export interface RegionalLocationParentDestinationDto {

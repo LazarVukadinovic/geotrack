@@ -95,6 +95,12 @@ export type PlaceSortDir = 'asc' | 'desc';
 export interface PlaceListState {
   searchQuery: string;
   sort: PlaceSort;
+  status: string;
+  destinationId: number | null;
+  locationId: number | null;
+  placeTypeId: number | null;
+  tagIds: number[];
+  issues: string[];
   displayCount: number;
   scrollTop: number;
 }
@@ -127,6 +133,12 @@ export class PlacesListService {
     if (placeType) {
       httpParams = httpParams.set('placeType', placeType);
     }
+    if (params.destinationId)
+      httpParams = httpParams.set('destinationId', String(params.destinationId));
+    if (params.locationId) httpParams = httpParams.set('locationId', String(params.locationId));
+    if (params.placeTypeId) httpParams = httpParams.set('placeTypeId', String(params.placeTypeId));
+    for (const tagId of params.tagIds ?? []) httpParams = httpParams.append('tagId', String(tagId));
+    for (const issue of params.issues ?? []) httpParams = httpParams.append('issue', issue);
 
     return this.http.get<RegionalPlaceListResponse>(this.endpoint, { params: httpParams });
   }
@@ -134,7 +146,7 @@ export class PlacesListService {
   getPlace(regionId: number, placeId: string | number): Observable<RegionalPlaceDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
     return this.http.get<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, { params }).pipe(
-      map(dto => {
+      map((dto) => {
         this.toListItem(dto);
         return dto;
       }),
@@ -147,16 +159,20 @@ export class PlacesListService {
     payload: RegionalPlaceAddOwnerRequest,
   ): Observable<RegionalPlaceDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.post<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}/owners`, payload, { params });
+    return this.http.post<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}/owners`, payload, {
+      params,
+    });
   }
 
   createPlace(payload: RegionalPlaceCreateRequest): Observable<RegionalPlaceDetailDto> {
-    return this.http.post<RegionalPlaceDetailDto>(this.endpoint, this.buildCreateFormData(payload)).pipe(
-      map(dto => {
-        this.toListItem(dto);
-        return dto;
-      }),
-    );
+    return this.http
+      .post<RegionalPlaceDetailDto>(this.endpoint, this.buildCreateFormData(payload))
+      .pipe(
+        map((dto) => {
+          this.toListItem(dto);
+          return dto;
+        }),
+      );
   }
 
   updatePlace(
@@ -165,12 +181,18 @@ export class PlacesListService {
     payload: RegionalPlaceUpdateRequest,
   ): Observable<RegionalPlaceDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalPlaceDetailDto>(`${this.endpoint}/${placeId}`, this.buildUpdateFormData(payload), { params }).pipe(
-      map(dto => {
-        this.toListItem(dto);
-        return dto;
-      }),
-    );
+    return this.http
+      .put<RegionalPlaceDetailDto>(
+        `${this.endpoint}/${placeId}`,
+        this.buildUpdateFormData(payload),
+        { params },
+      )
+      .pipe(
+        map((dto) => {
+          this.toListItem(dto);
+          return dto;
+        }),
+      );
   }
 
   private buildUpdateFormData(payload: RegionalPlaceUpdateRequest): FormData {
@@ -190,9 +212,7 @@ export class PlacesListService {
     search?: string | null,
     take = 50,
   ): Observable<RegionalPlaceParentDestinationDto[]> {
-    let params = new HttpParams()
-      .set('regionId', String(regionId))
-      .set('take', String(take));
+    let params = new HttpParams().set('regionId', String(regionId)).set('take', String(take));
 
     const normalizedSearch = search?.trim();
     if (normalizedSearch) {
@@ -211,9 +231,7 @@ export class PlacesListService {
     take = 50,
     destinationId?: number | null,
   ): Observable<RegionalPlaceParentLocationDto[]> {
-    let params = new HttpParams()
-      .set('regionId', String(regionId))
-      .set('take', String(take));
+    let params = new HttpParams().set('regionId', String(regionId)).set('take', String(take));
 
     const normalizedSearch = search?.trim();
     if (normalizedSearch) {
@@ -256,7 +274,6 @@ export class PlacesListService {
     return this.http.delete<void>(`${this.endpoint}/${placeId}`, { params });
   }
 
-
   private buildCreateFormData(payload: RegionalPlaceCreateRequest): FormData {
     const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
     if (!cardImageFile || !coverImageFile) {
@@ -286,7 +303,11 @@ export class PlacesListService {
     const item: PlaceListItem = {
       id,
       name: dto.name,
-      summary: dto.summary ?? dto.subtitle ?? dto.description ?? (locationName ? `In ${locationName}` : ''),
+      summary:
+        dto.summary ??
+        dto.subtitle ??
+        dto.description ??
+        (locationName ? `In ${locationName}` : ''),
       subtitle: dto.subtitle ?? null,
       description: dto.description ?? null,
       region: dto.regionDisplayName,
@@ -294,7 +315,10 @@ export class PlacesListService {
       internalRefId: dto.internalReferenceId ?? undefined,
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
-      imageBg: (dto.coverImageUrl ?? dto.imageUrl) ? `url("${dto.coverImageUrl ?? dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
+      imageBg:
+        (dto.coverImageUrl ?? dto.imageUrl)
+          ? `url("${dto.coverImageUrl ?? dto.imageUrl}") center/cover`
+          : this.fallbackGradient(dto.id),
       category: placeType ?? 'Place',
       regionId: dto.regionId,
       regionDisplayName: dto.regionDisplayName,
@@ -306,30 +330,36 @@ export class PlacesListService {
       placeType,
       isOwnable: Boolean((dto as RegionalPlaceDetailDto).isOwnable),
       owners: (dto as RegionalPlaceDetailDto).owners ?? [],
-      hasOwner: Boolean((dto as RegionalPlaceDetailDto).hasOwner || ((dto as RegionalPlaceDetailDto).owners ?? []).length),
+      hasOwner: Boolean(
+        (dto as RegionalPlaceDetailDto).hasOwner ||
+        ((dto as RegionalPlaceDetailDto).owners ?? []).length,
+      ),
       stayTypeId: dto.stayTypeId ?? null,
       stayType,
       createdAt: dto.createdAt ?? null,
       lastUpdatedAt: dto.lastUpdatedAt ?? null,
       tagsDto: dto.tags ?? [],
-      tags: (dto.tags ?? []).map(tag => tag.name),
+      tags: (dto.tags ?? []).map((tag) => tag.name),
       imageUrl: dto.imageUrl ?? dto.cardImageUrl ?? null,
       coverImageUrl: dto.coverImageUrl ?? dto.imageUrl ?? undefined,
       coverImageName: dto.coverImageUrl ? 'Cover image' : undefined,
-      galleryImages: (dto.galleryImageUrls ?? []).map((url, index) => ({ url, name: `Gallery image ${index + 1}` })),
+      galleryImages: (dto.galleryImageUrls ?? []).map((url, index) => ({
+        url,
+        name: `Gallery image ${index + 1}`,
+      })),
       detailRoute: dto.detailRoute ?? `/places/detail/${dto.id}`,
       editRoute: dto.editRoute ?? `/places/edit/${dto.id}`,
       address: dto.address ?? undefined,
       lat: typeof detail.latitude === 'number' ? detail.latitude : undefined,
       lng: typeof detail.longitude === 'number' ? detail.longitude : undefined,
       openingHours: detail.openingHours ?? undefined,
-      hours: (detail.operatingHours ?? []).map(hour => ({
+      hours: (detail.operatingHours ?? []).map((hour) => ({
         name: hour.dayOfWeek,
         open: hour.isOpen,
         openTime: hour.openTime ?? '',
         closeTime: hour.closeTime ?? '',
       })),
-      amenities: (detail.amenities ?? []).map(amenity => amenity.name).filter(Boolean),
+      amenities: (detail.amenities ?? []).map((amenity) => amenity.name).filter(Boolean),
       contactEmail: detail.contactEmail ?? undefined,
       phoneNumber: detail.phoneNumber ?? undefined,
       contactPhone: detail.contactPhone ?? detail.phoneNumber ?? undefined,
@@ -348,7 +378,7 @@ export class PlacesListService {
   }
 
   rememberItems(items: PlaceListItem[]): void {
-    items.forEach(item => this.cache.set(String(item.id), item));
+    items.forEach((item) => this.cache.set(String(item.id), item));
   }
 
   getAllItems(): PlaceListItem[] {
@@ -397,8 +427,8 @@ export class PlacesListService {
       skip,
       take: params.pageSize,
     }).pipe(
-      map(response => ({
-        items: response.items.map(item => this.toListItem(item)),
+      map((response) => ({
+        items: response.items.map((item) => this.toListItem(item)),
         total: response.totalCount,
         page: params.page,
         pageSize: response.take,

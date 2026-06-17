@@ -461,6 +461,9 @@ public class AdminRegionalController : ControllerBase
         [FromQuery] int regionId,
         [FromQuery] string? search = null,
         [FromQuery] string? status = null,
+        [FromQuery] int? destinationTypeId = null,
+        [FromQuery(Name = "tagId")] int[]? tagIds = null,
+        [FromQuery(Name = "issue")] string[]? issues = null,
         [FromQuery] string? sort = null,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 25)
@@ -475,6 +478,9 @@ public class AdminRegionalController : ControllerBase
                 regionId,
                 search,
                 status,
+                destinationTypeId,
+                tagIds,
+                issues,
                 sort,
                 skip,
                 take));
@@ -640,6 +646,19 @@ public class AdminRegionalController : ControllerBase
         }
     }
 
+    [HttpGet("destination-types")]
+    public async Task<ActionResult<List<RegionalDestinationTypeDto>>> GetDestinationTypes()
+    {
+        try
+        {
+            return Ok(await _destinations.GetDestinationTypesAsync(GetCurrentUserId()));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
     [HttpGet("destination-tags")]
     public async Task<ActionResult<List<RegionalDestinationTagDto>>> GetDestinationTags(
         [FromQuery] string? search = null)
@@ -695,6 +714,11 @@ public class AdminRegionalController : ControllerBase
         [FromQuery] int regionId,
         [FromQuery] string? search = null,
         [FromQuery] string? status = null,
+        [FromQuery] int? destinationId = null,
+        [FromQuery] int? locationTypeId = null,
+        [FromQuery] string? boundaryState = null,
+        [FromQuery(Name = "tagId")] int[]? tagIds = null,
+        [FromQuery(Name = "issue")] string[]? issues = null,
         [FromQuery] string? sort = null,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 25)
@@ -709,6 +733,11 @@ public class AdminRegionalController : ControllerBase
                 regionId,
                 search,
                 status,
+                destinationId,
+                locationTypeId,
+                boundaryState,
+                tagIds,
+                issues,
                 sort,
                 skip,
                 take));
@@ -881,6 +910,11 @@ public class AdminRegionalController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? status = null,
         [FromQuery] string? placeType = null,
+        [FromQuery] int? destinationId = null,
+        [FromQuery] int? locationId = null,
+        [FromQuery] int? placeTypeId = null,
+        [FromQuery(Name = "tagId")] int[]? tagIds = null,
+        [FromQuery(Name = "issue")] string[]? issues = null,
         [FromQuery] string? sort = null,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 25)
@@ -896,6 +930,11 @@ public class AdminRegionalController : ControllerBase
                 search,
                 status,
                 placeType,
+                destinationId,
+                locationId,
+                placeTypeId,
+                tagIds,
+                issues,
                 sort,
                 skip,
                 take));
@@ -1128,6 +1167,15 @@ public class AdminRegionalController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? status = null,
         [FromQuery] string? eventType = null,
+        [FromQuery] int? destinationId = null,
+        [FromQuery] int? locationId = null,
+        [FromQuery] int? placeId = null,
+        [FromQuery] int? eventTypeId = null,
+        [FromQuery] string? dateFilter = null,
+        [FromQuery] DateTime? dateFrom = null,
+        [FromQuery] DateTime? dateTo = null,
+        [FromQuery] string? priceFilter = null,
+        [FromQuery(Name = "tagId")] int[]? tagIds = null,
         [FromQuery] string? sort = null,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 25)
@@ -1143,6 +1191,15 @@ public class AdminRegionalController : ControllerBase
                 search,
                 status,
                 eventType,
+                destinationId,
+                locationId,
+                placeId,
+                eventTypeId,
+                dateFilter,
+                dateFrom,
+                dateTo,
+                priceFilter,
+                tagIds,
                 sort,
                 skip,
                 take));

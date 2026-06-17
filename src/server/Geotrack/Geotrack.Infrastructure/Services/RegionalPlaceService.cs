@@ -45,6 +45,11 @@ public class RegionalPlaceService : IRegionalPlaceService
         string? search,
         string? status,
         string? placeType,
+        int? destinationId,
+        int? locationId,
+        int? placeTypeId,
+        IReadOnlyCollection<int>? tagIds,
+        IReadOnlyCollection<string>? issues,
         string? sort,
         int skip,
         int take)
@@ -66,8 +71,36 @@ public class RegionalPlaceService : IRegionalPlaceService
             query = query.Where(place => place.Status == statusName);
         }
 
+        if (destinationId.HasValue && destinationId.Value > 0)
+            query = query.Where(place => place.Location.DestinationId == destinationId.Value);
+
+        if (locationId.HasValue && locationId.Value > 0)
+            query = query.Where(place => place.LocationId == locationId.Value);
+
+        if (placeTypeId.HasValue && placeTypeId.Value > 0)
+            query = query.Where(place => place.PlaceTypeId == placeTypeId.Value);
+
+        foreach (var tagId in (tagIds ?? Array.Empty<int>()).Where(id => id > 0).Distinct())
+            query = query.Where(place => place.PlaceTags.Any(link => link.TagId == tagId));
+
+        var issueSet = (issues ?? Array.Empty<string>())
+            .Where(issue => !string.IsNullOrWhiteSpace(issue))
+            .Select(issue => issue.Trim().ToLowerInvariant())
+            .ToHashSet();
+        if (issueSet.Count > 0)
+        {
+            var missingImage = issueSet.Contains("missingimage");
+            var missingDescription = issueSet.Contains("missingdescription");
+            var missingAddress = issueSet.Contains("missingaddress");
+            query = query.Where(place =>
+                (missingImage && !place.Images.Any(image => image.TargetType == EntityImageTargetType.Place)) ||
+                (missingDescription && (place.Description == null || place.Description == "")) ||
+                (missingAddress && (place.Address == null || place.Address == "")));
+        }
+
         query = ApplySearch(query, search);
-        query = ApplyPlaceTypeFilter(query, placeType);
+        if (!placeTypeId.HasValue || placeTypeId.Value <= 0)
+            query = ApplyPlaceTypeFilter(query, placeType);
         query = ApplySort(query, normalizedSort);
 
         var totalCount = await query.CountAsync();
@@ -642,7 +675,7 @@ public class RegionalPlaceService : IRegionalPlaceService
     {
         await EnsureAssignedRegionAsync(userId, regionId);
 
-        var normalizedTake = Math.Clamp(take <= 0 ? MaxTake : take, 1, MaxTake);
+        var normalizedTake = Math.Clamp(take <= 0 ? 500 : take, 1, 500);
         var query = _db.Destinations
             .AsNoTracking()
             .Where(destination => destination.RegionId == regionId);
@@ -678,7 +711,7 @@ public class RegionalPlaceService : IRegionalPlaceService
     {
         await EnsureAssignedRegionAsync(userId, regionId);
 
-        var normalizedTake = Math.Clamp(take <= 0 ? MaxTake : take, 1, MaxTake);
+        var normalizedTake = Math.Clamp(take <= 0 ? 500 : take, 1, 500);
         var query = _db.Locations
             .AsNoTracking()
             .Where(location => location.Destination.RegionId == regionId);
@@ -743,7 +776,8 @@ public class RegionalPlaceService : IRegionalPlaceService
                 TagTypeName = tag.TagType != null ? tag.TagType.Name : null,
                 TagTypeSlug = tag.TagType != null ? tag.TagType.Slug : null,
                 TagTypeLabel = tag.TagType != null ? tag.TagType.FilterLabel ?? tag.TagType.Name : null,
-                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000
+                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000,
+                IsFilterable = tag.TagType != null && tag.TagType.IsFilterable
             })
             .ToListAsync();
     }
@@ -768,7 +802,8 @@ public class RegionalPlaceService : IRegionalPlaceService
             TagTypeName = tag.TagType?.Name,
             TagTypeSlug = tag.TagType?.Slug,
             TagTypeLabel = tag.TagType?.FilterLabel ?? tag.TagType?.Name,
-            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000
+            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000,
+            IsFilterable = tag.TagType != null && tag.TagType.IsFilterable
         };
     }
 

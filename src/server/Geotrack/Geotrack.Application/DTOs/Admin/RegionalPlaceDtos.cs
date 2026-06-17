@@ -181,6 +181,7 @@ public class RegionalPlaceTagDto
     public string? TagTypeSlug { get; set; }
     public string? TagTypeLabel { get; set; }
     public int? TagTypeOrder { get; set; }
+    public bool IsFilterable { get; set; }
 }
 
 public class RegionalPlaceAmenityDto

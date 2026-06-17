@@ -12,16 +12,23 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { finalize, Subscription } from 'rxjs';
+import { finalize, forkJoin, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../../core/services/auth.service';
+import { EventListItem, EventsListService } from '../../../../../core/services/events-list.service';
 import {
-  EventListItem,
-  EventsListService,
-} from '../../../../../core/services/events-list.service';
-import { EventSort } from '../../../../../core/models/event.model';
+  EventDateFilter,
+  EventPriceFilter,
+  EventSort,
+  EventStatusFilter,
+  RegionalEventParentDestinationDto,
+  RegionalEventParentLocationDto,
+  RegionalEventParentPlaceDto,
+  RegionalEventTagDto,
+  RegionalEventTypeDto,
+} from '../../../../../core/models/event.model';
 import { RegionalAssignedRegion } from '../../../../../core/models/dashboard.model';
 
 const PAGE_SIZE = 25;
@@ -66,6 +73,42 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     { label: 'Event Date Latest', value: 'eventDateDesc' },
   ];
 
+  statusFilter: EventStatusFilter = 'all';
+  selectedDestinationId: number | null = null;
+  selectedLocationId: number | null = null;
+  selectedPlaceId: number | null = null;
+  selectedEventTypeId: number | null = null;
+  dateFilter: EventDateFilter = 'upcoming';
+  dateFrom = '';
+  dateTo = '';
+  priceFilter: EventPriceFilter = 'all';
+  selectedTagIds: number[] = [];
+  destinations: RegionalEventParentDestinationDto[] = [];
+  locations: RegionalEventParentLocationDto[] = [];
+  places: RegionalEventParentPlaceDto[] = [];
+  eventTypes: RegionalEventTypeDto[] = [];
+  filterTags: RegionalEventTagDto[] = [];
+  moreFiltersOpen = false;
+  filterOptionsLoading = false;
+  readonly statusOptions: { label: string; value: EventStatusFilter }[] = [
+    { label: 'All statuses', value: 'all' },
+    { label: 'Published', value: 'published' },
+    { label: 'Draft', value: 'draft' },
+    { label: 'Archived', value: 'archived' },
+  ];
+  readonly dateOptions: { label: string; value: EventDateFilter }[] = [
+    { label: 'All dates', value: 'all' },
+    { label: 'Upcoming', value: 'upcoming' },
+    { label: 'Ongoing now', value: 'ongoing' },
+    { label: 'Past', value: 'past' },
+    { label: 'Custom range', value: 'custom' },
+  ];
+  readonly priceOptions: { label: string; value: EventPriceFilter }[] = [
+    { label: 'Free or paid', value: 'all' },
+    { label: 'Free only', value: 'free' },
+    { label: 'Paid only', value: 'paid' },
+  ];
+
   deleteTarget: EventListItem | null = null;
   isDeleting = false;
   isCheckingDelete = false;
@@ -92,9 +135,19 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     if (saved) {
       this.searchQuery = saved.searchQuery;
       this.currentSort = saved.sort;
+      this.statusFilter = (saved.status as EventStatusFilter) ?? 'all';
+      this.selectedDestinationId = saved.destinationId ?? null;
+      this.selectedLocationId = saved.locationId ?? null;
+      this.selectedPlaceId = saved.placeId ?? null;
+      this.selectedEventTypeId = saved.eventTypeId ?? null;
+      this.dateFilter = (saved.dateFilter as EventDateFilter) ?? 'upcoming';
+      this.dateFrom = saved.dateFrom ?? '';
+      this.dateTo = saved.dateTo ?? '';
+      this.priceFilter = (saved.priceFilter as EventPriceFilter) ?? 'all';
+      this.selectedTagIds = [...(saved.tagIds ?? [])];
       this.pendingScrollTop = saved.scrollTop;
     }
-
+    this.restoreFiltersFromUrl();
     this.loadAssignedRegions();
   }
 
@@ -117,7 +170,7 @@ export class AllEventsComponent implements OnInit, OnDestroy {
   }
 
   get activeRegion(): RegionalAssignedRegion | null {
-    return this.assignedRegions.find(region => region.id === this.activeRegionId) ?? null;
+    return this.assignedRegions.find((region) => region.id === this.activeRegionId) ?? null;
   }
 
   get regionDisplayName(): string {
@@ -125,7 +178,56 @@ export class AllEventsComponent implements OnInit, OnDestroy {
   }
 
   get currentSortLabel(): string {
-    return this.sortOptions.find(option => option.value === this.currentSort)?.label ?? 'Newest First';
+    return (
+      this.sortOptions.find((option) => option.value === this.currentSort)?.label ?? 'Newest First'
+    );
+  }
+
+  get filteredLocations(): RegionalEventParentLocationDto[] {
+    return this.selectedDestinationId
+      ? this.locations.filter((x) => x.destinationId === this.selectedDestinationId)
+      : this.locations;
+  }
+  get filteredPlaces(): RegionalEventParentPlaceDto[] {
+    return this.places.filter(
+      (x) =>
+        (!this.selectedDestinationId || x.destinationId === this.selectedDestinationId) &&
+        (!this.selectedLocationId || x.locationId === this.selectedLocationId),
+    );
+  }
+  get activeFilterCount(): number {
+    return (
+      (this.statusFilter !== 'all' ? 1 : 0) +
+      (this.selectedDestinationId ? 1 : 0) +
+      (this.selectedLocationId ? 1 : 0) +
+      (this.selectedPlaceId ? 1 : 0) +
+      (this.selectedEventTypeId ? 1 : 0) +
+      (this.dateFilter !== 'all' ? 1 : 0) +
+      (this.priceFilter !== 'all' ? 1 : 0) +
+      this.selectedTagIds.length
+    );
+  }
+  get selectedDestinationName(): string {
+    return (
+      this.destinations.find((x) => x.id === this.selectedDestinationId)?.name ?? 'Destination'
+    );
+  }
+  get selectedLocationName(): string {
+    return this.locations.find((x) => x.id === this.selectedLocationId)?.name ?? 'Location';
+  }
+  get selectedPlaceName(): string {
+    return this.places.find((x) => x.id === this.selectedPlaceId)?.name ?? 'Place';
+  }
+  get selectedEventTypeName(): string {
+    return this.eventTypes.find((x) => x.id === this.selectedEventTypeId)?.name ?? 'Type';
+  }
+  get tagGroups(): { label: string; tags: RegionalEventTagDto[] }[] {
+    const groups = new Map<string, RegionalEventTagDto[]>();
+    for (const tag of this.filterTags) {
+      const label = tag.tagTypeLabel || tag.tagTypeName || 'Tags';
+      groups.set(label, [...(groups.get(label) ?? []), tag]);
+    }
+    return [...groups.entries()].map(([label, tags]) => ({ label, tags }));
   }
 
   get hasMore(): boolean {
@@ -142,7 +244,8 @@ export class AllEventsComponent implements OnInit, OnDestroy {
 
   get emptyMessage(): string {
     if (!this.activeRegionId) return 'No active assigned region.';
-    if (this.searchQuery.trim()) return 'No events found for this search.';
+    if (this.searchQuery.trim() || this.activeFilterCount > 0)
+      return 'No events match the selected filters.';
     return 'No events found in this region.';
   }
 
@@ -169,7 +272,7 @@ export class AllEventsComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: regions => {
+        next: (regions) => {
           this.assignedRegions = regions ?? [];
 
           if (this.assignedRegions.length === 0) {
@@ -185,15 +288,16 @@ export class AllEventsComponent implements OnInit, OnDestroy {
           const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
           const persistedRegionId = this.readPersistedRegionId();
           const selectedRegion =
-            this.assignedRegions.find(region => region.id === queryRegionId) ??
-            this.assignedRegions.find(region => region.id === persistedRegionId) ??
+            this.assignedRegions.find((region) => region.id === queryRegionId) ??
+            this.assignedRegions.find((region) => region.id === persistedRegionId) ??
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
+          this.loadFilterOptions();
           this.resetList();
           this.loadEvents(true);
         },
-        error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
+        error: (error) => this.handleLoadError(error, 'Unable to load assigned regions.'),
       });
   }
 
@@ -201,10 +305,11 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     if (regionId === this.activeRegionId) return;
 
     this.setActiveRegion(regionId, true);
-    this.searchQuery = '';
-    this.currentSort = 'newest';
+    this.resetFilters();
     this.deleteTarget = null;
+    this.loadFilterOptions();
     this.resetList();
+    this.syncUrl();
     this.loadEvents(true);
     this.notifyStateChanged();
   }
@@ -216,6 +321,7 @@ export class AllEventsComponent implements OnInit, OnDestroy {
 
     this.searchDebounceHandle = setTimeout(() => {
       this.resetList();
+      this.syncUrl();
       this.loadEvents(true);
       this.notifyStateChanged();
     }, 300);
@@ -236,8 +342,74 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     this.currentSort = option.value;
     this.sortOpen = false;
     this.resetList();
+    this.syncUrl();
     this.loadEvents(true);
     this.notifyStateChanged();
+  }
+
+  onDestinationFilterChange(): void {
+    const loc = this.locations.find((x) => x.id === this.selectedLocationId);
+    if (loc && loc.destinationId !== this.selectedDestinationId) {
+      this.selectedLocationId = null;
+      this.selectedPlaceId = null;
+    }
+    const place = this.places.find((x) => x.id === this.selectedPlaceId);
+    if (place && place.destinationId !== this.selectedDestinationId) this.selectedPlaceId = null;
+    this.onFilterChange();
+  }
+  onLocationFilterChange(): void {
+    const loc = this.locations.find((x) => x.id === this.selectedLocationId);
+    if (loc) this.selectedDestinationId = loc.destinationId;
+    const place = this.places.find((x) => x.id === this.selectedPlaceId);
+    if (place && place.locationId !== this.selectedLocationId) this.selectedPlaceId = null;
+    this.onFilterChange();
+  }
+  onPlaceFilterChange(): void {
+    const place = this.places.find((x) => x.id === this.selectedPlaceId);
+    if (place) {
+      this.selectedLocationId = place.locationId;
+      this.selectedDestinationId = place.destinationId;
+    }
+    this.onFilterChange();
+  }
+  onDateFilterChange(): void {
+    if (this.dateFilter !== 'custom') {
+      this.dateFrom = '';
+      this.dateTo = '';
+    }
+    this.onFilterChange();
+  }
+  onFilterChange(): void {
+    this.resetList();
+    this.syncUrl();
+    this.loadEvents(true);
+    this.notifyStateChanged();
+  }
+  toggleTag(tagId: number): void {
+    this.selectedTagIds = this.selectedTagIds.includes(tagId)
+      ? this.selectedTagIds.filter((id) => id !== tagId)
+      : [...this.selectedTagIds, tagId];
+    this.onFilterChange();
+  }
+  removeTag(tagId: number): void {
+    this.selectedTagIds = this.selectedTagIds.filter((id) => id !== tagId);
+    this.onFilterChange();
+  }
+  tagName(tagId: number): string {
+    return this.filterTags.find((x) => x.id === tagId)?.name ?? `Tag ${tagId}`;
+  }
+  clearAllFilters(): void {
+    this.statusFilter = 'all';
+    this.selectedDestinationId = null;
+    this.selectedLocationId = null;
+    this.selectedPlaceId = null;
+    this.selectedEventTypeId = null;
+    this.dateFilter = 'all';
+    this.dateFrom = '';
+    this.dateTo = '';
+    this.priceFilter = 'all';
+    this.selectedTagIds = [];
+    this.onFilterChange();
   }
 
   loadMore(): void {
@@ -248,7 +420,11 @@ export class AllEventsComponent implements OnInit, OnDestroy {
   navigateToAdd(): void {
     this.router.navigate(['/events/new'], {
       queryParams: this.activeRegionId ? { regionId: this.activeRegionId } : undefined,
-      state: { returnTo: '/events', regionId: this.activeRegionId, regionDisplayName: this.regionDisplayName },
+      state: {
+        returnTo: '/events',
+        regionId: this.activeRegionId,
+        regionDisplayName: this.regionDisplayName,
+      },
     });
   }
 
@@ -310,7 +486,7 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     this.notifyStateChanged();
 
     this.eventsService.getEvent(item.regionId, item.id).subscribe({
-      next: dto => {
+      next: (dto) => {
         if (dto.canDelete === false) {
           this.deleteModalError = 'Cannot delete: this event has related content.';
         }
@@ -332,7 +508,8 @@ export class AllEventsComponent implements OnInit, OnDestroy {
   }
 
   confirmDelete(): void {
-    if (!this.deleteTarget || !this.activeRegionId || this.isDeleting || this.deleteModalError) return;
+    if (!this.deleteTarget || !this.activeRegionId || this.isDeleting || this.deleteModalError)
+      return;
 
     const target = this.deleteTarget;
     this.isDeleting = true;
@@ -349,7 +526,7 @@ export class AllEventsComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.deleteTarget = null;
-          this.items = this.items.filter(item => item.id !== target.id);
+          this.items = this.items.filter((item) => item.id !== target.id);
           this.totalItems = Math.max(0, this.totalItems - 1);
           this.feedbackMessage = 'Event deleted.';
 
@@ -358,7 +535,7 @@ export class AllEventsComponent implements OnInit, OnDestroy {
             this.loadEvents(true);
           }
         },
-        error: error => this.handleActionError(error),
+        error: (error) => this.handleActionError(error),
       });
   }
 
@@ -394,6 +571,17 @@ export class AllEventsComponent implements OnInit, OnDestroy {
       .list({
         regionId: this.activeRegionId,
         search: this.searchQuery,
+        status: this.statusFilter,
+        destinationId: this.selectedDestinationId,
+        locationId: this.selectedLocationId,
+        placeId: this.selectedPlaceId,
+        eventTypeId: this.selectedEventTypeId,
+        dateFilter: this.dateFilter,
+        dateFrom:
+          this.dateFilter === 'custom' && this.dateFrom ? `${this.dateFrom}T00:00:00Z` : null,
+        dateTo: this.dateFilter === 'custom' && this.dateTo ? `${this.dateTo}T23:59:59Z` : null,
+        priceFilter: this.priceFilter,
+        tagIds: this.selectedTagIds,
         sort: this.currentSort,
         skip,
         take: PAGE_SIZE,
@@ -409,15 +597,17 @@ export class AllEventsComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: response => {
+        next: (response) => {
           if (this.listRequestSequence !== requestId) return;
 
-          const newItems = (response.items ?? []).map(item => this.eventsService.toListItem(item));
+          const newItems = (response.items ?? []).map((item) =>
+            this.eventsService.toListItem(item),
+          );
           this.items = reset ? newItems : [...this.items, ...newItems];
           this.eventsService.rememberItems(this.items);
           this.totalItems = this.toSafeCount(response.totalCount);
         },
-        error: error => {
+        error: (error) => {
           if (this.listRequestSequence === requestId) {
             this.handleLoadError(error, 'Unable to load events.');
           }
@@ -440,7 +630,8 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 401) {
         this.authRequired = true;
-        this.errorMessage = 'Sign in with an authenticated Regional Manager account to view events.';
+        this.errorMessage =
+          'Sign in with an authenticated Regional Manager account to view events.';
         this.notifyStateChanged();
         return;
       }
@@ -471,9 +662,152 @@ export class AllEventsComponent implements OnInit, OnDestroy {
     this.eventsService.saveListState({
       searchQuery: this.searchQuery,
       sort: this.currentSort,
+      status: this.statusFilter,
+      destinationId: this.selectedDestinationId,
+      locationId: this.selectedLocationId,
+      placeId: this.selectedPlaceId,
+      eventTypeId: this.selectedEventTypeId,
+      dateFilter: this.dateFilter,
+      dateFrom: this.dateFrom,
+      dateTo: this.dateTo,
+      priceFilter: this.priceFilter,
+      tagIds: [...this.selectedTagIds],
       displayCount: this.items.length,
       scrollTop: this.scrollContainer?.nativeElement?.scrollTop ?? 0,
     });
+  }
+
+  private loadFilterOptions(): void {
+    if (!this.activeRegionId) return;
+    this.filterOptionsLoading = true;
+    forkJoin({
+      destinations: this.eventsService.getParentDestinations(this.activeRegionId, null, 500),
+      locations: this.eventsService.getParentLocations(this.activeRegionId, null, 500),
+      places: this.eventsService.getParentPlaces(this.activeRegionId, null, 500),
+      types: this.eventsService.getEventTypes(),
+      tags: this.eventsService.getEventTags(),
+    })
+      .pipe(
+        finalize(() => {
+          this.filterOptionsLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: ({ destinations, locations, places, types, tags }) => {
+          this.destinations = destinations ?? [];
+          this.locations = locations ?? [];
+          this.places = places ?? [];
+          this.eventTypes = types ?? [];
+          this.filterTags = (tags ?? []).filter((tag) => tag.isFilterable);
+          const place = this.places.find((x) => x.id === this.selectedPlaceId);
+          if (place) {
+            this.selectedLocationId = place.locationId;
+            this.selectedDestinationId = place.destinationId;
+          } else {
+            const loc = this.locations.find((x) => x.id === this.selectedLocationId);
+            if (loc) this.selectedDestinationId = loc.destinationId;
+          }
+          if (
+            this.selectedDestinationId &&
+            !this.destinations.some((x) => x.id === this.selectedDestinationId)
+          ) {
+            this.selectedDestinationId = null;
+            this.selectedLocationId = null;
+            this.selectedPlaceId = null;
+          }
+          if (
+            this.selectedLocationId &&
+            !this.locations.some((x) => x.id === this.selectedLocationId)
+          ) {
+            this.selectedLocationId = null;
+            this.selectedPlaceId = null;
+          }
+          if (this.selectedPlaceId && !this.places.some((x) => x.id === this.selectedPlaceId))
+            this.selectedPlaceId = null;
+          if (
+            this.selectedEventTypeId &&
+            !this.eventTypes.some((x) => x.id === this.selectedEventTypeId)
+          )
+            this.selectedEventTypeId = null;
+          this.selectedTagIds = this.selectedTagIds.filter((id) =>
+            this.filterTags.some((tag) => tag.id === id),
+          );
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.destinations = [];
+          this.locations = [];
+          this.places = [];
+          this.eventTypes = [];
+          this.filterTags = [];
+        },
+      });
+  }
+  private resetFilters(): void {
+    this.searchQuery = '';
+    this.currentSort = 'newest';
+    this.statusFilter = 'all';
+    this.selectedDestinationId = null;
+    this.selectedLocationId = null;
+    this.selectedPlaceId = null;
+    this.selectedEventTypeId = null;
+    this.dateFilter = 'upcoming';
+    this.dateFrom = '';
+    this.dateTo = '';
+    this.priceFilter = 'all';
+    this.selectedTagIds = [];
+    this.moreFiltersOpen = false;
+  }
+  private restoreFiltersFromUrl(): void {
+    const p = this.route.snapshot.queryParamMap;
+    if (p.has('q')) this.searchQuery = p.get('q') ?? '';
+    const sort = p.get('sort') as EventSort | null;
+    if (sort && this.sortOptions.some((x) => x.value === sort)) this.currentSort = sort;
+    const status = p.get('status') as EventStatusFilter | null;
+    if (status && this.statusOptions.some((x) => x.value === status)) this.statusFilter = status;
+    this.selectedDestinationId =
+      this.parsePositiveInt(p.get('destinationId')) ?? this.selectedDestinationId;
+    this.selectedLocationId = this.parsePositiveInt(p.get('locationId')) ?? this.selectedLocationId;
+    this.selectedPlaceId = this.parsePositiveInt(p.get('placeId')) ?? this.selectedPlaceId;
+    this.selectedEventTypeId =
+      this.parsePositiveInt(p.get('eventTypeId')) ?? this.selectedEventTypeId;
+    const date = p.get('date') as EventDateFilter | null;
+    if (date && this.dateOptions.some((x) => x.value === date)) this.dateFilter = date;
+    if (p.has('from')) this.dateFrom = p.get('from') ?? '';
+    if (p.has('to')) this.dateTo = p.get('to') ?? '';
+    const price = p.get('price') as EventPriceFilter | null;
+    if (price && this.priceOptions.some((x) => x.value === price)) this.priceFilter = price;
+    if (p.has('tagId'))
+      this.selectedTagIds = p
+        .getAll('tagId')
+        .map(Number)
+        .filter((x) => Number.isFinite(x) && x > 0);
+  }
+  private syncUrl(): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        q: this.searchQuery.trim() || null,
+        sort: this.currentSort !== 'newest' ? this.currentSort : null,
+        status: this.statusFilter !== 'all' ? this.statusFilter : null,
+        destinationId: this.selectedDestinationId,
+        locationId: this.selectedLocationId,
+        placeId: this.selectedPlaceId,
+        eventTypeId: this.selectedEventTypeId,
+        date: this.dateFilter !== 'upcoming' ? this.dateFilter : null,
+        from: this.dateFilter === 'custom' && this.dateFrom ? this.dateFrom : null,
+        to: this.dateFilter === 'custom' && this.dateTo ? this.dateTo : null,
+        price: this.priceFilter !== 'all' ? this.priceFilter : null,
+        tagId: this.selectedTagIds.length ? this.selectedTagIds : null,
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+  private parsePositiveInt(value: string | null): number | null {
+    const n = value ? Number(value) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
   }
 
   private setActiveRegion(regionId: number, updateUrl: boolean): void {

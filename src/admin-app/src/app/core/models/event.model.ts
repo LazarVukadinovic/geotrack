@@ -1,5 +1,13 @@
-export type EventSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc' | 'eventDateAsc' | 'eventDateDesc';
+export type EventSort =
+  | 'newest'
+  | 'oldest'
+  | 'nameAsc'
+  | 'nameDesc'
+  | 'eventDateAsc'
+  | 'eventDateDesc';
 export type EventStatusFilter = 'all' | 'published' | 'draft' | 'archived';
+export type EventDateFilter = 'all' | 'upcoming' | 'ongoing' | 'past' | 'custom';
+export type EventPriceFilter = 'all' | 'free' | 'paid';
 
 export interface RegionalEventListItemDto {
   id: number;
@@ -77,6 +85,15 @@ export interface RegionalEventListParams {
   search?: string | null;
   status?: EventStatusFilter;
   eventType?: string | null;
+  destinationId?: number | null;
+  locationId?: number | null;
+  placeId?: number | null;
+  eventTypeId?: number | null;
+  dateFilter?: EventDateFilter;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  priceFilter?: EventPriceFilter;
+  tagIds?: number[];
   sort?: EventSort;
   skip?: number;
   take?: number;
@@ -163,6 +180,7 @@ export interface RegionalEventTagDto {
   tagTypeSlug?: string | null;
   tagTypeLabel?: string | null;
   tagTypeOrder?: number | null;
+  isFilterable?: boolean;
 }
 
 export interface RegionalEventTypeDto {

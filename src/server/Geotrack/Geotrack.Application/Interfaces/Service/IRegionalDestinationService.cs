@@ -9,6 +9,9 @@ public interface IRegionalDestinationService
         int regionId,
         string? search,
         string? status,
+        int? destinationTypeId,
+        IReadOnlyCollection<int>? tagIds,
+        IReadOnlyCollection<string>? issues,
         string? sort,
         int skip,
         int take);
@@ -50,6 +53,8 @@ public interface IRegionalDestinationService
     Task DeleteDestinationAsync(int userId, int regionId, int destinationId);
 
     Task<List<RegionalDestinationTagDto>> GetDestinationTagsAsync(int userId, string? search);
+
+    Task<List<RegionalDestinationTypeDto>> GetDestinationTypesAsync(int userId);
 
     Task<RegionalDestinationTagDto> CreateDestinationTagAsync(int userId, RegionalTagCreateRequestDto request);
 }

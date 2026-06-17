@@ -10,6 +10,11 @@ public interface IRegionalPlaceService
         string? search,
         string? status,
         string? placeType,
+        int? destinationId,
+        int? locationId,
+        int? placeTypeId,
+        IReadOnlyCollection<int>? tagIds,
+        IReadOnlyCollection<string>? issues,
         string? sort,
         int skip,
         int take);

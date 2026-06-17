@@ -12,7 +12,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { finalize, Subscription } from 'rxjs';
+import { finalize, forkJoin, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../../core/services/dashboard.service';
@@ -21,7 +21,14 @@ import {
   LocationListItem,
   LocationsListService,
 } from '../../../../../core/services/locations-list.service';
-import { LocationSort } from '../../../../../core/models/location.model';
+import {
+  LocationSort,
+  LocationStatusFilter,
+  RegionalLocationParentDestinationDto,
+  RegionalLocationTagDto,
+  RegionalLocationTypeDto,
+} from '../../../../../core/models/location.model';
+import { ContentIssueFilter } from '../../../../../core/models/destination.model';
 import { RegionalAssignedRegion } from '../../../../../core/models/dashboard.model';
 
 const PAGE_SIZE = 25;
@@ -64,6 +71,34 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     { label: 'Name Z-A', value: 'nameDesc' },
   ];
 
+  statusFilter: LocationStatusFilter = 'all';
+  selectedDestinationId: number | null = null;
+  selectedLocationTypeId: number | null = null;
+  boundaryState: 'all' | 'configured' | 'missing' = 'all';
+  selectedTagIds: number[] = [];
+  selectedIssues: ContentIssueFilter[] = [];
+  destinations: RegionalLocationParentDestinationDto[] = [];
+  locationTypes: RegionalLocationTypeDto[] = [];
+  filterTags: RegionalLocationTagDto[] = [];
+  moreFiltersOpen = false;
+  filterOptionsLoading = false;
+  readonly statusOptions: { label: string; value: LocationStatusFilter }[] = [
+    { label: 'All statuses', value: 'all' },
+    { label: 'Published', value: 'published' },
+    { label: 'Draft', value: 'draft' },
+    { label: 'Archived', value: 'archived' },
+  ];
+  readonly boundaryOptions = [
+    { label: 'Any boundary state', value: 'all' as const },
+    { label: 'Boundary configured', value: 'configured' as const },
+    { label: 'Boundary missing', value: 'missing' as const },
+  ];
+  readonly issueOptions: { label: string; value: ContentIssueFilter }[] = [
+    { label: 'Missing geographic center', value: 'missingCenter' },
+    { label: 'Missing image', value: 'missingImage' },
+    { label: 'Missing description', value: 'missingDescription' },
+  ];
+
   deleteTarget: LocationListItem | null = null;
   isDeleting = false;
   isCheckingDelete = false;
@@ -90,9 +125,16 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     if (saved) {
       this.searchQuery = saved.searchQuery;
       this.currentSort = saved.sort;
+      this.statusFilter = (saved.status as LocationStatusFilter) ?? 'all';
+      this.selectedDestinationId = saved.destinationId ?? null;
+      this.selectedLocationTypeId = saved.locationTypeId ?? null;
+      this.boundaryState = (saved.boundaryState as 'all' | 'configured' | 'missing') ?? 'all';
+      this.selectedTagIds = [...(saved.tagIds ?? [])];
+      this.selectedIssues = [...((saved.issues ?? []) as ContentIssueFilter[])];
       this.pendingScrollTop = saved.scrollTop;
     }
 
+    this.restoreFiltersFromUrl();
     this.loadAssignedRegions();
   }
 
@@ -115,7 +157,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
   }
 
   get activeRegion(): RegionalAssignedRegion | null {
-    return this.assignedRegions.find(region => region.id === this.activeRegionId) ?? null;
+    return this.assignedRegions.find((region) => region.id === this.activeRegionId) ?? null;
   }
 
   get regionDisplayName(): string {
@@ -123,7 +165,42 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
   }
 
   get currentSortLabel(): string {
-    return this.sortOptions.find(option => option.value === this.currentSort)?.label ?? 'Newest First';
+    return (
+      this.sortOptions.find((option) => option.value === this.currentSort)?.label ?? 'Newest First'
+    );
+  }
+
+  get activeFilterCount(): number {
+    return (
+      (this.statusFilter !== 'all' ? 1 : 0) +
+      (this.selectedDestinationId ? 1 : 0) +
+      (this.selectedLocationTypeId ? 1 : 0) +
+      (this.boundaryState !== 'all' ? 1 : 0) +
+      this.selectedTagIds.length +
+      this.selectedIssues.length
+    );
+  }
+
+  get selectedDestinationName(): string {
+    return (
+      this.destinations.find((item) => item.id === this.selectedDestinationId)?.name ??
+      'Destination'
+    );
+  }
+
+  get selectedLocationTypeName(): string {
+    return (
+      this.locationTypes.find((item) => item.id === this.selectedLocationTypeId)?.name ?? 'Type'
+    );
+  }
+
+  get tagGroups(): { label: string; tags: RegionalLocationTagDto[] }[] {
+    const groups = new Map<string, RegionalLocationTagDto[]>();
+    for (const tag of this.filterTags) {
+      const label = tag.tagTypeLabel || tag.tagTypeName || 'Tags';
+      groups.set(label, [...(groups.get(label) ?? []), tag]);
+    }
+    return [...groups.entries()].map(([label, tags]) => ({ label, tags }));
   }
 
   get hasMore(): boolean {
@@ -140,7 +217,8 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
 
   get emptyMessage(): string {
     if (!this.activeRegionId) return 'No active assigned region.';
-    if (this.searchQuery.trim()) return 'No locations found for this search.';
+    if (this.searchQuery.trim() || this.activeFilterCount > 0)
+      return 'No locations match the selected filters.';
     return 'No locations found in this region.';
   }
 
@@ -167,7 +245,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: regions => {
+        next: (regions) => {
           this.assignedRegions = regions ?? [];
 
           if (this.assignedRegions.length === 0) {
@@ -183,15 +261,16 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
           const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
           const persistedRegionId = this.readPersistedRegionId();
           const selectedRegion =
-            this.assignedRegions.find(region => region.id === queryRegionId) ??
-            this.assignedRegions.find(region => region.id === persistedRegionId) ??
+            this.assignedRegions.find((region) => region.id === queryRegionId) ??
+            this.assignedRegions.find((region) => region.id === persistedRegionId) ??
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
+          this.loadFilterOptions();
           this.resetList();
           this.loadLocations(true);
         },
-        error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
+        error: (error) => this.handleLoadError(error, 'Unable to load assigned regions.'),
       });
   }
 
@@ -199,10 +278,11 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     if (regionId === this.activeRegionId) return;
 
     this.setActiveRegion(regionId, true);
-    this.searchQuery = '';
-    this.currentSort = 'newest';
+    this.resetFilters();
     this.deleteTarget = null;
+    this.loadFilterOptions();
     this.resetList();
+    this.syncUrl();
     this.loadLocations(true);
     this.notifyStateChanged();
   }
@@ -214,6 +294,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
 
     this.searchDebounceHandle = setTimeout(() => {
       this.resetList();
+      this.syncUrl();
       this.loadLocations(true);
       this.notifyStateChanged();
     }, 300);
@@ -234,8 +315,55 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     this.currentSort = option.value;
     this.sortOpen = false;
     this.resetList();
+    this.syncUrl();
     this.loadLocations(true);
     this.notifyStateChanged();
+  }
+
+  onFilterChange(): void {
+    this.resetList();
+    this.syncUrl();
+    this.loadLocations(true);
+    this.notifyStateChanged();
+  }
+
+  toggleTag(tagId: number): void {
+    this.selectedTagIds = this.selectedTagIds.includes(tagId)
+      ? this.selectedTagIds.filter((id) => id !== tagId)
+      : [...this.selectedTagIds, tagId];
+    this.onFilterChange();
+  }
+
+  toggleIssue(issue: ContentIssueFilter): void {
+    this.selectedIssues = this.selectedIssues.includes(issue)
+      ? this.selectedIssues.filter((value) => value !== issue)
+      : [...this.selectedIssues, issue];
+    this.onFilterChange();
+  }
+
+  removeTag(tagId: number): void {
+    this.selectedTagIds = this.selectedTagIds.filter((id) => id !== tagId);
+    this.onFilterChange();
+  }
+  removeIssue(issue: ContentIssueFilter): void {
+    this.selectedIssues = this.selectedIssues.filter((value) => value !== issue);
+    this.onFilterChange();
+  }
+  tagName(tagId: number): string {
+    return this.filterTags.find((tag) => tag.id === tagId)?.name ?? `Tag ${tagId}`;
+  }
+  issueLabel(issue: ContentIssueFilter): string {
+    return this.issueOptions.find((option) => option.value === issue)?.label ?? issue;
+  }
+
+  clearAllFilters(): void {
+    this.statusFilter = 'all';
+    this.selectedDestinationId = null;
+    this.selectedLocationTypeId = null;
+    this.boundaryState = 'all';
+    this.selectedTagIds = [];
+    this.selectedIssues = [];
+    this.onFilterChange();
   }
 
   loadMore(): void {
@@ -263,7 +391,12 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     const full = this.locationsService.findById(item.id) ?? item;
     this.router.navigate([full.editRoute ?? `/locations/edit/${full.id}`], {
       queryParams: this.activeRegionId ? { regionId: this.activeRegionId } : undefined,
-      state: { location: full, editMode: true, returnTo: '/locations', regionId: this.activeRegionId },
+      state: {
+        location: full,
+        editMode: true,
+        returnTo: '/locations',
+        regionId: this.activeRegionId,
+      },
     });
   }
 
@@ -302,7 +435,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     this.notifyStateChanged();
 
     this.locationsService.getLocation(item.regionId, item.id).subscribe({
-      next: dto => {
+      next: (dto) => {
         if (dto.canDelete === false) {
           this.deleteModalError = 'Cannot delete: this location has related content.';
         }
@@ -324,7 +457,8 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
   }
 
   confirmDelete(): void {
-    if (!this.deleteTarget || !this.activeRegionId || this.isDeleting || this.deleteModalError) return;
+    if (!this.deleteTarget || !this.activeRegionId || this.isDeleting || this.deleteModalError)
+      return;
 
     const target = this.deleteTarget;
     this.isDeleting = true;
@@ -341,7 +475,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.deleteTarget = null;
-          this.items = this.items.filter(item => item.id !== target.id);
+          this.items = this.items.filter((item) => item.id !== target.id);
           this.totalItems = Math.max(0, this.totalItems - 1);
           this.feedbackMessage = 'Location deleted.';
 
@@ -350,7 +484,7 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
             this.loadLocations(true);
           }
         },
-        error: error => this.handleActionError(error),
+        error: (error) => this.handleActionError(error),
       });
   }
 
@@ -386,6 +520,12 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
       .list({
         regionId: this.activeRegionId,
         search: this.searchQuery,
+        status: this.statusFilter,
+        destinationId: this.selectedDestinationId,
+        locationTypeId: this.selectedLocationTypeId,
+        boundaryState: this.boundaryState,
+        tagIds: this.selectedTagIds,
+        issues: this.selectedIssues,
         sort: this.currentSort,
         skip,
         take: PAGE_SIZE,
@@ -401,15 +541,17 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: response => {
+        next: (response) => {
           if (this.listRequestSequence !== requestId) return;
 
-          const newItems = (response.items ?? []).map(item => this.locationsService.toListItem(item));
+          const newItems = (response.items ?? []).map((item) =>
+            this.locationsService.toListItem(item),
+          );
           this.items = reset ? newItems : [...this.items, ...newItems];
           this.locationsService.rememberItems(this.items);
           this.totalItems = this.toSafeCount(response.totalCount);
         },
-        error: error => {
+        error: (error) => {
           if (this.listRequestSequence === requestId) {
             this.handleLoadError(error, 'Unable to load locations.');
           }
@@ -432,7 +574,8 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 401) {
         this.authRequired = true;
-        this.errorMessage = 'Sign in with an authenticated Regional Manager account to view locations.';
+        this.errorMessage =
+          'Sign in with an authenticated Regional Manager account to view locations.';
         this.notifyStateChanged();
         return;
       }
@@ -463,9 +606,120 @@ export class AllLocationsComponent implements OnInit, OnDestroy {
     this.locationsService.saveListState({
       searchQuery: this.searchQuery,
       sort: this.currentSort,
+      status: this.statusFilter,
+      destinationId: this.selectedDestinationId,
+      locationTypeId: this.selectedLocationTypeId,
+      boundaryState: this.boundaryState,
+      tagIds: [...this.selectedTagIds],
+      issues: [...this.selectedIssues],
       displayCount: this.items.length,
       scrollTop: this.scrollContainer?.nativeElement?.scrollTop ?? 0,
     });
+  }
+
+  private loadFilterOptions(): void {
+    if (!this.activeRegionId) return;
+    this.filterOptionsLoading = true;
+    forkJoin({
+      destinations: this.locationsService.getParentDestinations(this.activeRegionId, null, 500),
+      types: this.locationsService.getLocationTypes(),
+      tags: this.locationsService.getLocationTags(),
+    })
+      .pipe(
+        finalize(() => {
+          this.filterOptionsLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: ({ destinations, types, tags }) => {
+          this.destinations = destinations ?? [];
+          this.locationTypes = types ?? [];
+          this.filterTags = (tags ?? []).filter((tag) => tag.isFilterable);
+          if (
+            this.selectedDestinationId &&
+            !this.destinations.some((item) => item.id === this.selectedDestinationId)
+          )
+            this.selectedDestinationId = null;
+          if (
+            this.selectedLocationTypeId &&
+            !this.locationTypes.some((item) => item.id === this.selectedLocationTypeId)
+          )
+            this.selectedLocationTypeId = null;
+          this.selectedTagIds = this.selectedTagIds.filter((id) =>
+            this.filterTags.some((tag) => tag.id === id),
+          );
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.destinations = [];
+          this.locationTypes = [];
+          this.filterTags = [];
+        },
+      });
+  }
+
+  private resetFilters(): void {
+    this.searchQuery = '';
+    this.currentSort = 'newest';
+    this.statusFilter = 'all';
+    this.selectedDestinationId = null;
+    this.selectedLocationTypeId = null;
+    this.boundaryState = 'all';
+    this.selectedTagIds = [];
+    this.selectedIssues = [];
+    this.moreFiltersOpen = false;
+  }
+
+  private restoreFiltersFromUrl(): void {
+    const params = this.route.snapshot.queryParamMap;
+    if (params.has('q')) this.searchQuery = params.get('q') ?? '';
+    const sort = params.get('sort') as LocationSort | null;
+    if (sort && this.sortOptions.some((option) => option.value === sort)) this.currentSort = sort;
+    const status = params.get('status') as LocationStatusFilter | null;
+    if (status && this.statusOptions.some((option) => option.value === status))
+      this.statusFilter = status;
+    this.selectedDestinationId =
+      this.parsePositiveInt(params.get('destinationId')) ?? this.selectedDestinationId;
+    this.selectedLocationTypeId =
+      this.parsePositiveInt(params.get('locationTypeId')) ?? this.selectedLocationTypeId;
+    const boundary = params.get('boundaryState') as 'all' | 'configured' | 'missing' | null;
+    if (boundary && this.boundaryOptions.some((option) => option.value === boundary))
+      this.boundaryState = boundary;
+    if (params.has('tagId'))
+      this.selectedTagIds = params
+        .getAll('tagId')
+        .map(Number)
+        .filter((value) => Number.isFinite(value) && value > 0);
+    if (params.has('issue'))
+      this.selectedIssues = params
+        .getAll('issue')
+        .filter((value) =>
+          this.issueOptions.some((option) => option.value === value),
+        ) as ContentIssueFilter[];
+  }
+
+  private syncUrl(): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        q: this.searchQuery.trim() || null,
+        sort: this.currentSort !== 'newest' ? this.currentSort : null,
+        status: this.statusFilter !== 'all' ? this.statusFilter : null,
+        destinationId: this.selectedDestinationId,
+        locationTypeId: this.selectedLocationTypeId,
+        boundaryState: this.boundaryState !== 'all' ? this.boundaryState : null,
+        tagId: this.selectedTagIds.length ? this.selectedTagIds : null,
+        issue: this.selectedIssues.length ? this.selectedIssues : null,
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+
+  private parsePositiveInt(value: string | null): number | null {
+    const parsed = value ? Number(value) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
 
   private setActiveRegion(regionId: number, updateUrl: boolean): void {

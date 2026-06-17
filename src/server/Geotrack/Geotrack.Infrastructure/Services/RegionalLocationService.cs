@@ -5,6 +5,7 @@ using Geotrack.Application.Services;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Microsoft.EntityFrameworkCore;
+using NtsGeometry = NetTopologySuite.Geometries.Geometry;
 
 namespace Geotrack.Infrastructure.Services;
 
@@ -40,6 +41,11 @@ public class RegionalLocationService : IRegionalLocationService
         int regionId,
         string? search,
         string? status,
+        int? destinationId,
+        int? locationTypeId,
+        string? boundaryState,
+        IReadOnlyCollection<int>? tagIds,
+        IReadOnlyCollection<string>? issues,
         string? sort,
         int skip,
         int take)
@@ -59,6 +65,36 @@ public class RegionalLocationService : IRegionalLocationService
         {
             var statusName = StatusFromToken(normalizedStatus);
             query = query.Where(location => location.Status == statusName);
+        }
+
+        if (destinationId.HasValue && destinationId.Value > 0)
+            query = query.Where(location => location.DestinationId == destinationId.Value);
+
+        if (locationTypeId.HasValue && locationTypeId.Value > 0)
+            query = query.Where(location => location.LocationTypeId == locationTypeId.Value);
+
+        var normalizedBoundaryState = boundaryState?.Trim().ToLowerInvariant();
+        if (normalizedBoundaryState == "configured")
+            query = query.Where(location => EF.Property<NtsGeometry?>(location, "BoundaryGeometry") != null);
+        else if (normalizedBoundaryState == "missing")
+            query = query.Where(location => EF.Property<NtsGeometry?>(location, "BoundaryGeometry") == null);
+
+        foreach (var tagId in (tagIds ?? Array.Empty<int>()).Where(id => id > 0).Distinct())
+            query = query.Where(location => location.LocationTags.Any(link => link.TagId == tagId));
+
+        var issueSet = (issues ?? Array.Empty<string>())
+            .Where(issue => !string.IsNullOrWhiteSpace(issue))
+            .Select(issue => issue.Trim().ToLowerInvariant())
+            .ToHashSet();
+        if (issueSet.Count > 0)
+        {
+            var missingCenter = issueSet.Contains("missingcenter");
+            var missingImage = issueSet.Contains("missingimage");
+            var missingDescription = issueSet.Contains("missingdescription");
+            query = query.Where(location =>
+                (missingCenter && location.Latitude == 0 && location.Longitude == 0) ||
+                (missingImage && !location.Images.Any(image => image.TargetType == EntityImageTargetType.Location)) ||
+                (missingDescription && (location.Description == null || location.Description == "")));
         }
 
         query = ApplySearch(query, search);
@@ -381,7 +417,7 @@ public class RegionalLocationService : IRegionalLocationService
     {
         await EnsureAssignedRegionAsync(userId, regionId);
 
-        var normalizedTake = Math.Clamp(take <= 0 ? MaxTake : take, 1, MaxTake);
+        var normalizedTake = Math.Clamp(take <= 0 ? 500 : take, 1, 500);
         var query = _db.Destinations
             .AsNoTracking()
             .Where(destination => destination.RegionId == regionId);
@@ -438,7 +474,8 @@ public class RegionalLocationService : IRegionalLocationService
                 TagTypeName = tag.TagType != null ? tag.TagType.Name : null,
                 TagTypeSlug = tag.TagType != null ? tag.TagType.Slug : null,
                 TagTypeLabel = tag.TagType != null ? tag.TagType.FilterLabel ?? tag.TagType.Name : null,
-                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000
+                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000,
+                IsFilterable = tag.TagType != null && tag.TagType.IsFilterable
             })
             .ToListAsync();
     }
@@ -463,7 +500,8 @@ public class RegionalLocationService : IRegionalLocationService
             TagTypeName = tag.TagType?.Name,
             TagTypeSlug = tag.TagType?.Slug,
             TagTypeLabel = tag.TagType?.FilterLabel ?? tag.TagType?.Name,
-            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000
+            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000,
+            IsFilterable = tag.TagType != null && tag.TagType.IsFilterable
         };
     }
 

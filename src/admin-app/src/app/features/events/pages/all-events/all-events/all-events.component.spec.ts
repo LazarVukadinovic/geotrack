@@ -34,8 +34,10 @@ describe('AllEventsComponent', () => {
   it('loads first 25 events for the active assigned region', () => {
     fixture.detectChanges();
     flushRegions();
-    flushEvents(7, eventPage(makeEvents(25), 60), req =>
-      req.params.get('skip') === '0' && req.params.get('take') === '25',
+    flushEvents(
+      7,
+      eventPage(makeEvents(25), 60),
+      (req) => req.params.get('skip') === '0' && req.params.get('take') === '25',
     );
 
     expect(component.activeRegionId).toBe(7);
@@ -43,7 +45,7 @@ describe('AllEventsComponent', () => {
     expect(component.totalItems).toBe(60);
     expect(component.hasMore).toBe(true);
     expect(component.isLoading).toBe(false);
-    expect(component.items.every(item => item.name.startsWith('Backend Event'))).toBe(true);
+    expect(component.items.every((item) => item.name.startsWith('Backend Event'))).toBe(true);
   });
 
   it('renders backend rows and footer without mock event rows', () => {
@@ -64,8 +66,10 @@ describe('AllEventsComponent', () => {
     flushEvents(7, eventPage(makeEvents(25), 40));
 
     component.loadMore();
-    flushEvents(7, eventPage(makeEvents(15, 26), 40, 25), req =>
-      req.params.get('skip') === '25' && req.params.get('take') === '25',
+    flushEvents(
+      7,
+      eventPage(makeEvents(15, 26), 40, 25),
+      (req) => req.params.get('skip') === '25' && req.params.get('take') === '25',
     );
 
     expect(component.items.length).toBe(40);
@@ -84,11 +88,13 @@ describe('AllEventsComponent', () => {
     component.onSearchChange();
     vi.advanceTimersByTime(300);
 
-    flushEvents(7, eventPage([eventDto(7, 'Festival Event')], 1), req =>
-      req.params.get('search') === 'festival' && req.params.get('skip') === '0',
+    flushEvents(
+      7,
+      eventPage([eventDto(7, 'Festival Event')], 1),
+      (req) => req.params.get('search') === 'festival' && req.params.get('skip') === '0',
     );
 
-    expect(component.items.map(item => item.name)).toEqual(['Festival Event']);
+    expect(component.items.map((item) => item.name)).toEqual(['Festival Event']);
     expect(component.totalItems).toBe(1);
   });
 
@@ -100,10 +106,13 @@ describe('AllEventsComponent', () => {
     component.searchQuery = 'river';
     component.applySortOption({ label: 'Event Date Soonest', value: 'eventDateAsc' });
 
-    flushEvents(7, eventPage([eventDto(12, 'Soonest Event')], 1), req =>
-      req.params.get('sort') === 'eventDateAsc' &&
-      req.params.get('search') === 'river' &&
-      req.params.get('skip') === '0',
+    flushEvents(
+      7,
+      eventPage([eventDto(12, 'Soonest Event')], 1),
+      (req) =>
+        req.params.get('sort') === 'eventDateAsc' &&
+        req.params.get('search') === 'river' &&
+        req.params.get('skip') === '0',
     );
 
     expect(component.currentSort).toBe('eventDateAsc');
@@ -117,14 +126,14 @@ describe('AllEventsComponent', () => {
 
     expect(component.isLoading).toBe(false);
     expect(component.items).toEqual([]);
-    expect(component.emptyMessage).toBe('No events found in this region.');
+    expect(component.emptyMessage).toBe('No events match the selected filters.');
   });
 
   it('clears loading and shows a safe error state when the API fails', () => {
     fixture.detectChanges();
     flushRegions();
 
-    const request = http.expectOne(req => req.url === '/api/admin/regional/events');
+    const request = http.expectOne((req) => req.url === '/api/admin/regional/events');
     request.flush({ message: 'Server error' }, { status: 500, statusText: 'Server Error' });
 
     expect(component.isLoading).toBe(false);
@@ -143,15 +152,13 @@ describe('AllEventsComponent', () => {
     component.confirmDelete();
 
     const request = http.expectOne(
-      req =>
-        req.url === '/api/admin/regional/events/15' &&
-        req.params.get('regionId') === '7',
+      (req) => req.url === '/api/admin/regional/events/15' && req.params.get('regionId') === '7',
     );
     expect(request.request.method).toBe('DELETE');
     request.flush(null);
 
     expect(component.deleteTarget).toBeNull();
-    expect(component.items.map(item => item.name)).toEqual(['Keep Me']);
+    expect(component.items.map((item) => item.name)).toEqual(['Keep Me']);
     expect(component.totalItems).toBe(1);
   });
 
@@ -170,7 +177,9 @@ describe('AllEventsComponent', () => {
     );
 
     expect(component.isDeleting).toBe(false);
-    expect(component.errorMessage).toBe('This event cannot be deleted while it has related content.');
+    expect(component.errorMessage).toBe(
+      'This event cannot be deleted while it has related content.',
+    );
   });
 
   it('changing active region reloads the first page for the new region', () => {
@@ -182,10 +191,11 @@ describe('AllEventsComponent', () => {
     flushEvents(7, eventPage([eventDto(1, 'Region 7 Event')], 1));
 
     component.onRegionSelected(8);
+    flushFilterOptions(8);
     flushEvents(8, eventPage([eventDto(2, 'Region 8 Event', 8)], 1));
 
     expect(component.activeRegionId).toBe(8);
-    expect(component.items.map(item => item.name)).toEqual(['Region 8 Event']);
+    expect(component.items.map((item) => item.name)).toEqual(['Region 8 Event']);
   });
 
   it('navigates edit through the canonical event edit route with active region context', () => {
@@ -216,6 +226,62 @@ describe('AllEventsComponent', () => {
     const request = http.expectOne('/api/admin/regional/regions');
     expect(request.request.method).toBe('GET');
     request.flush(regions);
+    flushFilterOptions(regions[0]?.id ?? 7);
+  }
+
+  function flushFilterOptions(regionId: number): void {
+    http
+      .expectOne(
+        (req) =>
+          req.url === '/api/admin/regional/event-parent-destinations' &&
+          req.params.get('regionId') === String(regionId),
+      )
+      .flush([
+        {
+          id: 3,
+          name: 'Backend Destination',
+          displayName: 'Backend Destination',
+          status: 'Published',
+        },
+      ]);
+    http
+      .expectOne(
+        (req) =>
+          req.url === '/api/admin/regional/event-parent-locations' &&
+          req.params.get('regionId') === String(regionId),
+      )
+      .flush([
+        {
+          id: 9,
+          name: 'Backend Location',
+          displayName: 'Backend Location',
+          destinationId: 3,
+          destinationName: 'Backend Destination',
+          status: 'Published',
+        },
+      ]);
+    http
+      .expectOne(
+        (req) =>
+          req.url === '/api/admin/regional/event-parent-places' &&
+          req.params.get('regionId') === String(regionId),
+      )
+      .flush([
+        {
+          id: 11,
+          name: 'Backend Place',
+          displayName: 'Backend Place',
+          locationId: 9,
+          locationName: 'Backend Location',
+          destinationId: 3,
+          destinationName: 'Backend Destination',
+          status: 'Published',
+        },
+      ]);
+    http
+      .expectOne('/api/admin/regional/event-types')
+      .flush([{ id: 2, name: 'Festival', description: 'Festival type' }]);
+    http.expectOne('/api/admin/regional/event-tags').flush([]);
   }
 
   function flushEvents(
@@ -224,7 +290,7 @@ describe('AllEventsComponent', () => {
     extra?: (req: import('@angular/common/http').HttpRequest<unknown>) => boolean,
   ): void {
     const request = http.expectOne(
-      req =>
+      (req) =>
         req.url === '/api/admin/regional/events' &&
         req.params.get('regionId') === String(regionId) &&
         (!extra || extra(req)),

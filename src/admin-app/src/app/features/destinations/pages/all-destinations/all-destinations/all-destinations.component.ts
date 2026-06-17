@@ -12,7 +12,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { finalize, Subscription } from 'rxjs';
+import { finalize, forkJoin, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../../core/services/dashboard.service';
@@ -21,7 +21,13 @@ import {
   DestinationListItem,
   DestinationsListService,
 } from '../../../../../core/services/destinations-list.service';
-import { DestinationSort } from '../../../../../core/models/destination.model';
+import {
+  ContentIssueFilter,
+  DestinationSort,
+  DestinationStatusFilter,
+  RegionalDestinationTagDto,
+  RegionalDestinationTypeDto,
+} from '../../../../../core/models/destination.model';
 import { RegionalAssignedRegion } from '../../../../../core/models/dashboard.model';
 
 const PAGE_SIZE = 25;
@@ -64,6 +70,27 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     { label: 'Name Z-A', value: 'nameDesc' },
   ];
 
+  statusFilter: DestinationStatusFilter = 'all';
+  selectedDestinationTypeId: number | null = null;
+  selectedTagIds: number[] = [];
+  selectedIssues: ContentIssueFilter[] = [];
+  destinationTypes: RegionalDestinationTypeDto[] = [];
+  filterTags: RegionalDestinationTagDto[] = [];
+  moreFiltersOpen = false;
+  filterOptionsLoading = false;
+  readonly statusOptions: { label: string; value: DestinationStatusFilter }[] = [
+    { label: 'All statuses', value: 'all' },
+    { label: 'Published', value: 'published' },
+    { label: 'Draft', value: 'draft' },
+    { label: 'Archived', value: 'archived' },
+  ];
+  readonly issueOptions: { label: string; value: ContentIssueFilter }[] = [
+    { label: 'Missing boundary', value: 'missingBoundary' },
+    { label: 'Missing geographic center', value: 'missingCenter' },
+    { label: 'Missing image', value: 'missingImage' },
+    { label: 'Missing description', value: 'missingDescription' },
+  ];
+
   deleteTarget: DestinationListItem | null = null;
   isDeleting = false;
   isCheckingDelete = false;
@@ -90,9 +117,14 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     if (saved) {
       this.searchQuery = saved.searchQuery;
       this.currentSort = saved.sort;
+      this.statusFilter = (saved.status as DestinationStatusFilter) ?? 'all';
+      this.selectedDestinationTypeId = saved.destinationTypeId ?? null;
+      this.selectedTagIds = [...(saved.tagIds ?? [])];
+      this.selectedIssues = [...((saved.issues ?? []) as ContentIssueFilter[])];
       this.pendingScrollTop = saved.scrollTop;
     }
 
+    this.restoreFiltersFromUrl();
     this.loadAssignedRegions();
   }
 
@@ -115,7 +147,7 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
   }
 
   get activeRegion(): RegionalAssignedRegion | null {
-    return this.assignedRegions.find(region => region.id === this.activeRegionId) ?? null;
+    return this.assignedRegions.find((region) => region.id === this.activeRegionId) ?? null;
   }
 
   get regionDisplayName(): string {
@@ -123,7 +155,34 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
   }
 
   get currentSortLabel(): string {
-    return this.sortOptions.find(option => option.value === this.currentSort)?.label ?? 'Newest First';
+    return (
+      this.sortOptions.find((option) => option.value === this.currentSort)?.label ?? 'Newest First'
+    );
+  }
+
+  get activeFilterCount(): number {
+    return (
+      (this.statusFilter !== 'all' ? 1 : 0) +
+      (this.selectedDestinationTypeId ? 1 : 0) +
+      this.selectedTagIds.length +
+      this.selectedIssues.length
+    );
+  }
+
+  get selectedDestinationTypeName(): string {
+    return (
+      this.destinationTypes.find((type) => type.id === this.selectedDestinationTypeId)?.name ??
+      'Type'
+    );
+  }
+
+  get tagGroups(): { label: string; tags: RegionalDestinationTagDto[] }[] {
+    const groups = new Map<string, RegionalDestinationTagDto[]>();
+    for (const tag of this.filterTags) {
+      const label = tag.tagTypeLabel || tag.tagTypeName || 'Tags';
+      groups.set(label, [...(groups.get(label) ?? []), tag]);
+    }
+    return [...groups.entries()].map(([label, tags]) => ({ label, tags }));
   }
 
   get hasMore(): boolean {
@@ -140,7 +199,8 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
 
   get emptyMessage(): string {
     if (!this.activeRegionId) return 'No active assigned region.';
-    if (this.searchQuery.trim()) return 'No destinations found for this search.';
+    if (this.searchQuery.trim() || this.activeFilterCount > 0)
+      return 'No destinations match the selected filters.';
     return 'No destinations found in this region.';
   }
 
@@ -167,7 +227,7 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: regions => {
+        next: (regions) => {
           this.assignedRegions = regions ?? [];
 
           if (this.assignedRegions.length === 0) {
@@ -183,15 +243,16 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
           const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
           const persistedRegionId = this.readPersistedRegionId();
           const selectedRegion =
-            this.assignedRegions.find(region => region.id === queryRegionId) ??
-            this.assignedRegions.find(region => region.id === persistedRegionId) ??
+            this.assignedRegions.find((region) => region.id === queryRegionId) ??
+            this.assignedRegions.find((region) => region.id === persistedRegionId) ??
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
+          this.loadFilterOptions();
           this.resetList();
           this.loadDestinations(true);
         },
-        error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
+        error: (error) => this.handleLoadError(error, 'Unable to load assigned regions.'),
       });
   }
 
@@ -199,10 +260,11 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     if (regionId === this.activeRegionId) return;
 
     this.setActiveRegion(regionId, true);
-    this.searchQuery = '';
-    this.currentSort = 'newest';
+    this.resetFilters();
     this.deleteTarget = null;
+    this.loadFilterOptions();
     this.resetList();
+    this.syncUrl();
     this.loadDestinations(true);
     this.notifyStateChanged();
   }
@@ -214,6 +276,7 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
 
     this.searchDebounceHandle = setTimeout(() => {
       this.resetList();
+      this.syncUrl();
       this.loadDestinations(true);
       this.notifyStateChanged();
     }, 300);
@@ -234,8 +297,56 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     this.currentSort = option.value;
     this.sortOpen = false;
     this.resetList();
+    this.syncUrl();
     this.loadDestinations(true);
     this.notifyStateChanged();
+  }
+
+  onFilterChange(): void {
+    this.resetList();
+    this.syncUrl();
+    this.loadDestinations(true);
+    this.notifyStateChanged();
+  }
+
+  toggleTag(tagId: number): void {
+    this.selectedTagIds = this.selectedTagIds.includes(tagId)
+      ? this.selectedTagIds.filter((id) => id !== tagId)
+      : [...this.selectedTagIds, tagId];
+    this.onFilterChange();
+  }
+
+  toggleIssue(issue: ContentIssueFilter): void {
+    this.selectedIssues = this.selectedIssues.includes(issue)
+      ? this.selectedIssues.filter((value) => value !== issue)
+      : [...this.selectedIssues, issue];
+    this.onFilterChange();
+  }
+
+  removeTag(tagId: number): void {
+    this.selectedTagIds = this.selectedTagIds.filter((id) => id !== tagId);
+    this.onFilterChange();
+  }
+
+  removeIssue(issue: ContentIssueFilter): void {
+    this.selectedIssues = this.selectedIssues.filter((value) => value !== issue);
+    this.onFilterChange();
+  }
+
+  tagName(tagId: number): string {
+    return this.filterTags.find((tag) => tag.id === tagId)?.name ?? `Tag ${tagId}`;
+  }
+
+  issueLabel(issue: ContentIssueFilter): string {
+    return this.issueOptions.find((option) => option.value === issue)?.label ?? issue;
+  }
+
+  clearAllFilters(): void {
+    this.statusFilter = 'all';
+    this.selectedDestinationTypeId = null;
+    this.selectedTagIds = [];
+    this.selectedIssues = [];
+    this.onFilterChange();
   }
 
   loadMore(): void {
@@ -263,7 +374,12 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     const full = this.destinationsService.findById(item.id) ?? item;
     this.router.navigate([full.editRoute ?? `/destinations/edit/${full.id}`], {
       queryParams: this.activeRegionId ? { regionId: this.activeRegionId } : undefined,
-      state: { place: full, editMode: true, returnTo: '/destinations', regionId: this.activeRegionId },
+      state: {
+        place: full,
+        editMode: true,
+        returnTo: '/destinations',
+        regionId: this.activeRegionId,
+      },
     });
   }
 
@@ -302,7 +418,7 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     this.notifyStateChanged();
 
     this.destinationsService.getDestination(item.regionId, item.id).subscribe({
-      next: dto => {
+      next: (dto) => {
         if (dto.canDelete === false) {
           this.deleteModalError = 'Cannot delete: this destination has related content.';
         }
@@ -324,7 +440,8 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
   }
 
   confirmDelete(): void {
-    if (!this.deleteTarget || !this.activeRegionId || this.isDeleting || this.deleteModalError) return;
+    if (!this.deleteTarget || !this.activeRegionId || this.isDeleting || this.deleteModalError)
+      return;
 
     const target = this.deleteTarget;
     this.isDeleting = true;
@@ -341,7 +458,7 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.deleteTarget = null;
-          this.items = this.items.filter(item => item.id !== target.id);
+          this.items = this.items.filter((item) => item.id !== target.id);
           this.totalItems = Math.max(0, this.totalItems - 1);
           this.feedbackMessage = 'Destination deleted.';
 
@@ -350,7 +467,7 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
             this.loadDestinations(true);
           }
         },
-        error: error => this.handleActionError(error),
+        error: (error) => this.handleActionError(error),
       });
   }
 
@@ -386,6 +503,10 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
       .list({
         regionId: this.activeRegionId,
         search: this.searchQuery,
+        status: this.statusFilter,
+        destinationTypeId: this.selectedDestinationTypeId,
+        tagIds: this.selectedTagIds,
+        issues: this.selectedIssues,
         sort: this.currentSort,
         skip,
         take: PAGE_SIZE,
@@ -401,15 +522,17 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: response => {
+        next: (response) => {
           if (this.listRequestSequence !== requestId) return;
 
-          const newItems = (response.items ?? []).map(item => this.destinationsService.toListItem(item));
+          const newItems = (response.items ?? []).map((item) =>
+            this.destinationsService.toListItem(item),
+          );
           this.items = reset ? newItems : [...this.items, ...newItems];
           this.destinationsService.rememberItems(this.items);
           this.totalItems = this.toSafeCount(response.totalCount);
         },
-        error: error => {
+        error: (error) => {
           if (this.listRequestSequence === requestId) {
             this.handleLoadError(error, 'Unable to load destinations.');
           }
@@ -432,7 +555,8 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 401) {
         this.authRequired = true;
-        this.errorMessage = 'Sign in with an authenticated Regional Manager account to view destinations.';
+        this.errorMessage =
+          'Sign in with an authenticated Regional Manager account to view destinations.';
         this.notifyStateChanged();
         return;
       }
@@ -463,9 +587,100 @@ export class AllDestinationsComponent implements OnInit, OnDestroy {
     this.destinationsService.saveListState({
       searchQuery: this.searchQuery,
       sort: this.currentSort,
+      status: this.statusFilter,
+      destinationTypeId: this.selectedDestinationTypeId,
+      tagIds: [...this.selectedTagIds],
+      issues: [...this.selectedIssues],
       displayCount: this.items.length,
       scrollTop: this.scrollContainer?.nativeElement?.scrollTop ?? 0,
     });
+  }
+
+  private loadFilterOptions(): void {
+    this.filterOptionsLoading = true;
+    forkJoin({
+      types: this.destinationsService.getDestinationTypes(),
+      tags: this.destinationsService.getDestinationTags(),
+    })
+      .pipe(
+        finalize(() => {
+          this.filterOptionsLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: ({ types, tags }) => {
+          this.destinationTypes = types ?? [];
+          this.filterTags = (tags ?? []).filter((tag) => tag.isFilterable);
+          if (
+            this.selectedDestinationTypeId &&
+            !this.destinationTypes.some((type) => type.id === this.selectedDestinationTypeId)
+          )
+            this.selectedDestinationTypeId = null;
+          this.selectedTagIds = this.selectedTagIds.filter((id) =>
+            this.filterTags.some((tag) => tag.id === id),
+          );
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.destinationTypes = [];
+          this.filterTags = [];
+        },
+      });
+  }
+
+  private resetFilters(): void {
+    this.searchQuery = '';
+    this.currentSort = 'newest';
+    this.statusFilter = 'all';
+    this.selectedDestinationTypeId = null;
+    this.selectedTagIds = [];
+    this.selectedIssues = [];
+    this.moreFiltersOpen = false;
+  }
+
+  private restoreFiltersFromUrl(): void {
+    const params = this.route.snapshot.queryParamMap;
+    if (params.has('q')) this.searchQuery = params.get('q') ?? '';
+    const sort = params.get('sort') as DestinationSort | null;
+    if (sort && this.sortOptions.some((option) => option.value === sort)) this.currentSort = sort;
+    const status = params.get('status') as DestinationStatusFilter | null;
+    if (status && this.statusOptions.some((option) => option.value === status))
+      this.statusFilter = status;
+    this.selectedDestinationTypeId =
+      this.parsePositiveInt(params.get('destinationTypeId')) ?? this.selectedDestinationTypeId;
+    if (params.has('tagId'))
+      this.selectedTagIds = params
+        .getAll('tagId')
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value) && value > 0);
+    if (params.has('issue'))
+      this.selectedIssues = params
+        .getAll('issue')
+        .filter((value) =>
+          this.issueOptions.some((option) => option.value === value),
+        ) as ContentIssueFilter[];
+  }
+
+  private syncUrl(): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        q: this.searchQuery.trim() || null,
+        sort: this.currentSort !== 'newest' ? this.currentSort : null,
+        status: this.statusFilter !== 'all' ? this.statusFilter : null,
+        destinationTypeId: this.selectedDestinationTypeId,
+        tagId: this.selectedTagIds.length ? this.selectedTagIds : null,
+        issue: this.selectedIssues.length ? this.selectedIssues : null,
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+
+  private parsePositiveInt(value: string | null): number | null {
+    const parsed = value ? Number(value) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
 
   private setActiveRegion(regionId: number, updateUrl: boolean): void {

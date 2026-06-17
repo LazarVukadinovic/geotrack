@@ -34,8 +34,10 @@ describe('AllPlacesComponent', () => {
   it('loads first 25 places for the active assigned region', () => {
     fixture.detectChanges();
     flushRegions();
-    flushPlaces(7, placePage(makePlaces(25), 60), req =>
-      req.params.get('skip') === '0' && req.params.get('take') === '25',
+    flushPlaces(
+      7,
+      placePage(makePlaces(25), 60),
+      (req) => req.params.get('skip') === '0' && req.params.get('take') === '25',
     );
 
     expect(component.activeRegionId).toBe(7);
@@ -43,7 +45,7 @@ describe('AllPlacesComponent', () => {
     expect(component.totalItems).toBe(60);
     expect(component.hasMore).toBe(true);
     expect(component.isLoading).toBe(false);
-    expect(component.items.map(item => item.name)).not.toContain('Narodni Muzej Kragujevac');
+    expect(component.items.map((item) => item.name)).not.toContain('Narodni Muzej Kragujevac');
   });
 
   it('renders backend rows and footer without mock place rows', () => {
@@ -66,8 +68,10 @@ describe('AllPlacesComponent', () => {
     flushPlaces(7, placePage(makePlaces(25), 40));
 
     component.loadMore();
-    flushPlaces(7, placePage(makePlaces(15, 26), 40, 25), req =>
-      req.params.get('skip') === '25' && req.params.get('take') === '25',
+    flushPlaces(
+      7,
+      placePage(makePlaces(15, 26), 40, 25),
+      (req) => req.params.get('skip') === '25' && req.params.get('take') === '25',
     );
 
     expect(component.items.length).toBe(40);
@@ -86,11 +90,13 @@ describe('AllPlacesComponent', () => {
     component.onSearchChange();
     vi.advanceTimersByTime(300);
 
-    flushPlaces(7, placePage([placeDto(7, 'Museum Place')], 1), req =>
-      req.params.get('search') === 'museum' && req.params.get('skip') === '0',
+    flushPlaces(
+      7,
+      placePage([placeDto(7, 'Museum Place')], 1),
+      (req) => req.params.get('search') === 'museum' && req.params.get('skip') === '0',
     );
 
-    expect(component.items.map(item => item.name)).toEqual(['Museum Place']);
+    expect(component.items.map((item) => item.name)).toEqual(['Museum Place']);
     expect(component.totalItems).toBe(1);
   });
 
@@ -102,10 +108,13 @@ describe('AllPlacesComponent', () => {
     component.searchQuery = 'river';
     component.applySortOption({ label: 'Name Z-A', value: 'nameDesc' });
 
-    flushPlaces(7, placePage([placeDto(12, 'Zeta Place')], 1), req =>
-      req.params.get('sort') === 'nameDesc' &&
-      req.params.get('search') === 'river' &&
-      req.params.get('skip') === '0',
+    flushPlaces(
+      7,
+      placePage([placeDto(12, 'Zeta Place')], 1),
+      (req) =>
+        req.params.get('sort') === 'nameDesc' &&
+        req.params.get('search') === 'river' &&
+        req.params.get('skip') === '0',
     );
 
     expect(component.currentSort).toBe('nameDesc');
@@ -126,7 +135,7 @@ describe('AllPlacesComponent', () => {
     fixture.detectChanges();
     flushRegions();
 
-    const request = http.expectOne(req => req.url === '/api/admin/regional/places');
+    const request = http.expectOne((req) => req.url === '/api/admin/regional/places');
     request.flush({ message: 'Server error' }, { status: 500, statusText: 'Server Error' });
 
     expect(component.isLoading).toBe(false);
@@ -145,15 +154,13 @@ describe('AllPlacesComponent', () => {
     component.confirmDelete();
 
     const request = http.expectOne(
-      req =>
-        req.url === '/api/admin/regional/places/15' &&
-        req.params.get('regionId') === '7',
+      (req) => req.url === '/api/admin/regional/places/15' && req.params.get('regionId') === '7',
     );
     expect(request.request.method).toBe('DELETE');
     request.flush(null);
 
     expect(component.deleteTarget).toBeNull();
-    expect(component.items.map(item => item.name)).toEqual(['Keep Me']);
+    expect(component.items.map((item) => item.name)).toEqual(['Keep Me']);
     expect(component.totalItems).toBe(1);
   });
 
@@ -172,7 +179,9 @@ describe('AllPlacesComponent', () => {
     );
 
     expect(component.isDeleting).toBe(false);
-    expect(component.errorMessage).toBe('This place cannot be deleted while it has related content.');
+    expect(component.errorMessage).toBe(
+      'This place cannot be deleted while it has related content.',
+    );
   });
 
   it('changing active region reloads the first page for the new region', () => {
@@ -184,10 +193,11 @@ describe('AllPlacesComponent', () => {
     flushPlaces(7, placePage([placeDto(1, 'Region 7 Place')], 1));
 
     component.onRegionSelected(8);
+    flushFilterOptions(8);
     flushPlaces(8, placePage([placeDto(2, 'Region 8 Place', 8)], 1));
 
     expect(component.activeRegionId).toBe(8);
-    expect(component.items.map(item => item.name)).toEqual(['Region 8 Place']);
+    expect(component.items.map((item) => item.name)).toEqual(['Region 8 Place']);
   });
 
   it('navigates edit through the existing place edit flow with active region context', () => {
@@ -217,6 +227,44 @@ describe('AllPlacesComponent', () => {
     const request = http.expectOne('/api/admin/regional/regions');
     expect(request.request.method).toBe('GET');
     request.flush(regions);
+    flushFilterOptions(regions[0]?.id ?? 7);
+  }
+
+  function flushFilterOptions(regionId: number): void {
+    http
+      .expectOne(
+        (req) =>
+          req.url === '/api/admin/regional/place-parent-destinations' &&
+          req.params.get('regionId') === String(regionId),
+      )
+      .flush([
+        {
+          id: 3,
+          name: 'Backend Destination',
+          displayName: 'Backend Destination',
+          status: 'Published',
+        },
+      ]);
+    http
+      .expectOne(
+        (req) =>
+          req.url === '/api/admin/regional/place-parent-locations' &&
+          req.params.get('regionId') === String(regionId),
+      )
+      .flush([
+        {
+          id: 9,
+          name: 'Backend Location',
+          displayName: 'Backend Location',
+          destinationId: 3,
+          destinationName: 'Backend Destination',
+          status: 'Published',
+        },
+      ]);
+    http
+      .expectOne('/api/admin/regional/place-types')
+      .flush([{ id: 2, name: 'Landmark', description: 'Landmark type', isOwnable: false }]);
+    http.expectOne('/api/admin/regional/place-tags').flush([]);
   }
 
   function flushPlaces(
@@ -225,7 +273,7 @@ describe('AllPlacesComponent', () => {
     extra?: (req: import('@angular/common/http').HttpRequest<unknown>) => boolean,
   ): void {
     const request = http.expectOne(
-      req =>
+      (req) =>
         req.url === '/api/admin/regional/places' &&
         req.params.get('regionId') === String(regionId) &&
         (!extra || extra(req)),

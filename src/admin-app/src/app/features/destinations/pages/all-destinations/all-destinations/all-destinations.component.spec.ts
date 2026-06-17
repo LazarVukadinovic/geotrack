@@ -34,8 +34,10 @@ describe('AllDestinationsComponent', () => {
   it('loads first 25 destinations for the active assigned region', () => {
     fixture.detectChanges();
     flushRegions();
-    flushDestinations(7, destinationPage(makeDestinations(25), 60), req =>
-      req.params.get('skip') === '0' && req.params.get('take') === '25',
+    flushDestinations(
+      7,
+      destinationPage(makeDestinations(25), 60),
+      (req) => req.params.get('skip') === '0' && req.params.get('take') === '25',
     );
 
     expect(component.activeRegionId).toBe(7);
@@ -43,7 +45,7 @@ describe('AllDestinationsComponent', () => {
     expect(component.totalItems).toBe(60);
     expect(component.hasMore).toBe(true);
     expect(component.isLoading).toBe(false);
-    expect(component.items.map(item => item.name)).not.toContain('Sumadija Heartland');
+    expect(component.items.map((item) => item.name)).not.toContain('Sumadija Heartland');
   });
 
   it('renders backend rows and footer without mock destination rows', () => {
@@ -66,8 +68,10 @@ describe('AllDestinationsComponent', () => {
     flushDestinations(7, destinationPage(makeDestinations(25), 40));
 
     component.loadMore();
-    flushDestinations(7, destinationPage(makeDestinations(15, 26), 40, 25), req =>
-      req.params.get('skip') === '25' && req.params.get('take') === '25',
+    flushDestinations(
+      7,
+      destinationPage(makeDestinations(15, 26), 40, 25),
+      (req) => req.params.get('skip') === '25' && req.params.get('take') === '25',
     );
 
     expect(component.items.length).toBe(40);
@@ -86,11 +90,13 @@ describe('AllDestinationsComponent', () => {
     component.onSearchChange();
     vi.advanceTimersByTime(300);
 
-    flushDestinations(7, destinationPage([destinationDto(7, 'Orchard Destination')], 1), req =>
-      req.params.get('search') === 'orchards' && req.params.get('skip') === '0',
+    flushDestinations(
+      7,
+      destinationPage([destinationDto(7, 'Orchard Destination')], 1),
+      (req) => req.params.get('search') === 'orchards' && req.params.get('skip') === '0',
     );
 
-    expect(component.items.map(item => item.name)).toEqual(['Orchard Destination']);
+    expect(component.items.map((item) => item.name)).toEqual(['Orchard Destination']);
     expect(component.totalItems).toBe(1);
   });
 
@@ -102,10 +108,13 @@ describe('AllDestinationsComponent', () => {
     component.searchQuery = 'river';
     component.applySortOption({ label: 'Name Z-A', value: 'nameDesc' });
 
-    flushDestinations(7, destinationPage([destinationDto(12, 'Zeta Destination')], 1), req =>
-      req.params.get('sort') === 'nameDesc' &&
-      req.params.get('search') === 'river' &&
-      req.params.get('skip') === '0',
+    flushDestinations(
+      7,
+      destinationPage([destinationDto(12, 'Zeta Destination')], 1),
+      (req) =>
+        req.params.get('sort') === 'nameDesc' &&
+        req.params.get('search') === 'river' &&
+        req.params.get('skip') === '0',
     );
 
     expect(component.currentSort).toBe('nameDesc');
@@ -126,7 +135,7 @@ describe('AllDestinationsComponent', () => {
     fixture.detectChanges();
     flushRegions();
 
-    const request = http.expectOne(req => req.url === '/api/admin/regional/destinations');
+    const request = http.expectOne((req) => req.url === '/api/admin/regional/destinations');
     request.flush({ message: 'Server error' }, { status: 500, statusText: 'Server Error' });
 
     expect(component.isLoading).toBe(false);
@@ -137,7 +146,10 @@ describe('AllDestinationsComponent', () => {
   it('opens delete confirmation and removes a row after successful delete', () => {
     fixture.detectChanges();
     flushRegions();
-    flushDestinations(7, destinationPage([destinationDto(15, 'Delete Me'), destinationDto(16, 'Keep Me')], 2));
+    flushDestinations(
+      7,
+      destinationPage([destinationDto(15, 'Delete Me'), destinationDto(16, 'Keep Me')], 2),
+    );
 
     component.promptDelete(component.items[0]);
     expect(component.deleteTarget?.name).toBe('Delete Me');
@@ -145,15 +157,14 @@ describe('AllDestinationsComponent', () => {
     component.confirmDelete();
 
     const request = http.expectOne(
-      req =>
-        req.url === '/api/admin/regional/destinations/15' &&
-        req.params.get('regionId') === '7',
+      (req) =>
+        req.url === '/api/admin/regional/destinations/15' && req.params.get('regionId') === '7',
     );
     expect(request.request.method).toBe('DELETE');
     request.flush(null);
 
     expect(component.deleteTarget).toBeNull();
-    expect(component.items.map(item => item.name)).toEqual(['Keep Me']);
+    expect(component.items.map((item) => item.name)).toEqual(['Keep Me']);
     expect(component.totalItems).toBe(1);
   });
 
@@ -172,7 +183,9 @@ describe('AllDestinationsComponent', () => {
     );
 
     expect(component.isDeleting).toBe(false);
-    expect(component.errorMessage).toBe('This destination cannot be deleted while it has related content.');
+    expect(component.errorMessage).toBe(
+      'This destination cannot be deleted while it has related content.',
+    );
   });
 
   it('changing active region reloads the first page for the new region', () => {
@@ -184,10 +197,11 @@ describe('AllDestinationsComponent', () => {
     flushDestinations(7, destinationPage([destinationDto(1, 'Region 7 Destination')], 1));
 
     component.onRegionSelected(8);
+    flushFilterOptions();
     flushDestinations(8, destinationPage([destinationDto(2, 'Region 8 Destination', 8)], 1));
 
     expect(component.activeRegionId).toBe(8);
-    expect(component.items.map(item => item.name)).toEqual(['Region 8 Destination']);
+    expect(component.items.map((item) => item.name)).toEqual(['Region 8 Destination']);
   });
 
   it('navigates edit through the canonical destination edit route with active region context', () => {
@@ -217,6 +231,14 @@ describe('AllDestinationsComponent', () => {
     const request = http.expectOne('/api/admin/regional/regions');
     expect(request.request.method).toBe('GET');
     request.flush(regions);
+    flushFilterOptions();
+  }
+
+  function flushFilterOptions(): void {
+    http
+      .expectOne('/api/admin/regional/destination-types')
+      .flush([{ id: 2, name: 'City', description: 'City destination' }]);
+    http.expectOne('/api/admin/regional/destination-tags').flush([]);
   }
 
   function flushDestinations(
@@ -225,7 +247,7 @@ describe('AllDestinationsComponent', () => {
     extra?: (req: import('@angular/common/http').HttpRequest<unknown>) => boolean,
   ): void {
     const request = http.expectOne(
-      req =>
+      (req) =>
         req.url === '/api/admin/regional/destinations' &&
         req.params.get('regionId') === String(regionId) &&
         (!extra || extra(req)),

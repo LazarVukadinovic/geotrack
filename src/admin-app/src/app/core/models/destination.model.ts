@@ -1,5 +1,11 @@
 export type DestinationSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
 export type DestinationStatusFilter = 'all' | 'published' | 'draft' | 'archived';
+export type ContentIssueFilter =
+  | 'missingBoundary'
+  | 'missingCenter'
+  | 'missingImage'
+  | 'missingDescription'
+  | 'missingAddress';
 
 export interface RegionalDestinationListItemDto {
   id: number;
@@ -49,6 +55,9 @@ export interface RegionalDestinationListParams {
   regionId: number;
   search?: string | null;
   status?: DestinationStatusFilter;
+  destinationTypeId?: number | null;
+  tagIds?: number[];
+  issues?: ContentIssueFilter[];
   sort?: DestinationSort;
   skip?: number;
   take?: number;
@@ -63,6 +72,7 @@ export interface RegionalDestinationTagDto {
   tagTypeSlug?: string | null;
   tagTypeLabel?: string | null;
   tagTypeOrder?: number | null;
+  isFilterable?: boolean;
 }
 
 export interface RegionalDestinationCoordinateDto {
@@ -121,7 +131,6 @@ export interface RegionalDestinationCreateRequest {
   galleryImageFiles?: File[];
 }
 
-
 export interface RegionalDestinationUpdateRequest {
   name?: string | null;
   summary?: string | null;
@@ -136,4 +145,10 @@ export interface RegionalDestinationUpdateRequest {
   coverImageUrl?: string | null;
   galleryImageUrls?: string[] | null;
   galleryImageFiles?: File[];
+}
+
+export interface RegionalDestinationTypeDto {
+  id: number;
+  name: string;
+  description?: string | null;
 }

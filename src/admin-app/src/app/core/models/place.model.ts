@@ -1,4 +1,5 @@
 import { RegionalEntityImageDto } from './regional-image.model';
+import { ContentIssueFilter } from './destination.model';
 
 export type PlaceSort = 'newest' | 'oldest' | 'nameAsc' | 'nameDesc';
 export type PlaceStatusFilter = 'all' | 'published' | 'draft' | 'archived';
@@ -60,7 +61,6 @@ export interface RegionalPlaceDetailDto extends RegionalPlaceListItemDto {
   amenities?: RegionalPlaceAmenityDto[];
 }
 
-
 export interface RegionalPlaceOwnerDto {
   userId: number;
   username: string;
@@ -84,6 +84,11 @@ export interface RegionalPlaceListParams {
   search?: string | null;
   status?: PlaceStatusFilter;
   placeType?: string | null;
+  destinationId?: number | null;
+  locationId?: number | null;
+  placeTypeId?: number | null;
+  tagIds?: number[];
+  issues?: ContentIssueFilter[];
   sort?: PlaceSort;
   skip?: number;
   take?: number;
@@ -98,6 +103,7 @@ export interface RegionalPlaceTagDto {
   tagTypeSlug?: string | null;
   tagTypeLabel?: string | null;
   tagTypeOrder?: number | null;
+  isFilterable?: boolean;
 }
 
 export interface RegionalPlaceAmenityDto {

@@ -12,6 +12,7 @@ import {
   RegionalDestinationListParams,
   RegionalDestinationListResponse,
   RegionalDestinationTagDto,
+  RegionalDestinationTypeDto,
   RegionalDestinationUpdateRequest,
 } from '../models/destination.model';
 
@@ -69,6 +70,10 @@ export type DestinationSortDir = 'asc' | 'desc';
 export interface DestinationListState {
   searchQuery: string;
   sort: DestinationSort;
+  status: string;
+  destinationTypeId: number | null;
+  tagIds: number[];
+  issues: string[];
   displayCount: number;
   scrollTop: number;
 }
@@ -96,17 +101,31 @@ export class DestinationsListService {
     if (params.status && params.status !== 'all') {
       httpParams = httpParams.set('status', params.status);
     }
+    if (params.destinationTypeId)
+      httpParams = httpParams.set('destinationTypeId', String(params.destinationTypeId));
+    for (const tagId of params.tagIds ?? []) httpParams = httpParams.append('tagId', String(tagId));
+    for (const issue of params.issues ?? []) httpParams = httpParams.append('issue', issue);
 
     return this.http.get<RegionalDestinationListResponse>(this.endpoint, { params: httpParams });
   }
 
-  getDestination(regionId: number, destinationId: string | number): Observable<RegionalDestinationDetailDto> {
+  getDestination(
+    regionId: number,
+    destinationId: string | number,
+  ): Observable<RegionalDestinationDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.get<RegionalDestinationDetailDto>(`${this.endpoint}/${destinationId}`, { params });
+    return this.http.get<RegionalDestinationDetailDto>(`${this.endpoint}/${destinationId}`, {
+      params,
+    });
   }
 
-  createDestination(payload: RegionalDestinationCreateRequest): Observable<RegionalDestinationDetailDto> {
-    return this.http.post<RegionalDestinationDetailDto>(this.endpoint, this.buildCreateFormData(payload));
+  createDestination(
+    payload: RegionalDestinationCreateRequest,
+  ): Observable<RegionalDestinationDetailDto> {
+    return this.http.post<RegionalDestinationDetailDto>(
+      this.endpoint,
+      this.buildCreateFormData(payload),
+    );
   }
 
   searchBoundarySuggestions(
@@ -115,22 +134,24 @@ export class DestinationsListService {
     latitude?: number | null,
     longitude?: number | null,
   ): Observable<RegionalDestinationBoundarySuggestionDto[]> {
-    let params = new HttpParams()
-      .set('regionId', String(regionId))
-      .set('query', query.trim());
+    let params = new HttpParams().set('regionId', String(regionId)).set('query', query.trim());
 
     if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-      params = params
-        .set('latitude', String(latitude))
-        .set('longitude', String(longitude));
+      params = params.set('latitude', String(latitude)).set('longitude', String(longitude));
     }
 
     return this.http
-      .get<RegionalDestinationBoundarySuggestionsDto>('/api/admin/regional/destination-boundaries/suggestions', { params })
-      .pipe(map(response => response.items ?? []));
+      .get<RegionalDestinationBoundarySuggestionsDto>(
+        '/api/admin/regional/destination-boundaries/suggestions',
+        { params },
+      )
+      .pipe(map((response) => response.items ?? []));
   }
 
-  uploadBoundary(regionId: number, file: File): Observable<RegionalDestinationBoundarySuggestionDto> {
+  uploadBoundary(
+    regionId: number,
+    file: File,
+  ): Observable<RegionalDestinationBoundarySuggestionDto> {
     const params = new HttpParams().set('regionId', String(regionId));
     const formData = new FormData();
     formData.append('file', file);
@@ -150,7 +171,10 @@ export class DestinationsListService {
       .set('regionId', String(regionId))
       .set('latitude', String(latitude))
       .set('longitude', String(longitude));
-    return this.http.get<DestinationCoordinateResolutionDto>('/api/admin/regional/destinations/resolve', { params });
+    return this.http.get<DestinationCoordinateResolutionDto>(
+      '/api/admin/regional/destinations/resolve',
+      { params },
+    );
   }
 
   updateDestination(
@@ -159,7 +183,15 @@ export class DestinationsListService {
     payload: RegionalDestinationUpdateRequest,
   ): Observable<RegionalDestinationDetailDto> {
     const params = new HttpParams().set('regionId', String(regionId));
-    return this.http.put<RegionalDestinationDetailDto>(`${this.endpoint}/${destinationId}`, this.buildUpdateFormData(payload), { params });
+    return this.http.put<RegionalDestinationDetailDto>(
+      `${this.endpoint}/${destinationId}`,
+      this.buildUpdateFormData(payload),
+      { params },
+    );
+  }
+
+  getDestinationTypes(): Observable<RegionalDestinationTypeDto[]> {
+    return this.http.get<RegionalDestinationTypeDto[]>('/api/admin/regional/destination-types');
   }
 
   getDestinationTags(): Observable<RegionalDestinationTagDto[]> {
@@ -168,11 +200,15 @@ export class DestinationsListService {
 
   searchDestinationTags(query: string): Observable<RegionalDestinationTagDto[]> {
     const params = new HttpParams().set('search', query);
-    return this.http.get<RegionalDestinationTagDto[]>('/api/admin/regional/destination-tags', { params });
+    return this.http.get<RegionalDestinationTagDto[]>('/api/admin/regional/destination-tags', {
+      params,
+    });
   }
 
   createDestinationTag(name: string): Observable<RegionalDestinationTagDto> {
-    return this.http.post<RegionalDestinationTagDto>('/api/admin/regional/destination-tags', { name });
+    return this.http.post<RegionalDestinationTagDto>('/api/admin/regional/destination-tags', {
+      name,
+    });
   }
 
   deleteDestination(regionId: number, destinationId: string | number): Observable<void> {
@@ -225,7 +261,10 @@ export class DestinationsListService {
       internalRefId: dto.internalReferenceId ?? undefined,
       lastUpdated: this.formatDate(lastUpdatedIso),
       sortTimestamp: this.toTimestamp(lastUpdatedIso),
-      imageBg: (dto.coverImageUrl ?? dto.imageUrl) ? `url("${dto.coverImageUrl ?? dto.imageUrl}") center/cover` : this.fallbackGradient(dto.id),
+      imageBg:
+        (dto.coverImageUrl ?? dto.imageUrl)
+          ? `url("${dto.coverImageUrl ?? dto.imageUrl}") center/cover`
+          : this.fallbackGradient(dto.id),
       category: dto.destinationTypeName ?? 'Destination',
       regionId: dto.regionId,
       regionDisplayName: dto.regionDisplayName,
@@ -236,13 +275,16 @@ export class DestinationsListService {
       imageUrl: dto.imageUrl ?? dto.cardImageUrl ?? null,
       coverImageUrl: dto.coverImageUrl ?? dto.imageUrl ?? undefined,
       coverImageName: dto.coverImageUrl ? 'Cover image' : undefined,
-      galleryImages: (dto.galleryImageUrls ?? []).map((url, index) => ({ url, name: `Gallery image ${index + 1}` })),
+      galleryImages: (dto.galleryImageUrls ?? []).map((url, index) => ({
+        url,
+        name: `Gallery image ${index + 1}`,
+      })),
       detailRoute: dto.detailRoute ?? `/destinations/detail/${dto.id}`,
       editRoute: dto.editRoute ?? `/destinations/edit/${dto.id}`,
       tagsDto: dto.tags ?? [],
       lat: (dto as RegionalDestinationDetailDto).latitude,
       lng: (dto as RegionalDestinationDetailDto).longitude,
-      tags: (dto.tags ?? []).map(tag => tag.name),
+      tags: (dto.tags ?? []).map((tag) => tag.name),
       canDelete: (dto as RegionalDestinationDetailDto).canDelete ?? true,
     };
 
@@ -251,7 +293,7 @@ export class DestinationsListService {
   }
 
   rememberItems(items: DestinationListItem[]): void {
-    items.forEach(item => this.cache.set(String(item.id), item));
+    items.forEach((item) => this.cache.set(String(item.id), item));
   }
 
   getAllItems(): DestinationListItem[] {
@@ -299,8 +341,8 @@ export class DestinationsListService {
       skip,
       take: params.pageSize,
     }).pipe(
-      map(response => ({
-        items: response.items.map(item => this.toListItem(item)),
+      map((response) => ({
+        items: response.items.map((item) => this.toListItem(item)),
         total: response.totalCount,
         page: params.page,
         pageSize: response.take,

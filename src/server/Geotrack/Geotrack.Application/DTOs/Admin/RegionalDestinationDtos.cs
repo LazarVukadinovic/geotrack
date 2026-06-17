@@ -111,4 +111,12 @@ public class RegionalDestinationTagDto
     public string? TagTypeSlug { get; set; }
     public string? TagTypeLabel { get; set; }
     public int? TagTypeOrder { get; set; }
+    public bool IsFilterable { get; set; }
+}
+
+public class RegionalDestinationTypeDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
 }

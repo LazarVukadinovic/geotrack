@@ -12,16 +12,21 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { finalize, Subscription } from 'rxjs';
+import { finalize, forkJoin, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
 import { DashboardService } from '../../../../../core/services/dashboard.service';
 import { AuthService } from '../../../../../core/services/auth.service';
+import { PlaceListItem, PlacesListService } from '../../../../../core/services/places-list.service';
 import {
-  PlaceListItem,
-  PlacesListService,
-} from '../../../../../core/services/places-list.service';
-import { PlaceSort } from '../../../../../core/models/place.model';
+  PlaceSort,
+  PlaceStatusFilter,
+  RegionalPlaceParentDestinationDto,
+  RegionalPlaceParentLocationDto,
+  RegionalPlaceTagDto,
+  RegionalPlaceTypeDto,
+} from '../../../../../core/models/place.model';
+import { ContentIssueFilter } from '../../../../../core/models/destination.model';
 import { RegionalAssignedRegion } from '../../../../../core/models/dashboard.model';
 
 const PAGE_SIZE = 25;
@@ -64,6 +69,30 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     { label: 'Name Z-A', value: 'nameDesc' },
   ];
 
+  statusFilter: PlaceStatusFilter = 'all';
+  selectedDestinationId: number | null = null;
+  selectedLocationId: number | null = null;
+  selectedPlaceTypeId: number | null = null;
+  selectedTagIds: number[] = [];
+  selectedIssues: ContentIssueFilter[] = [];
+  destinations: RegionalPlaceParentDestinationDto[] = [];
+  locations: RegionalPlaceParentLocationDto[] = [];
+  placeTypes: RegionalPlaceTypeDto[] = [];
+  filterTags: RegionalPlaceTagDto[] = [];
+  moreFiltersOpen = false;
+  filterOptionsLoading = false;
+  readonly statusOptions: { label: string; value: PlaceStatusFilter }[] = [
+    { label: 'All statuses', value: 'all' },
+    { label: 'Published', value: 'published' },
+    { label: 'Draft', value: 'draft' },
+    { label: 'Archived', value: 'archived' },
+  ];
+  readonly issueOptions: { label: string; value: ContentIssueFilter }[] = [
+    { label: 'Missing image', value: 'missingImage' },
+    { label: 'Missing description', value: 'missingDescription' },
+    { label: 'Missing address', value: 'missingAddress' },
+  ];
+
   deleteTarget: PlaceListItem | null = null;
   isDeleting = false;
   isCheckingDelete = false;
@@ -90,9 +119,15 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     if (saved) {
       this.searchQuery = saved.searchQuery;
       this.currentSort = saved.sort;
+      this.statusFilter = (saved.status as PlaceStatusFilter) ?? 'all';
+      this.selectedDestinationId = saved.destinationId ?? null;
+      this.selectedLocationId = saved.locationId ?? null;
+      this.selectedPlaceTypeId = saved.placeTypeId ?? null;
+      this.selectedTagIds = [...(saved.tagIds ?? [])];
+      this.selectedIssues = [...((saved.issues ?? []) as ContentIssueFilter[])];
       this.pendingScrollTop = saved.scrollTop;
     }
-
+    this.restoreFiltersFromUrl();
     this.loadAssignedRegions();
   }
 
@@ -115,7 +150,7 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
   }
 
   get activeRegion(): RegionalAssignedRegion | null {
-    return this.assignedRegions.find(region => region.id === this.activeRegionId) ?? null;
+    return this.assignedRegions.find((region) => region.id === this.activeRegionId) ?? null;
   }
 
   get regionDisplayName(): string {
@@ -123,7 +158,44 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
   }
 
   get currentSortLabel(): string {
-    return this.sortOptions.find(option => option.value === this.currentSort)?.label ?? 'Newest First';
+    return (
+      this.sortOptions.find((option) => option.value === this.currentSort)?.label ?? 'Newest First'
+    );
+  }
+
+  get filteredLocations(): RegionalPlaceParentLocationDto[] {
+    return this.selectedDestinationId
+      ? this.locations.filter((item) => item.destinationId === this.selectedDestinationId)
+      : this.locations;
+  }
+  get activeFilterCount(): number {
+    return (
+      (this.statusFilter !== 'all' ? 1 : 0) +
+      (this.selectedDestinationId ? 1 : 0) +
+      (this.selectedLocationId ? 1 : 0) +
+      (this.selectedPlaceTypeId ? 1 : 0) +
+      this.selectedTagIds.length +
+      this.selectedIssues.length
+    );
+  }
+  get selectedDestinationName(): string {
+    return (
+      this.destinations.find((x) => x.id === this.selectedDestinationId)?.name ?? 'Destination'
+    );
+  }
+  get selectedLocationName(): string {
+    return this.locations.find((x) => x.id === this.selectedLocationId)?.name ?? 'Location';
+  }
+  get selectedPlaceTypeName(): string {
+    return this.placeTypes.find((x) => x.id === this.selectedPlaceTypeId)?.name ?? 'Type';
+  }
+  get tagGroups(): { label: string; tags: RegionalPlaceTagDto[] }[] {
+    const groups = new Map<string, RegionalPlaceTagDto[]>();
+    for (const tag of this.filterTags) {
+      const label = tag.tagTypeLabel || tag.tagTypeName || 'Tags';
+      groups.set(label, [...(groups.get(label) ?? []), tag]);
+    }
+    return [...groups.entries()].map(([label, tags]) => ({ label, tags }));
   }
 
   get hasMore(): boolean {
@@ -140,7 +212,8 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
 
   get emptyMessage(): string {
     if (!this.activeRegionId) return 'No active assigned region.';
-    if (this.searchQuery.trim()) return 'No places found for this search.';
+    if (this.searchQuery.trim() || this.activeFilterCount > 0)
+      return 'No places match the selected filters.';
     return 'No places found in this region.';
   }
 
@@ -167,7 +240,7 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: regions => {
+        next: (regions) => {
           this.assignedRegions = regions ?? [];
 
           if (this.assignedRegions.length === 0) {
@@ -183,15 +256,16 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
           const queryRegionId = Number(this.route.snapshot.queryParamMap.get('regionId'));
           const persistedRegionId = this.readPersistedRegionId();
           const selectedRegion =
-            this.assignedRegions.find(region => region.id === queryRegionId) ??
-            this.assignedRegions.find(region => region.id === persistedRegionId) ??
+            this.assignedRegions.find((region) => region.id === queryRegionId) ??
+            this.assignedRegions.find((region) => region.id === persistedRegionId) ??
             this.assignedRegions[0];
 
           this.setActiveRegion(selectedRegion.id, false);
+          this.loadFilterOptions();
           this.resetList();
           this.loadPlaces(true);
         },
-        error: error => this.handleLoadError(error, 'Unable to load assigned regions.'),
+        error: (error) => this.handleLoadError(error, 'Unable to load assigned regions.'),
       });
   }
 
@@ -199,10 +273,11 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     if (regionId === this.activeRegionId) return;
 
     this.setActiveRegion(regionId, true);
-    this.searchQuery = '';
-    this.currentSort = 'newest';
+    this.resetFilters();
     this.deleteTarget = null;
+    this.loadFilterOptions();
     this.resetList();
+    this.syncUrl();
     this.loadPlaces(true);
     this.notifyStateChanged();
   }
@@ -214,6 +289,7 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
 
     this.searchDebounceHandle = setTimeout(() => {
       this.resetList();
+      this.syncUrl();
       this.loadPlaces(true);
       this.notifyStateChanged();
     }, 300);
@@ -234,8 +310,62 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     this.currentSort = option.value;
     this.sortOpen = false;
     this.resetList();
+    this.syncUrl();
     this.loadPlaces(true);
     this.notifyStateChanged();
+  }
+
+  onDestinationFilterChange(): void {
+    const selectedLocation = this.locations.find((item) => item.id === this.selectedLocationId);
+    if (selectedLocation && selectedLocation.destinationId !== this.selectedDestinationId)
+      this.selectedLocationId = null;
+    this.onFilterChange();
+  }
+  onLocationFilterChange(): void {
+    const selected = this.locations.find((item) => item.id === this.selectedLocationId);
+    if (selected) this.selectedDestinationId = selected.destinationId;
+    this.onFilterChange();
+  }
+  onFilterChange(): void {
+    this.resetList();
+    this.syncUrl();
+    this.loadPlaces(true);
+    this.notifyStateChanged();
+  }
+  toggleTag(tagId: number): void {
+    this.selectedTagIds = this.selectedTagIds.includes(tagId)
+      ? this.selectedTagIds.filter((id) => id !== tagId)
+      : [...this.selectedTagIds, tagId];
+    this.onFilterChange();
+  }
+  toggleIssue(issue: ContentIssueFilter): void {
+    this.selectedIssues = this.selectedIssues.includes(issue)
+      ? this.selectedIssues.filter((x) => x !== issue)
+      : [...this.selectedIssues, issue];
+    this.onFilterChange();
+  }
+  removeTag(tagId: number): void {
+    this.selectedTagIds = this.selectedTagIds.filter((id) => id !== tagId);
+    this.onFilterChange();
+  }
+  removeIssue(issue: ContentIssueFilter): void {
+    this.selectedIssues = this.selectedIssues.filter((x) => x !== issue);
+    this.onFilterChange();
+  }
+  tagName(tagId: number): string {
+    return this.filterTags.find((tag) => tag.id === tagId)?.name ?? `Tag ${tagId}`;
+  }
+  issueLabel(issue: ContentIssueFilter): string {
+    return this.issueOptions.find((x) => x.value === issue)?.label ?? issue;
+  }
+  clearAllFilters(): void {
+    this.statusFilter = 'all';
+    this.selectedDestinationId = null;
+    this.selectedLocationId = null;
+    this.selectedPlaceTypeId = null;
+    this.selectedTagIds = [];
+    this.selectedIssues = [];
+    this.onFilterChange();
   }
 
   loadMore(): void {
@@ -302,7 +432,7 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     this.notifyStateChanged();
 
     this.placesService.getPlace(item.regionId, item.id).subscribe({
-      next: dto => {
+      next: (dto) => {
         if (dto.canDelete === false) {
           this.deleteModalError = 'Cannot delete: this place has related content.';
         }
@@ -324,7 +454,8 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
   }
 
   confirmDelete(): void {
-    if (!this.deleteTarget || !this.activeRegionId || this.isDeleting || this.deleteModalError) return;
+    if (!this.deleteTarget || !this.activeRegionId || this.isDeleting || this.deleteModalError)
+      return;
 
     const target = this.deleteTarget;
     this.isDeleting = true;
@@ -341,7 +472,7 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.deleteTarget = null;
-          this.items = this.items.filter(item => item.id !== target.id);
+          this.items = this.items.filter((item) => item.id !== target.id);
           this.totalItems = Math.max(0, this.totalItems - 1);
           this.feedbackMessage = 'Place deleted.';
 
@@ -350,7 +481,7 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
             this.loadPlaces(true);
           }
         },
-        error: error => this.handleActionError(error),
+        error: (error) => this.handleActionError(error),
       });
   }
 
@@ -386,6 +517,12 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
       .list({
         regionId: this.activeRegionId,
         search: this.searchQuery,
+        status: this.statusFilter,
+        destinationId: this.selectedDestinationId,
+        locationId: this.selectedLocationId,
+        placeTypeId: this.selectedPlaceTypeId,
+        tagIds: this.selectedTagIds,
+        issues: this.selectedIssues,
         sort: this.currentSort,
         skip,
         take: PAGE_SIZE,
@@ -401,15 +538,17 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
         }),
       )
       .subscribe({
-        next: response => {
+        next: (response) => {
           if (this.listRequestSequence !== requestId) return;
 
-          const newItems = (response.items ?? []).map(item => this.placesService.toListItem(item));
+          const newItems = (response.items ?? []).map((item) =>
+            this.placesService.toListItem(item),
+          );
           this.items = reset ? newItems : [...this.items, ...newItems];
           this.placesService.rememberItems(this.items);
           this.totalItems = this.toSafeCount(response.totalCount);
         },
-        error: error => {
+        error: (error) => {
           if (this.listRequestSequence === requestId) {
             this.handleLoadError(error, 'Unable to load places.');
           }
@@ -432,7 +571,8 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 401) {
         this.authRequired = true;
-        this.errorMessage = 'Sign in with an authenticated Regional Manager account to view places.';
+        this.errorMessage =
+          'Sign in with an authenticated Regional Manager account to view places.';
         this.notifyStateChanged();
         return;
       }
@@ -463,9 +603,123 @@ export class AllPlacesComponent implements OnInit, OnDestroy {
     this.placesService.saveListState({
       searchQuery: this.searchQuery,
       sort: this.currentSort,
+      status: this.statusFilter,
+      destinationId: this.selectedDestinationId,
+      locationId: this.selectedLocationId,
+      placeTypeId: this.selectedPlaceTypeId,
+      tagIds: [...this.selectedTagIds],
+      issues: [...this.selectedIssues],
       displayCount: this.items.length,
       scrollTop: this.scrollContainer?.nativeElement?.scrollTop ?? 0,
     });
+  }
+
+  private loadFilterOptions(): void {
+    if (!this.activeRegionId) return;
+    this.filterOptionsLoading = true;
+    forkJoin({
+      destinations: this.placesService.getParentDestinations(this.activeRegionId, null, 500),
+      locations: this.placesService.getParentLocations(this.activeRegionId, null, 500, null),
+      types: this.placesService.getPlaceTypes(),
+      tags: this.placesService.getPlaceTags(),
+    })
+      .pipe(
+        finalize(() => {
+          this.filterOptionsLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: ({ destinations, locations, types, tags }) => {
+          this.destinations = destinations ?? [];
+          this.locations = locations ?? [];
+          this.placeTypes = types ?? [];
+          this.filterTags = (tags ?? []).filter((tag) => tag.isFilterable);
+          const selectedLocation = this.locations.find((x) => x.id === this.selectedLocationId);
+          if (selectedLocation) this.selectedDestinationId = selectedLocation.destinationId;
+          if (
+            this.selectedDestinationId &&
+            !this.destinations.some((x) => x.id === this.selectedDestinationId)
+          ) {
+            this.selectedDestinationId = null;
+            this.selectedLocationId = null;
+          }
+          if (
+            this.selectedLocationId &&
+            !this.locations.some((x) => x.id === this.selectedLocationId)
+          )
+            this.selectedLocationId = null;
+          if (
+            this.selectedPlaceTypeId &&
+            !this.placeTypes.some((x) => x.id === this.selectedPlaceTypeId)
+          )
+            this.selectedPlaceTypeId = null;
+          this.selectedTagIds = this.selectedTagIds.filter((id) =>
+            this.filterTags.some((tag) => tag.id === id),
+          );
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.destinations = [];
+          this.locations = [];
+          this.placeTypes = [];
+          this.filterTags = [];
+        },
+      });
+  }
+  private resetFilters(): void {
+    this.searchQuery = '';
+    this.currentSort = 'newest';
+    this.statusFilter = 'all';
+    this.selectedDestinationId = null;
+    this.selectedLocationId = null;
+    this.selectedPlaceTypeId = null;
+    this.selectedTagIds = [];
+    this.selectedIssues = [];
+    this.moreFiltersOpen = false;
+  }
+  private restoreFiltersFromUrl(): void {
+    const p = this.route.snapshot.queryParamMap;
+    if (p.has('q')) this.searchQuery = p.get('q') ?? '';
+    const sort = p.get('sort') as PlaceSort | null;
+    if (sort && this.sortOptions.some((x) => x.value === sort)) this.currentSort = sort;
+    const status = p.get('status') as PlaceStatusFilter | null;
+    if (status && this.statusOptions.some((x) => x.value === status)) this.statusFilter = status;
+    this.selectedDestinationId =
+      this.parsePositiveInt(p.get('destinationId')) ?? this.selectedDestinationId;
+    this.selectedLocationId = this.parsePositiveInt(p.get('locationId')) ?? this.selectedLocationId;
+    this.selectedPlaceTypeId =
+      this.parsePositiveInt(p.get('placeTypeId')) ?? this.selectedPlaceTypeId;
+    if (p.has('tagId'))
+      this.selectedTagIds = p
+        .getAll('tagId')
+        .map(Number)
+        .filter((x) => Number.isFinite(x) && x > 0);
+    if (p.has('issue'))
+      this.selectedIssues = p
+        .getAll('issue')
+        .filter((v) => this.issueOptions.some((x) => x.value === v)) as ContentIssueFilter[];
+  }
+  private syncUrl(): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        q: this.searchQuery.trim() || null,
+        sort: this.currentSort !== 'newest' ? this.currentSort : null,
+        status: this.statusFilter !== 'all' ? this.statusFilter : null,
+        destinationId: this.selectedDestinationId,
+        locationId: this.selectedLocationId,
+        placeTypeId: this.selectedPlaceTypeId,
+        tagId: this.selectedTagIds.length ? this.selectedTagIds : null,
+        issue: this.selectedIssues.length ? this.selectedIssues : null,
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+  private parsePositiveInt(value: string | null): number | null {
+    const n = value ? Number(value) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
   }
 
   private setActiveRegion(regionId: number, updateUrl: boolean): void {

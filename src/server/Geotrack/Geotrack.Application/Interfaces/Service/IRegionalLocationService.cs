@@ -9,6 +9,11 @@ public interface IRegionalLocationService
         int regionId,
         string? search,
         string? status,
+        int? destinationId,
+        int? locationTypeId,
+        string? boundaryState,
+        IReadOnlyCollection<int>? tagIds,
+        IReadOnlyCollection<string>? issues,
         string? sort,
         int skip,
         int take);

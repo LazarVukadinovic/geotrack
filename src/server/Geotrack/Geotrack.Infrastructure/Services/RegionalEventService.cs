@@ -38,6 +38,15 @@ public class RegionalEventService : IRegionalEventService
         string? search,
         string? status,
         string? eventType,
+        int? destinationId,
+        int? locationId,
+        int? placeId,
+        int? eventTypeId,
+        string? dateFilter,
+        DateTime? dateFrom,
+        DateTime? dateTo,
+        string? priceFilter,
+        IReadOnlyCollection<int>? tagIds,
         string? sort,
         int skip,
         int take)
@@ -58,8 +67,50 @@ public class RegionalEventService : IRegionalEventService
             query = query.Where(@event => @event.Status.ToLower() == normalizedStatus);
         }
 
+        if (destinationId.HasValue && destinationId.Value > 0)
+            query = query.Where(@event => @event.DestinationId == destinationId.Value);
+
+        if (locationId.HasValue && locationId.Value > 0)
+            query = query.Where(@event => @event.LocationId == locationId.Value);
+
+        if (placeId.HasValue && placeId.Value > 0)
+            query = query.Where(@event => @event.PlaceId == placeId.Value);
+
+        if (eventTypeId.HasValue && eventTypeId.Value > 0)
+            query = query.Where(@event => @event.EventTypeId == eventTypeId.Value);
+
+        var now = DateTime.UtcNow;
+        switch (dateFilter?.Trim().ToLowerInvariant())
+        {
+            case "upcoming":
+                query = query.Where(@event => @event.EndDate >= now);
+                break;
+            case "ongoing":
+                query = query.Where(@event => @event.StartDate <= now && @event.EndDate >= now);
+                break;
+            case "past":
+                query = query.Where(@event => @event.EndDate < now);
+                break;
+            case "custom":
+                if (dateFrom.HasValue)
+                    query = query.Where(@event => @event.EndDate >= dateFrom.Value);
+                if (dateTo.HasValue)
+                    query = query.Where(@event => @event.StartDate <= dateTo.Value);
+                break;
+        }
+
+        var normalizedPriceFilter = priceFilter?.Trim().ToLowerInvariant();
+        if (normalizedPriceFilter == "free")
+            query = query.Where(@event => @event.IsFree);
+        else if (normalizedPriceFilter == "paid")
+            query = query.Where(@event => !@event.IsFree);
+
+        foreach (var tagId in (tagIds ?? Array.Empty<int>()).Where(id => id > 0).Distinct())
+            query = query.Where(@event => @event.EventTags.Any(link => link.TagId == tagId));
+
         query = ApplySearch(query, search);
-        query = ApplyEventTypeFilter(query, eventType);
+        if (!eventTypeId.HasValue || eventTypeId.Value <= 0)
+            query = ApplyEventTypeFilter(query, eventType);
         query = ApplySort(query, normalizedSort);
 
         var totalCount = await query.CountAsync();
@@ -445,7 +496,7 @@ public class RegionalEventService : IRegionalEventService
     {
         await EnsureAssignedRegionAsync(userId, regionId);
 
-        var normalizedTake = Math.Clamp(take <= 0 ? MaxTake : take, 1, MaxTake);
+        var normalizedTake = Math.Clamp(take <= 0 ? 500 : take, 1, 500);
         var query = _db.Destinations
             .AsNoTracking()
             .Where(destination => destination.RegionId == regionId);
@@ -482,7 +533,7 @@ public class RegionalEventService : IRegionalEventService
     {
         await EnsureAssignedRegionAsync(userId, regionId);
 
-        var normalizedTake = Math.Clamp(take <= 0 ? MaxTake : take, 1, MaxTake);
+        var normalizedTake = Math.Clamp(take <= 0 ? 500 : take, 1, 500);
         var query = _db.Locations
             .AsNoTracking()
             .Where(location => location.Destination.RegionId == regionId);
@@ -522,7 +573,7 @@ public class RegionalEventService : IRegionalEventService
     {
         await EnsureAssignedRegionAsync(userId, regionId);
 
-        var normalizedTake = Math.Clamp(take <= 0 ? MaxTake : take, 1, MaxTake);
+        var normalizedTake = Math.Clamp(take <= 0 ? 500 : take, 1, 500);
         var query = _db.Places
             .AsNoTracking()
             .Where(place => place.Location.Destination.RegionId == regionId);
@@ -588,7 +639,8 @@ public class RegionalEventService : IRegionalEventService
                 TagTypeName = tag.TagType != null ? tag.TagType.Name : null,
                 TagTypeSlug = tag.TagType != null ? tag.TagType.Slug : null,
                 TagTypeLabel = tag.TagType != null ? tag.TagType.FilterLabel ?? tag.TagType.Name : null,
-                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000
+                TagTypeOrder = tag.TagType != null ? tag.TagType.FilterOrder : 1000,
+                IsFilterable = tag.TagType != null && tag.TagType.IsFilterable
             })
             .ToListAsync();
     }
@@ -613,7 +665,8 @@ public class RegionalEventService : IRegionalEventService
             TagTypeName = tag.TagType?.Name,
             TagTypeSlug = tag.TagType?.Slug,
             TagTypeLabel = tag.TagType?.FilterLabel ?? tag.TagType?.Name,
-            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000
+            TagTypeOrder = tag.TagType?.FilterOrder ?? 1000,
+            IsFilterable = tag.TagType != null && tag.TagType.IsFilterable
         };
     }
 
