@@ -897,6 +897,20 @@ public class MapService : IMapService
             _ => 120,
         };
 
+        // Keep the quick place-type filters stable while the user pans between
+        // viewports. Counts are still calculated for the current map area.
+        var availablePlaceTypes = await _db.PlaceTypes
+            .AsNoTracking()
+            .OrderBy(placeType => placeType.Name)
+            .Select(placeType => new MapFilterOptionDto
+            {
+                Id = placeType.Id,
+                Label = placeType.Name,
+                Count = 0,
+                Score = 0,
+            })
+            .ToListAsync(cancellationToken);
+
         if (zoom < DestinationZoomThreshold && normalizedCategories.Count == 0)
         {
             var destinations = await _db.Destinations
@@ -940,6 +954,7 @@ public class MapService : IMapService
             {
                 Mode = "destinations",
                 Markers = destinations,
+                PlaceTypes = availablePlaceTypes,
             };
         }
 
@@ -1041,6 +1056,7 @@ public class MapService : IMapService
         {
             Mode = "entities",
             Markers = markers,
+            PlaceTypes = availablePlaceTypes,
             RecommendedTags = recommendedTags,
         };
     }

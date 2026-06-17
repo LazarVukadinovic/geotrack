@@ -146,15 +146,15 @@ describe('MapPageComponent', () => {
   });
 
 
-  it('keeps the quick filter row to All plus three place types', () => {
+  it('keeps a stable quick filter row in the preferred place-type order', () => {
     const component = createComponent();
     component.categories = [
       { id: 'all', label: 'All' },
-      { id: 'place-type:1', label: 'Stay' },
-      { id: 'place-type:2', label: 'Restaurant' },
-      { id: 'place-type:3', label: 'Cafe' },
-      { id: 'place-type:4', label: 'Landmark' },
       { id: 'place-type:5', label: 'Museum' },
+      { id: 'place-type:4', label: 'Landmark' },
+      { id: 'place-type:3', label: 'Cafe' },
+      { id: 'place-type:2', label: 'Restaurant' },
+      { id: 'place-type:1', label: 'Stay' },
     ];
 
     expect(component.primaryCategories.map(category => category.label)).toEqual([
@@ -162,6 +162,7 @@ describe('MapPageComponent', () => {
       'Stay',
       'Restaurant',
       'Cafe',
+      'Landmark',
     ]);
     expect(component.morePlaceTypeCategories).toHaveLength(5);
 

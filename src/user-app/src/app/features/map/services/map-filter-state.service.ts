@@ -28,6 +28,18 @@ const MAP_AVAILABLE_PLACE_TYPES_STORAGE_KEY = 'mapAvailablePlaceTypes';
 const MAP_AVAILABLE_FILTERS_STORAGE_KEY = 'mapAvailableFilters';
 const PLACE_TYPE_PREFIX = 'place-type:';
 const TAG_PREFIX = 'tag:';
+const PLACE_TYPE_ORDER = [
+  'stays',
+  'restaurant',
+  'cafe',
+  'landmark',
+  'bar',
+  'museum',
+  'gallery',
+  'park',
+  'nature',
+  'beach',
+];
 
 @Injectable({ providedIn: 'root' })
 export class MapFilterStateService {
@@ -75,19 +87,39 @@ export class MapFilterStateService {
     this.removeStorageItem(MAP_FILTERS_STORAGE_KEY);
   }
 
-  rebuildAvailablePlaceTypes(markers: MapEntityMarker[], selectedCategoryIds: string[]): MapFilterOption[] {
+  rebuildAvailablePlaceTypes(
+    markers: MapEntityMarker[],
+    selectedCategoryIds: string[],
+    placeTypes: MapFilterOptionResponse[] = [],
+  ): MapFilterOption[] {
     const byId = new Map<string, MapFilterOption>();
+
+    for (const placeType of placeTypes) {
+      if (!Number.isInteger(placeType.id) || placeType.id <= 0) continue;
+      const label = this.normalizePlaceTypeLabel(placeType.label);
+      if (!label) continue;
+
+      const id = this.placeTypeFilterId(placeType.id);
+      this.labelById.set(id, label);
+      byId.set(id, {
+        id,
+        valueId: placeType.id,
+        label,
+        count: 0,
+      });
+    }
 
     for (const marker of markers) {
       if (marker.entityType === 'destination' || typeof marker.placeTypeId !== 'number') continue;
 
-      const label = this.cleanLabel(marker.placeTypeLabel ?? marker.categoryLabel);
+      const label = this.normalizePlaceTypeLabel(marker.placeTypeLabel ?? marker.categoryLabel);
       if (!label) continue;
 
       const id = this.placeTypeFilterId(marker.placeTypeId);
       this.labelById.set(id, label);
       const existing = byId.get(id);
       if (existing) {
+        existing.label = label;
         existing.count += 1;
       } else {
         byId.set(id, {
@@ -244,10 +276,13 @@ export class MapFilterStateService {
   }
 
   private sortOptions(options: MapFilterOption[]): MapFilterOption[] {
-    const stayFirst = (label: string): number => label.toLowerCase() === 'stays' ? 0 : 1;
+    const priority = (label: string): number => {
+      const index = PLACE_TYPE_ORDER.indexOf(label.trim().toLowerCase());
+      return index === -1 ? PLACE_TYPE_ORDER.length : index;
+    };
+
     return options.sort((left, right) =>
-      stayFirst(left.label) - stayFirst(right.label) ||
-      right.count - left.count ||
+      priority(left.label) - priority(right.label) ||
       left.label.localeCompare(right.label));
   }
 
@@ -263,6 +298,11 @@ export class MapFilterStateService {
     if (!value.startsWith(prefix)) return null;
     const parsed = Number(value.slice(prefix.length));
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  private normalizePlaceTypeLabel(value: string | null | undefined): string {
+    const label = this.cleanLabel(value);
+    return label.toLowerCase() === 'stay' ? 'Stays' : label;
   }
 
   private cleanLabel(value: string | null | undefined): string {

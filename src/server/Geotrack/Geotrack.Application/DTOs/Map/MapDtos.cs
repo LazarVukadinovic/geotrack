@@ -44,6 +44,7 @@ public class GetMapMarkersResponseDto
 {
     public string Mode { get; set; } = string.Empty;
     public List<MapEntityMarkerDto> Markers { get; set; } = new();
+    public List<MapFilterOptionDto> PlaceTypes { get; set; } = new();
     public List<MapFilterOptionDto> RecommendedTags { get; set; } = new();
 }
 

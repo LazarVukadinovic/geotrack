@@ -76,6 +76,7 @@ export interface MapFilterOptionResponse {
 export interface MapMarkersResponse {
   mode: MapMarkersMode;
   markers: MapEntityMarker[];
+  placeTypes?: MapFilterOptionResponse[];
   recommendedTags?: MapFilterOptionResponse[];
 }
 

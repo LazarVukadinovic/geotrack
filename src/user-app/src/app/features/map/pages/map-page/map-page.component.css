@@ -61,9 +61,14 @@
   z-index: var(--map-layer-floating-control);
 }
 
+.map-page__side-controls {
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+}
+
 .map-page__legend-button {
-  top: 240px;
-  z-index: var(--map-layer-floating-control);
+  position: static;
 }
 
 .map-page__legend-overlay {
@@ -478,8 +483,7 @@
     right: var(--space-6, 1.5rem);
   }
 
-  .map-page__legend-button {
-    right: var(--space-6, 1.5rem);
-    top: 250px;
+  .map-page__side-controls {
+    right: var(--space-6, 1.5rem) !important;
   }
 }

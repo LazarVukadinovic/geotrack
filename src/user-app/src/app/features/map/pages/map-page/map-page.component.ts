@@ -39,7 +39,8 @@ const INITIAL_LOCATION_ZOOM = 13;
 const DETAIL_FOCUS_ZOOM = 16;
 const MARKER_ACTIVATION_DEDUPE_MS = 250;
 const MARKER_DISMISS_GRACE_MS = 250;
-const PRIMARY_PLACE_TYPE_COUNT = 3;
+const PRIMARY_PLACE_TYPE_COUNT = 4;
+const PRIMARY_PLACE_TYPE_LABELS = ['stays', 'restaurant', 'cafe', 'landmark'];
 
 interface MarkerEntry {
   data: MapEntityMarker;
@@ -312,10 +313,24 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   get primaryCategories(): Array<{ id: string; label: string; count?: number }> {
     const all = this.categories.find((category) => category.id === 'all') ?? { id: 'all', label: 'All' };
-    const placeTypes = this.categories
-      .filter((category) => category.id !== 'all')
-      .slice(0, PRIMARY_PLACE_TYPE_COUNT);
-    return [all, ...placeTypes];
+    const available = this.categories.filter((category) => category.id !== 'all');
+    const selectedIds = new Set<string>();
+    const preferred = PRIMARY_PLACE_TYPE_LABELS
+      .map((label) => available.find((category) => {
+        const normalizedLabel = category.label.trim().toLowerCase();
+        return (normalizedLabel === 'stay' ? 'stays' : normalizedLabel) === label;
+      }))
+      .filter((category): category is { id: string; label: string; count?: number } => !!category)
+      .filter((category) => {
+        if (selectedIds.has(category.id)) return false;
+        selectedIds.add(category.id);
+        return true;
+      });
+    const fallback = available
+      .filter((category) => !selectedIds.has(category.id))
+      .slice(0, Math.max(0, PRIMARY_PLACE_TYPE_COUNT - preferred.length));
+
+    return [all, ...preferred, ...fallback];
   }
 
   get morePlaceTypeCategories(): Array<{ id: string; label: string; count?: number }> {
@@ -1648,13 +1663,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private applyMarkers(response: MapMarkersResponse): void {
     this.rawViewportMarkers = response.markers ?? [];
-
-    if (response.mode === 'entities') {
-      this.rebuildAvailableFilters(response);
-    } else {
-      this.restoreAvailableFiltersFromState();
-    }
-
+    this.rebuildAvailableFilters(response);
     this.renderMarkers(this.filterMarkersByMoreFilters(this.rawViewportMarkers), response.mode);
   }
 
@@ -2147,18 +2156,21 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private rebuildAvailableFilters(response: MapMarkersResponse): void {
     const placeTypes = this.mapFilterState.rebuildAvailablePlaceTypes(
-      this.rawViewportMarkers,
+      response.mode === 'entities' ? this.rawViewportMarkers : [],
       this.filterCategories,
+      response.placeTypes,
     );
     this.categories = [
       { id: 'all', label: 'All' },
       ...placeTypes.map((option) => ({ id: option.id, label: option.label, count: option.count })),
     ];
 
-    this.availableMoreFilters = this.mapFilterState.setRecommendedTagFilters(
-      response.recommendedTags,
-      this.selectedCategoryLabelFilters,
-    );
+    this.availableMoreFilters = response.mode === 'entities'
+      ? this.mapFilterState.setRecommendedTagFilters(
+          response.recommendedTags,
+          this.selectedCategoryLabelFilters,
+        )
+      : this.mapFilterState.availableMoreFilters();
   }
 
   private restoreAvailableFiltersFromState(): void {
