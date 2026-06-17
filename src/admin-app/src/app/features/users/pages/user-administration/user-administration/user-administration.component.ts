@@ -83,7 +83,6 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
   isSavingEdit = false;
 
   availableRegions: TerritoryUserAvailableRegion[] = [];
-  selectedRegionId: number | null = null;
   pendingRegions: TerritoryUserAvailableRegion[] = [];
   regionSearch = '';
   isLoadingRegions = false;
@@ -226,11 +225,6 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
     return this.availableRegions.filter(region =>
       !assignedIds.has(region.regionId) &&
       !pendingIds.has(region.regionId));
-  }
-
-  get canAddSelectedRegion(): boolean {
-    return !!this.selectedRegionId &&
-      this.selectableRegions.some(region => region.regionId === this.selectedRegionId);
   }
 
   get canOpenAddRegionalManager(): boolean {
@@ -480,18 +474,10 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
     this.regionSearchDebounceHandle = setTimeout(() => this.loadAvailableRegions(), 250);
   }
 
-  addPendingRegion(): void {
-    if (!this.selectedRegionId) return;
-
-    const region = this.selectableRegions.find(item => item.regionId === this.selectedRegionId);
-    if (!region) {
-      this.selectedRegionId = null;
-      this.notifyStateChanged();
-      return;
-    }
+  addRegionToPending(region: TerritoryUserAvailableRegion): void {
+    if (this.pendingRegions.some(item => item.regionId === region.regionId)) return;
 
     this.pendingRegions = [...this.pendingRegions, region];
-    this.selectedRegionId = null;
     this.notifyStateChanged();
   }
 
@@ -1166,13 +1152,9 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
     ).subscribe({
       next: regions => {
         this.availableRegions = regions;
-        if (this.selectedRegionId && !this.selectableRegions.some(region => region.regionId === this.selectedRegionId)) {
-          this.selectedRegionId = null;
-        }
       },
       error: error => {
         this.availableRegions = [];
-        this.selectedRegionId = null;
         this.regionsError = this.toSafeMessage(error, 'Unable to load available regions.');
       },
     });
@@ -1185,7 +1167,6 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
       this.regionSearchDebounceHandle = null;
     }
     this.availableRegions = [];
-    this.selectedRegionId = null;
     this.pendingRegions = [];
     this.regionSearch = '';
     this.regionsError = null;

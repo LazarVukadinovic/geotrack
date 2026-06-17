@@ -118,8 +118,7 @@ describe('UserAdministrationComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Assigned Regions');
     expect(fixture.nativeElement.textContent).toContain('North');
 
-    component.selectedRegionId = 22;
-    component.addPendingRegion();
+    component.addRegionToPending({ regionId: 22, regionName: 'North', displayName: 'North' });
     expect(component.pendingRegions.map(region => region.regionId)).toEqual([22]);
 
     component.saveEdit();
@@ -701,8 +700,7 @@ describe('UserAdministrationComponent', () => {
 
     expect(component.selectableRegions.map(region => region.regionId)).toEqual([22, 23]);
 
-    component.selectedRegionId = 22;
-    component.addPendingRegion();
+    component.addRegionToPending({ regionId: 22, regionName: 'North', displayName: 'North' });
     expect(component.selectableRegions.map(region => region.regionId)).toEqual([23]);
   });
 

@@ -350,7 +350,7 @@
 // ─── Sections ─────────────────────────────────────────────────────────────────
 
 .pd__section {
-  margin-bottom: 8px;
+  margin-bottom: 20px;
 
   &--last { margin-bottom: 0; }
 }
@@ -1095,6 +1095,10 @@
 
 
 
+.pd__ownership-action {
+  display: flex;
+  gap: 10px;
+}
 .pd__ownership-status { border-radius: 999px; padding: 10px 14px; font-size: 13px; font-weight: 800; }
 .pd__ownership-status--owned { background: rgba(16,185,129,.12); color: #065f46; }
 .pd__ownership-status--pending { background: rgba(245,158,11,.14); color: #92400e; }

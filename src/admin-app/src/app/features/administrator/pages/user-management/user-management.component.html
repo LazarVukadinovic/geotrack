@@ -570,12 +570,9 @@
                   <div class="grid gap-3 lg:grid-cols-2">
                     @for (role of detail.roles; track trackByRoleName($index, role)) {
                       <div class="rounded-xl border border-gray-100 p-4">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <span class="rounded-full px-2.5 py-1 text-xs font-semibold" [class]="roleClass(role.roleName)">
-                            {{ role.displayName }}
-                          </span>
-                          <span class="text-xs font-medium text-gray-400">{{ role.assignedScope }}</span>
-                        </div>
+                        <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold" [class]="roleClass(role.roleName)">
+                          {{ role.displayName }}
+                        </span>
                         @if (role.scopes.length > 0) {
                           <div class="mt-3 flex flex-wrap gap-1.5">
                             @for (scope of role.scopes; track scope.scopeType + '-' + scope.scopeId + '-' + scope.displayName) {
@@ -584,42 +581,13 @@
                               </span>
                             }
                           </div>
+                        } @else {
+                          <p class="mt-3 text-[11px] font-medium text-gray-400">{{ role.assignedScope }}</p>
                         }
                       </div>
                     }
                   </div>
                 }
-
-                <div class="mt-5 grid gap-3 lg:grid-cols-2">
-                  <div class="rounded-xl bg-gray-50 p-4">
-                    <p class="text-xs font-semibold text-gray-400">Assigned Territories</p>
-                    @if (detail.user.assignedTerritories.length === 0) {
-                      <p class="mt-2 text-sm text-gray-500">No assigned territories.</p>
-                    } @else {
-                      <div class="mt-2 flex flex-wrap gap-1.5">
-                        @for (territory of detail.user.assignedTerritories; track territory.territoryId) {
-                          <span class="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600">
-                            {{ territory.displayName || territory.territoryName }}
-                          </span>
-                        }
-                      </div>
-                    }
-                  </div>
-                  <div class="rounded-xl bg-gray-50 p-4">
-                    <p class="text-xs font-semibold text-gray-400">Assigned Regions</p>
-                    @if (detail.user.assignedRegions.length === 0) {
-                      <p class="mt-2 text-sm text-gray-500">No assigned regions.</p>
-                    } @else {
-                      <div class="mt-2 flex flex-wrap gap-1.5">
-                        @for (region of detail.user.assignedRegions; track region.regionId) {
-                          <span class="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600">
-                            {{ region.regionName }}
-                          </span>
-                        }
-                      </div>
-                    }
-                  </div>
-                </div>
               </section>
             </div>
           }

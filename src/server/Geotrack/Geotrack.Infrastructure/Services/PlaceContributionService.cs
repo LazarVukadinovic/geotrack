@@ -511,7 +511,8 @@ public class PlaceContributionService : IPlaceContributionService
 
         _db.PlaceContributions.Add(contribution);
         await _db.SaveChangesAsync();
-        await _adminNotificationService.CreateTerritoryContributionPendingReviewNotificationAsync(contribution);
+        // Contribution/ownership requests are routed to the responsible Regional Manager (and the
+        // Content Moderator as a fallback). Territory Managers no longer receive these.
         await _adminNotificationService.CreateRegionalContributionPendingReviewNotificationAsync(contribution);
         await _adminNotificationService.CreateContentManagerContributionPendingReviewNotificationAsync(contribution);
 
@@ -705,7 +706,8 @@ public class PlaceContributionService : IPlaceContributionService
 
         if (isRejectedResubmission)
         {
-            await _adminNotificationService.CreateTerritoryContributionPendingReviewNotificationAsync(contribution);
+            // Territory Managers no longer receive contribution/ownership requests; only the
+            // Regional Manager (and Content Moderator fallback) are notified.
             await _adminNotificationService.CreateRegionalContributionPendingReviewNotificationAsync(contribution);
             await _adminNotificationService.CreateContentManagerContributionPendingReviewNotificationAsync(contribution);
         }

@@ -81,6 +81,7 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   ];
 
   private contentSearchHandle: ReturnType<typeof setTimeout> | null = null;
+  private routeSubscription: Subscription | null = null;
   private detailSubscription: Subscription | null = null;
   private contentSubscription: Subscription | null = null;
   private contentRequestSequence = 0;
@@ -98,11 +99,18 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.loadDetail();
+    // Subscribe to the route param rather than reading the snapshot once, so that
+    // navigating between region detail pages (e.g. clicking a different region
+    // notification while already on a region page) reloads the correct region instead
+    // of keeping the first one's content.
+    this.routeSubscription = this.route.paramMap.subscribe(params => {
+      this.loadDetail(params.get('id') ?? '');
+    });
   }
 
   ngOnDestroy(): void {
     this.contentRequestSequence++;
+    this.routeSubscription?.unsubscribe();
     this.detailSubscription?.unsubscribe();
     this.contentSubscription?.unsubscribe();
 
@@ -358,9 +366,23 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
       && Boolean(target.closest('a, button, input, select, textarea, [role="button"]'));
   }
 
-  private loadDetail(): void {
-    const regionId = this.route.snapshot.paramMap.get('id') ?? '';
+  private loadDetail(regionId: string): void {
     const state = history.state as { territoryId?: number } | undefined;
+
+    // Reset the per-region view state so a reused component instance doesn't show stale
+    // tabs, search, or content when switching to a different region.
+    this.detailSubscription?.unsubscribe();
+    if (this.contentSearchHandle) {
+      clearTimeout(this.contentSearchHandle);
+      this.contentSearchHandle = null;
+    }
+    this.detail = null;
+    this.activeTab = 'destinations';
+    this.contentSearch = '';
+    this.contentSort = 'name';
+    this.contentSortOpen = false;
+    this.showAllHealthDetails = false;
+    this.resetContent();
 
     this.isLoading = true;
     this.errorMessage = null;

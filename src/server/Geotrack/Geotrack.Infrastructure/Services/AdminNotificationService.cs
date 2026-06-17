@@ -254,53 +254,6 @@ public sealed class AdminNotificationService : IAdminNotificationService
             cancellationToken);
     }
 
-    public async Task CreateTerritoryContributionPendingReviewNotificationAsync(
-        PlaceContribution contribution,
-        CancellationToken cancellationToken = default)
-    {
-        if (contribution.Id <= 0)
-            return;
-
-        var row = await _db.PlaceContributions
-            .AsNoTracking()
-            .Where(item => item.Id == contribution.Id && item.LocationId.HasValue)
-            .Select(item => new
-            {
-                item.Id,
-                item.Name,
-                item.Type,
-                item.SubmittedAt,
-                RegionId = item.Location!.Destination.RegionId,
-                RegionName = item.Location.Destination.Region.Name,
-                TerritoryId = item.Location.Destination.Region.TerritoryId,
-                TerritoryName = item.Location.Destination.Region.Territory.Name
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (row is null)
-            return;
-
-        var title = "New request pending review";
-        var message = $"{ContributionTypeLabel(row.Type)} request for {TrimForMessage(row.Name, 80)} is pending in {row.RegionName}.";
-        var requestKey = Uri.EscapeDataString($"contribution:{row.Id}");
-
-        await AddNotificationIfMissingAsync(
-            audienceRole: TerritoryAudienceRole,
-            type: ContributionPendingReviewType,
-            title: title,
-            message: message,
-            severity: InfoSeverity,
-            targetType: ContributionTargetType,
-            targetId: row.Id,
-            targetRoute: $"/territory/regions/{row.RegionId}?highlight={requestKey}",
-            metadataSummary: row.RegionName,
-            createdAt: row.SubmittedAt == default ? DateTime.UtcNow : row.SubmittedAt,
-            scopeType: RegionScopeType,
-            scopeId: row.RegionId,
-            scopeLabel: BuildScopeLabel(row.RegionName, row.TerritoryName),
-            cancellationToken);
-    }
-
     public async Task CreateRegionalContributionPendingReviewNotificationAsync(
         PlaceContribution contribution,
         CancellationToken cancellationToken = default)
@@ -652,9 +605,14 @@ public sealed class AdminNotificationService : IAdminNotificationService
                 row.Notification.Type != RegionalManagerRemovedType);
         }
 
+        // Territory Managers/Associates oversee regions, not the individual contribution/ownership
+        // request queue. Those requests are handled by Regional Managers (and the Content Moderator
+        // fallback), so exclude reported reviews and contribution requests from the territory feed.
         query = query.Where(row =>
             row.Notification.Type != ReviewReportedType &&
-            row.Notification.TargetType != ReviewReportNotificationTargetType);
+            row.Notification.TargetType != ReviewReportNotificationTargetType &&
+            row.Notification.Type != ContributionPendingReviewType &&
+            row.Notification.TargetType != ContributionTargetType);
 
         return query;
     }

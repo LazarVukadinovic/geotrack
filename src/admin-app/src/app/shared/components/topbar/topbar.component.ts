@@ -6,6 +6,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { AdminView } from '../../../core/models/admin-view.model';
 import { buildAvatarDisplayUrl } from '../../../core/utils/avatar-url';
 import { AdminNotificationsService } from '../../../core/services/administrator/admin-notifications.service';
+import { NotificationReuseStrategy } from '../../../core/routing/notification-reuse-strategy';
 import {
   AdminNotification,
   AdminNotificationFilter,
@@ -61,6 +62,7 @@ export class TopbarComponent implements OnInit, OnDestroy {
   private readonly notificationRequestCancel$ = new Subject<void>();
   private notificationLoadSequence = 0;
   private readonly notificationPageSize = 25;
+  private lastNotificationNavigationUrl: string | null = null;
 
   readonly notificationSkeletonItems = [1, 2, 3, 4];
   private readonly notificationDrawerState = signal<NotificationDrawerState>(initialNotificationDrawerState());
@@ -74,6 +76,7 @@ export class TopbarComponent implements OnInit, OnDestroy {
     private readonly auth: AuthService,
     private readonly elementRef: ElementRef<HTMLElement>,
     private readonly notificationsService: AdminNotificationsService,
+    private readonly reuseStrategy: NotificationReuseStrategy,
   ) {}
 
   ngOnInit(): void {
@@ -766,13 +769,32 @@ export class TopbarComponent implements OnInit, OnDestroy {
   private resetNotificationDrawerState(): void {
     this.notificationLoadSequence += 1;
     this.notificationRequestCancel$.next();
+    this.lastNotificationNavigationUrl = null;
     this.notificationDrawerState.set(initialNotificationDrawerState());
   }
 
   private navigateNotification(notification: AdminNotification): void {
     const route = this.resolveNotificationRoute(notification);
     this.closeNotifications();
-    this.router.navigateByUrl(route);
+
+    // If the user is still on the page opened by the previous notification, replace that
+    // history entry instead of stacking a new one. This keeps the browser back button
+    // returning to wherever the user actually came from rather than walking back through
+    // every notification they clicked while staying on the same destination.
+    const stillOnPreviousNotificationPage =
+      this.lastNotificationNavigationUrl !== null
+      && this.router.url === this.lastNotificationNavigationUrl;
+
+    // Force the destination page to re-create itself so that opening a different notification
+    // while already on a notification target reloads with the new target, even when the
+    // destination component reads its id/region from a one-time route snapshot.
+    this.reuseStrategy.forceReloadOnNextNavigation();
+    const navigation = stillOnPreviousNotificationPage
+      ? this.router.navigateByUrl(route, { replaceUrl: true })
+      : this.router.navigateByUrl(route);
+    navigation.finally(() => this.reuseStrategy.reset());
+
+    this.lastNotificationNavigationUrl = route;
   }
 
   private resolveNotificationRoute(notification: AdminNotification): string {
