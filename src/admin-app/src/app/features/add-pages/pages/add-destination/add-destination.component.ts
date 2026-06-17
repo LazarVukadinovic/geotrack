@@ -14,14 +14,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
+import { finalize, forkJoin, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { CoverImageCropperComponent } from '../../../../shared/components/cover-image-cropper/cover-image-cropper.component';
 import { DashboardService } from '../../../../core/services/dashboard.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { DestinationsListService } from '../../../../core/services/destinations-list.service';
-import { RegionalMediaService } from '../../../../core/services/regional-media.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
@@ -165,7 +164,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   coverImageUrl: string | null = null;
   coverImageName = '';
   coverCropFile: File | null = null;
-  galleryImages: { url: string; name: string; file: File }[] = [];
+  galleryImages: { url: string; name: string; file?: File }[] = [];
 
   private cardImageFile: File | null = null;
   private coverImageFile: File | null = null;
@@ -209,7 +208,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     private readonly dashboardService: DashboardService,
     private readonly lightboxService: LightboxService,
     private readonly destinationsService: DestinationsListService,
-    private readonly regionalMedia: RegionalMediaService,
     private readonly auth: AuthService,
     private readonly adminMapService: AdminMapService,
     private readonly formDrafts: AdminFormDraftService,
@@ -272,8 +270,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   get canPublish(): boolean {
-    const mediaReady =
-      this.isEditMode || (Boolean(this.cardImageFile) && Boolean(this.coverImageFile));
+    const mediaReady = Boolean(this.cardImageUrl) && Boolean(this.coverImageUrl);
     return (
       Boolean(this.activeRegionId) &&
       this.destinationName.trim().length > 0 &&
@@ -454,7 +451,6 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
         this.galleryImages = (dto.galleryImageUrls ?? []).map((url, index) => ({
           url,
           name: `Existing gallery image ${index + 1}`,
-          file: null as unknown as File,
         }));
 
         this.selectedTagIds = new Set((dto.tags ?? []).map((tag) => tag.id));
@@ -914,23 +910,8 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     this.notifyStateChanged();
 
     this.createSubscription?.unsubscribe();
-    const payload$ = this.coverImageFile
-      ? this.regionalMedia.uploadImages(regionId, [this.coverImageFile]).pipe(
-          map(response => {
-            const uploadedCover = response.images[0]?.url;
-            if (!uploadedCover) {
-              throw new Error('Cover image upload did not return a URL.');
-            }
-
-            return { ...payload, coverImageUrl: uploadedCover };
-          }),
-        )
-      : of(payload);
-
-    this.createSubscription = payload$
-      .pipe(
-        switchMap(preparedPayload => this.destinationsService.updateDestination(regionId, destinationId, preparedPayload)),
-      )
+    this.createSubscription = this.destinationsService
+      .updateDestination(regionId, destinationId, payload)
       .pipe(
         finalize(() => {
           this.isSaving = false;
@@ -1021,7 +1002,9 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
       tagIds: this.selectedTagIdList(),
       cardImageFile: this.cardImageFile,
       coverImageFile: this.coverImageFile,
-      galleryImageFiles: this.galleryImages.map((image) => image.file),
+      galleryImageFiles: this.galleryImages
+        .filter((image): image is { url: string; name: string; file: File } => image.file != null)
+        .map(image => image.file),
     };
   }
 
@@ -1035,6 +1018,16 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
     const normalizedSummary = this.summary.trim();
     if (normalizedSummary.length > 160) {
       this.errorMessage = 'Summary must be 160 characters or less.';
+      return null;
+    }
+
+    if (!this.cardImageUrl) {
+      this.errorMessage = 'Card image is required.';
+      return null;
+    }
+
+    if (!this.coverImageUrl) {
+      this.errorMessage = 'Cover image is required.';
       return null;
     }
 
@@ -1080,8 +1073,12 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
           }
         : {}),
       tagIds: this.selectedTagIdList(),
+      cardImageFile: this.cardImageFile,
+      coverImageFile: this.coverImageFile,
       galleryImageUrls: this.galleryImages.filter(image => !image.file).map(image => image.url),
-      galleryImageFiles: this.galleryImages.filter(image => image.file).map(image => image.file),
+      galleryImageFiles: this.galleryImages
+        .filter((image): image is { url: string; name: string; file: File } => image.file != null)
+        .map(image => image.file),
     };
   }
 

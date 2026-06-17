@@ -204,5 +204,7 @@ export interface RegionalPlaceUpdateRequest {
   cardImageUrl?: string | null;
   coverImageUrl?: string | null;
   galleryImageUrls?: string[] | null;
+  cardImageFile?: File | null;
+  coverImageFile?: File | null;
   galleryImageFiles?: File[];
 }

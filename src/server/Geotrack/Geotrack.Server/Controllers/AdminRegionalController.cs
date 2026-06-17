@@ -1566,17 +1566,32 @@ public class AdminRegionalController : ControllerBase
         if (request is null)
             return null;
 
+        var cardImage = form.Files.GetFile("cardImage");
+        var coverImage = form.Files.GetFile("coverImage");
         var galleryImages = form.Files.GetFiles("galleryImages");
-        var filesToValidate = galleryImages.Where(file => file is { Length: > 0 }).ToList();
+
+        var filesToValidate = new List<IFormFile>();
+        if (cardImage is { Length: > 0 })
+            filesToValidate.Add(cardImage);
+        if (coverImage is { Length: > 0 })
+            filesToValidate.Add(coverImage);
+        filesToValidate.AddRange(galleryImages.Where(file => file is { Length: > 0 }));
+
         await UploadValidation.ValidateRegionalImageUploadAsync(filesToValidate, _uploadLimits, HttpContext.RequestAborted);
 
+        var cardUrl = cardImage is { Length: > 0 }
+            ? await StoreOptionalFormImageAsync(cardImage)
+            : null;
+        var coverUrl = coverImage is { Length: > 0 }
+            ? await StoreOptionalFormImageAsync(coverImage)
+            : null;
         var galleryUrls = new List<string>();
         foreach (var file in galleryImages.Where(file => file is { Length: > 0 }))
         {
             galleryUrls.Add(await StoreOptionalFormImageAsync(file));
         }
 
-        AppendGalleryImageUrls(request, galleryUrls);
+        ApplyUpdateImageUrls(request, cardUrl, coverUrl, galleryUrls);
         return request;
     }
 
@@ -1645,32 +1660,55 @@ public class AdminRegionalController : ControllerBase
     }
 
 
-    private static void AppendGalleryImageUrls<T>(T request, List<string> uploadedGalleryUrls)
+    private static void ApplyUpdateImageUrls<T>(
+        T request,
+        string? uploadedCardUrl,
+        string? uploadedCoverUrl,
+        List<string> uploadedGalleryUrls)
     {
-        if (uploadedGalleryUrls.Count == 0)
-            return;
-
         switch (request)
         {
             case RegionalDestinationUpdateRequestDto destination:
-                destination.GalleryImageUrls = (destination.GalleryImageUrls ?? new List<string>())
-                    .Concat(uploadedGalleryUrls)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                if (!string.IsNullOrWhiteSpace(uploadedCardUrl))
+                    destination.CardImageUrl = uploadedCardUrl;
+                if (!string.IsNullOrWhiteSpace(uploadedCoverUrl))
+                    destination.CoverImageUrl = uploadedCoverUrl;
+                destination.GalleryImageUrls = MergeGalleryImageUrls(
+                    destination.GalleryImageUrls,
+                    uploadedGalleryUrls);
                 break;
             case RegionalLocationUpdateRequestDto location:
-                location.GalleryImageUrls = (location.GalleryImageUrls ?? new List<string>())
-                    .Concat(uploadedGalleryUrls)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                if (!string.IsNullOrWhiteSpace(uploadedCardUrl))
+                    location.CardImageUrl = uploadedCardUrl;
+                if (!string.IsNullOrWhiteSpace(uploadedCoverUrl))
+                    location.CoverImageUrl = uploadedCoverUrl;
+                location.GalleryImageUrls = MergeGalleryImageUrls(
+                    location.GalleryImageUrls,
+                    uploadedGalleryUrls);
                 break;
             case RegionalPlaceUpdateRequestDto place:
-                place.GalleryImageUrls = (place.GalleryImageUrls ?? new List<string>())
-                    .Concat(uploadedGalleryUrls)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                if (!string.IsNullOrWhiteSpace(uploadedCardUrl))
+                    place.CardImageUrl = uploadedCardUrl;
+                if (!string.IsNullOrWhiteSpace(uploadedCoverUrl))
+                    place.CoverImageUrl = uploadedCoverUrl;
+                place.GalleryImageUrls = MergeGalleryImageUrls(
+                    place.GalleryImageUrls,
+                    uploadedGalleryUrls);
                 break;
         }
+    }
+
+    private static List<string>? MergeGalleryImageUrls(
+        List<string>? existingGalleryUrls,
+        List<string> uploadedGalleryUrls)
+    {
+        if (uploadedGalleryUrls.Count == 0)
+            return existingGalleryUrls;
+
+        return (existingGalleryUrls ?? new List<string>())
+            .Concat(uploadedGalleryUrls)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static void ApplyImageUrls<T>(T request, string cardUrl, string coverUrl, List<string> galleryUrls)

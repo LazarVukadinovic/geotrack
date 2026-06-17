@@ -14,7 +14,7 @@ import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
+import { finalize, forkJoin, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { CoverImageCropperComponent } from '../../../../shared/components/cover-image-cropper/cover-image-cropper.component';
@@ -22,7 +22,6 @@ import { DashboardService } from '../../../../core/services/dashboard.service';
 import { LightboxService } from '../../../../core/services/lightbox.service';
 import { PlacesListService } from '../../../../core/services/places-list.service';
 import { DestinationsListService } from '../../../../core/services/destinations-list.service';
-import { RegionalMediaService } from '../../../../core/services/regional-media.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AdminMapService } from '../../../../core/services/admin-map.service';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
@@ -313,7 +312,6 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     private readonly lightboxService: LightboxService,
     private readonly placesService: PlacesListService,
     private readonly destinationsService: DestinationsListService,
-    private readonly regionalMedia: RegionalMediaService,
     private readonly auth: AuthService,
     private readonly http: HttpClient,
     private readonly adminMapService: AdminMapService,
@@ -503,7 +501,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   get canPublish(): boolean {
-    const mediaReady = this.isEditMode || (Boolean(this.cardImageFile) && Boolean(this.coverImageFile));
+    const mediaReady = Boolean(this.cardImageUrl) && Boolean(this.coverImageUrl);
     return Boolean(this.activeRegionId) &&
       Boolean(this.parentDestinationId) &&
       Boolean(this.parentLocationId) &&
@@ -1519,23 +1517,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.notifyStateChanged();
 
     this.createSubscription?.unsubscribe();
-    const payload$ = this.coverImageFile
-      ? this.regionalMedia.uploadImages(regionId, [this.coverImageFile]).pipe(
-          map(response => {
-            const uploadedCover = response.images[0]?.url;
-            if (!uploadedCover) {
-              throw new Error('Cover image upload did not return a URL.');
-            }
-
-            return { ...payload, coverImageUrl: uploadedCover };
-          }),
-        )
-      : of(payload);
-
-    this.createSubscription = payload$
-      .pipe(
-        switchMap(preparedPayload => this.placesService.updatePlace(regionId, placeId, preparedPayload)),
-      )
+    this.createSubscription = this.placesService
+      .updatePlace(regionId, placeId, payload)
       .pipe(
         finalize(() => {
           this.isSaving = false;
@@ -1739,6 +1722,16 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       return null;
     }
 
+    if (!this.cardImageUrl) {
+      this.errorMessage = 'Card image is required.';
+      return null;
+    }
+
+    if (!this.coverImageUrl) {
+      this.errorMessage = 'Cover image is required.';
+      return null;
+    }
+
     const coordinates = this.readPinnedCoordinates();
     if (!coordinates) {
       this.errorMessage = 'Place coordinates are required before updating.';
@@ -1806,6 +1799,8 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       operatingHoursEnabled: this.opsEnabled,
       operatingHours,
       tagIds: this.selectedTagIdList(),
+      cardImageFile: this.cardImageFile,
+      coverImageFile: this.coverImageFile,
       galleryImageUrls: this.galleryImages.filter(image => !image.file).map(image => image.url),
       galleryImageFiles: this.galleryImages
         .filter((image): image is { url: string; name: string; file: File } => image.file != null)

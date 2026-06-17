@@ -215,9 +215,12 @@ export class DestinationsListService {
   }
 
   private buildUpdateFormData(payload: RegionalDestinationUpdateRequest): FormData {
-    const { galleryImageFiles, ...request } = payload;
+    const { cardImageFile, coverImageFile, galleryImageFiles, ...request } = payload;
     const formData = new FormData();
     formData.append('payload', JSON.stringify(request));
+
+    if (cardImageFile) formData.append('cardImage', cardImageFile);
+    if (coverImageFile) formData.append('coverImage', coverImageFile);
 
     for (const file of galleryImageFiles ?? []) {
       if (file) {
