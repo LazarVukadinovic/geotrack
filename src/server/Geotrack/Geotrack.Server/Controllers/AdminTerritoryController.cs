@@ -16,6 +16,7 @@ public sealed class AdminTerritoryController : ControllerBase
     private readonly ITerritoryAnalyticsService _territoryAnalytics;
     private readonly ITerritoryUserAdminService _territoryUsers;
     private readonly IAdmBoundaryRegionSyncService _regionSync;
+    private readonly ILocalBoundaryImportService _localBoundaryImport;
     private readonly IEntityProfileService _entityProfile;
     private readonly IRegionalEntityImageStorageService _imageStorage;
     private readonly ILogger<AdminTerritoryController> _logger;
@@ -25,6 +26,7 @@ public sealed class AdminTerritoryController : ControllerBase
         ITerritoryAnalyticsService territoryAnalytics,
         ITerritoryUserAdminService territoryUsers,
         IAdmBoundaryRegionSyncService regionSync,
+        ILocalBoundaryImportService localBoundaryImport,
         IEntityProfileService entityProfile,
         IRegionalEntityImageStorageService imageStorage,
         ILogger<AdminTerritoryController> logger)
@@ -33,6 +35,7 @@ public sealed class AdminTerritoryController : ControllerBase
         _territoryAnalytics = territoryAnalytics;
         _territoryUsers = territoryUsers;
         _regionSync = regionSync;
+        _localBoundaryImport = localBoundaryImport;
         _entityProfile = entityProfile;
         _imageStorage = imageStorage;
         _logger = logger;
@@ -387,9 +390,63 @@ public sealed class AdminTerritoryController : ControllerBase
 
         try
         {
-            return Ok(await _regionSync.SyncRegionsFromAdm1CandidatesForTerritoryManagerAsync(
-                GetCurrentUserId(),
+            var userId = GetCurrentUserId();
+            var setupStatus = await _regionSync.GetRegionSetupStatusForTerritoryManagerAsync(
+                userId,
                 territoryId,
+                cancellationToken);
+
+            if (setupStatus.MissingCandidateData)
+            {
+                if (dryRun)
+                {
+                    throw new InvalidOperationException(
+                        "ADM1 boundary data has not been imported yet. Run Get Started to import boundaries and initialize regions.");
+                }
+
+                _logger.LogInformation(
+                    "Territory Manager {UserId} is importing ADM1 boundaries for territory {TerritoryId} ({CountryIso3}) before region setup.",
+                    userId,
+                    setupStatus.TerritoryId,
+                    setupStatus.CountryIso3);
+
+                var importSummary = await _localBoundaryImport.ImportLocalBoundariesAsync(
+                    "ADM1",
+                    forceRefresh: force,
+                    countryIso3: setupStatus.CountryIso3,
+                    take: null,
+                    cancellationToken: cancellationToken);
+
+                _logger.LogInformation(
+                    "Territory Manager ADM1 import completed for territory {TerritoryId} ({CountryIso3}). imported={Imported}; updated={Updated}; skipped={Skipped}; failed={Failed}.",
+                    setupStatus.TerritoryId,
+                    setupStatus.CountryIso3,
+                    importSummary.ImportedCandidatesCount,
+                    importSummary.UpdatedCandidatesCount,
+                    importSummary.SkippedCandidatesCount,
+                    importSummary.FailedCandidatesCount);
+
+                setupStatus = await _regionSync.GetRegionSetupStatusForTerritoryManagerAsync(
+                    userId,
+                    setupStatus.TerritoryId,
+                    cancellationToken);
+
+                if (setupStatus.MissingCandidateData)
+                {
+                    var firstFailure = importSummary.FailedItems
+                        .Select(item => item.Message)
+                        .FirstOrDefault(message => !string.IsNullOrWhiteSpace(message));
+
+                    throw new InvalidOperationException(
+                        firstFailure is null
+                            ? $"ADM1 boundary import completed, but no boundary candidates were found for {setupStatus.CountryIso3}."
+                            : $"ADM1 boundary import failed for {setupStatus.CountryIso3}: {firstFailure}");
+                }
+            }
+
+            return Ok(await _regionSync.SyncRegionsFromAdm1CandidatesForTerritoryManagerAsync(
+                userId,
+                setupStatus.TerritoryId,
                 dryRun,
                 force || forceUpdateGeometry,
                 createMissingRegions: true,

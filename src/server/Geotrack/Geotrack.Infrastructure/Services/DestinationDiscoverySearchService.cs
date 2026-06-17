@@ -348,10 +348,15 @@ public class DestinationDiscoverySearchService
         if (destinationIds.Length == 0)
             return [];
 
-        return await _db.Destinations
+        // Do not project all child collections in one query. The previous query
+        // projected destination tags, matching locations, location tags, places,
+        // place tags, place types and stay types at once. EF translated that into
+        // one very large cartesian query, which caused a sharp memory spike in
+        // production. Load the scalar destination rows first and hydrate each
+        // collection with small flat queries instead.
+        var rows = await _db.Destinations
             .AsNoTracking()
             .Where(destination => destinationIds.Contains(destination.Id))
-            .AsSplitQuery()
             .Select(destination => new DestinationSearchRow
             {
                 Id = destination.Id,
@@ -370,152 +375,247 @@ public class DestinationDiscoverySearchService
                     .ThenBy(image => image.Id)
                     .Select(image => image.Url)
                     .FirstOrDefault(),
-                Tags = destination.DestinationTags
-                    .OrderBy(destinationTag => destinationTag.Tag.Name)
-                    .Select(destinationTag => new DestinationDiscoveryTagDto
-                    {
-                        Id = destinationTag.TagId,
-                        Name = destinationTag.Tag.Name,
-                        Slug = destinationTag.Tag.Slug,
-                        TagTypeId = destinationTag.Tag.TagTypeId,
-                        TagTypeSlug = destinationTag.Tag.TagType != null ? destinationTag.Tag.TagType.Slug : null
-                    })
-                    .ToList(),
                 DestinationTypeMatched = selectedDestinationTypeIds.Contains(destination.DestinationTypeId) ||
-                    (hasQuery && destination.DestinationType.Name.ToLower().Contains(term)),
-                MatchedDestinationTags = destination.DestinationTags
-                    .Where(destinationTag =>
-                        selectedTagIds.Contains(destinationTag.TagId) ||
-                        (hasQuery &&
-                         (destinationTag.Tag.Name.ToLower().Contains(term) ||
-                          destinationTag.Tag.Slug.ToLower().Contains(term))))
-                    .OrderBy(destinationTag => destinationTag.Tag.Name)
-                    .ThenBy(destinationTag => destinationTag.TagId)
-                    .Select(destinationTag => destinationTag.Tag.Name)
-                    .ToList(),
-                MatchedLocationNames = destination.Locations
-                    .Where(location =>
-                        location.Status == PublishedStatus &&
-                        hasQuery &&
-                        (
-                            location.Name.ToLower().Contains(term) ||
-                            (location.Summary != null && location.Summary.ToLower().Contains(term)) ||
-                            location.Description.ToLower().Contains(term) ||
-                            location.LocationType.Name.ToLower().Contains(term) ||
-                            location.LocationTags.Any(locationTag =>
-                                locationTag.Tag.Name.ToLower().Contains(term) ||
-                                locationTag.Tag.Slug.ToLower().Contains(term))
-                        ))
-                    .OrderBy(location => location.Name)
-                    .ThenBy(location => location.Id)
-                    .Select(location => location.Name)
-                    .Take(5)
-                    .ToList(),
-                MatchedLocationTags = destination.Locations
-                    .Where(location => location.Status == PublishedStatus)
-                    .SelectMany(location => location.LocationTags)
-                    .Where(locationTag =>
-                        hasQuery &&
-                        (locationTag.Tag.Name.ToLower().Contains(term) ||
-                         locationTag.Tag.Slug.ToLower().Contains(term)))
-                    .OrderBy(locationTag => locationTag.Tag.Name)
-                    .ThenBy(locationTag => locationTag.TagId)
-                    .Select(locationTag => locationTag.Tag.Name)
-                    .Take(8)
-                    .ToList(),
-                MatchedPlaceNames = destination.Locations
-                    .Where(location => location.Status == PublishedStatus)
-                    .SelectMany(location => location.Places)
-                    .Where(place =>
-                        place.Status == PublishedStatus &&
-                        hasQuery &&
-                        (
-                            place.Name.ToLower().Contains(term) ||
-                            (place.Subtitle != null && place.Subtitle.ToLower().Contains(term)) ||
-                            (place.Address != null && place.Address.ToLower().Contains(term)) ||
-                            place.Description.ToLower().Contains(term) ||
-                            place.PlaceType.Name.ToLower().Contains(term) ||
-                            (place.Stay != null && place.Stay.StayType.Name.ToLower().Contains(term)) ||
-                            place.PlaceTags.Any(placeTag =>
-                                placeTag.Tag.Name.ToLower().Contains(term) ||
-                                placeTag.Tag.Slug.ToLower().Contains(term))
-                        ))
-                    .OrderBy(place => place.Name)
-                    .ThenBy(place => place.Id)
-                    .Select(place => place.Name)
-                    .Take(5)
-                    .ToList(),
-                MatchedPlaceTags = destination.Locations
-                    .Where(location => location.Status == PublishedStatus)
-                    .SelectMany(location => location.Places)
-                    .Where(place => place.Status == PublishedStatus)
-                    .SelectMany(place => place.PlaceTags)
-                    .Where(placeTag =>
-                        hasQuery &&
-                        (placeTag.Tag.Name.ToLower().Contains(term) ||
-                         placeTag.Tag.Slug.ToLower().Contains(term)))
-                    .OrderBy(placeTag => placeTag.Tag.Name)
-                    .ThenBy(placeTag => placeTag.TagId)
-                    .Select(placeTag => placeTag.Tag.Name)
-                    .Take(8)
-                    .ToList(),
-                MatchedPlaceTypes = destination.Locations
-                    .Where(location => location.Status == PublishedStatus)
-                    .SelectMany(location => location.Places)
-                    .Where(place =>
-                        place.Status == PublishedStatus &&
-                        hasQuery &&
-                        place.PlaceType.Name.ToLower().Contains(term))
-                    .OrderBy(place => place.PlaceType.Name)
-                    .ThenBy(place => place.PlaceTypeId)
-                    .Select(place => place.PlaceType.Name)
-                    .Take(8)
-                    .ToList(),
-                MatchedStayTypes = destination.Locations
-                    .Where(location => location.Status == PublishedStatus)
-                    .SelectMany(location => location.Places)
-                    .Where(place =>
-                        place.Status == PublishedStatus &&
-                        place.Stay != null &&
-                        hasQuery &&
-                        place.Stay.StayType.Name.ToLower().Contains(term))
-                    .OrderBy(place => place.Stay!.StayType.Name)
-                    .ThenBy(place => place.Stay!.StayTypeId)
-                    .Select(place => place.Stay!.StayType.Name)
-                    .Take(8)
-                    .ToList(),
-                MatchedLocationCount = destination.Locations
-                    .Count(location =>
-                        location.Status == PublishedStatus &&
-                        hasQuery &&
-                        (
-                            location.Name.ToLower().Contains(term) ||
-                            (location.Summary != null && location.Summary.ToLower().Contains(term)) ||
-                            location.Description.ToLower().Contains(term) ||
-                            location.LocationType.Name.ToLower().Contains(term) ||
-                            location.LocationTags.Any(locationTag =>
-                                locationTag.Tag.Name.ToLower().Contains(term) ||
-                                locationTag.Tag.Slug.ToLower().Contains(term))
-                        )),
-                MatchedPlaceCount = destination.Locations
-                    .Where(location => location.Status == PublishedStatus)
-                    .SelectMany(location => location.Places)
-                    .Count(place =>
-                        place.Status == PublishedStatus &&
-                        hasQuery &&
-                        (
-                            place.Name.ToLower().Contains(term) ||
-                            (place.Subtitle != null && place.Subtitle.ToLower().Contains(term)) ||
-                            (place.Address != null && place.Address.ToLower().Contains(term)) ||
-                            place.Description.ToLower().Contains(term) ||
-                            place.PlaceType.Name.ToLower().Contains(term) ||
-                            (place.Stay != null && place.Stay.StayType.Name.ToLower().Contains(term)) ||
-                            place.PlaceTags.Any(placeTag =>
-                                placeTag.Tag.Name.ToLower().Contains(term) ||
-                                placeTag.Tag.Slug.ToLower().Contains(term))
-                        ))
+                    (hasQuery && destination.DestinationType.Name.ToLower().Contains(term))
             })
             .ToListAsync(cancellationToken);
+
+        var rowsById = rows.ToDictionary(row => row.Id);
+
+        var destinationTags = await _db.DestinationTags
+            .AsNoTracking()
+            .Where(destinationTag => destinationIds.Contains(destinationTag.DestinationId))
+            .OrderBy(destinationTag => destinationTag.DestinationId)
+            .ThenBy(destinationTag => destinationTag.Tag.Name)
+            .ThenBy(destinationTag => destinationTag.TagId)
+            .Select(destinationTag => new
+            {
+                destinationTag.DestinationId,
+                destinationTag.TagId,
+                destinationTag.Tag.Name,
+                destinationTag.Tag.Slug,
+                destinationTag.Tag.TagTypeId,
+                TagTypeSlug = destinationTag.Tag.TagType != null
+                    ? destinationTag.Tag.TagType.Slug
+                    : null
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in destinationTags.GroupBy(tag => tag.DestinationId))
+        {
+            if (!rowsById.TryGetValue(group.Key, out var row))
+                continue;
+
+            row.Tags = group
+                .Select(tag => new DestinationDiscoveryTagDto
+                {
+                    Id = tag.TagId,
+                    Name = tag.Name,
+                    Slug = tag.Slug,
+                    TagTypeId = tag.TagTypeId,
+                    TagTypeSlug = tag.TagTypeSlug
+                })
+                .ToList();
+
+            row.MatchedDestinationTags = TakeDistinctNames(
+                group
+                    .Where(tag =>
+                        selectedTagIds.Contains(tag.TagId) ||
+                        (hasQuery &&
+                         (tag.Name.ToLower().Contains(term) ||
+                          tag.Slug.ToLower().Contains(term))))
+                    .Select(tag => tag.Name),
+                8);
+        }
+
+        if (!hasQuery)
+            return rows;
+
+        var matchedLocations = await _db.Locations
+            .AsNoTracking()
+            .Where(location =>
+                destinationIds.Contains(location.DestinationId) &&
+                location.Status == PublishedStatus &&
+                (
+                    location.Name.ToLower().Contains(term) ||
+                    (location.Summary != null && location.Summary.ToLower().Contains(term)) ||
+                    location.Description.ToLower().Contains(term) ||
+                    location.LocationType.Name.ToLower().Contains(term) ||
+                    location.LocationTags.Any(locationTag =>
+                        locationTag.Tag.Name.ToLower().Contains(term) ||
+                        locationTag.Tag.Slug.ToLower().Contains(term))
+                ))
+            .OrderBy(location => location.DestinationId)
+            .ThenBy(location => location.Name)
+            .ThenBy(location => location.Id)
+            .Select(location => new
+            {
+                location.DestinationId,
+                location.Id,
+                location.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in matchedLocations.GroupBy(location => location.DestinationId))
+        {
+            if (!rowsById.TryGetValue(group.Key, out var row))
+                continue;
+
+            var matches = group.ToList();
+            row.MatchedLocationCount = matches.Count;
+            row.MatchedLocationNames = TakeDistinctNames(matches.Select(location => location.Name), 5);
+        }
+
+        var matchedLocationTags = await _db.LocationTags
+            .AsNoTracking()
+            .Where(locationTag =>
+                destinationIds.Contains(locationTag.Location.DestinationId) &&
+                locationTag.Location.Status == PublishedStatus &&
+                (
+                    locationTag.Tag.Name.ToLower().Contains(term) ||
+                    locationTag.Tag.Slug.ToLower().Contains(term)
+                ))
+            .OrderBy(locationTag => locationTag.Location.DestinationId)
+            .ThenBy(locationTag => locationTag.Tag.Name)
+            .ThenBy(locationTag => locationTag.TagId)
+            .Select(locationTag => new
+            {
+                locationTag.Location.DestinationId,
+                locationTag.TagId,
+                locationTag.Tag.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in matchedLocationTags.GroupBy(tag => tag.DestinationId))
+        {
+            if (rowsById.TryGetValue(group.Key, out var row))
+                row.MatchedLocationTags = TakeDistinctNames(group.Select(tag => tag.Name), 8);
+        }
+
+        var matchedPlaces = await _db.Places
+            .AsNoTracking()
+            .Where(place =>
+                destinationIds.Contains(place.Location.DestinationId) &&
+                place.Location.Status == PublishedStatus &&
+                place.Status == PublishedStatus &&
+                (
+                    place.Name.ToLower().Contains(term) ||
+                    (place.Subtitle != null && place.Subtitle.ToLower().Contains(term)) ||
+                    (place.Address != null && place.Address.ToLower().Contains(term)) ||
+                    place.Description.ToLower().Contains(term) ||
+                    place.PlaceType.Name.ToLower().Contains(term) ||
+                    (place.Stay != null && place.Stay.StayType.Name.ToLower().Contains(term)) ||
+                    place.PlaceTags.Any(placeTag =>
+                        placeTag.Tag.Name.ToLower().Contains(term) ||
+                        placeTag.Tag.Slug.ToLower().Contains(term))
+                ))
+            .OrderBy(place => place.Location.DestinationId)
+            .ThenBy(place => place.Name)
+            .ThenBy(place => place.Id)
+            .Select(place => new
+            {
+                DestinationId = place.Location.DestinationId,
+                place.Id,
+                place.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in matchedPlaces.GroupBy(place => place.DestinationId))
+        {
+            if (!rowsById.TryGetValue(group.Key, out var row))
+                continue;
+
+            var matches = group.ToList();
+            row.MatchedPlaceCount = matches.Count;
+            row.MatchedPlaceNames = TakeDistinctNames(matches.Select(place => place.Name), 5);
+        }
+
+        var matchedPlaceTags = await _db.PlaceTags
+            .AsNoTracking()
+            .Where(placeTag =>
+                destinationIds.Contains(placeTag.Place.Location.DestinationId) &&
+                placeTag.Place.Location.Status == PublishedStatus &&
+                placeTag.Place.Status == PublishedStatus &&
+                (
+                    placeTag.Tag.Name.ToLower().Contains(term) ||
+                    placeTag.Tag.Slug.ToLower().Contains(term)
+                ))
+            .OrderBy(placeTag => placeTag.Place.Location.DestinationId)
+            .ThenBy(placeTag => placeTag.Tag.Name)
+            .ThenBy(placeTag => placeTag.TagId)
+            .Select(placeTag => new
+            {
+                DestinationId = placeTag.Place.Location.DestinationId,
+                placeTag.TagId,
+                placeTag.Tag.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in matchedPlaceTags.GroupBy(tag => tag.DestinationId))
+        {
+            if (rowsById.TryGetValue(group.Key, out var row))
+                row.MatchedPlaceTags = TakeDistinctNames(group.Select(tag => tag.Name), 8);
+        }
+
+        var matchedPlaceTypes = await _db.Places
+            .AsNoTracking()
+            .Where(place =>
+                destinationIds.Contains(place.Location.DestinationId) &&
+                place.Location.Status == PublishedStatus &&
+                place.Status == PublishedStatus &&
+                place.PlaceType.Name.ToLower().Contains(term))
+            .OrderBy(place => place.Location.DestinationId)
+            .ThenBy(place => place.PlaceType.Name)
+            .ThenBy(place => place.PlaceTypeId)
+            .Select(place => new
+            {
+                DestinationId = place.Location.DestinationId,
+                place.PlaceTypeId,
+                place.PlaceType.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in matchedPlaceTypes.GroupBy(placeType => placeType.DestinationId))
+        {
+            if (rowsById.TryGetValue(group.Key, out var row))
+                row.MatchedPlaceTypes = TakeDistinctNames(group.Select(placeType => placeType.Name), 8);
+        }
+
+        var matchedStayTypes = await _db.Places
+            .AsNoTracking()
+            .Where(place =>
+                destinationIds.Contains(place.Location.DestinationId) &&
+                place.Location.Status == PublishedStatus &&
+                place.Status == PublishedStatus &&
+                place.Stay != null &&
+                place.Stay.StayType.Name.ToLower().Contains(term))
+            .OrderBy(place => place.Location.DestinationId)
+            .ThenBy(place => place.Stay!.StayType.Name)
+            .ThenBy(place => place.Stay!.StayTypeId)
+            .Select(place => new
+            {
+                DestinationId = place.Location.DestinationId,
+                StayTypeId = place.Stay!.StayTypeId,
+                Name = place.Stay!.StayType.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in matchedStayTypes.GroupBy(stayType => stayType.DestinationId))
+        {
+            if (rowsById.TryGetValue(group.Key, out var row))
+                row.MatchedStayTypes = TakeDistinctNames(group.Select(stayType => stayType.Name), 8);
+        }
+
+        return rows;
+    }
+
+    private static List<string> TakeDistinctNames(IEnumerable<string> values, int take)
+    {
+        return values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(take)
+            .ToList();
     }
 
     private static DestinationDiscoverySearchItemDto MapRow(DestinationSearchRow row, double score)

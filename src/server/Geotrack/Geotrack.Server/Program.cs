@@ -613,14 +613,16 @@ var shouldAutoMigrate =
 
 if (shouldAutoMigrate || shouldSeedOperationalUsers || shouldSeedDemoContent || shouldSeedPublicContent)
 {
-    using var strategyScope = app.Services.CreateScope();
-    var strategyDb = strategyScope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var strategy = strategyDb.Database.CreateExecutionStrategy();
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var strategy = db.Database.CreateExecutionStrategy();
 
     await strategy.ExecuteAsync(async () =>
     {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        // The execution strategy and every scoped startup service must use the same
+        // DbContext. Otherwise a scoped service that opens a transaction is treated as
+        // an unrelated user transaction and EnableRetryOnFailure rejects SaveChanges.
+        db.ChangeTracker.Clear();
 
         await db.Database.MigrateAsync();
 
