@@ -345,59 +345,66 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
             ?? throw new InvalidOperationException("Country code is invalid.");
         var now = DateTime.UtcNow;
 
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-
-        var existing = await _db.Territories
-            .Include(territory => territory.TerritoryManagerTerritories)
-            .FirstOrDefaultAsync(
-                territory =>
-                    territory.TerritoryKind == TerritoryKinds.Country &&
-                    (territory.CountryIso3 == countryIso3 ||
-                     territory.CountryCode == countryCode ||
-                     (territory.CountryCode == null &&
-                      territory.Name.ToLower() == name.ToLower())),
-                cancellationToken);
-
-        if (existing is null)
+        var territoryId = await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            throw new InvalidOperationException("Boundary data is missing. Import ADM0 boundary before assigning this territory.");
-        }
+            // A retry must start from a clean tracked state. All reads and writes that belong
+            // to the transaction are intentionally performed inside the execution strategy.
+            _db.ChangeTracker.Clear();
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
 
-        if (existing.TerritoryManagerTerritories.Count > 0)
-        {
-            throw new InvalidOperationException("This country is already assigned to a territory.");
-        }
+            var existing = await _db.Territories
+                .Include(territory => territory.TerritoryManagerTerritories)
+                .FirstOrDefaultAsync(
+                    territory =>
+                        territory.TerritoryKind == TerritoryKinds.Country &&
+                        (territory.CountryIso3 == countryIso3 ||
+                         territory.CountryCode == countryCode ||
+                         (territory.CountryCode == null &&
+                          territory.Name.ToLower() == name.ToLower())),
+                    cancellationToken);
 
-        var boundary = await _db.Territories
-            .Where(item => item.Id == existing.Id)
-            .Select(item => EF.Property<Geometry?>(item, BoundaryGeometryPropertyName))
-            .SingleAsync(cancellationToken);
-        if (!IsValidAdm0Boundary(boundary))
-        {
-            throw new InvalidOperationException(MissingBoundaryAssignmentMessage);
-        }
+            if (existing is null)
+            {
+                throw new InvalidOperationException("Boundary data is missing. Import ADM0 boundary before assigning this territory.");
+            }
 
-        existing.Name = name;
-        existing.TerritoryKind = TerritoryKinds.Country;
-        existing.CountryCode = countryCode;
-        existing.CountryIso3 = countryIso3;
-        existing.UpdatedAt = now;
+            if (existing.TerritoryManagerTerritories.Count > 0)
+            {
+                throw new InvalidOperationException("This country is already assigned to a territory.");
+            }
 
-        if (request.AssignedManagerUserId.HasValue)
-        {
-            await AssignManagerToTerritoryAsync(
-                existing,
-                request.AssignedManagerUserId.Value,
-                allowedExistingTerritoryId: null,
-                now,
-                cancellationToken);
-        }
+            var boundary = await _db.Territories
+                .Where(item => item.Id == existing.Id)
+                .Select(item => EF.Property<Geometry?>(item, BoundaryGeometryPropertyName))
+                .SingleAsync(cancellationToken);
+            if (!IsValidAdm0Boundary(boundary))
+            {
+                throw new InvalidOperationException(MissingBoundaryAssignmentMessage);
+            }
 
-        await _db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            existing.Name = name;
+            existing.TerritoryKind = TerritoryKinds.Country;
+            existing.CountryCode = countryCode;
+            existing.CountryIso3 = countryIso3;
+            existing.UpdatedAt = now;
+
+            if (request.AssignedManagerUserId.HasValue)
+            {
+                await AssignManagerToTerritoryAsync(
+                    existing,
+                    request.AssignedManagerUserId.Value,
+                    allowedExistingTerritoryId: null,
+                    now,
+                    cancellationToken);
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return existing.Id;
+        });
+
         TerritoryMapBoundaryCache.Invalidate(_cache);
-
-        return await GetTerritoryDtoAsync(existing.Id, cancellationToken);
+        return await GetTerritoryDtoAsync(territoryId, cancellationToken);
     }
 
     public async Task<AdminTerritoryDetailDto> AssignManagerAsync(
@@ -408,77 +415,83 @@ public sealed class AdminTerritoryManagementService : IAdminTerritoryManagementS
         if (territoryId <= 0)
             throw new InvalidOperationException("Territory id is required.");
 
-        var territory = await _db.Territories
-            .Include(item => item.TerritoryManagerTerritories)
-                .ThenInclude(assignment => assignment.TerritoryManager)
-                    .ThenInclude(manager => manager.User)
-                        .ThenInclude(user => user.UserRoles)
-                            .ThenInclude(userRole => userRole.Role)
-            .AsSplitQuery()
-            .SingleOrDefaultAsync(item => item.Id == territoryId, cancellationToken)
-            ?? throw new KeyNotFoundException("Territory not found.");
-
         var requestedManagerUserId = request.ManagerUserId ?? request.AssignedManagerUserId;
 
-        if (requestedManagerUserId.HasValue)
+        await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            if (!IsCountryKind(territory.TerritoryKind))
+            // EnableRetryOnFailure requires the complete user transaction to be executed as
+            // one retriable unit. Clearing tracked state also makes a repeated attempt fresh.
+            _db.ChangeTracker.Clear();
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+            var territory = await _db.Territories
+                .Include(item => item.TerritoryManagerTerritories)
+                    .ThenInclude(assignment => assignment.TerritoryManager)
+                        .ThenInclude(manager => manager.User)
+                            .ThenInclude(user => user.UserRoles)
+                                .ThenInclude(userRole => userRole.Role)
+                .AsSplitQuery()
+                .SingleOrDefaultAsync(item => item.Id == territoryId, cancellationToken)
+                ?? throw new KeyNotFoundException("Territory not found.");
+
+            if (requestedManagerUserId.HasValue)
             {
-                throw new InvalidOperationException(DisputedViewOnlyMessage);
+                if (!IsCountryKind(territory.TerritoryKind))
+                {
+                    throw new InvalidOperationException(DisputedViewOnlyMessage);
+                }
+
+                var boundary = await _db.Territories
+                    .Where(item => item.Id == territoryId)
+                    .Select(item => EF.Property<Geometry?>(item, BoundaryGeometryPropertyName))
+                    .SingleAsync(cancellationToken);
+
+                if (!IsValidAdm0Boundary(boundary))
+                {
+                    throw new InvalidOperationException(MissingBoundaryAssignmentMessage);
+                }
             }
 
-            var boundary = await _db.Territories
-                .Where(item => item.Id == territoryId)
-                .Select(item => EF.Property<Geometry?>(item, BoundaryGeometryPropertyName))
-                .SingleAsync(cancellationToken);
-
-            if (!IsValidAdm0Boundary(boundary))
+            var alreadyAssignedManagerUserId = territory.TerritoryManagerTerritories
+                .Select(assignment => assignment.UserId)
+                .FirstOrDefault();
+            if (requestedManagerUserId.HasValue &&
+                requestedManagerUserId.Value == alreadyAssignedManagerUserId)
             {
-                throw new InvalidOperationException(MissingBoundaryAssignmentMessage);
+                territory.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return;
             }
-        }
 
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            var currentManagerAssignments = territory.TerritoryManagerTerritories
+                .Where(assignment => !requestedManagerUserId.HasValue || assignment.UserId != requestedManagerUserId.Value)
+                .ToList();
+            var removedManagerUserIds = currentManagerAssignments
+                .Select(assignment => assignment.UserId)
+                .Distinct()
+                .ToList();
+            _db.TerritoryManagerTerritories.RemoveRange(currentManagerAssignments);
 
-        var alreadyAssignedManagerUserId = territory.TerritoryManagerTerritories
-            .Select(assignment => assignment.UserId)
-            .FirstOrDefault();
-        if (requestedManagerUserId.HasValue &&
-            requestedManagerUserId.Value == alreadyAssignedManagerUserId)
-        {
+            foreach (var removedUserId in removedManagerUserIds)
+            {
+                await RemoveTerritoryManagerRoleIfUnassignedAsync(removedUserId, territoryId, cancellationToken);
+            }
+
+            if (requestedManagerUserId.HasValue)
+            {
+                await AssignManagerToTerritoryAsync(
+                    territory,
+                    requestedManagerUserId.Value,
+                    allowedExistingTerritoryId: territoryId,
+                    DateTime.UtcNow,
+                    cancellationToken);
+            }
+
             territory.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return await GetTerritoryDetailAsync(territoryId, cancellationToken);
-        }
-
-        var currentManagerAssignments = territory.TerritoryManagerTerritories
-            .Where(assignment => !requestedManagerUserId.HasValue || assignment.UserId != requestedManagerUserId.Value)
-            .ToList();
-        var removedManagerUserIds = currentManagerAssignments
-            .Select(assignment => assignment.UserId)
-            .Distinct()
-            .ToList();
-        _db.TerritoryManagerTerritories.RemoveRange(currentManagerAssignments);
-
-        foreach (var removedUserId in removedManagerUserIds)
-        {
-            await RemoveTerritoryManagerRoleIfUnassignedAsync(removedUserId, territoryId, cancellationToken);
-        }
-
-        if (requestedManagerUserId.HasValue)
-        {
-            await AssignManagerToTerritoryAsync(
-                territory,
-                requestedManagerUserId.Value,
-                allowedExistingTerritoryId: territoryId,
-                DateTime.UtcNow,
-                cancellationToken);
-        }
-
-        territory.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        });
 
         return await GetTerritoryDetailAsync(territoryId, cancellationToken);
     }
