@@ -148,9 +148,13 @@ img.image-fallback-active {
   pointer-events: none;
 }
 
-.gt-marker--place { color: #2f855a; }
+.gt-marker--place,
+.gt-marker--other { color: #64748b; }
 .gt-marker--stay { color: #e8570a; }
-.gt-marker--event { color: #2563eb; }
+.gt-marker--restaurant { color: #b45309; }
+.gt-marker--drinks { color: #7c3aed; }
+.gt-marker--attraction { color: #2563eb; }
+.gt-marker--event { color: #0f766e; }
 
 .gt-marker--destination {
   width: 46px;
@@ -277,9 +281,14 @@ img.image-fallback-active {
   box-shadow: 0 6px 14px rgba(15, 23, 42, 0.22);
 }
 
-.gt-marker-stack--place { color: #2f855a; }
-.gt-marker-stack--stay  { color: #e8570a; }
-.gt-marker-stack--event { color: #1a2b4a; }
+.gt-marker-stack--place,
+.gt-marker-stack--other { color: #64748b; }
+.gt-marker-stack--stay { color: #e8570a; }
+.gt-marker-stack--restaurant { color: #b45309; }
+.gt-marker-stack--drinks { color: #7c3aed; }
+.gt-marker-stack--attraction { color: #2563eb; }
+.gt-marker-stack--event { color: #0f766e; }
+.gt-marker-stack--destination { color: #1a2b4a; }
 
 @media (min-width: 1024px) {
   .gt-detail {

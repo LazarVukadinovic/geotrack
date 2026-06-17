@@ -205,7 +205,7 @@
 
     <div
       class="map-page__controls-panel absolute top-0 left-0 right-0 px-4 pt-4 pb-3"
-      style="z-index: 5"
+      style="z-index: 12"
     >
       <div class="relative mb-3">
         <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
@@ -318,13 +318,13 @@
         }
       </div>
 
-      <div class="flex gap-3 overflow-x-auto scrollbar-hide mt-4 pb-2">
-        @for (cat of categories; track cat.id) {
+      <div class="map-page__primary-filter-row mt-4 pb-2" role="list" aria-label="Quick place type filters">
+        @for (cat of primaryCategories; track cat.id) {
           <button
             type="button"
             (click)="selectCategory(cat)"
             [attr.aria-pressed]="activeCategory === cat.id"
-            class="flex-none px-5 py-2 rounded-full border text-sm font-semibold transition-colors duration-200 whitespace-nowrap shadow-sm"
+            class="map-page__primary-filter-chip rounded-full border font-semibold transition-colors duration-200 whitespace-nowrap shadow-sm"
             [class.bg-[#1a2b4a]]="activeCategory === cat.id"
             [class.border-[#1a2b4a]]="activeCategory === cat.id"
             [class.text-white]="activeCategory === cat.id"
@@ -347,16 +347,17 @@
           [class.bg-white]="!isMoreActive"
           [class.border-slate-200]="!isMoreActive"
           [class.text-slate-600]="!isMoreActive"
-          class="flex-none px-5 py-2 rounded-full border text-sm font-semibold whitespace-nowrap shadow-sm flex items-center gap-1 transition-colors duration-200"
+          class="map-page__primary-filter-chip rounded-full border font-semibold whitespace-nowrap shadow-sm flex items-center justify-center gap-1 transition-colors duration-200"
         >
           More
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 5l7 7-7 7"
-            />
+          <svg
+            class="w-3.5 h-3.5 transition-transform"
+            [class.rotate-90]="isMoreFiltersOpen"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           </svg>
         </button>
       </div>
@@ -369,13 +370,13 @@
         >
           <div class="map-page__more-header">
             <div>
-              <p class="map-page__more-title">Recommended for you</p>
-              <p class="map-page__more-kicker">Based on your interests and activity</p>
+              <p class="map-page__more-title">All place types</p>
+              <p class="map-page__more-kicker">Choose one place type, or combine it with recommended tags.</p>
             </div>
             <div class="map-page__more-actions">
               @if (hasRecommendedTagFilters) {
                 <button type="button" class="map-page__more-clear" (click)="clearMoreFilters()">
-                  Clear
+                  Clear tags
                 </button>
               }
               <button
@@ -385,36 +386,62 @@
                 aria-label="Collapse more filters"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M5 15l7-7 7 7"
-                  />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
                 </svg>
               </button>
             </div>
           </div>
 
-          @if (availableMoreFilters.length > 0) {
-            <div class="map-page__more-chip-list" role="list" aria-label="Recommended tag filters">
-              @for (filter of availableMoreFilters; track filter.id) {
+          <div class="map-page__more-section">
+            <div class="map-page__more-chip-list" role="list" aria-label="All place type filters">
+              <button
+                type="button"
+                class="map-page__more-chip"
+                [class.map-page__more-chip--active]="activeCategory === 'all'"
+                (click)="selectCategoryFromMore({ id: 'all', label: 'All' })"
+              >
+                <span>All places</span>
+              </button>
+              @for (category of morePlaceTypeCategories; track category.id) {
                 <button
                   type="button"
                   class="map-page__more-chip"
-                  [class.map-page__more-chip--active]="isMoreFilterSelected(filter)"
-                  (click)="toggleMoreFilter(filter)"
+                  [class.map-page__more-chip--active]="activeCategory === category.id"
+                  (click)="selectCategoryFromMore(category)"
                 >
-                  <span>{{ filter.label }}</span>
-                  <span class="map-page__more-count">{{ filter.count }}</span>
+                  <span>{{ category.label }}</span>
+                  @if (category.count !== undefined) {
+                    <span class="map-page__more-count">{{ category.count }}</span>
+                  }
                 </button>
               }
             </div>
-          } @else {
-            <p class="map-page__more-empty">
-              No recommended tags are available for the places in this area yet.
-            </p>
-          }
+          </div>
+
+          <div class="map-page__more-section map-page__more-section--tags">
+            <p class="map-page__more-subtitle">Recommended for you</p>
+            <p class="map-page__more-kicker">Based on your interests, activity and popular tags nearby.</p>
+
+            @if (availableMoreFilters.length > 0) {
+              <div class="map-page__more-chip-list" role="list" aria-label="Recommended tag filters">
+                @for (filter of availableMoreFilters; track filter.id) {
+                  <button
+                    type="button"
+                    class="map-page__more-chip"
+                    [class.map-page__more-chip--active]="isMoreFilterSelected(filter)"
+                    (click)="toggleMoreFilter(filter)"
+                  >
+                    <span>{{ filter.label }}</span>
+                    <span class="map-page__more-count">{{ filter.count }}</span>
+                  </button>
+                }
+              </div>
+            } @else {
+              <p class="map-page__more-empty">
+                No recommended tags are available for the places in this area yet.
+              </p>
+            }
+          </div>
         </section>
       }
     </div>
@@ -505,27 +532,38 @@
           </div>
           <ul class="flex flex-col gap-3">
             <li class="flex items-center gap-3">
-              <span class="map-page__legend-dot" style="background: #2f855a"></span>
-              <div>
-                <p class="text-sm font-semibold text-slate-700">Place</p>
-                <p class="text-xs text-slate-400">Restaurants, attractions, points of interest</p>
-              </div>
-            </li>
-            <li class="flex items-center gap-3">
               <span class="map-page__legend-dot" style="background: #e8570a"></span>
               <div>
-                <p class="text-sm font-semibold text-slate-700">Stay</p>
-                <p class="text-xs text-slate-400">Hotels, hostels, apartments</p>
+                <p class="text-sm font-semibold text-slate-700">Stays</p>
+                <p class="text-xs text-slate-400">Hotels, hostels and apartments</p>
               </div>
             </li>
             <li class="flex items-center gap-3">
-              <span
-                class="map-page__legend-dot map-page__legend-dot--lg"
-                style="background: #1a2b4a"
-              ></span>
+              <span class="map-page__legend-dot" style="background: #b45309"></span>
               <div>
-                <p class="text-sm font-semibold text-slate-700">Destination</p>
-                <p class="text-xs text-slate-400">City or region to explore</p>
+                <p class="text-sm font-semibold text-slate-700">Restaurants</p>
+                <p class="text-xs text-slate-400">Food and dining places</p>
+              </div>
+            </li>
+            <li class="flex items-center gap-3">
+              <span class="map-page__legend-dot" style="background: #7c3aed"></span>
+              <div>
+                <p class="text-sm font-semibold text-slate-700">Cafes & bars</p>
+                <p class="text-xs text-slate-400">Coffee, drinks and nightlife</p>
+              </div>
+            </li>
+            <li class="flex items-center gap-3">
+              <span class="map-page__legend-dot" style="background: #2563eb"></span>
+              <div>
+                <p class="text-sm font-semibold text-slate-700">Attractions & culture</p>
+                <p class="text-xs text-slate-400">Landmarks, museums, galleries and parks</p>
+              </div>
+            </li>
+            <li class="flex items-center gap-3">
+              <span class="map-page__legend-dot" style="background: #64748b"></span>
+              <div>
+                <p class="text-sm font-semibold text-slate-700">Other places</p>
+                <p class="text-xs text-slate-400">Shopping and other useful places</p>
               </div>
             </li>
           </ul>
@@ -554,6 +592,44 @@
         ></div>
       }
     </button>
+
+    @if (showDestinationPreview) {
+      @if (focusedDestination; as destination) {
+        <div class="map-page__destination-card absolute bg-white rounded-2xl shadow-xl border border-slate-100">
+          <div class="flex items-center gap-3 p-3">
+            <div class="flex-none w-10 h-10 rounded-full bg-[#1a2b4a]/10 text-[#1a2b4a] flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z" />
+                <circle cx="12" cy="9" r="2.2" stroke="currentColor" stroke-width="2" />
+              </svg>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Current destination</p>
+              <p class="text-sm font-bold text-slate-800 truncate">{{ destination.title }}</p>
+            </div>
+            @if (destination.detailRoute) {
+              <button
+                type="button"
+                (click)="openDestinationDetails()"
+                class="flex-none px-3 py-2 rounded-xl bg-[#1a2b4a] text-white text-xs font-bold active:scale-[0.98] transition-transform"
+              >
+                View
+              </button>
+            }
+            <button
+              type="button"
+              (click)="closeDestinationPreview()"
+              aria-label="Close destination preview"
+              class="flex-none w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      }
+    }
 
     @if (selectedPlace; as place) {
       <div class="map-page__preview-card absolute bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -668,29 +744,42 @@
             </button>
           }
 
-          <button
-            type="button"
-            (click)="openDirections()"
-            [disabled]="isLoadingRoute"
-            class="flex-1 py-3 bg-white border border-slate-200 rounded-2xl text-slate-700 text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-            [class.opacity-60]="isLoadingRoute"
-          >
-            @if (isLoadingRoute) {
-              <div
-                class="w-4 h-4 border-2 border-[#e8570a] border-t-transparent rounded-full animate-spin"
-              ></div>
-            } @else {
+          @if (hasActiveDirectionsForSelectedPlace) {
+            <button
+              type="button"
+              (click)="openDetailedDirections()"
+              class="flex-1 py-3 bg-white border border-[#1a2b4a] rounded-2xl text-[#1a2b4a] text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7v7m0-7-9 9M5 5h5M5 5v14h14v-5" />
               </svg>
-            }
-            {{ isLoadingRoute ? 'Calculating…' : 'Directions' }}
-          </button>
+              Open in Maps
+            </button>
+          } @else {
+            <button
+              type="button"
+              (click)="openDirections()"
+              [disabled]="isLoadingRoute"
+              class="flex-1 py-3 bg-white border border-slate-200 rounded-2xl text-slate-700 text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+              [class.opacity-60]="isLoadingRoute"
+            >
+              @if (isLoadingRoute) {
+                <div
+                  class="w-4 h-4 border-2 border-[#e8570a] border-t-transparent rounded-full animate-spin"
+                ></div>
+              } @else {
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                  />
+                </svg>
+              }
+              {{ isLoadingRoute ? 'Calculating…' : 'Directions' }}
+            </button>
+          }
         </div>
 
         <div class="px-4 pb-4">

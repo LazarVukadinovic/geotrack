@@ -145,6 +145,44 @@ describe('MapPageComponent', () => {
     vi.useRealTimers();
   });
 
+
+  it('keeps the quick filter row to All plus three place types', () => {
+    const component = createComponent();
+    component.categories = [
+      { id: 'all', label: 'All' },
+      { id: 'place-type:1', label: 'Stay' },
+      { id: 'place-type:2', label: 'Restaurant' },
+      { id: 'place-type:3', label: 'Cafe' },
+      { id: 'place-type:4', label: 'Landmark' },
+      { id: 'place-type:5', label: 'Museum' },
+    ];
+
+    expect(component.primaryCategories.map(category => category.label)).toEqual([
+      'All',
+      'Stay',
+      'Restaurant',
+      'Cafe',
+    ]);
+    expect(component.morePlaceTypeCategories).toHaveLength(5);
+
+    component.ngOnDestroy();
+  });
+
+  it('replaces More tag filters when a quick place type is selected', () => {
+    const component = createComponent({
+      categories: ['place-type:1'],
+      categoryLabelIds: ['tag:12', 'tag:13'],
+    });
+
+    component.selectCategory({ id: 'place-type:2', label: 'Restaurant' });
+
+    expect(component.activeCategory).toBe('place-type:2');
+    expect((component as any).filterCategories).toEqual(['place-type:2']);
+    expect((component as any).selectedCategoryLabelFilters).toEqual([]);
+
+    component.ngOnDestroy();
+  });
+
   it('caches the same padded viewport that was actually requested', () => {
     const component = createComponent();
     const internals = component as any;

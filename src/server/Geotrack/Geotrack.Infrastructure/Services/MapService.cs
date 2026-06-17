@@ -166,6 +166,10 @@ public class MapService : IMapService
                 var token = term;
                 destinations = destinations.Where(destination =>
                     destination.SearchText.Contains(token) ||
+                    destination.Name.ToLower().Contains(token) ||
+                    (destination.Summary != null && destination.Summary.ToLower().Contains(token)) ||
+                    destination.Description.ToLower().Contains(token) ||
+                    (destination.InternalReferenceId != null && destination.InternalReferenceId.ToLower().Contains(token)) ||
                     destination.Region.Name.ToLower().Contains(token) ||
                     (destination.DestinationType != null && destination.DestinationType.Name.ToLower().Contains(token)));
             }
@@ -186,7 +190,9 @@ public class MapService : IMapService
                     Longitude = destination.Longitude,
                     ParentName = destination.Region.Name,
                     OwnSearchText = destination.Name,
-                    ContentSearchText = destination.SearchText,
+                    ContentSearchText = destination.SearchText + " " +
+                        (destination.Summary ?? string.Empty) + " " +
+                        destination.Description,
                     ParentSearchText = destination.Region.Name,
                     TypeSearchText = destination.DestinationType != null ? destination.DestinationType.Name : string.Empty,
                     IdentifierSearchText = destination.InternalReferenceId ?? string.Empty,
@@ -207,7 +213,12 @@ public class MapService : IMapService
                 var token = term;
                 locations = locations.Where(location =>
                     location.SearchText.Contains(token) ||
+                    location.Name.ToLower().Contains(token) ||
+                    (location.Summary != null && location.Summary.ToLower().Contains(token)) ||
+                    location.Description.ToLower().Contains(token) ||
+                    (location.InternalReferenceId != null && location.InternalReferenceId.ToLower().Contains(token)) ||
                     location.Destination.SearchText.Contains(token) ||
+                    location.Destination.Name.ToLower().Contains(token) ||
                     location.LocationType.Name.ToLower().Contains(token));
             }
 
@@ -228,7 +239,9 @@ public class MapService : IMapService
                     Longitude = location.Longitude,
                     ParentName = location.Destination.Name,
                     OwnSearchText = location.Name,
-                    ContentSearchText = location.SearchText,
+                    ContentSearchText = location.SearchText + " " +
+                        (location.Summary ?? string.Empty) + " " +
+                        location.Description,
                     ParentSearchText = location.Destination.Name,
                     TypeSearchText = location.LocationType.Name,
                     IdentifierSearchText = location.InternalReferenceId ?? string.Empty,
@@ -251,8 +264,15 @@ public class MapService : IMapService
                 var token = term;
                 places = places.Where(place =>
                     place.SearchText.Contains(token) ||
+                    place.Name.ToLower().Contains(token) ||
+                    (place.Subtitle != null && place.Subtitle.ToLower().Contains(token)) ||
+                    (place.Address != null && place.Address.ToLower().Contains(token)) ||
+                    place.Description.ToLower().Contains(token) ||
+                    (place.InternalReferenceId != null && place.InternalReferenceId.ToLower().Contains(token)) ||
                     place.Location.SearchText.Contains(token) ||
+                    place.Location.Name.ToLower().Contains(token) ||
                     place.Location.Destination.SearchText.Contains(token) ||
+                    place.Location.Destination.Name.ToLower().Contains(token) ||
                     place.PlaceType.Name.ToLower().Contains(token) ||
                     (place.Stay != null &&
                         (place.Stay.StayType.Name.ToLower().Contains(token) ||
@@ -277,7 +297,10 @@ public class MapService : IMapService
                     Longitude = place.Longitude,
                     ParentName = place.Location.Name,
                     OwnSearchText = place.Name,
-                    ContentSearchText = place.SearchText,
+                    ContentSearchText = place.SearchText + " " +
+                        (place.Subtitle ?? string.Empty) + " " +
+                        (place.Address ?? string.Empty) + " " +
+                        place.Description,
                     ParentSearchText = place.Location.Name,
                     DestinationSearchText = place.Location.Destination.Name,
                     TypeSearchText = place.Stay != null ? place.Stay.StayType.Name : place.PlaceType.Name,
@@ -306,13 +329,26 @@ public class MapService : IMapService
                 var token = term;
                 events = events.Where(@event =>
                     @event.SearchText.Contains(token) ||
+                    @event.Name.ToLower().Contains(token) ||
+                    (@event.Summary != null && @event.Summary.ToLower().Contains(token)) ||
+                    @event.Description.ToLower().Contains(token) ||
+                    (@event.VenueName != null && @event.VenueName.ToLower().Contains(token)) ||
+                    (@event.InternalReferenceId != null && @event.InternalReferenceId.ToLower().Contains(token)) ||
                     @event.Destination.SearchText.Contains(token) ||
+                    @event.Destination.Name.ToLower().Contains(token) ||
                     @event.EventType.Name.ToLower().Contains(token) ||
-                    (@event.Location != null && @event.Location.SearchText.Contains(token)) ||
+                    (@event.Location != null &&
+                        (@event.Location.SearchText.Contains(token) ||
+                         @event.Location.Name.ToLower().Contains(token))) ||
                     (@event.Place != null &&
                         (@event.Place.SearchText.Contains(token) ||
+                         @event.Place.Name.ToLower().Contains(token) ||
+                         (@event.Place.Address != null && @event.Place.Address.ToLower().Contains(token)) ||
+                         @event.Place.Description.ToLower().Contains(token) ||
                          @event.Place.Location.SearchText.Contains(token) ||
-                         @event.Place.Location.Destination.SearchText.Contains(token))));
+                         @event.Place.Location.Name.ToLower().Contains(token) ||
+                         @event.Place.Location.Destination.SearchText.Contains(token) ||
+                         @event.Place.Location.Destination.Name.ToLower().Contains(token))));
             }
 
             candidates.AddRange(await events
@@ -349,7 +385,10 @@ public class MapService : IMapService
                             ? @event.Location.Name
                             : @event.Destination.Name,
                     OwnSearchText = @event.Name,
-                    ContentSearchText = @event.SearchText,
+                    ContentSearchText = @event.SearchText + " " +
+                        (@event.Summary ?? string.Empty) + " " +
+                        @event.Description + " " +
+                        (@event.VenueName ?? string.Empty),
                     ParentSearchText = @event.Place != null
                         ? @event.Place.Name
                         : @event.Location != null
@@ -1423,7 +1462,9 @@ public class MapService : IMapService
                         Longitude = location.Longitude,
                         ParentName = location.Destination.Name,
                         OwnSearchText = location.Name,
-                        ContentSearchText = location.SearchText,
+                        ContentSearchText = location.SearchText + " " +
+                        (location.Summary ?? string.Empty) + " " +
+                        location.Description,
                         ParentSearchText = location.Destination.Name,
                         TypeSearchText = location.LocationType.Name,
                         IdentifierSearchText = location.InternalReferenceId ?? string.Empty,
@@ -1468,7 +1509,9 @@ public class MapService : IMapService
                         Longitude = destination.Longitude,
                         ParentName = destination.Region.Name,
                         OwnSearchText = destination.Name,
-                        ContentSearchText = destination.SearchText,
+                        ContentSearchText = destination.SearchText + " " +
+                        (destination.Summary ?? string.Empty) + " " +
+                        destination.Description,
                         ParentSearchText = destination.Region.Name,
                         TypeSearchText = destination.DestinationType != null
                             ? destination.DestinationType.Name

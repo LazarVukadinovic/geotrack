@@ -39,6 +39,7 @@ const INITIAL_LOCATION_ZOOM = 13;
 const DETAIL_FOCUS_ZOOM = 16;
 const MARKER_ACTIVATION_DEDUPE_MS = 250;
 const MARKER_DISMISS_GRACE_MS = 250;
+const PRIMARY_PLACE_TYPE_COUNT = 3;
 
 interface MarkerEntry {
   data: MapEntityMarker;
@@ -102,6 +103,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private viewportLoadTimeout?: ReturnType<typeof setTimeout>;
   private requestSeq = 0;
   private routeRequestSeq = 0;
+  private activeRouteDestinationKey: string | null = null;
+  private activeRouteMode: 'walking' | 'driving' | null = null;
+  private activeRouteOrigin: { latitude: number; longitude: number } | null = null;
   private lastFetchedViewport: CachedViewport | null = null;
   private isDestroyed = false;
   private readonly initialMapFocus: MapEntityMarker | null;
@@ -138,6 +142,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private searchBlurTimeout?: ReturnType<typeof setTimeout>;
 
   selectedPlace: MapEntityMarker | null = null;
+  focusedDestination: MapEntityMarker | null = null;
   stackedPlacePicker: MapEntityMarker[] | null = null;
   emptyStateMessage = '';
   loadErrorMessage = '';
@@ -255,6 +260,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         this.noDataModalDismissed = true;
       }
     }
+
+    this.focusedDestination = this.destinationMarkerFromCurrentMode();
   }
 
   ngAfterViewInit(): void {
@@ -303,12 +310,49 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     window.removeEventListener('resize', this.resizeHandler);
   }
 
+  get primaryCategories(): Array<{ id: string; label: string; count?: number }> {
+    const all = this.categories.find((category) => category.id === 'all') ?? { id: 'all', label: 'All' };
+    const placeTypes = this.categories
+      .filter((category) => category.id !== 'all')
+      .slice(0, PRIMARY_PLACE_TYPE_COUNT);
+    return [all, ...placeTypes];
+  }
+
+  get morePlaceTypeCategories(): Array<{ id: string; label: string; count?: number }> {
+    return this.categories.filter((category) => category.id !== 'all');
+  }
+
   get isMoreActive(): boolean {
-    return this.selectedCategoryLabelFilters.length > 0 || this.isMoreFiltersOpen;
+    const activeTypeIsInMore =
+      this.activeCategory !== 'all' &&
+      !this.primaryCategories.some((category) => category.id === this.activeCategory);
+    return (
+      activeTypeIsInMore ||
+      this.selectedCategoryLabelFilters.length > 0 ||
+      this.isMoreFiltersOpen
+    );
   }
 
   get hasRecommendedTagFilters(): boolean {
     return this.selectedCategoryLabelFilters.length > 0;
+  }
+
+  get showDestinationPreview(): boolean {
+    return !!(
+      this.focusedDestination &&
+      !this.selectedPlace &&
+      !this.stackedPlacePicker &&
+      !this.isPinToPinMode &&
+      this.currentMode === 'entities'
+    );
+  }
+
+  get hasActiveDirectionsForSelectedPlace(): boolean {
+    return !!(
+      this.selectedPlace &&
+      this.activeRouteDestinationKey === this.getMarkerKey(this.selectedPlace) &&
+      this.hasRenderedRoute()
+    );
   }
 
   get mapAccessibilitySummary(): string {
@@ -496,6 +540,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
+    this.focusedDestination = null;
     this.routeErrorMessage = '';
     this.routeInfoMessage = '';
     this.clearRoute();
@@ -523,6 +568,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const focusMarker = this.toMarkerFromSearchResult(result);
     if (focusMarker) {
       this.selectedPlace = focusMarker;
+    }
+
+    if (result.type === 'destination' && result.id) {
+      this.focusedDestination = this.toDestinationMarkerFromSearchResult(result);
     }
 
     this.writeSearchResultMapViewState(result, zoom);
@@ -573,6 +622,51 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       detailRoute: this.detailRouteForSearchResult(result, entityType),
       latitude: result.latitude,
       longitude: result.longitude,
+      isSaved: false,
+    };
+  }
+
+  private toDestinationMarkerFromSearchResult(result: MapSearchResult): MapEntityMarker {
+    return {
+      entityType: 'destination',
+      entityId: result.id ?? 0,
+      title: result.name,
+      subtitle: result.subtitle ?? result.parentName ?? null,
+      categoryLabel: 'Destination',
+      imageUrl: null,
+      detailRoute: result.id ? `/destinations/${result.id}` : null,
+      latitude: result.latitude,
+      longitude: result.longitude,
+      isSaved: false,
+    };
+  }
+
+  private destinationMarkerFromCurrentMode(): MapEntityMarker | null {
+    if (!this.destinationSvc.isDestinationMode()) return null;
+
+    const id = this.destinationSvc.id();
+    const name = this.destinationSvc.name();
+    const latitude = this.destinationSvc.latitude();
+    const longitude = this.destinationSvc.longitude();
+    if (
+      typeof id !== 'number' ||
+      id <= 0 ||
+      !name ||
+      !this.hasUsableCoordinates(latitude, longitude)
+    ) {
+      return null;
+    }
+
+    return {
+      entityType: 'destination',
+      entityId: id,
+      title: name,
+      subtitle: 'Destination',
+      categoryLabel: 'Destination',
+      imageUrl: null,
+      detailRoute: `/destinations/${id}`,
+      latitude: latitude as number,
+      longitude: longitude as number,
       isSaved: false,
     };
   }
@@ -673,10 +767,14 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   selectCategory(category: { id: string; label: string }): void {
-    if (this.activeCategory === category.id) return;
+    const sameCategory = this.activeCategory === category.id;
+    const hadMoreFilters = this.selectedCategoryLabelFilters.length > 0;
+    if (sameCategory && !hadMoreFilters) return;
 
     this.activeCategory = category.id;
     this.filterCategories = category.id === 'all' ? [] : [category.id];
+    // A primary place-type choice replaces any tag combination selected in More.
+    this.selectedCategoryLabelFilters = [];
     this.isMoreFiltersOpen = false;
     this.syncActiveFilters();
     this.persistMapFilters();
@@ -686,19 +784,19 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       metadata: {
         surface: 'map',
         placeType: category.id === 'all' ? null : category.label,
-        recommendedTags: this.selectedMoreFilterLabels(),
+        recommendedTags: [],
+        replacedMoreFilters: hadMoreFilters,
       },
     });
 
     this.renderFilteredMarkers();
   }
 
-  onMoreFiltersClick(): void {
-    if (!this.isDesktopViewport()) {
-      void this.router.navigate(['/filters']);
-      return;
-    }
+  selectCategoryFromMore(category: { id: string; label: string }): void {
+    this.selectCategory(category);
+  }
 
+  onMoreFiltersClick(): void {
     this.isMoreFiltersOpen = !this.isMoreFiltersOpen;
   }
 
@@ -829,6 +927,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         }
         this.drawRoute(route);
         this.fitRoute(route, origin, selectedPlace);
+        if (route.coordinates.length >= 2) {
+          this.activeRouteDestinationKey = selectedKey;
+          this.activeRouteMode = useDriving ? 'driving' : 'walking';
+          this.activeRouteOrigin = { latitude: origin.latitude, longitude: origin.longitude };
+        }
         this.isLoadingRoute = false;
         this.routeInfoMessage = this.buildRouteLabel(route, useDriving);
         this.cdr.detectChanges();
@@ -848,6 +951,40 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         this.cdr.detectChanges();
       },
     });
+  }
+
+  openDetailedDirections(): void {
+    const place = this.selectedPlace;
+    if (!place || !this.hasActiveDirectionsForSelectedPlace) return;
+
+    const params = new URLSearchParams({
+      api: '1',
+      destination: `${place.latitude},${place.longitude}`,
+      travelmode: this.activeRouteMode ?? 'walking',
+    });
+
+    if (this.activeRouteOrigin) {
+      params.set(
+        'origin',
+        `${this.activeRouteOrigin.latitude},${this.activeRouteOrigin.longitude}`,
+      );
+    }
+
+    globalThis.open(
+      `https://www.google.com/maps/dir/?${params.toString()}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+  }
+
+  openDestinationDetails(): void {
+    const destination = this.focusedDestination;
+    if (!destination?.detailRoute) return;
+    void this.router.navigateByUrl(destination.detailRoute);
+  }
+
+  closeDestinationPreview(): void {
+    this.focusedDestination = null;
   }
 
   private haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -991,6 +1128,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         }
         this.drawRoute(route);
         this.fitRoute(route, origin, destination);
+        if (route.coordinates.length >= 2) {
+          this.activeRouteDestinationKey = selectedKey;
+          this.activeRouteMode = useDriving ? 'driving' : 'walking';
+          this.activeRouteOrigin = { latitude: origin.latitude, longitude: origin.longitude };
+        }
         this.isLoadingRoute = false;
         this.routeInfoMessage = this.buildRouteLabel(route, useDriving);
         this.cdr.detectChanges();
@@ -1739,11 +1881,16 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private refreshStackMarkerDom(button: HTMLElement, group: MapEntityMarker[]): void {
     this.stackGroupByElement.set(button, group);
-    const typeClass = `gt-marker-stack--${group[0].entityType}`;
+    const typeClass = `gt-marker-stack--${this.markerVisualCategory(group[0])}`;
     button.classList.remove(
       'gt-marker-stack--place',
       'gt-marker-stack--stay',
+      'gt-marker-stack--restaurant',
+      'gt-marker-stack--drinks',
+      'gt-marker-stack--attraction',
+      'gt-marker-stack--other',
       'gt-marker-stack--event',
+      'gt-marker-stack--destination',
     );
     button.classList.add('gt-marker-stack', typeClass);
     button.setAttribute(
@@ -1831,10 +1978,14 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     button.classList.remove(
       'gt-marker--place',
       'gt-marker--stay',
+      'gt-marker--restaurant',
+      'gt-marker--drinks',
+      'gt-marker--attraction',
+      'gt-marker--other',
       'gt-marker--event',
       'gt-marker--destination',
     );
-    button.classList.add(`gt-marker--${marker.entityType}`);
+    button.classList.add(`gt-marker--${this.markerVisualCategory(marker)}`);
 
     const ariaLabel = `Open ${this.markerTypeLabel(marker)} marker: ${marker.title}`;
     if (button.getAttribute('aria-label') !== ariaLabel) {
@@ -1909,6 +2060,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     if (marker.entityType === 'destination') {
       this.selectedPlace = null;
+      this.focusedDestination = marker;
       this.routeErrorMessage = '';
       this.routeInfoMessage = '';
       this.searchResults = [];
@@ -2043,14 +2195,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.filterCategories.length > 0 || this.selectedCategoryLabelFilters.length > 0;
   }
 
-  private isDesktopViewport(): boolean {
-    return (
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(min-width: 1024px)').matches
-    );
-  }
-
   private getMarkerKey(marker: MapEntityMarker): string {
     return `${marker.entityType}:${marker.entityId}`;
   }
@@ -2066,6 +2210,22 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       default:
         return 'place';
     }
+  }
+
+  private markerVisualCategory(
+    marker: MapEntityMarker,
+  ): 'stay' | 'restaurant' | 'drinks' | 'attraction' | 'other' | 'destination' | 'event' {
+    if (marker.entityType === 'destination') return 'destination';
+    if (marker.entityType === 'event') return 'event';
+    if (marker.entityType === 'stay') return 'stay';
+
+    const label = `${marker.placeTypeLabel ?? ''} ${marker.categoryLabel ?? ''}`.toLowerCase();
+    if (/restaurant|dining|food/.test(label)) return 'restaurant';
+    if (/cafe|coffee|bar|pub|drink|nightlife|club/.test(label)) return 'drinks';
+    if (/landmark|museum|gallery|park|nature|attraction|monument|culture|historic/.test(label)) {
+      return 'attraction';
+    }
+    return 'other';
   }
 
   private markerTypeLabel(marker: MapEntityMarker): string {
@@ -2200,6 +2360,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     if (this.map?.getLayer(this.ROUTE_LAYER)) this.map.removeLayer(this.ROUTE_LAYER);
     if (this.map?.getLayer(this.ROUTE_OUTLINE)) this.map.removeLayer(this.ROUTE_OUTLINE);
     if (this.map?.getSource(this.ROUTE_SOURCE)) this.map.removeSource(this.ROUTE_SOURCE);
+    this.activeRouteDestinationKey = null;
+    this.activeRouteMode = null;
+    this.activeRouteOrigin = null;
   }
 
   private placeUserMarker(lat: number, lon: number): void {
@@ -2258,6 +2421,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
+    this.focusedDestination = null;
     this.routeErrorMessage = '';
     this.routeInfoMessage = '';
     this.clearRoute();
@@ -2324,6 +2488,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
+    this.focusedDestination = null;
     this.routeErrorMessage = '';
     this.routeInfoMessage = '';
     this.clearRoute();

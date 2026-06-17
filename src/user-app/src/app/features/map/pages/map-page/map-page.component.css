@@ -33,7 +33,8 @@
   animation: map-bottom-card-enter 160ms ease-out both;
 }
 
-.map-page__preview-card {
+.map-page__preview-card,
+.map-page__destination-card {
   left: var(--map-card-gutter);
   right: var(--map-card-gutter);
   bottom: var(--map-bottom-gap);
@@ -74,7 +75,9 @@
 }
 
 .map-page__legend-card {
-  width: min(300px, calc(100% - 3rem));
+  width: min(340px, calc(100% - 2rem));
+  max-height: min(82vh, 560px);
+  overflow-y: auto;
   animation: map-bottom-card-enter 160ms ease-out both;
 }
 
@@ -112,8 +115,157 @@
   animation: map-bottom-card-enter 200ms ease-out both;
 }
 
+.map-page__primary-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  overflow: visible;
+}
+
+.map-page__primary-filter-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.78rem;
+  line-height: 1.1;
+}
+
 .map-page__more-panel {
-  display: none;
+  display: block;
+  max-height: min(52vh, 380px);
+  overflow-y: auto;
+  margin-top: 0.45rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(26, 43, 76, 0.1);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.map-page__more-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.map-page__more-title,
+.map-page__more-subtitle {
+  margin: 0;
+  color: #1a2b4c;
+  font-size: 0.875rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.map-page__more-subtitle {
+  font-size: 0.8125rem;
+}
+
+.map-page__more-kicker {
+  margin: 0.15rem 0 0;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.map-page__more-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.map-page__more-clear,
+.map-page__more-close {
+  border: 0;
+  background: transparent;
+  color: #e8570a;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.map-page__more-clear {
+  padding: 0.35rem 0.2rem;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.map-page__more-close {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(232, 87, 10, 0.08);
+}
+
+.map-page__more-section--tags {
+  margin-top: 0.85rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(26, 43, 76, 0.08);
+}
+
+.map-page__more-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.map-page__more-chip {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: normal;
+  text-align: left;
+}
+
+.map-page__more-chip--active {
+  border-color: #1a2b4c;
+  background: #1a2b4c;
+  color: #ffffff;
+}
+
+.map-page__more-count {
+  flex: none;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(26, 43, 76, 0.08);
+  color: inherit;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.map-page__more-chip--active .map-page__more-count {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.map-page__more-empty {
+  margin: 0.55rem 0 0;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 @keyframes map-bottom-card-enter {
@@ -181,14 +333,15 @@
     border: 1px solid rgba(26, 43, 76, 0.1);
   }
 
-  .map-page__controls-panel .overflow-x-auto {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
+  .map-page__primary-filter-row {
     gap: var(--space-2, 0.5rem);
     margin-top: 0;
     padding-bottom: 0;
-    overflow: hidden;
+  }
+
+  .map-page__primary-filter-chip {
+    padding: 0.55rem 0.9rem;
+    font-size: 0.8125rem;
   }
 
   .map-page__more-panel {
@@ -314,6 +467,7 @@
 
   .map-page__status-card,
   .map-page__preview-card,
+  .map-page__destination-card,
   .map-page__stack-picker {
     left: var(--space-6, 1.5rem);
     right: auto;
