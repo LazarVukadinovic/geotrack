@@ -1,0 +1,232 @@
+<div
+  *ngIf="isOpen"
+  class="modal-backdrop fixed inset-0 flex items-start justify-center pt-12 pb-8 px-4 overflow-y-auto"
+  style="background: rgba(0,0,0,0.45); z-index: 9999;"
+  (click)="onBackdropClick($event)"
+>
+  <div
+    class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl"
+    style="min-height: 400px;"
+  >
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div>
+        <h2 class="text-lg font-bold text-gray-900">Edit Profile</h2>
+        <p class="text-xs text-gray-500 mt-0.5">{{ context?.entityName }}</p>
+      </div>
+      <button
+        (click)="close()"
+        type="button"
+        class="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 border-none bg-transparent cursor-pointer transition-colors"
+        aria-label="Close"
+      >
+        <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="isLoading" class="flex items-center justify-center py-20 text-gray-400 text-sm">
+      <svg class="animate-spin w-5 h-5 mr-2 text-blue-600" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+      Loading profile…
+    </div>
+
+    <!-- Content -->
+    <div *ngIf="!isLoading" class="px-6 py-5 space-y-6">
+
+      <!-- Error / Success -->
+      <div *ngIf="errorMessage"
+           class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {{ errorMessage }}
+      </div>
+      <div *ngIf="successMessage"
+           class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 font-semibold">
+        {{ successMessage }}
+      </div>
+
+      <!-- Description -->
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Description</label>
+        <textarea
+          [(ngModel)]="description"
+          rows="4"
+          placeholder="Write a short description for this {{ context?.entityType === 'region' ? 'region' : 'territory' }}…"
+          class="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none"
+        ></textarea>
+      </div>
+
+      <!-- Card Image -->
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Card Image</label>
+        <div *ngIf="cardImageUrl; else cardUpload" class="relative inline-block">
+          <img [src]="cardImageUrl" alt="Card image" class="w-32 h-20 object-cover rounded-lg border border-gray-200 shadow-sm" />
+          <button
+            (click)="removeCard()"
+            type="button"
+            class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center border-none cursor-pointer shadow-sm hover:bg-red-600 transition-colors"
+            aria-label="Remove card image"
+          >
+            <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="3">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <ng-template #cardUpload>
+          <label
+            class="flex items-center gap-2 w-32 h-20 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/40 cursor-pointer transition-colors justify-center flex-col"
+            [class.opacity-60]="isUploadingCard"
+          >
+            <svg *ngIf="!isUploadingCard" class="w-6 h-6 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+            <svg *ngIf="isUploadingCard" class="animate-spin w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <span class="text-[10px] text-gray-400">{{ isUploadingCard ? 'Uploading…' : 'Upload' }}</span>
+            <input type="file" accept="image/*" class="hidden" (change)="onCardImageSelected($event)" [disabled]="isUploadingCard" />
+          </label>
+        </ng-template>
+      </div>
+
+      <!-- Cover Image -->
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Cover Image</label>
+        <div *ngIf="coverImageUrl; else coverUpload" class="relative inline-block">
+          <img [src]="coverImageUrl" alt="Cover image" class="w-full max-w-md h-28 object-cover rounded-lg border border-gray-200 shadow-sm" />
+          <button
+            (click)="removeCover()"
+            type="button"
+            class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center border-none cursor-pointer shadow-sm hover:bg-red-600 transition-colors"
+            aria-label="Remove cover image"
+          >
+            <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="3">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <ng-template #coverUpload>
+          <label
+            class="flex items-center gap-2 w-full max-w-md h-28 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/40 cursor-pointer transition-colors justify-center flex-col"
+            [class.opacity-60]="isUploadingCover"
+          >
+            <svg *ngIf="!isUploadingCover" class="w-6 h-6 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+            <svg *ngIf="isUploadingCover" class="animate-spin w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <span class="text-[10px] text-gray-400">{{ isUploadingCover ? 'Uploading…' : 'Upload wide cover' }}</span>
+            <input type="file" accept="image/*" class="hidden" (change)="onCoverImageSelected($event)" [disabled]="isUploadingCover" />
+          </label>
+        </ng-template>
+      </div>
+
+      <!-- Gallery -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-sm font-semibold text-gray-700">
+            Gallery
+            <span class="text-xs font-normal text-gray-400 ml-1">({{ galleryImageUrls.length }}/{{ MAX_GALLERY }})</span>
+          </label>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <!-- Existing gallery thumbnails -->
+          <div *ngFor="let url of galleryImageUrls; let i = index" class="relative">
+            <img [src]="url" alt="Gallery image" class="w-20 h-14 object-cover rounded-lg border border-gray-200 shadow-sm" />
+            <button
+              (click)="removeGalleryImage(i)"
+              type="button"
+              class="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center border-none cursor-pointer shadow-sm hover:bg-red-600 transition-colors"
+              aria-label="Remove gallery image"
+            >
+              <svg viewBox="0 0 24 24" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="3">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Upload button -->
+          <label
+            *ngIf="galleryImageUrls.length < MAX_GALLERY"
+            class="flex items-center justify-center flex-col gap-1 w-20 h-14 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/40 cursor-pointer transition-colors"
+            [class.opacity-60]="isUploadingGallery"
+          >
+            <svg *ngIf="!isUploadingGallery" class="w-5 h-5 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <svg *ngIf="isUploadingGallery" class="animate-spin w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <span class="text-[10px] text-gray-400">{{ isUploadingGallery ? '…' : 'Add' }}</span>
+            <input type="file" accept="image/*" multiple class="hidden" (change)="onGalleryImagesSelected($event)" [disabled]="isUploadingGallery" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Tags -->
+      <div *ngIf="tagGroups.length > 0">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Tags</label>
+        <div class="space-y-3">
+          <div *ngFor="let group of tagGroups">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{{ group.typeName }}</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                *ngFor="let item of group.tags"
+                type="button"
+                (click)="toggleTag(item)"
+                class="px-3 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer"
+                [class.bg-blue-600]="item.selected"
+                [class.text-white]="item.selected"
+                [class.border-blue-600]="item.selected"
+                [class.bg-gray-50]="!item.selected"
+                [class.text-gray-600]="!item.selected"
+                [class.border-gray-200]="!item.selected"
+                [class.hover:border-blue-300]="!item.selected"
+              >
+                {{ item.tag.name }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- No tags placeholder -->
+      <div *ngIf="tagGroups.length === 0" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-400 text-center">
+        No tags available for this {{ context?.entityType === 'region' ? 'region' : 'territory' }} type yet.
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div *ngIf="!isLoading" class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+      <button
+        (click)="close()"
+        type="button"
+        class="px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+      >
+        Cancel
+      </button>
+      <button
+        (click)="save()"
+        type="button"
+        [disabled]="isSaving || isAnyUploading"
+        class="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed border-none"
+      >
+        <svg *ngIf="isSaving" class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+        </svg>
+        {{ isSaving ? 'Saving…' : 'Save Profile' }}
+      </button>
+    </div>
+  </div>
+</div>

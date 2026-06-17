@@ -103,6 +103,29 @@ export const territoryManagerGuard: CanActivateFn = (_route, state) => {
 
 export const nationalManagerGuard = territoryManagerGuard;
 
+export const regionalOrTerritoryManagerGuard: CanActivateFn = (_route, state) => {
+  const auth   = inject(AuthService);
+  const router = inject(Router);
+
+  const canAccess = () => auth.isRegionalManager() || auth.canAccessTerritoryAdmin();
+  if (canAccess() && auth.hasValidAccessToken()) return true;
+  if (auth.getUser() && !auth.hasValidAccessToken()) {
+    return auth.restoreSession({ forceRefresh: true }).pipe(
+      map(user => {
+        if (!user) return deniedOrLoginTree(auth, router, state, true);
+        return canAccess() ? true : router.parseUrl(auth.getHomeRoute());
+      }),
+    );
+  }
+
+  return auth.restoreSession().pipe(
+    map(user => {
+      if (!user) return deniedOrLoginTree(auth, router, state);
+      return canAccess() ? true : router.parseUrl(auth.getHomeRoute());
+    }),
+  );
+};
+
 //REGIONAL MANAGER GUARD
  
 export const regionalManagerGuard: CanActivateFn = (_route, state) => {

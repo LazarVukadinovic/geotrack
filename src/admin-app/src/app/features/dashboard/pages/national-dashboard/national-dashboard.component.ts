@@ -5,6 +5,7 @@ import { Subscription } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
+import { EntityProfileEditModalComponent, EntityProfileEditContext } from '../../../../shared/components/entity-profile-edit-modal/entity-profile-edit-modal.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import {
   TerritoryAssignedTerritory,
@@ -30,7 +31,7 @@ interface TerritoryStatCard {
 @Component({
   selector: 'app-national-dashboard',
   standalone: true,
-  imports: [CommonModule, DatePipe, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, DatePipe, SidebarComponent, TopbarComponent, EntityProfileEditModalComponent],
   templateUrl: './national-dashboard.component.html',
   styleUrl: './national-dashboard.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -51,6 +52,8 @@ export class NationalDashboardComponent implements OnInit, OnDestroy {
   isLoading = false;
   isTerritoryLoading = false;
   errorMessage = '';
+  profileModalOpen = false;
+  profileModalContext: EntityProfileEditContext | null = null;
   private failedManagerAvatarKeys = new Set<string>();
   private setupChangedSubscription: Subscription | null = null;
 
@@ -115,6 +118,22 @@ export class NationalDashboardComponent implements OnInit, OnDestroy {
 
   navigateToRegions(): void {
     this.router.navigate(['/territory/regions']);
+  }
+
+  openProfileModal(): void {
+    if (!this.activeTerritory) return;
+    this.profileModalContext = {
+      entityType: 'territory',
+      entityId: this.activeTerritory.id,
+      entityName: this.activeTerritory.displayName ?? this.activeTerritory.name,
+    };
+    this.profileModalOpen = true;
+    this.cdr.markForCheck();
+  }
+
+  closeProfileModal(): void {
+    this.profileModalOpen = false;
+    this.cdr.markForCheck();
   }
 
   openRegion(region: TerritoryRegionHealth): void {

@@ -6064,6 +6064,48 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
+        async Task AddRegionTagsIfMissingAsync(Region region, params string[] tagSlugs)
+        {
+            foreach (var tagSlug in tagSlugs)
+            {
+                if (!tagLookup.TryGetValue(tagSlug, out var tag))
+                {
+                    continue;
+                }
+
+                var exists = await db.RegionTags.AnyAsync(x => x.RegionId == region.Id && x.TagId == tag.Id);
+                if (exists)
+                {
+                    continue;
+                }
+
+                db.RegionTags.Add(new RegionTag { RegionId = region.Id, TagId = tag.Id });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        async Task AddTerritoryTagsIfMissingAsync(Territory territory, params string[] tagSlugs)
+        {
+            foreach (var tagSlug in tagSlugs)
+            {
+                if (!tagLookup.TryGetValue(tagSlug, out var tag))
+                {
+                    continue;
+                }
+
+                var exists = await db.TerritoryTags.AnyAsync(x => x.TerritoryId == territory.Id && x.TagId == tag.Id);
+                if (exists)
+                {
+                    continue;
+                }
+
+                db.TerritoryTags.Add(new TerritoryTag { TerritoryId = territory.Id, TagId = tag.Id });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
         async Task AddEventTagsIfMissingAsync(Event eventEntity, params string[] tagSlugs)
         {
             foreach (var tagSlug in tagSlugs)
@@ -6523,6 +6565,11 @@ public static class SeedData
         await AddLocationTagsIfMissingAsync(srd, "panoramic-view", "nature");
         await AddLocationTagsIfMissingAsync(lokrum, "island-escape", "nature");
         await AddLocationTagsIfMissingAsync(trsteno, "relaxed-area", "nature");
+
+        var dubrovnikNeretvaSeedRegion = await EnsureCroatiaSeedRegionAsync(db, croatia, now);
+        await AddRegionTagsIfMissingAsync(dubrovnikNeretvaSeedRegion, "region-coastal", "region-historic");
+
+        await AddTerritoryTagsIfMissingAsync(croatia, "country-coastal", "country-mediterranean", "country-balkan");
 
         var croatiaTerritory = await EnsureCroatiaTerritoryAsync(db, now);
         await db.SaveChangesAsync();

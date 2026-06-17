@@ -6,11 +6,12 @@ import { takeUntil } from 'rxjs/operators';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { TerritoriesService, TerritoryDetail } from '../../../../core/services/national/territories.service';
+import { EntityProfileEditModalComponent, EntityProfileEditContext } from '../../../../shared/components/entity-profile-edit-modal/entity-profile-edit-modal.component';
 
 @Component({
   selector: 'app-territory-detail',
   standalone: true,
-  imports: [CommonModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, SidebarComponent, TopbarComponent, EntityProfileEditModalComponent],
   templateUrl: './territory-detail.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -22,6 +23,9 @@ export class TerritoryDetailComponent implements OnInit, OnDestroy {
   notFound = false;
   userName = '';
   userRole = '';
+
+  profileModalOpen = false;
+  profileModalContext: EntityProfileEditContext | null = null;
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -79,5 +83,21 @@ export class TerritoryDetailComponent implements OnInit, OnDestroy {
 
   goBack(): void {
     this.location.back();
+  }
+
+  openProfileModal(): void {
+    if (!this.territory) return;
+    this.profileModalContext = {
+      entityType: 'territory',
+      entityId: this.territory.id,
+      entityName: this.territory.name,
+    };
+    this.profileModalOpen = true;
+    this.cdr.markForCheck();
+  }
+
+  closeProfileModal(): void {
+    this.profileModalOpen = false;
+    this.cdr.markForCheck();
   }
 }

@@ -39,6 +39,9 @@ namespace Geotrack.Infrastructure.Repositories
         {
             return await _context.Regions
                 .Include(r => r.Territory)
+                .Include(r => r.Images)
+                .Include(r => r.RegionTags)
+                    .ThenInclude(rt => rt.Tag)
                 .Include(r => r.RegionalManagerRegions)
                     .ThenInclude(ror => ror.User)
                 .Include(r => r.Destinations)

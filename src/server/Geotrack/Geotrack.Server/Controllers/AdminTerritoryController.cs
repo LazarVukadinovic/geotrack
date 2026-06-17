@@ -3,6 +3,7 @@ using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 
 namespace Geotrack.Server.Controllers;
 
@@ -15,6 +16,8 @@ public sealed class AdminTerritoryController : ControllerBase
     private readonly ITerritoryAnalyticsService _territoryAnalytics;
     private readonly ITerritoryUserAdminService _territoryUsers;
     private readonly IAdmBoundaryRegionSyncService _regionSync;
+    private readonly IEntityProfileService _entityProfile;
+    private readonly IRegionalEntityImageStorageService _imageStorage;
     private readonly ILogger<AdminTerritoryController> _logger;
 
     public AdminTerritoryController(
@@ -22,13 +25,114 @@ public sealed class AdminTerritoryController : ControllerBase
         ITerritoryAnalyticsService territoryAnalytics,
         ITerritoryUserAdminService territoryUsers,
         IAdmBoundaryRegionSyncService regionSync,
+        IEntityProfileService entityProfile,
+        IRegionalEntityImageStorageService imageStorage,
         ILogger<AdminTerritoryController> logger)
     {
         _territoryDashboard = territoryDashboard;
         _territoryAnalytics = territoryAnalytics;
         _territoryUsers = territoryUsers;
         _regionSync = regionSync;
+        _entityProfile = entityProfile;
+        _imageStorage = imageStorage;
         _logger = logger;
+    }
+
+    [HttpGet("territory-profile")]
+    public async Task<ActionResult<EntityProfileDto>> GetTerritoryProfile(
+        [FromQuery] int territoryId,
+        CancellationToken cancellationToken = default)
+    {
+        if (territoryId <= 0)
+            return BadRequest(new { message = "territoryId is required." });
+
+        try
+        {
+            return Ok(await _entityProfile.GetTerritoryProfileAsync(GetCurrentUserId(), territoryId, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("territory-profile")]
+    public async Task<ActionResult<EntityProfileDto>> UpdateTerritoryProfile(
+        [FromQuery] int territoryId,
+        [FromBody] EntityProfileUpdateRequestDto? request,
+        CancellationToken cancellationToken = default)
+    {
+        if (territoryId <= 0)
+            return BadRequest(new { message = "territoryId is required." });
+
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _entityProfile.UpdateTerritoryProfileAsync(GetCurrentUserId(), territoryId, request, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("territory-tags")]
+    public async Task<ActionResult<List<EntityProfileTagDto>>> GetTerritoryTags(
+        [FromQuery] int territoryId,
+        CancellationToken cancellationToken = default)
+    {
+        if (territoryId <= 0)
+            return BadRequest(new { message = "territoryId is required." });
+
+        try
+        {
+            return Ok(await _entityProfile.GetTerritoryTagsAsync(GetCurrentUserId(), territoryId, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPost("media/images")]
+    [Consumes("multipart/form-data")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("uploads")]
+    [RequestSizeLimit(Geotrack.Application.Options.UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = Geotrack.Application.Options.UploadLimitDefaults.RegionalMaxTotalRequestBytes)]
+    public async Task<ActionResult<RegionalImageUploadResponseDto>> UploadTerritoryImages(
+        [FromQuery] int territoryId,
+        List<IFormFile>? files,
+        CancellationToken cancellationToken = default)
+    {
+        if (territoryId <= 0)
+            return BadRequest(new { message = "territoryId is required." });
+
+        if (files is null || files.Count == 0)
+            return BadRequest(new { message = "Please select at least one image to upload." });
+
+        try
+        {
+            var uploads = new List<RegionalImageUploadFileDto>();
+            foreach (var file in files.Where(f => f is { Length: > 0 }))
+            {
+                await using var stream = new MemoryStream();
+                await file.CopyToAsync(stream, cancellationToken);
+                uploads.Add(new RegionalImageUploadFileDto
+                {
+                    FileName = file.FileName,
+                    ContentType = file.ContentType,
+                    Content = stream.ToArray()
+                });
+            }
+
+            return Ok(await _entityProfile.UploadTerritoryImagesAsync(GetCurrentUserId(), territoryId, uploads, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
     }
 
     [HttpGet("territories")]

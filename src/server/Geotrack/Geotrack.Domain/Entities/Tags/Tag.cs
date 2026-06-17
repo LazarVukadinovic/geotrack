@@ -26,6 +26,8 @@ public class Tag
     public ICollection<PlaceTag> PlaceTags { get; set; } = new List<PlaceTag>();
     public ICollection<EventTag> EventTags { get; set; } = new List<EventTag>();
     public ICollection<UserTag> UserTags { get; set; } = new List<UserTag>();
+    public ICollection<RegionTag> RegionTags { get; set; } = new List<RegionTag>();
+    public ICollection<TerritoryTag> TerritoryTags { get; set; } = new List<TerritoryTag>();
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

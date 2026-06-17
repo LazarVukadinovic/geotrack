@@ -1,4 +1,5 @@
 ﻿using Geotrack.Application.DTOs.Common;
+using Geotrack.Application.DTOs.Tags;
 using Geotrack.Application.DTOs.Territories;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
@@ -46,6 +47,10 @@ public class TerritoryService : ITerritoryService
             Name = territory.Name,
             Description = territory.Description,
             Images = territory.Images.ToPublicEntityImageDtos(),
+            Tags = territory.TerritoryTags
+                .Select(tt => new TagDto { Id = tt.Tag.Id, Name = tt.Tag.Name, Slug = tt.Tag.Slug })
+                .OrderBy(t => t.Name)
+                .ToList(),
             Regions = territory.Regions
                 .Where(r => r.Destinations.Any(d => d.Status == "Published"))
                 .OrderBy(r => r.Name)
@@ -53,7 +58,12 @@ public class TerritoryService : ITerritoryService
                 {
                     Id = r.Id,
                     Name = r.Name,
-                    Description = r.Description
+                    Description = r.Description,
+                    Image = r.Images
+                        .OrderBy(i => i.ImageRole == "card" ? 0 : i.ImageRole == "cover" ? 1 : 2)
+                        .ThenBy(i => i.SortOrder)
+                        .Select(i => i.Url)
+                        .FirstOrDefault()
                 }).ToList()
         };
     }

@@ -1,5 +1,6 @@
 ﻿using Geotrack.Application.DTOs.Common;
 using Geotrack.Application.DTOs.Locations;
+using Geotrack.Application.DTOs.Tags;
 
 namespace Geotrack.Application.DTOs.Destinations;
 
@@ -20,6 +21,7 @@ public class GetDestinationDetailsResponseDto
     public bool IsSaved { get; set; }
     public List<int> SavedCollectionIds { get; set; } = new();
     public List<PublicEntityImageDto> Images { get; set; } = new();
+    public List<TagDto> Tags { get; set; } = new();
     public List<DestinationSectionPreviewDto> Sections { get; set; } = new();
     public List<DestinationSectionPlaceItemDto> TopPlaces { get; set; } = new();
     public List<DestinationRelatedItemDto> SimilarDestinations { get; set; } = new();

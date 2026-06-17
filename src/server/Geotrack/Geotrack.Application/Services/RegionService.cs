@@ -1,5 +1,7 @@
-﻿using Geotrack.Application.DTOs.Destinations;
+﻿using Geotrack.Application.DTOs.Common;
+using Geotrack.Application.DTOs.Destinations;
 using Geotrack.Application.DTOs.Region;
+using Geotrack.Application.DTOs.Tags;
 using Geotrack.Application.DTOs.Users;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
@@ -45,6 +47,11 @@ namespace Geotrack.Application.Services
                 Description = region.Description,
                 TerritoryId = region.TerritoryId,
                 TerritoryName = region.Territory?.Name,
+                Images = region.Images.ToPublicEntityImageDtos(),
+                Tags = region.RegionTags
+                    .Select(rt => new TagDto { Id = rt.Tag.Id, Name = rt.Tag.Name, Slug = rt.Tag.Slug })
+                    .OrderBy(t => t.Name)
+                    .ToList(),
                 Managers = region.RegionalManagerRegions
                     .Where(ror => ror.IsActive)
                     .Select(ror => new UserItemDto

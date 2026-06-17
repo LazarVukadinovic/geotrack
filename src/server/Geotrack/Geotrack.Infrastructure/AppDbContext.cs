@@ -71,6 +71,8 @@ public class AppDbContext : DbContext
     public DbSet<LocationTag> LocationTags => Set<LocationTag>();
     public DbSet<PlaceTag> PlaceTags => Set<PlaceTag>();
     public DbSet<EventTag> EventTags => Set<EventTag>();
+    public DbSet<RegionTag> RegionTags => Set<RegionTag>();
+    public DbSet<TerritoryTag> TerritoryTags => Set<TerritoryTag>();
 
     public DbSet<DestinationReview> DestinationReviews => Set<DestinationReview>();
     public DbSet<LocationReview> LocationReviews => Set<LocationReview>();
@@ -1569,6 +1571,44 @@ public class AppDbContext : DbContext
                 .WithMany(x => x.UserTags)
                 .HasForeignKey(x => x.TagId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RegionTag>(entity =>
+        {
+            entity.ToTable("RegionTags");
+
+            entity.HasKey(x => new { x.RegionId, x.TagId });
+
+            entity.HasOne(x => x.Region)
+                .WithMany(x => x.RegionTags)
+                .HasForeignKey(x => x.RegionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany(x => x.RegionTags)
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.TagId);
+        });
+
+        modelBuilder.Entity<TerritoryTag>(entity =>
+        {
+            entity.ToTable("TerritoryTags");
+
+            entity.HasKey(x => new { x.TerritoryId, x.TagId });
+
+            entity.HasOne(x => x.Territory)
+                .WithMany(x => x.TerritoryTags)
+                .HasForeignKey(x => x.TerritoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Tag)
+                .WithMany(x => x.TerritoryTags)
+                .HasForeignKey(x => x.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.TagId);
         });
     }
 
