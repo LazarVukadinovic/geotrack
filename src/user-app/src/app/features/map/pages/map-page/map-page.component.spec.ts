@@ -232,6 +232,31 @@ describe('MapPageComponent', () => {
     component.ngOnDestroy();
   });
 
+  it('hides the current destination preview while a blocking map dialog is open', () => {
+    const component = createComponent();
+    component.focusedDestination = {
+      entityType: 'destination',
+      entityId: 7,
+      title: 'Kragujevac',
+      latitude: 44.01,
+      longitude: 20.91,
+      detailRoute: '/destinations/7',
+      isSaved: false,
+    };
+    component.currentMode = 'entities';
+
+    expect(component.showDestinationPreview).toBe(true);
+
+    component.showLegend = true;
+    expect(component.showDestinationPreview).toBe(false);
+
+    component.showLegend = false;
+    component.showNoDataModal = true;
+    expect(component.showDestinationPreview).toBe(false);
+
+    component.ngOnDestroy();
+  });
+
   it('always opens destination details even when the marker omitted its route', () => {
     const component = createComponent();
     component.focusedDestination = {

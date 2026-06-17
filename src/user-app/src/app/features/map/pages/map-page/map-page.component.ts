@@ -373,6 +373,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       !this.selectedPlace &&
       !this.stackedPlacePicker &&
       !this.isPinToPinMode &&
+      !this.showNoDataModal &&
+      !this.showLegend &&
       this.currentMode === 'entities'
     );
   }
