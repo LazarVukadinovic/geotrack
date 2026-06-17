@@ -132,13 +132,11 @@
               [class.shadow-sm]="statusFilter === tab.value"
               [class.text-gray-500]="statusFilter !== tab.value"
             >
-              {{ tab.label }}
-              @if (tab.value === 'open' && counts.openCount > 0) {
-                <span class="ml-1 bg-red-100 text-red-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{{ counts.openCount }}</span>
-              }
-              @if (tab.value === 'inProgress' && counts.inProgressCount > 0) {
-                <span class="ml-1 bg-blue-100 text-blue-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{{ counts.inProgressCount }}</span>
-              }
+              @if (tab.value === 'open') { {{ tab.label }} ({{ counts.openCount }}) }
+              @if (tab.value === 'inProgress') { {{ tab.label }} ({{ counts.inProgressCount }}) }
+              @if (tab.value === 'resolved') { {{ tab.label }} ({{ counts.resolvedCount }}) }
+              @if (tab.value === 'dismissed') { {{ tab.label }} ({{ counts.dismissedCount }}) }
+              @if (tab.value === 'all') { {{ tab.label }} ({{ counts.allCount }}) }
             </button>
           }
         </div>

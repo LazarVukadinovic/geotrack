@@ -38,7 +38,7 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   supportReportsCount = 0;
 
   // ── View state ────────────────────────────────────────────────────────────
-  activeTab: ViewTab = 'map';
+  activeTab: ViewTab = 'list';
 
   // ── Territory list ────────────────────────────────────────────────────────
   territories: Territory[] = [];
@@ -75,16 +75,33 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
   listSortOpen = false;
 
   listSortOptions: { label: string; field: ListSortField; dir: SortDir }[] = [
-    { label: 'Newest first',             field: 'createdAt', dir: 'desc' },
-    { label: 'Oldest first',             field: 'createdAt', dir: 'asc'  },
-    { label: 'Status: Active first',     field: 'status',    dir: 'asc'  },
-    { label: 'Status: Unassigned first', field: 'status',    dir: 'desc' },
-    { label: 'A – Z',                    field: 'name',      dir: 'asc'  },
-    { label: 'Z – A',                    field: 'name',      dir: 'desc' },
+    { label: 'Newest',     field: 'createdAt', dir: 'desc' },
+    { label: 'Oldest',     field: 'createdAt', dir: 'asc'  },
+    { label: 'Assigned',   field: 'status',    dir: 'asc'  },
+    { label: 'Unassigned', field: 'status',    dir: 'desc' },
+    { label: 'A – Z',      field: 'name',      dir: 'asc'  },
+    { label: 'Z – A',      field: 'name',      dir: 'desc' },
   ];
 
   get currentSortLabel(): string {
     return this.listSortOptions.find(o => o.field === this.listSortField && o.dir === this.listSortDir)?.label ?? 'Newest first';
+  }
+
+  get filteredTerritories(): Territory[] {
+    if (this.listSortField === 'status') {
+      if (this.listSortDir === 'asc') {
+        // "Assigned" filter — show only assigned
+        return this.territories.filter(t =>
+          t.status === 'Assigned' || t.status === 'DisputedAssigned'
+        );
+      } else {
+        // "Unassigned" filter — show only unassigned/disputed
+        return this.territories.filter(t =>
+          t.status === 'Unassigned' || t.status === 'DisputedViewOnly'
+        );
+      }
+    }
+    return this.territories;
   }
 
   // ── Assign modal (existing unassigned territory from list) ────────────────
@@ -481,14 +498,19 @@ export class TerritoryManagementComponent implements OnInit, OnDestroy {
     const code = territory.countries[0];
     this.tabBeforeDetail = this.activeTab;
     this.highlightCountryCode = '';
-    this.activeTab = 'map';
-    this.cdr.detectChanges();
-    // let the map tab render, then trigger zoom
-    setTimeout(() => {
-      this.highlightCountryCode = code;
+    if (this.activeTab === 'map') {
+      // highlight on map in background
+      this.cdr.detectChanges();
+      setTimeout(() => {
+        this.highlightCountryCode = code;
+        this.openTerritoryDetail(territory);
+        this.cdr.detectChanges();
+      }, 50);
+    } else {
+      // stay on list tab — open detail immediately
       this.openTerritoryDetail(territory);
       this.cdr.detectChanges();
-    }, 50);
+    }
   }
 
   closeDetail(): void {
