@@ -29,6 +29,7 @@ public class AdminRegionalController : ControllerBase
     private readonly IRegionalAnalyticsService _analytics;
     private readonly IRegionalMediaService _media;
     private readonly IRegionalEntityImageStorageService _regionalImageStorage;
+    private readonly IEntityProfileService _entityProfile;
     private readonly UploadLimitsOptions _uploadLimits;
     private readonly ILogger<AdminRegionalController> _logger;
 
@@ -44,6 +45,7 @@ public class AdminRegionalController : ControllerBase
         IRegionalAnalyticsService analytics,
         IRegionalMediaService media,
         IRegionalEntityImageStorageService regionalImageStorage,
+        IEntityProfileService entityProfile,
         IOptions<UploadLimitsOptions> uploadLimits,
         ILogger<AdminRegionalController> logger)
     {
@@ -58,8 +60,67 @@ public class AdminRegionalController : ControllerBase
         _analytics = analytics;
         _media = media;
         _regionalImageStorage = regionalImageStorage;
+        _entityProfile = entityProfile;
         _uploadLimits = uploadLimits.Value;
         _logger = logger;
+    }
+
+    [HttpGet("region-profile")]
+    public async Task<ActionResult<EntityProfileDto>> GetRegionProfile(
+        [FromQuery] int regionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        try
+        {
+            return Ok(await _entityProfile.GetRegionProfileAsync(GetCurrentUserId(), regionId, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpPut("region-profile")]
+    public async Task<ActionResult<EntityProfileDto>> UpdateRegionProfile(
+        [FromQuery] int regionId,
+        [FromBody] EntityProfileUpdateRequestDto? request,
+        CancellationToken cancellationToken = default)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        if (request is null)
+            return BadRequest(new { message = "Request body is required." });
+
+        try
+        {
+            return Ok(await _entityProfile.UpdateRegionProfileAsync(GetCurrentUserId(), regionId, request, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
+    }
+
+    [HttpGet("region-tags")]
+    public async Task<ActionResult<List<EntityProfileTagDto>>> GetRegionTags(
+        [FromQuery] int regionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (regionId <= 0)
+            return BadRequest(new { message = "regionId is required." });
+
+        try
+        {
+            return Ok(await _entityProfile.GetRegionTagsAsync(GetCurrentUserId(), regionId, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            return HandleException(ex);
+        }
     }
 
     [HttpGet("regions")]

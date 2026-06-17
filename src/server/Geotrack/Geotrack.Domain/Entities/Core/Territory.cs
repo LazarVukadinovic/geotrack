@@ -1,4 +1,5 @@
-﻿using Geotrack.Domain.Entities.Users;
+﻿using Geotrack.Domain.Entities.Tags;
+using Geotrack.Domain.Entities.Users;
 
 namespace Geotrack.Domain.Entities.Core;
 
@@ -29,6 +30,7 @@ public class Territory
     public ICollection<TerritoryManagerTerritory> TerritoryManagerTerritories { get; set; } = new List<TerritoryManagerTerritory>();
 
     public ICollection<EntityImage> Images { get; set; } = new List<EntityImage>();
+    public ICollection<TerritoryTag> TerritoryTags { get; set; } = new List<TerritoryTag>();
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

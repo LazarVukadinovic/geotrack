@@ -1,5 +1,6 @@
 ﻿using Geotrack.Application.DTOs.Common;
 using Geotrack.Application.DTOs.Locations;
+using Geotrack.Application.DTOs.Tags;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
@@ -61,6 +62,10 @@ public class LocationService : ILocationService
             IsSaved = isSaved,
             SavedCollectionIds = savedCollectionIds,
             Images = location.Images.ToPublicEntityImageDtos(),
+            Tags = location.LocationTags
+                .Select(lt => new TagDto { Id = lt.Tag.Id, Name = lt.Tag.Name, Slug = lt.Tag.Slug })
+                .OrderBy(t => t.Name)
+                .ToList(),
             Sections = BuildLocationPreviewSections(location),
             SimilarLocations = similarLocations,
             RelatedEvents = relatedEvents.Select(MapEventItem).ToList()

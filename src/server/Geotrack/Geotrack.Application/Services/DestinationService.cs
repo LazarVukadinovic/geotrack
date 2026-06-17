@@ -1,5 +1,6 @@
 ﻿using Geotrack.Application.DTOs.Common;
 using Geotrack.Application.DTOs.Destinations;
+using Geotrack.Application.DTOs.Tags;
 using Geotrack.Application.Interfaces.Repository;
 using Geotrack.Application.Interfaces.Service;
 using Geotrack.Domain.Entities.Core;
@@ -60,6 +61,10 @@ public class DestinationService : IDestinationService
             IsSaved = isSaved,
             SavedCollectionIds = savedCollectionIds,
             Images = destination.Images.ToPublicEntityImageDtos(),
+            Tags = destination.DestinationTags
+                .Select(dt => new TagDto { Id = dt.Tag.Id, Name = dt.Tag.Name, Slug = dt.Tag.Slug })
+                .OrderBy(t => t.Name)
+                .ToList(),
             Sections = BuildDestinationPreviewSections(destination),
             TopPlaces = BuildDestinationTopPlaces(destination),
             SimilarDestinations = similarDestinations

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
 
 namespace Geotrack.Domain.Entities.Core;
@@ -37,4 +38,5 @@ public class Region
     public DateTime? UpdatedAt { get; set; }
 
     public ICollection<EntityImage> Images { get; set; } = new List<EntityImage>();
+    public ICollection<RegionTag> RegionTags { get; set; } = new List<RegionTag>();
 }

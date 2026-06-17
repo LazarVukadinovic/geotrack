@@ -24,6 +24,7 @@ import {
   TerritoryRegionManager,
 } from '../../../../../core/models/dashboard.model';
 import { buildAvatarDisplayUrl } from '../../../../../core/utils/avatar-url';
+import { EntityProfileEditModalComponent, EntityProfileEditContext } from '../../../../../shared/components/entity-profile-edit-modal/entity-profile-edit-modal.component';
 
 const CONTENT_PAGE_SIZE = 25;
 
@@ -40,7 +41,7 @@ interface ContentSortOption {
 @Component({
   selector: 'app-region-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, FormsModule, SidebarComponent, TopbarComponent, EntityProfileEditModalComponent],
   templateUrl: './region-detail.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -48,6 +49,9 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
   detail: TerritoryRegionDetail | null = null;
   isLoading = false;
   errorMessage: string | null = null;
+
+  profileModalOpen = false;
+  profileModalContext: EntityProfileEditContext | null = null;
 
   activeTab: TerritoryRegionContentType = 'destinations';
   contentItems: TerritoryRegionContentItem[] = [];
@@ -169,6 +173,34 @@ export class RegionDetailComponent implements OnInit, OnDestroy {
 
   goBack(): void {
     this.location.back();
+  }
+
+  get isTerritoryManager(): boolean {
+    return this.auth.canAccessTerritoryAdmin();
+  }
+
+  openProfileModal(): void {
+    if (!this.detail) return;
+    if (this.isTerritoryManager) {
+      this.profileModalContext = {
+        entityType: 'territory',
+        entityId: this.detail.region.territoryId,
+        entityName: this.detail.region.territoryDisplayName ?? this.detail.region.name,
+      };
+    } else {
+      this.profileModalContext = {
+        entityType: 'region',
+        entityId: this.detail.region.id,
+        entityName: this.detail.region.displayName || this.detail.region.name,
+      };
+    }
+    this.profileModalOpen = true;
+    this.notifyStateChanged();
+  }
+
+  closeProfileModal(): void {
+    this.profileModalOpen = false;
+    this.notifyStateChanged();
   }
 
   onTerritoryChange(territoryId: number): void {

@@ -15,11 +15,12 @@ import {
   RegionalDashboardActivityItem,
   RegionalRequestQueuePreviewItem,
 } from '../../../../core/models/dashboard.model';
+import { EntityProfileEditModalComponent, EntityProfileEditContext } from '../../../../shared/components/entity-profile-edit-modal/entity-profile-edit-modal.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, SidebarComponent, TopbarComponent, EntityProfileEditModalComponent],
   templateUrl: './dashboard-page.component.html',
   styleUrl: './dashboard-page.component.css',
 })
@@ -34,6 +35,9 @@ export class DashboardComponent implements OnInit {
   errorMessage: string | null = null;
   authRequired = false;
   regionPickerOpen = false;
+
+  profileModalOpen = false;
+  profileModalContext: EntityProfileEditContext | null = null;
 
   constructor(
     private readonly router: Router,
@@ -158,6 +162,23 @@ export class DashboardComponent implements OnInit {
 
   closeRegionPicker(): void {
     this.regionPickerOpen = false;
+  }
+
+  openProfileModal(): void {
+    const region = this.activeRegion;
+    if (!region) return;
+    this.profileModalContext = {
+      entityType: 'region',
+      entityId: region.id,
+      entityName: region.displayName,
+    };
+    this.profileModalOpen = true;
+    this.notifyStateChanged();
+  }
+
+  closeProfileModal(): void {
+    this.profileModalOpen = false;
+    this.notifyStateChanged();
   }
 
   statusClass(status: string | null | undefined): string {

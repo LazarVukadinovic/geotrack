@@ -23,6 +23,10 @@ public class TerritoryRepository : Repository<Territory>, ITerritoryRepository
     {
         return await _context.Set<Territory>()
             .Include(t => t.Images)
+            .Include(t => t.TerritoryTags)
+                .ThenInclude(tt => tt.Tag)
+            .Include(t => t.Regions)
+                .ThenInclude(r => r.Images)
             .Include(t => t.Regions)
                 .ThenInclude(r => r.RegionalManagerRegions)
             .Include(t => t.Regions)

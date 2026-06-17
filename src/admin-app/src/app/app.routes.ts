@@ -6,6 +6,7 @@ import {
   loginRedirectGuard,
   regionalManagerGuard,
   territoryManagerGuard,
+  regionalOrTerritoryManagerGuard,
 } from './core/guards/auth.guard';
 export const routes: Routes = [
   // Redirect root → login
@@ -292,7 +293,7 @@ export const routes: Routes = [
       },
       {
         path: 'territory/regions/:id',
-        canActivate:[territoryManagerGuard],
+        canActivate:[regionalOrTerritoryManagerGuard],
         loadComponent: () => import('./features/regions/pages/region-detail/region-detail/region-detail.component').then(m=>m.RegionDetailComponent),
       },
       {

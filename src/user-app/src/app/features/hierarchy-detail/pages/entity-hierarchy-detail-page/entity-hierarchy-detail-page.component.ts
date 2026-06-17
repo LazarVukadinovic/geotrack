@@ -69,6 +69,7 @@ interface HierarchyDetail {
   parent?: DetailParentLink | null;
   parentTerritoryId?: string | null;
   images: EntityImage[];
+  tags: string[];
   sections: DetailSectionPreview[];
   relatedEvents: DetailItem[];
   topPlaces: DetailItem[];
@@ -136,12 +137,10 @@ export class EntityHierarchyDetailPageComponent {
     return getCoverImageUrl(d.images, d.images[0]?.url ?? '');
   });
 
-  // Tags are not modelled for hierarchy entities in the database; the entity
-  // type label is used as a placeholder category chip so the layout matches the
-  // place detail page (cover → tags → title).
   protected readonly displayTags = computed<string[]>(() => {
     const d = this.detail();
-    return d ? [d.typeLabel] : [];
+    if (!d) return [];
+    return d.tags.length > 0 ? d.tags : [d.typeLabel];
   });
 
   // Regions and territories frequently have no stored description. Fall back to
@@ -519,6 +518,7 @@ export class EntityHierarchyDetailPageComponent {
     const id = this.toStringValue(dto['id']);
     const title = this.toStringValue(dto['name']) || 'Untitled';
     const images = normalizeEntityImages(dto['images'] as ApiEntityImage[] | null | undefined);
+    const tags = this.mapTags(dto['tags']) ?? [];
     const base = {
       id,
       title,
@@ -526,6 +526,7 @@ export class EntityHierarchyDetailPageComponent {
       rating: this.toNullableNumber(dto['averageRating']),
       reviewsCount: this.toNullableNumber(dto['reviewsCount']),
       images,
+      tags,
       reviews: [],
       hasMoreReviews: false,
       totalReviewsCount: this.toNullableNumber(dto['reviewsCount']) ?? 0,
