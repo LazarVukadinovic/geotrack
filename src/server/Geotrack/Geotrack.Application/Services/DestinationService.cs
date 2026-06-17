@@ -61,6 +61,7 @@ public class DestinationService : IDestinationService
             SavedCollectionIds = savedCollectionIds,
             Images = destination.Images.ToPublicEntityImageDtos(),
             Sections = BuildDestinationPreviewSections(destination),
+            TopPlaces = BuildDestinationTopPlaces(destination),
             SimilarDestinations = similarDestinations
         };
     }
@@ -256,6 +257,20 @@ public class DestinationService : IDestinationService
         };
     }
 
+    private List<DestinationSectionPlaceItemDto> BuildDestinationTopPlaces(Destination destination)
+    {
+        return destination.Locations
+            .Where(l => l.Status == PublishedStatus)
+            .SelectMany(l => l.Places)
+            .Where(p => p.Status == PublishedStatus)
+            .OrderByDescending(p => p.AverageRating ?? 0d)
+            .ThenByDescending(p => p.ReviewCount)
+            .ThenBy(p => p.Name)
+            .Take(SectionPreviewLimit * 2)
+            .Select(MapDestinationPlaceItem)
+            .ToList();
+    }
+
     private static DestinationSectionPlaceItemDto MapDestinationPlaceItem(Place place)
     {
         return new DestinationSectionPlaceItemDto
@@ -263,7 +278,9 @@ public class DestinationService : IDestinationService
             Id = place.Id,
             Name = place.Name,
             Image = PickCardImage(place.Images),
-            LocationId = place.LocationId
+            LocationId = place.LocationId,
+            AverageRating = Math.Round(place.AverageRating ?? 0d, 2),
+            ReviewCount = place.ReviewCount
         };
     }
 

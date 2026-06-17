@@ -12,4 +12,6 @@ public class DestinationSectionPlaceItemDto
     public string Name { get; set; } = string.Empty;
     public string? Image { get; set; }
     public int LocationId { get; set; }
+    public double AverageRating { get; set; }
+    public int ReviewCount { get; set; }
 }
