@@ -103,20 +103,6 @@ export const routes: Routes = [
             .then(m => m.ContentModeratorEntityReviewComponent),
       },
       {
-        path: 'content-moderator/contributions',
-        canActivate: [contentModeratorGuard],
-        loadComponent: () =>
-          import('./features/content-moderator/pages/cm-contributions/cm-contributions.component')
-            .then(m => m.CmContributionsComponent),
-      },
-      {
-        path: 'content-moderator/contributions/:id',
-        canActivate: [contentModeratorGuard],
-        loadComponent: () =>
-          import('./features/content-moderator/pages/cm-contributions/cm-contribution-detail.component')
-            .then(m => m.CmContributionDetailComponent),
-      },
-      {
         path: 'content-moderator/review-management',
         canActivate: [contentModeratorGuard],
         loadComponent: () =>

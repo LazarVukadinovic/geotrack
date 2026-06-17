@@ -286,31 +286,6 @@ public sealed class AdminNotificationService : IAdminNotificationService
         if (row is null)
             return;
 
-        var hasActiveManager = await _db.RegionalManagerRegions
-            .AsNoTracking()
-            .AnyAsync(r => r.RegionId == row.RegionId && r.IsActive, cancellationToken);
-
-        if (!hasActiveManager)
-        {
-            var cmTitle = "New request pending review";
-            var cmMessage = $"{ContributionTypeLabel(row.Type)} request for {TrimForMessage(row.Name, 80)} — region {row.RegionName} has no assigned manager.";
-            await AddNotificationIfMissingAsync(
-                audienceRole: ContentModeratorAudienceRole,
-                type: ContributionPendingReviewType,
-                title: cmTitle,
-                message: cmMessage,
-                severity: InfoSeverity,
-                targetType: ContributionTargetType,
-                targetId: row.Id,
-                targetRoute: $"/content-moderator/contributions/{row.Id}",
-                metadataSummary: row.RegionName,
-                createdAt: row.SubmittedAt == default ? DateTime.UtcNow : row.SubmittedAt,
-                scopeType: GlobalScopeType,
-                scopeId: null,
-                scopeLabel: null,
-                cancellationToken);
-            return;
-        }
 
         var title = "New request pending review";
         var message = $"{ContributionTypeLabel(row.Type)} request for {TrimForMessage(row.Name, 80)} was submitted in {row.RegionName}.";
@@ -332,41 +307,6 @@ public sealed class AdminNotificationService : IAdminNotificationService
             cancellationToken);
     }
 
-    public async Task CreateContentManagerContributionPendingReviewNotificationAsync(
-        PlaceContribution contribution,
-        CancellationToken cancellationToken = default)
-    {
-        if (contribution.Id <= 0)
-            return;
-
-        var row = await _db.PlaceContributions
-            .AsNoTracking()
-            .Where(item => item.Id == contribution.Id && !item.LocationId.HasValue)
-            .Select(item => new { item.Id, item.Name, item.Type, item.SubmittedAt })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (row is null)
-            return;
-
-        var title = "New request pending review";
-        var message = $"{ContributionTypeLabel(row.Type)} request for {TrimForMessage(row.Name, 80)} — location is outside any mapped region.";
-
-        await AddNotificationIfMissingAsync(
-            audienceRole: ContentModeratorAudienceRole,
-            type: ContributionPendingReviewType,
-            title: title,
-            message: message,
-            severity: InfoSeverity,
-            targetType: ContributionTargetType,
-            targetId: row.Id,
-            targetRoute: $"/content-moderator/contributions/{row.Id}",
-            metadataSummary: string.Empty,
-            createdAt: row.SubmittedAt == default ? DateTime.UtcNow : row.SubmittedAt,
-            scopeType: GlobalScopeType,
-            scopeId: null,
-            scopeLabel: null,
-            cancellationToken);
-    }
 
     public async Task CreateTerritoryRegionCreatedNotificationAsync(
         int territoryId,
