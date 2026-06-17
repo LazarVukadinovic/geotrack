@@ -285,8 +285,7 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
 
         var ordered = items.ToList();
         var pageItems = ordered.Skip(skip).Take(take).ToList();
-        var representativeImages = await GetRepresentativeImagesForRegionsAsync(
-            pageItems.Select(item => item.RegionId).ToList());
+        var representativeImages = await GetRepresentativeImagesForRegionsAsync(pageItems);
 
         foreach (var item in pageItems)
         {
@@ -1567,15 +1566,24 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
     }
 
     private async Task<Dictionary<int, TerritoryRegionRepresentativeImageDto>> GetRepresentativeImagesForRegionsAsync(
-        List<int> regionIds)
+        IReadOnlyList<TerritoryRegionDirectoryItemDto> regionItems)
     {
-        regionIds = regionIds
+        var regionIds = regionItems
+            .Select(item => item.RegionId)
             .Where(regionId => regionId > 0)
             .Distinct()
             .ToList();
 
         if (regionIds.Count == 0)
             return new Dictionary<int, TerritoryRegionRepresentativeImageDto>();
+
+        // Maps each region on the current page to its owning territory so a
+        // territory-level profile image can act as a fallback for its regions.
+        var regionTerritoryMap = regionItems
+            .Where(item => item.RegionId > 0 && item.TerritoryId > 0)
+            .GroupBy(item => item.RegionId)
+            .ToDictionary(group => group.Key, group => group.First().TerritoryId);
+        var territoryIds = regionTerritoryMap.Values.Distinct().ToList();
 
         var candidates = new List<RegionRepresentativeImageCandidate>();
 
@@ -1678,6 +1686,91 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 ImageId = image.Id
             })
             .ToListAsync());
+
+        // Region-level profile image (set via "Edit Region Details"). This is an
+        // explicitly chosen card image for the region, so it takes precedence over
+        // images pulled from the region's child content.
+        candidates.AddRange(await _db.EntityImages
+            .AsNoTracking()
+            .Where(image =>
+                image.TargetType == EntityImageTargetType.Region &&
+                image.RegionId.HasValue &&
+                image.Url != string.Empty &&
+                regionIds.Contains(image.RegionId.Value))
+            .Select(image => new RegionRepresentativeImageCandidate
+            {
+                RegionId = image.RegionId!.Value,
+                SourcePriority = -2,
+                SourceType = "Region",
+                SourceId = image.RegionId!.Value,
+                SourceName = image.Region!.Name,
+                SourceStatus = "Active",
+                Url = image.Url,
+                AltText = image.AltText,
+                IsMain = image.IsMain,
+                ImageRole = image.ImageRole,
+                SortOrder = image.SortOrder,
+                CreatedAt = image.CreatedAt,
+                ImageId = image.Id
+            })
+            .ToListAsync());
+
+        // Territory-level profile image (set via "Edit Territory Details"). Shared
+        // across every region in the territory, so it is only used as a last-resort
+        // fallback when a region has no image of its own or from its child content.
+        if (territoryIds.Count > 0)
+        {
+            var territoryImages = await _db.EntityImages
+                .AsNoTracking()
+                .Where(image =>
+                    image.TargetType == EntityImageTargetType.Territory &&
+                    image.TerritoryId.HasValue &&
+                    image.Url != string.Empty &&
+                    territoryIds.Contains(image.TerritoryId.Value))
+                .Select(image => new
+                {
+                    TerritoryId = image.TerritoryId!.Value,
+                    TerritoryName = image.Territory!.Name,
+                    image.Url,
+                    image.AltText,
+                    image.SortOrder,
+                    image.CreatedAt,
+                    ImageId = image.Id
+                })
+                .ToListAsync();
+
+            var territoryImagesByTerritory = territoryImages
+                .GroupBy(image => image.TerritoryId)
+                .ToDictionary(group => group.Key, group => group.ToList());
+
+            foreach (var entry in regionTerritoryMap)
+            {
+                if (!territoryImagesByTerritory.TryGetValue(entry.Value, out var images))
+                    continue;
+
+                foreach (var image in images)
+                {
+                    candidates.Add(new RegionRepresentativeImageCandidate
+                    {
+                        RegionId = entry.Key,
+                        SourcePriority = 100,
+                        SourceType = "Territory",
+                        SourceId = entry.Value,
+                        SourceName = image.TerritoryName,
+                        SourceStatus = "Active",
+                        Url = image.Url,
+                        AltText = image.AltText,
+                        // Force into the non-preferred group so any region-specific
+                        // image always wins over the shared territory fallback.
+                        IsMain = false,
+                        ImageRole = EntityImageRole.Gallery,
+                        SortOrder = image.SortOrder,
+                        CreatedAt = image.CreatedAt,
+                        ImageId = image.ImageId
+                    });
+                }
+            }
+        }
 
         return candidates
             .Where(IsDisplayableRepresentativeImageCandidate)
