@@ -39,6 +39,7 @@ public class PlaceDetailDto
     public string? Category { get; set; }
     public string? ContactEmail { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? ContactPhone { get; set; }
     public string? AdmissionPriceRange { get; set; }
     public string? BookingExternalLink { get; set; }
     public List<AmenityDto> Amenities { get; set; } = new();

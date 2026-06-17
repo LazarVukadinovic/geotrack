@@ -87,6 +87,7 @@ describe('NewPlaceComponent', () => {
     flushRegionViewport(17);
     flushPlaceTypes();
     flushPlaceTags();
+    flushAmenityOptions();
 
     expect(component.activeRegionId).toBe(17);
     expect(component.streetAddress).toBe('Pinned address');
@@ -99,6 +100,7 @@ describe('NewPlaceComponent', () => {
     flushRegionViewport(17);
     flushPlaceTypes();
     flushPlaceTags();
+    flushAmenityOptions();
 
     component.onParentLocationSelection(component.createLocationOptionValue);
 
@@ -121,10 +123,12 @@ describe('NewPlaceComponent', () => {
     flushRegionViewport(17);
     flushPlaceTypes();
     flushPlaceTags();
+    flushAmenityOptions();
 
     component.placeName = 'Draft place';
     component.summary = 'Draft summary';
     component.parentDestinationId = 12;
+    component.selectedAmenities = new Set(['wifi']);
 
     component.onParentDestinationSelection(component.createDestinationOptionValue);
 
@@ -141,6 +145,7 @@ describe('NewPlaceComponent', () => {
           placeName: 'Draft place',
           summary: 'Draft summary',
           parentDestinationId: 12,
+          amenities: ['wifi'],
           pinLat: '45.123457',
           pinLng: '16.765432',
         }),
@@ -191,6 +196,23 @@ describe('NewPlaceComponent', () => {
     const request = http.expectOne('/api/admin/regional/place-tags');
     expect(request.request.method).toBe('GET');
     request.flush([]);
+  }
+
+  function flushAmenityOptions(): void {
+    const request = http.expectOne('/api/contributions/feature-options');
+    expect(request.request.method).toBe('GET');
+    request.flush({
+      amenities: [
+        { id: 'wifi', label: 'WiFi' },
+        { id: 'parking', label: 'Parking' },
+      ],
+      stayAmenities: [
+        { id: 'pool', label: 'Pool' },
+      ],
+      amenityIdsByPlaceType: {
+        place: ['wifi', 'parking'],
+      },
+    });
   }
 
   function flushReverseGeocode(latitude: number, longitude: number): void {

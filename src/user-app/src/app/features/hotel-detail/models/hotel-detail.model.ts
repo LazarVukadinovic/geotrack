@@ -72,6 +72,7 @@ export interface HotelDetail {
   website?: string | null;
   contactEmail?: string | null;
   phoneNumber?: string | null;
+  contactPhone?: string | null;
   admissionPriceRange?: string | null;
   bestTimeToVisit?: string | null;
   visitorTips?: string | null;

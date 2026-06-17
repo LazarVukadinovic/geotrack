@@ -29,6 +29,8 @@ interface ApiHotelDetail {
   website?: string | null;
   contactEmail?: string | null;
   phoneNumber?: string | null;
+  contactPhone?: string | null;
+  number?: string | null;
   admissionPriceRange?: string | null;
   bestTimeToVisit?: string | null;
   visitorTips?: string | null;
@@ -115,6 +117,7 @@ export class HotelDetailService {
         }
 
         const images = normalizeEntityImages(dto.images);
+        const phone = this.normalizePhone(dto);
         const detail: HotelDetail = {
           id: String(dto.id),
           title: dto.title,
@@ -131,8 +134,9 @@ export class HotelDetailService {
           distance: dto.distance ?? '',
           about: dto.about ?? '',
           website: dto.website ?? null,
-          contactEmail: dto.contactEmail ?? null,
-          phoneNumber: dto.phoneNumber ?? null,
+          contactEmail: this.normalizeContactEmail(dto.contactEmail),
+          phoneNumber: phone,
+          contactPhone: phone,
           admissionPriceRange: dto.admissionPriceRange ?? null,
           bestTimeToVisit: dto.bestTimeToVisit ?? null,
           visitorTips: dto.visitorTips ?? null,
@@ -221,6 +225,23 @@ export class HotelDetailService {
       }
     }
     return '?distanceOrigin=destination-centre';
+  }
+
+  private normalizePhone(dto: Pick<ApiHotelDetail, 'phoneNumber' | 'contactPhone' | 'number'>): string | null {
+    return this.firstNonBlank(dto.phoneNumber, dto.contactPhone, dto.number);
+  }
+
+  private normalizeContactEmail(value: string | null | undefined): string | null {
+    return this.firstNonBlank(value);
+  }
+
+  private firstNonBlank(...values: Array<string | null | undefined>): string | null {
+    for (const value of values) {
+      const normalized = value?.trim();
+      if (normalized) return normalized;
+    }
+
+    return null;
   }
 
   private setLoadState(id: string, state: DetailLoadState): void {

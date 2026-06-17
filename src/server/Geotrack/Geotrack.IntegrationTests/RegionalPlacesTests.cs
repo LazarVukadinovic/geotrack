@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Geotrack.Application.DTOs.Admin;
 using Geotrack.Application.DTOs.Auth;
+using Geotrack.Application.DTOs.Places;
 using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Tags;
 using Geotrack.Domain.Entities.Users;
@@ -50,7 +51,8 @@ public sealed class RegionalPlacesTests
                 fixture.AssignedRegionId,
                 fixture.AssignedLocationId,
                 placeTypeId,
-                placeTags.Select(tag => tag.Id).ToArray()));
+                placeTags.Select(tag => tag.Id).ToArray(),
+                amenities: ["wifi"]));
 
         var responseBody = await response.Content.ReadAsStringAsync();
         Assert.True(response.StatusCode == HttpStatusCode.Created, responseBody);
@@ -62,9 +64,13 @@ public sealed class RegionalPlacesTests
         Assert.Equal("Published", created.Status);
         Assert.Equal("New Regional Place", created.Name);
         Assert.Equal("Short place summary.", created.Summary);
+        Assert.Equal("contact@example.com", created.ContactEmail);
+        Assert.Equal("+1 555 000 1111", created.PhoneNumber);
+        Assert.Equal("+1 555 000 1111", created.ContactPhone);
         Assert.StartsWith("PLC-", created.InternalReferenceId);
         Assert.Equal(placeTypeId, created.PlaceTypeId);
         Assert.Equal(placeTags.Select(tag => tag.Id).OrderBy(id => id), created.Tags.Select(tag => tag.Id).OrderBy(id => id));
+        Assert.Contains(created.Amenities, amenity => amenity.Name.Equals("Free WiFi", StringComparison.OrdinalIgnoreCase));
         Assert.True(created.OperatingHoursEnabled);
         Assert.Equal(2, created.OperatingHours.Count);
         Assert.NotNull(created.PublishedAt);
@@ -78,7 +84,9 @@ public sealed class RegionalPlacesTests
         Assert.Equal(created.InternalReferenceId, stored.InternalReferenceId);
         Assert.Equal("Museum lane 1", stored.Address);
         Assert.Equal("https://example.com/place", stored.Website);
+        Assert.Equal("contact@example.com", stored.ContactEmail);
         Assert.Equal("+1 555 000 1111", stored.Number);
+        Assert.NotEmpty(await db.PlaceAmenities.Where(item => item.PlaceId == created.Id).ToListAsync());
         Assert.Equal("EUR 10 - EUR 20", stored.AdmissionPriceRange);
         Assert.Equal("https://example.com/book", stored.BookingExternalLink);
         Assert.Equal("Spring mornings", stored.BestTimeToVisit);
@@ -97,6 +105,13 @@ public sealed class RegionalPlacesTests
 
         var list = await GetPlacesAsync(manager, fixture.AssignedRegionId, search: created.InternalReferenceId);
         Assert.Contains(list.Items, item => item.Id == created.Id);
+
+        using var publicClient = app.CreateClient();
+        var publicDetail = await publicClient.GetFromJsonAsync<PlaceDetailDto>($"/api/places/{created.Id}");
+        Assert.NotNull(publicDetail);
+        Assert.Equal("contact@example.com", publicDetail!.ContactEmail);
+        Assert.Equal("+1 555 000 1111", publicDetail.PhoneNumber);
+        Assert.Equal("+1 555 000 1111", publicDetail.ContactPhone);
     }
 
     [Fact]
@@ -474,6 +489,73 @@ public sealed class RegionalPlacesTests
         Assert.Equal(18.77, updated.Longitude);
     }
 
+    [Fact]
+    public async Task Regional_place_contact_update_replaces_email_and_phone_independently()
+    {
+        await using var app = await GeotrackApiFactory.CreateAsync();
+        var fixture = await CreatePlacesFixtureAsync(app);
+
+        using var manager = await LoginAsync(app, "elena@example.com", "password123");
+        using var publicClient = app.CreateClient();
+        var url = $"/api/admin/regional/places/{fixture.SearchPlaceId}?regionId={fixture.AssignedRegionId}";
+
+        await AssertContactUpdateAsync(
+            manager,
+            publicClient,
+            url,
+            fixture.SearchPlaceId,
+            new RegionalPlaceUpdateRequestDto
+            {
+                ContactEmail = "frontdesk@example.com",
+                PhoneNumber = "",
+                ContactPhone = "+381 11 111 111"
+            },
+            "frontdesk@example.com",
+            "+381 11 111 111");
+
+        await AssertContactUpdateAsync(
+            manager,
+            publicClient,
+            url,
+            fixture.SearchPlaceId,
+            new RegionalPlaceUpdateRequestDto
+            {
+                ContactEmail = "",
+                PhoneNumber = "",
+                ContactPhone = "+381 22 222 222"
+            },
+            null,
+            "+381 22 222 222");
+
+        await AssertContactUpdateAsync(
+            manager,
+            publicClient,
+            url,
+            fixture.SearchPlaceId,
+            new RegionalPlaceUpdateRequestDto
+            {
+                ContactEmail = "only-email@example.com",
+                PhoneNumber = "",
+                ContactPhone = ""
+            },
+            "only-email@example.com",
+            null);
+
+        await AssertContactUpdateAsync(
+            manager,
+            publicClient,
+            url,
+            fixture.SearchPlaceId,
+            new RegionalPlaceUpdateRequestDto
+            {
+                ContactEmail = "",
+                PhoneNumber = "",
+                ContactPhone = ""
+            },
+            null,
+            null);
+    }
+
     private static async Task<RegionalPlaceListResponseDto> GetPlacesAsync(
         HttpClient client,
         int regionId,
@@ -498,12 +580,39 @@ public sealed class RegionalPlacesTests
         return page!;
     }
 
+    private static async Task AssertContactUpdateAsync(
+        HttpClient manager,
+        HttpClient publicClient,
+        string updateUrl,
+        int placeId,
+        RegionalPlaceUpdateRequestDto request,
+        string? expectedEmail,
+        string? expectedPhone)
+    {
+        var response = await manager.PutAsJsonAsync(updateUrl, request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == HttpStatusCode.OK, responseBody);
+
+        var updated = await response.Content.ReadFromJsonAsync<RegionalPlaceDetailDto>();
+        Assert.NotNull(updated);
+        Assert.Equal(expectedEmail, updated!.ContactEmail);
+        Assert.Equal(expectedPhone, updated.PhoneNumber);
+        Assert.Equal(expectedPhone, updated.ContactPhone);
+
+        var publicDetail = await publicClient.GetFromJsonAsync<PlaceDetailDto>($"/api/places/{placeId}");
+        Assert.NotNull(publicDetail);
+        Assert.Equal(expectedEmail, publicDetail!.ContactEmail);
+        Assert.Equal(expectedPhone, publicDetail.PhoneNumber);
+        Assert.Equal(expectedPhone, publicDetail.ContactPhone);
+    }
+
     private static RegionalPlaceCreateRequestDto BuildCreateRequest(
         int regionId,
         int locationId,
         int placeTypeId,
         int[]? tagIds = null,
-        string name = "New Regional Place")
+        string name = "New Regional Place",
+        string[]? amenities = null)
     {
         return new RegionalPlaceCreateRequestDto
         {
@@ -523,8 +632,10 @@ public sealed class RegionalPlacesTests
             AccessibilityNotes = "Step-free route available.",
             Website = "https://example.com/place",
             ContactPhone = "+1 555 000 1111",
+            ContactEmail = "contact@example.com",
             AdmissionPriceRange = "EUR 10 - EUR 20",
             BookingExternalLink = "https://example.com/book",
+            Amenities = amenities?.ToList() ?? [],
             OperatingHoursEnabled = true,
             OperatingHours =
             [

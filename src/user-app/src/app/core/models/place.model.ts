@@ -96,6 +96,7 @@ export interface PlaceDetail {
   category: PlaceCategory;
   contactEmail?: string | null;
   phoneNumber?: string | null;
+  contactPhone?: string | null;
   admissionPriceRange?: string | null;
   bookingExternalLink?: string | null;
   amenities: PlaceAmenity[];

@@ -651,7 +651,7 @@
           <div class="pd__divider pd__divider--contact"></div>
 
           <section class="pd__section pd__section--contact">
-            <h2 class="pd__section-title text-[18px] font-extrabold text-[#1a2b4c]">Operational information</h2>
+            <h2 class="pd__section-title text-[18px] font-extrabold text-[#1a2b4c]">Contact & operational information</h2>
             <div class="flex flex-col gap-2.5">
               @if (p.website) {
                 <div class="flex items-center gap-3 py-3 border-b border-[#f0f1f5] last:border-b-0">
@@ -679,16 +679,16 @@
                   </a>
                 </div>
               }
+              @if (p.phoneNumber || p.contactPhone) {
+                <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'tel:' + (p.phoneNumber || p.contactPhone)">
+                  <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Phone</span>
+                  <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ p.phoneNumber || p.contactPhone }}</span>
+                </a>
+              }
               @if (p.contactEmail) {
                 <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'mailto:' + p.contactEmail">
                   <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Email</span>
                   <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ p.contactEmail }}</span>
-                </a>
-              }
-              @if (p.phoneNumber) {
-                <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'tel:' + p.phoneNumber">
-                  <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Phone</span>
-                  <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ p.phoneNumber }}</span>
                 </a>
               }
             </div>

@@ -310,6 +310,7 @@ export class ContributionsService {
       website: isAccommodation ? '' : details.website,
       contactEmail: details.contactEmail,
       phoneNumber: details.phone,
+      contactPhone: details.phone,
       bookingExternalLink: details.bookingPartners[0]?.url ?? null,
       tags: features.tags,
       amenities: toContributionAmenityApiValues(features.amenities, isAccommodation),

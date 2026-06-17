@@ -58,6 +58,8 @@ interface ApiPlaceDetail {
   category?: string;
   contactEmail?: string | null;
   phoneNumber?: string | null;
+  contactPhone?: string | null;
+  number?: string | null;
   admissionPriceRange?: string | null;
   bookingExternalLink?: string | null;
   amenities?: { id: number; label: string; icon?: string | null }[] | null;
@@ -137,6 +139,7 @@ export class PlaceDetailService {
 
         const images = normalizeEntityImages(dto.images);
         const coverImage = getCoverImage(images);
+        const phone = this.normalizePhone(dto);
         const detail: PlaceDetail = {
           id: String(dto.id),
           title: dto.title,
@@ -186,8 +189,9 @@ export class PlaceDetailService {
           ownerContributionId: dto.ownerContributionId ?? null,
           contentType: (dto.contentType ?? 'place') as PlaceDetail['contentType'],
           category: (dto.category ?? 'attraction') as PlaceDetail['category'],
-          contactEmail: dto.contactEmail ?? null,
-          phoneNumber: dto.phoneNumber ?? null,
+          contactEmail: this.normalizeContactEmail(dto.contactEmail),
+          phoneNumber: phone,
+          contactPhone: phone,
           admissionPriceRange: dto.admissionPriceRange ?? null,
           bookingExternalLink: dto.bookingExternalLink ?? null,
           amenities: dto.amenities ?? [],
@@ -246,6 +250,23 @@ export class PlaceDetailService {
     }));
   }
 
+  private normalizePhone(dto: Pick<ApiPlaceDetail, 'phoneNumber' | 'contactPhone' | 'number'>): string | null {
+    return this.firstNonBlank(dto.phoneNumber, dto.contactPhone, dto.number);
+  }
+
+  private normalizeContactEmail(value: string | null | undefined): string | null {
+    return this.firstNonBlank(value);
+  }
+
+  private firstNonBlank(...values: Array<string | null | undefined>): string | null {
+    for (const value of values) {
+      const normalized = value?.trim();
+      if (normalized) return normalized;
+    }
+
+    return null;
+  }
+
   private buildLocationQuery(): string {
     if (this.destinationSvc.mode() === 'location') {
       const loc = this.locationSvc.location();
@@ -281,6 +302,7 @@ export class PlaceDetailService {
       next: (dto) => {
         const images = normalizeEntityImages(dto.images);
         const coverImage = getCoverImage(images);
+        const phone = this.normalizePhone(dto);
         const updated: Partial<PlaceDetail> = {
           title: dto.title,
           heroImage: getCoverImageUrl(images, dto.heroImage),
@@ -291,8 +313,9 @@ export class PlaceDetailService {
           openingHours: dto.openingHours ?? null,
           openingHoursSchedule: dto.openingHoursSchedule ?? null,
           website: dto.website ?? null,
-          contactEmail: dto.contactEmail ?? null,
-          phoneNumber: dto.phoneNumber ?? null,
+          contactEmail: this.normalizeContactEmail(dto.contactEmail),
+          phoneNumber: phone,
+          contactPhone: phone,
           admissionPriceRange: dto.admissionPriceRange ?? null,
           bookingExternalLink: dto.bookingExternalLink ?? null,
           amenities: dto.amenities ?? [],

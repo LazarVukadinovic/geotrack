@@ -157,9 +157,12 @@ export interface RegionalPlaceCreateRequest {
   accessNotes?: string | null;
   accessibilityNotes?: string | null;
   website?: string | null;
+  phoneNumber?: string | null;
   contactPhone?: string | null;
+  contactEmail?: string | null;
   admissionPriceRange?: string | null;
   bookingExternalLink?: string | null;
+  amenities?: string[];
   operatingHoursEnabled: boolean;
   operatingHours: RegionalPlaceOperatingHourDto[];
   tagIds: number[];
@@ -184,6 +187,7 @@ export interface RegionalPlaceUpdateRequest {
   website?: string | null;
   admissionPriceRange?: string | null;
   bookingExternalLink?: string | null;
+  amenities?: string[] | null;
   bestTimeToVisit?: string | null;
   visitorTips?: string | null;
   accessNotes?: string | null;

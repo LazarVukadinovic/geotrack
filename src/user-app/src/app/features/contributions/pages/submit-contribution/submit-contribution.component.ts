@@ -173,6 +173,8 @@ export class SubmitContributionComponent implements OnInit {
       openingHoursSchedule?: { day?: string | null; hours?: string | null }[] | null;
       contactEmail?: string | null;
       phoneNumber?: string | null;
+      contactPhone?: string | null;
+      number?: string | null;
       category?: string | null;
       images?: { url?: string; imageRole?: string; imagePosition?: string; imageSize?: string }[] | null;
       tags?: { label: string }[] | null;
@@ -239,8 +241,8 @@ export class SubmitContributionComponent implements OnInit {
             open24Hours: isOpen24HoursSchedule(operatingHours),
             openingHours: place.openingHours ?? '',
             operatingHours,
-            phone: place.phoneNumber ?? '',
-            contactEmail: place.contactEmail ?? '',
+            phone: firstNonBlank(place.phoneNumber, place.contactPhone, place.number) ?? '',
+            contactEmail: firstNonBlank(place.contactEmail) ?? '',
             website: place.website ?? '',
             bookingPartners: [],
           },
@@ -449,6 +451,15 @@ function toTitleCase(value: string): string {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(' ');
+}
+
+function firstNonBlank(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (normalized) return normalized;
+  }
+
+  return null;
 }
 
 function parsePlaceOpeningHoursSchedule(
