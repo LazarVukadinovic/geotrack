@@ -146,14 +146,14 @@
     >
       @for (day of days; track day.name; let last = $last) {
         <div
-          class="flex items-center gap-2 px-3 py-2.5"
+          class="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-2.5"
           [class.border-b]="!last"
           [class.border-slate-100]="!last"
         >
-          <span class="text-xs font-semibold text-slate-600 w-20 flex-none">{{ day.name }}</span>
+          <span class="text-xs font-semibold text-slate-600 w-16 sm:w-20 flex-none">{{ day.name }}</span>
 
           @if (day.open) {
-            <div class="relative flex-1 min-w-0">
+            <div class="relative flex-1 min-w-0 max-w-[5rem] sm:max-w-none">
               <input
                 [attr.name]="'openingHours-' + day.name + '-open'"
                 type="text"
@@ -166,7 +166,7 @@
                 spellcheck="false"
                 maxlength="5"
                 placeholder="HH:mm"
-                class="gt-custom-time-input w-full border border-slate-200 rounded-lg px-2 py-1.5 pr-8 text-xs text-slate-700 bg-white outline-none"
+                class="gt-custom-time-input w-full border border-slate-200 rounded-lg px-1.5 sm:px-2 py-1.5 pr-7 sm:pr-8 text-xs text-slate-700 bg-white outline-none"
                 [ngModel]="day.openTime"
                 (ngModelChange)="onTimeInput(day, 'openTime', $event)"
                 (blur)="onTimeBlur(day, 'openTime')"
@@ -183,8 +183,8 @@
                 </svg>
               </button>
             </div>
-            <span class="text-xs text-slate-400 flex-none">to</span>
-            <div class="relative flex-1 min-w-0">
+            <span class="text-xs text-slate-400 flex-none">–</span>
+            <div class="relative flex-1 min-w-0 max-w-[5rem] sm:max-w-none">
               <input
                 [attr.name]="'openingHours-' + day.name + '-close'"
                 type="text"
@@ -197,7 +197,7 @@
                 spellcheck="false"
                 maxlength="5"
                 placeholder="HH:mm"
-                class="gt-custom-time-input w-full border border-slate-200 rounded-lg px-2 py-1.5 pr-8 text-xs text-slate-700 bg-white outline-none"
+                class="gt-custom-time-input w-full border border-slate-200 rounded-lg px-1.5 sm:px-2 py-1.5 pr-7 sm:pr-8 text-xs text-slate-700 bg-white outline-none"
                 [ngModel]="day.closeTime"
                 (ngModelChange)="onTimeInput(day, 'closeTime', $event)"
                 (blur)="onTimeBlur(day, 'closeTime')"
@@ -216,7 +216,7 @@
             </div>
             <button
               type="button"
-              class="flex-none w-6 h-6 flex items-center justify-center text-slate-400 hover:text-red-500 text-base border-none bg-transparent cursor-pointer"
+              class="flex-none w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center text-slate-400 hover:text-red-500 text-sm sm:text-base border-none bg-transparent cursor-pointer"
               (click)="day.open = false; onOpeningHoursChanged()"
             >x</button>
           } @else {
