@@ -39,8 +39,8 @@ const INITIAL_LOCATION_ZOOM = 13;
 const DETAIL_FOCUS_ZOOM = 16;
 const MARKER_ACTIVATION_DEDUPE_MS = 250;
 const MARKER_DISMISS_GRACE_MS = 250;
-const PRIMARY_PLACE_TYPE_COUNT = 4;
-const PRIMARY_PLACE_TYPE_LABELS = ['stays', 'restaurant', 'cafe', 'landmark'];
+const PRIMARY_PLACE_TYPE_COUNT = 3;
+const PRIMARY_PLACE_TYPE_LABELS = ['stays', 'restaurant', 'cafe'];
 
 interface MarkerEntry {
   data: MapEntityMarker;
@@ -343,7 +343,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   get morePlaceTypeCategories(): Array<{ id: string; label: string; count?: number }> {
-    return this.categories.filter((category) => category.id !== 'all');
+    return this.categories.filter(
+      (category) => category.id !== 'all' && (category.count === undefined || category.count > 0),
+    );
+  }
+
+  get visibleMoreFilters(): MapFilterOption[] {
+    return this.availableMoreFilters.filter((filter) => filter.count > 0);
   }
 
   get isMoreActive(): boolean {

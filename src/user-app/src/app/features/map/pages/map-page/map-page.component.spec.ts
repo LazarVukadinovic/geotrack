@@ -162,9 +162,27 @@ describe('MapPageComponent', () => {
       'Stay',
       'Restaurant',
       'Cafe',
-      'Landmark',
     ]);
     expect(component.morePlaceTypeCategories).toHaveLength(5);
+
+    component.ngOnDestroy();
+  });
+
+  it('hides zero-count place types and recommended tags from More', () => {
+    const component = createComponent();
+    component.categories = [
+      { id: 'all', label: 'All' },
+      { id: 'place-type:1', label: 'Stay', count: 2 },
+      { id: 'place-type:2', label: 'Restaurant', count: 0 },
+      { id: 'place-type:3', label: 'Cafe' },
+    ];
+    component.availableMoreFilters = [
+      { id: 'tag:1', valueId: 1, label: 'Sea view', count: 0 },
+      { id: 'tag:2', valueId: 2, label: 'Family friendly', count: 3 },
+    ];
+
+    expect(component.morePlaceTypeCategories.map(category => category.label)).toEqual(['Stay', 'Cafe']);
+    expect(component.visibleMoreFilters.map(filter => filter.label)).toEqual(['Family friendly']);
 
     component.ngOnDestroy();
   });

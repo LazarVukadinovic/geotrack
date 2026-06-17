@@ -62,7 +62,7 @@
 }
 
 .map-page__side-controls {
-  top: 10.75rem;
+  top: 8.5rem;
   transform: none;
   z-index: 10;
 }
@@ -128,17 +128,17 @@
 
 .map-page__primary-filter-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.45rem;
-  overflow: visible;
+  gap: 0.35rem;
+  overflow: hidden;
 }
 
 .map-page__primary-filter-chip {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
-  padding: 0.5rem 0.8rem;
-  font-size: 0.78rem;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.72rem;
   line-height: 1.1;
 }
 
@@ -345,9 +345,11 @@
   }
 
   .map-page__primary-filter-row {
+    flex-wrap: wrap;
     gap: var(--space-2, 0.5rem);
     margin-top: 0;
     padding-bottom: 0;
+    overflow: visible;
   }
 
   .map-page__primary-filter-chip {

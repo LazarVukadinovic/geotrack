@@ -422,9 +422,9 @@
             <p class="map-page__more-subtitle">Recommended for you</p>
             <p class="map-page__more-kicker">Based on your interests, activity and popular tags nearby.</p>
 
-            @if (availableMoreFilters.length > 0) {
+            @if (visibleMoreFilters.length > 0) {
               <div class="map-page__more-chip-list" role="list" aria-label="Recommended tag filters">
-                @for (filter of availableMoreFilters; track filter.id) {
+                @for (filter of visibleMoreFilters; track filter.id) {
                   <button
                     type="button"
                     class="map-page__more-chip"
