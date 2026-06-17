@@ -11,7 +11,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, finalize } from 'rxjs';
 import { SidebarComponent } from '../../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../../shared/components/topbar/topbar.component';
@@ -142,6 +142,7 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
 
   constructor(
     private readonly router: Router,
+    private readonly route: ActivatedRoute,
     private readonly auth: AuthService,
     private readonly svc: UsersService,
     private readonly territoryDashboard: TerritoryDashboardService,
@@ -977,6 +978,11 @@ export class UserAdministrationComponent implements OnInit, OnDestroy {
           }
 
           this.loadUsers(true);
+
+          if (this.route.snapshot.queryParamMap.get('openAddModal') === 'true') {
+            this.router.navigate([], { queryParams: {}, replaceUrl: true });
+            setTimeout(() => this.openAddRegionalManagerModal(), 300);
+          }
         },
         error: error => {
           this.handleLoadError(error, 'Unable to load assigned territories.');
