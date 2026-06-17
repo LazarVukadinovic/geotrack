@@ -442,6 +442,7 @@ export class AddDestinationComponent implements OnInit, AfterViewInit, OnDestroy
           this.centerLat = dto.latitude;
           this.centerLng = dto.longitude;
           this.zoneConfirmed = true;
+          this.validateSelectedPoint(dto.latitude, dto.longitude);
           setTimeout(() => this.showZoneOnMiniMap(), 0);
         }
 

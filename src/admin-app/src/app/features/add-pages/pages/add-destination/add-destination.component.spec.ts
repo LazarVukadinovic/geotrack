@@ -29,6 +29,7 @@ describe('AddDestinationComponent', () => {
     searchDestinationTags: ReturnType<typeof vi.fn>;
     createDestinationTag: ReturnType<typeof vi.fn>;
     createDestination: ReturnType<typeof vi.fn>;
+    getDestination: ReturnType<typeof vi.fn>;
   };
 
   const regions: RegionalAssignedRegion[] = [
@@ -59,6 +60,7 @@ describe('AddDestinationComponent', () => {
       searchDestinationTags: vi.fn(),
       createDestinationTag: vi.fn(),
       createDestination: vi.fn(),
+      getDestination: vi.fn(),
     };
     destinationsService.getDestinationTags.mockReturnValue(of(tags));
     destinationsService.searchDestinationTags.mockReturnValue(of([searchedTag]));
@@ -153,6 +155,33 @@ describe('AddDestinationComponent', () => {
     const publishButton = buttons.find(button => button.textContent?.includes('Publish'));
     expect(component.canPublish).toBe(false);
     expect(publishButton?.disabled).toBe(true);
+  });
+
+  it('validates the existing center when loading a destination for editing', () => {
+    destinationsService.getDestination.mockReturnValue(of({
+      id: 55,
+      name: 'Dubrovnik',
+      status: 'Published',
+      regionId: 7,
+      regionDisplayName: 'North, Testland',
+      destinationTypeId: 1,
+      latitude: 42.6507,
+      longitude: 18.0944,
+      hasBoundary: true,
+      boundaryDisplayName: 'Dubrovnik, Croatia',
+      boundarySource: 'OpenStreetMap',
+      tags: [],
+      galleryImageUrls: [],
+    }));
+    component.isEditMode = true;
+    component.activeRegionId = 7;
+    (component as any).editDestinationId = 55;
+    const validateSpy = vi.spyOn(component as any, 'validateSelectedPoint');
+
+    (component as any).loadDestinationForEditIfNeeded();
+
+    expect(component.existingBoundaryPresent).toBe(true);
+    expect(validateSpy).toHaveBeenCalledWith(42.6507, 18.0944);
   });
 
   it('renders internal reference id as read-only', () => {
