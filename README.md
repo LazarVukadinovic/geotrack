@@ -146,7 +146,7 @@ Trenutno ponašanje UI-ja:
 - PostgreSQL preko Npgsql
 - PostGIS i NetTopologySuite za prostorne upite
 - JWT bearer autentikacija i HttpOnly refresh cookie
-- Gemini AI provider adapter sa backend-managed pool-om API ključeva
+- Gemini AI provider adapter sa backend-managed pool-om API ključeva i fallback modelima
 - Remote HTTP JSON-RPC MCP endpoint na `/api/mcp`
 
 ## Struktura projekta
@@ -188,6 +188,15 @@ Build frontend-a:
 cd user-app
 npm run build
 ```
+
+Testovi frontend-a:
+
+```bash
+cd user-app
+npm run test:ci
+```
+
+Za admin aplikaciju iste komande se pokreću iz `admin-app` foldera.
 
 ## Pokretanje bekenda
 
@@ -237,6 +246,16 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 
 Ako korisnik baze nema dozvolu za to, ekstenziju napravite ručno nad bazom pre pokretanja aplikacije.
 
+## Testovi
+
+Backend integracioni testovi su u `server/Geotrack/Geotrack.IntegrationTests`:
+
+```bash
+dotnet test server/Geotrack/Geotrack.sln
+```
+
+Frontend testovi se pokreću kroz `npm run test:ci` u `user-app` ili `admin-app` folderu.
+
 ## Ask Agent
 
 Ask Agent je backend-driven AI funkcionalnost. Angular ne zove Gemini, OpenAI, Claude niti druge model providere direktno. Frontend učitava opcije preko:
@@ -247,7 +266,7 @@ Glavni chat ide preko:
 
 - `POST /api/agent/chat`
 
-Legacy endpoint `POST /api/agent/message` još postoji zbog kompatibilnosti, ali novi tok koristi `/api/agent/chat`.
+Legacy endpoint `POST /api/agent/message` više nije dostupan. Aktuelni tok koristi `/api/agent/chat`.
 
 Gemini je jedini provider za user-app Ask Agent tok. Model i API ključevi se podešavaju isključivo na backend-u. Frontend ne bira provider/model, ne čuva API key u browser storage-u i ne šalje privremene ili sačuvane korisničke ključeve. Ako jedan Gemini key dostigne kvotu ili rate-limit, backend privremeno hladi taj key i pokušava sledeći konfigurisani key.
 
@@ -260,7 +279,8 @@ Podešavanje preko user-secrets:
 ```bash
 dotnet user-secrets set "Gemini:ApiKeys:0" "<GEMINI_API_KEY_1>" --project server/Geotrack/Geotrack.Server
 dotnet user-secrets set "Gemini:ApiKeys:1" "<GEMINI_API_KEY_2>" --project server/Geotrack/Geotrack.Server
-dotnet user-secrets set "Gemini:Model" "gemini-3.5-flash-lite" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:Model" "gemini-3.1-flash-lite" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:FallbackModels:0" "gemini-3.5-flash" --project server/Geotrack/Geotrack.Server
 dotnet user-secrets set "Gemini:KeyCooldownSeconds" "300" --project server/Geotrack/Geotrack.Server
 ```
 
@@ -269,11 +289,12 @@ Ista podešavanja kao environment variable imena:
 ```text
 Gemini__ApiKeys__0=<GEMINI_API_KEY_1>
 Gemini__ApiKeys__1=<GEMINI_API_KEY_2>
-Gemini__Model=gemini-3.5-flash-lite
+Gemini__Model=gemini-3.1-flash-lite
+Gemini__FallbackModels__0=gemini-3.5-flash
 Gemini__KeyCooldownSeconds=300
 ```
 
-Podrazumevani model je `gemini-3.5-flash-lite`. Free quota i uslovi korišćenja zavise od Google AI Studio/Gemini pravila. Za produkciju moraju da se kontrolišu kvote, rate-limit-i i monitoring backend key pool-a.
+Podrazumevani model iz konfiguracije je `gemini-3.1-flash-lite`, sa `gemini-3.5-flash` kao fallback modelom. Ako se `Gemini:Model` ne podesi u konfiguraciji, aplikativni default u `GeminiOptions` je `gemini-3.5-flash`. Free quota i uslovi korišćenja zavise od Google AI Studio/Gemini pravila. Za produkciju moraju da se kontrolišu kvote, rate-limit-i i monitoring backend key pool-a.
 
 ## MCP konektor
 
@@ -292,6 +313,12 @@ Trenutni allowlist:
 - `geotrack_get_stay_details`
 - `geotrack_search_events`
 - `geotrack_get_event_details`
+- `geotrack_resolve_area`
+- `geotrack_search_catalog`
+- `geotrack_search_by_area`
+- `geotrack_get_area_overview`
+- `geotrack_get_category_options`
+- `geotrack_find_nearby_public_content`
 - `geotrack_get_map_filters`
 
 Lokalno povezivanje u Codex aplikaciji:
@@ -327,6 +354,5 @@ Za javni ChatGPT/Claude connector potreban je javni HTTPS URL, ne `localhost`. P
 - OpenAI i Claude provider adapteri nisu aktivni; trenutno su nedostupni scaffolding provideri.
 - Produkcioni deployment treba da podesi trajno čuvanje Data Protection ključeva pre oslanjanja na sačuvane korisničke AI ključeve.
 - Javni MCP connector zahteva HTTPS deployment.
-- Notification center postoji, ali `/settings/notifications` trenutno preusmerava nazad na `/settings`.
 - `admin-app` ima lokalni Regional Manager tok; produkcioni packaging/deployment treba posebno proveriti.
 - Angular build ima stroge bundle/style budget-e u `user-app/angular.json`; veće SCSS izmene mogu da izazovu budget upozorenja.
