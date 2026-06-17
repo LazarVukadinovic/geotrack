@@ -1,4 +1,5 @@
 import { AdminRoleCode, UserRole } from './user.model';
+import { cleanRoleName } from '../utils/role-utils';
 
 export interface AdminView {
   roleCode: AdminRoleCode;
@@ -41,7 +42,7 @@ export const ADMIN_VIEW_DEFINITIONS: readonly AdminView[] = [
 ] as const;
 
 export function normalizeAdminRoleCode(role: string | null | undefined): AdminRoleCode | null {
-  const normalized = (role ?? '').replace(/[\s_-]/g, '').toLowerCase();
+  const normalized = cleanRoleName(role ?? '').replace(/[\s_-]/g, '').toLowerCase();
 
   switch (normalized) {
     case 'admin':

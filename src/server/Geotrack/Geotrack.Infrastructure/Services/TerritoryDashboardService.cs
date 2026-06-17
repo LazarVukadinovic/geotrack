@@ -2237,8 +2237,8 @@ public sealed class TerritoryDashboardService : ITerritoryDashboardService
                 CreatedAt = place.CreatedAt,
                 UpdatedAt = place.UpdatedAt,
                 EventsCount = place.Events.Count,
-                ReviewsCount = place.ReviewCount,
-                AverageRating = place.AverageRating,
+                ReviewsCount = 0,
+                AverageRating = null,
                 ImageUrl = place.Images
                     .Where(image => image.TargetType == EntityImageTargetType.Place)
                     .OrderByDescending(image => image.IsMain)
