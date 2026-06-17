@@ -704,10 +704,10 @@ using (var interestCatalogScope = app.Services.CreateScope())
     var interestCatalogDb = interestCatalogScope.ServiceProvider.GetRequiredService<AppDbContext>();
     var interestCatalogStrategy = interestCatalogDb.Database.CreateExecutionStrategy();
 
-    await interestCatalogStrategy.ExecuteAsync(async () =>
-    {
-        await SeedData.EnsureInterestCatalogAsync(interestCatalogDb);
-    });
+    // await interestCatalogStrategy.ExecuteAsync(async () =>
+    // {
+    //     await SeedData.EnsureInterestCatalogAsync(interestCatalogDb);
+    // });
 }
 
 if (!app.Environment.IsDevelopment())
