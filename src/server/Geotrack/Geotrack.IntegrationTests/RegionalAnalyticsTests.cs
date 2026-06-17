@@ -89,8 +89,8 @@ public sealed class RegionalAnalyticsTests
         Assert.Equal(2, destinationOverview.Totals.UniqueVisitors);
         Assert.Equal(2, destinationOverview.Totals.Saves);
         Assert.Equal(2, destinationOverview.Totals.ExternalClicks);
-        Assert.Equal(2, destinationOverview.Totals.TotalReviews);
-        Assert.Equal(4.5, destinationOverview.Totals.AverageRating);
+        Assert.Equal(0, destinationOverview.Totals.TotalReviews);
+        Assert.Equal(0, destinationOverview.Totals.AverageRating);
 
         var destinationRow = Assert.Single(destinationOverview.EntityRows);
         Assert.Equal(AnalyticsEntityTypes.Destination, destinationRow.EntityType);
@@ -99,8 +99,8 @@ public sealed class RegionalAnalyticsTests
         Assert.Equal(2, destinationRow.UniqueVisitors);
         Assert.Equal(2, destinationRow.Saves);
         Assert.Equal(2, destinationRow.ExternalClicks);
-        Assert.Equal(2, destinationRow.ReviewCount);
-        Assert.Equal(4.5, destinationRow.AverageRating);
+        Assert.Equal(0, destinationRow.ReviewCount);
+        Assert.Equal(0, destinationRow.AverageRating);
         var rankedDestination = Assert.Single(destinationOverview.DestinationRanking);
         Assert.Equal(fixture.DestinationId, rankedDestination.DestinationId);
         Assert.Equal(5, rankedDestination.Visits);
@@ -111,8 +111,8 @@ public sealed class RegionalAnalyticsTests
         Assert.Equal(2, locationOverview.Totals.UniqueVisitors);
         Assert.Equal(2, locationOverview.Totals.Saves);
         Assert.Equal(2, locationOverview.Totals.ExternalClicks);
-        Assert.Equal(2, locationOverview.Totals.TotalReviews);
-        Assert.Equal(4.5, locationOverview.Totals.AverageRating);
+        Assert.Equal(0, locationOverview.Totals.TotalReviews);
+        Assert.Equal(0, locationOverview.Totals.AverageRating);
 
         var locationRow = Assert.Single(locationOverview.EntityRows);
         Assert.Equal(AnalyticsEntityTypes.Location, locationRow.EntityType);
@@ -121,8 +121,8 @@ public sealed class RegionalAnalyticsTests
         Assert.Equal(2, locationRow.UniqueVisitors);
         Assert.Equal(2, locationRow.Saves);
         Assert.Equal(2, locationRow.ExternalClicks);
-        Assert.Equal(2, locationRow.ReviewCount);
-        Assert.Equal(4.5, locationRow.AverageRating);
+        Assert.Equal(0, locationRow.ReviewCount);
+        Assert.Equal(0, locationRow.AverageRating);
         Assert.Equal(fixture.LocationId, locationOverview.TopPerformingEntities[0].EntityId);
         Assert.DoesNotContain(locationOverview.EntityRows, row => row.Name.StartsWith("Out Region", StringComparison.Ordinal));
     }
@@ -179,8 +179,8 @@ public sealed class RegionalAnalyticsTests
         Assert.Equal(fixture.AssignedRegionId, destination.RegionId);
         Assert.Equal(7, destination.Analytics.Views);
         Assert.Equal(4, destination.Analytics.Saves);
-        Assert.Equal(4, destination.Analytics.Reviews);
-        Assert.Equal(4.5, destination.Analytics.AverageRating);
+        Assert.Equal(1, destination.Analytics.Reviews);
+        Assert.Equal(5, destination.Analytics.AverageRating);
         Assert.Equal(1, destination.TypeSpecific.LocationsCount);
         Assert.True(destination.GalleryImages.Count > 0);
 
@@ -190,8 +190,8 @@ public sealed class RegionalAnalyticsTests
         Assert.Equal("Detail Destination", location.TypeSpecific.ParentDestination);
         Assert.Equal(6, location.Analytics.Views);
         Assert.Equal(3, location.Analytics.Saves);
-        Assert.Equal(3, location.Analytics.Reviews);
-        Assert.Equal(Math.Round(13d / 3d, 2, MidpointRounding.AwayFromZero), location.Analytics.AverageRating);
+        Assert.Equal(1, location.Analytics.Reviews);
+        Assert.Equal(4, location.Analytics.AverageRating);
         Assert.True(location.TypeSpecific.PlacesCount >= 2);
 
         Assert.NotNull(place);

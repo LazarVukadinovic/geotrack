@@ -49,6 +49,7 @@ export interface DetailsData {
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './step-details.component.html',
+  styleUrl: './step-details.component.css',
 })
 export class StepDetailsComponent implements AfterViewInit {
   @ViewChild('descriptionEditor') private descriptionEditor?: ElementRef<HTMLDivElement>;

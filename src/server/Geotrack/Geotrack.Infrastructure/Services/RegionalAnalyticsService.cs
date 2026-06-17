@@ -1643,7 +1643,7 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
 
         ApplyAnalyticsEventMetrics(rows, analyticsEvents);
         await ApplySaveMetricsAsync(rows, destinationIds, locationIds, placeIds, hotelIds, eventIds, aggregationMode, fromUtc, toUtc, cancellationToken);
-        await ApplyReviewMetricsAsync(rows, destinationIds, locationIds, placeIds, hotelIds, eventIds, aggregationMode, fromUtc, toUtc, cancellationToken);
+        await ApplyReviewMetricsAsync(rows, destinationIds, locationIds, placeIds, hotelIds, eventIds, fromUtc, toUtc, cancellationToken);
 
         var viewEvents = analyticsEvents.Where(evt => ViewEventTypes.Contains(evt.EventType)).ToList();
         var durationEvents = analyticsEvents
@@ -2385,28 +2385,11 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         IReadOnlyCollection<int> placeIds,
         IReadOnlyCollection<int> hotelIds,
         IReadOnlyCollection<int> eventIds,
-        MetricAggregationMode aggregationMode,
         DateTime? fromUtc,
         DateTime toUtc,
         CancellationToken cancellationToken)
     {
         var byKey = rows.ToDictionary(row => new EntityKey(row.EntityType, row.EntityId));
-
-        if (aggregationMode == MetricAggregationMode.DestinationRollup)
-        {
-            ApplyReviewRollupRows(
-                byKey,
-                await LoadDestinationRollupReviewRowsAsync(destinationIds, fromUtc, toUtc, cancellationToken));
-            return;
-        }
-
-        if (aggregationMode == MetricAggregationMode.LocationRollup)
-        {
-            ApplyReviewRollupRows(
-                byKey,
-                await LoadLocationRollupReviewRowsAsync(locationIds, fromUtc, toUtc, cancellationToken));
-            return;
-        }
 
         var destinationReviews = await ApplyCreatedPeriod(_db.DestinationReviews.AsNoTracking(), fromUtc, toUtc)
             .Where(review => destinationIds.Contains(review.DestinationId))
@@ -2461,129 +2444,6 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         foreach (var row in eventReviews)
         {
             ApplyReviewAggregate(byKey, AnalyticsEntityTypes.Event, row.EntityId, row.Count, row.Average);
-        }
-    }
-
-    private async Task<List<ReviewMetricRow>> LoadDestinationRollupReviewRowsAsync(
-        IReadOnlyCollection<int> destinationIds,
-        DateTime? fromUtc,
-        DateTime toUtc,
-        CancellationToken cancellationToken)
-    {
-        var rows = new List<ReviewMetricRow>();
-
-        rows.AddRange(await ApplyCreatedPeriod(_db.DestinationReviews.AsNoTracking(), fromUtc, toUtc)
-            .Where(review => destinationIds.Contains(review.DestinationId))
-            .GroupBy(review => review.DestinationId)
-            .Select(group => new ReviewMetricRow(
-                AnalyticsEntityTypes.Destination,
-                group.Key,
-                group.Count(),
-                group.Average(review => review.Rating)))
-            .ToListAsync(cancellationToken));
-
-        rows.AddRange(await ApplyCreatedPeriod(_db.LocationReviews.AsNoTracking(), fromUtc, toUtc)
-            .Where(review => destinationIds.Contains(review.Location.DestinationId))
-            .GroupBy(review => review.Location.DestinationId)
-            .Select(group => new ReviewMetricRow(
-                AnalyticsEntityTypes.Destination,
-                group.Key,
-                group.Count(),
-                group.Average(review => review.Rating)))
-            .ToListAsync(cancellationToken));
-
-        rows.AddRange(await ApplyCreatedPeriod(_db.PlaceReviews.AsNoTracking(), fromUtc, toUtc)
-            .Where(review => destinationIds.Contains(review.Place.Location.DestinationId))
-            .GroupBy(review => review.Place.Location.DestinationId)
-            .Select(group => new ReviewMetricRow(
-                AnalyticsEntityTypes.Destination,
-                group.Key,
-                group.Count(),
-                group.Average(review => review.Rating)))
-            .ToListAsync(cancellationToken));
-
-        rows.AddRange(await ApplyCreatedPeriod(_db.EventReviews.AsNoTracking(), fromUtc, toUtc)
-            .Where(review => destinationIds.Contains(review.Event.DestinationId))
-            .GroupBy(review => review.Event.DestinationId)
-            .Select(group => new ReviewMetricRow(
-                AnalyticsEntityTypes.Destination,
-                group.Key,
-                group.Count(),
-                group.Average(review => review.Rating)))
-            .ToListAsync(cancellationToken));
-
-        return rows;
-    }
-
-    private async Task<List<ReviewMetricRow>> LoadLocationRollupReviewRowsAsync(
-        IReadOnlyCollection<int> locationIds,
-        DateTime? fromUtc,
-        DateTime toUtc,
-        CancellationToken cancellationToken)
-    {
-        var rows = new List<ReviewMetricRow>();
-
-        rows.AddRange(await ApplyCreatedPeriod(_db.LocationReviews.AsNoTracking(), fromUtc, toUtc)
-            .Where(review => locationIds.Contains(review.LocationId))
-            .GroupBy(review => review.LocationId)
-            .Select(group => new ReviewMetricRow(
-                AnalyticsEntityTypes.Location,
-                group.Key,
-                group.Count(),
-                group.Average(review => review.Rating)))
-            .ToListAsync(cancellationToken));
-
-        rows.AddRange(await ApplyCreatedPeriod(_db.PlaceReviews.AsNoTracking(), fromUtc, toUtc)
-            .Where(review => locationIds.Contains(review.Place.LocationId))
-            .GroupBy(review => review.Place.LocationId)
-            .Select(group => new ReviewMetricRow(
-                AnalyticsEntityTypes.Location,
-                group.Key,
-                group.Count(),
-                group.Average(review => review.Rating)))
-            .ToListAsync(cancellationToken));
-
-        rows.AddRange(await ApplyCreatedPeriod(_db.EventReviews.AsNoTracking(), fromUtc, toUtc)
-            .Where(review => review.Event.LocationId.HasValue && locationIds.Contains(review.Event.LocationId.Value))
-            .GroupBy(review => review.Event.LocationId!.Value)
-            .Select(group => new ReviewMetricRow(
-                AnalyticsEntityTypes.Location,
-                group.Key,
-                group.Count(),
-                group.Average(review => review.Rating)))
-            .ToListAsync(cancellationToken));
-
-        rows.AddRange(await ApplyCreatedPeriod(_db.EventReviews.AsNoTracking(), fromUtc, toUtc)
-            .Where(review =>
-                !review.Event.LocationId.HasValue &&
-                review.Event.PlaceId.HasValue &&
-                locationIds.Contains(review.Event.Place!.LocationId))
-            .GroupBy(review => review.Event.Place!.LocationId)
-            .Select(group => new ReviewMetricRow(
-                AnalyticsEntityTypes.Location,
-                group.Key,
-                group.Count(),
-                group.Average(review => review.Rating)))
-            .ToListAsync(cancellationToken));
-
-        return rows;
-    }
-
-    private static void ApplyReviewRollupRows(
-        IReadOnlyDictionary<EntityKey, RegionalAnalyticsEntityMetricDto> rows,
-        IEnumerable<ReviewMetricRow> reviewRows)
-    {
-        foreach (var group in reviewRows.GroupBy(row => new EntityKey(row.ParentEntityType, row.ParentEntityId)))
-        {
-            var count = group.Sum(row => row.Count);
-            if (count <= 0 || !rows.TryGetValue(group.Key, out var metric))
-            {
-                continue;
-            }
-
-            var totalRating = group.Sum(row => row.Average * row.Count);
-            metric.ReviewCount = count;
-            metric.AverageRating = Math.Round(totalRating / count, 2, MidpointRounding.AwayFromZero);
         }
     }
 
@@ -3316,12 +3176,6 @@ public sealed class RegionalAnalyticsService : IRegionalAnalyticsService
         string SavedEntityType,
         int SavedEntityId,
         int UserId);
-
-    private sealed record ReviewMetricRow(
-        string ParentEntityType,
-        int ParentEntityId,
-        int Count,
-        double Average);
 
     private sealed class ExternalPartnerClickEventRow
     {
