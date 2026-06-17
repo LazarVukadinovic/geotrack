@@ -134,7 +134,6 @@ public sealed class AdminDashboardTests
         Assert.Equal(0, dashboard.Stats.PendingReportsCount);
         Assert.Equal(expected.SupportTicketsCount, dashboard.Stats.SupportTicketsCount);
         Assert.Equal(expected.OpenSupportTicketsCount, dashboard.Stats.OpenSupportTicketsCount);
-        Assert.Equal(expected.InProgressSupportTicketsCount, dashboard.Stats.InProgressSupportTicketsCount);
         Assert.Equal(expected.ResolvedSupportTicketsCount, dashboard.Stats.ResolvedSupportTicketsCount);
         Assert.Equal(expected.DismissedSupportTicketsCount, dashboard.Stats.DismissedSupportTicketsCount);
         Assert.Equal(expected.UnresolvedSupportTicketsCount, dashboard.Stats.UnresolvedSupportTicketsCount);
@@ -299,7 +298,7 @@ public sealed class AdminDashboardTests
                 Category = "location-and-maps",
                 Subject = $"{token} in progress",
                 Message = "Dashboard support in-progress ticket.",
-                Status = SupportRequestStatuses.InProgress,
+                Status = "InProgress",
                 Priority = SupportRequestPriorities.Normal,
                 CreatedAt = now.AddMinutes(-2),
                 UpdatedAt = now.AddMinutes(-1)
@@ -371,10 +370,10 @@ public sealed class AdminDashboardTests
             await db.LocationReviews.AsNoTracking().CountAsync();
         var openSupportTicketsCount = await db.SupportRequests
             .AsNoTracking()
-            .CountAsync(ticket => ticket.Status == SupportRequestStatuses.Open || ticket.Status == "Received");
-        var inProgressSupportTicketsCount = await db.SupportRequests
-            .AsNoTracking()
-            .CountAsync(ticket => ticket.Status == SupportRequestStatuses.InProgress);
+            .CountAsync(ticket =>
+                ticket.Status == SupportRequestStatuses.Open ||
+                ticket.Status == "Received" ||
+                ticket.Status == "InProgress");
 
         return new DashboardCounts(
             TerritoriesCount: await db.Territories.AsNoTracking().CountAsync(),
@@ -394,21 +393,20 @@ public sealed class AdminDashboardTests
                 .CountAsync(report => report.Status == ReviewReportStatus.Pending),
             SupportTicketsCount: await db.SupportRequests.AsNoTracking().CountAsync(),
             OpenSupportTicketsCount: openSupportTicketsCount,
-            InProgressSupportTicketsCount: inProgressSupportTicketsCount,
             ResolvedSupportTicketsCount: await db.SupportRequests
                 .AsNoTracking()
                 .CountAsync(ticket => ticket.Status == SupportRequestStatuses.Resolved),
             DismissedSupportTicketsCount: await db.SupportRequests
                 .AsNoTracking()
                 .CountAsync(ticket => ticket.Status == SupportRequestStatuses.Dismissed),
-            UnresolvedSupportTicketsCount: openSupportTicketsCount + inProgressSupportTicketsCount,
+            UnresolvedSupportTicketsCount: openSupportTicketsCount,
             HighPrioritySupportTicketsCount: await db.SupportRequests
                 .AsNoTracking()
                 .CountAsync(ticket =>
                     (
                         ticket.Status == SupportRequestStatuses.Open ||
                         ticket.Status == "Received" ||
-                        ticket.Status == SupportRequestStatuses.InProgress
+                        ticket.Status == "InProgress"
                     ) &&
                     (
                         ticket.Priority == SupportRequestPriorities.High ||
@@ -452,7 +450,6 @@ public sealed class AdminDashboardTests
         int PendingReportsCount,
         int SupportTicketsCount,
         int OpenSupportTicketsCount,
-        int InProgressSupportTicketsCount,
         int ResolvedSupportTicketsCount,
         int DismissedSupportTicketsCount,
         int UnresolvedSupportTicketsCount,

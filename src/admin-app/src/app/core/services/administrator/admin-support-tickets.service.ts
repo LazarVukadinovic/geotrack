@@ -57,10 +57,6 @@ export class AdminSupportTicketsService {
       .pipe(map(ticket => this.normalizeDetail(ticket)));
   }
 
-  markInProgress$(ticketId: number, internalNote?: string | null): Observable<AdminSupportTicketDetail> {
-    return this.updateStatus$(ticketId, { status: 'InProgress', internalNote });
-  }
-
   resolve$(ticketId: number, internalNote?: string | null): Observable<AdminSupportTicketDetail> {
     return this.updateStatus$(ticketId, { status: 'Resolved', internalNote });
   }
@@ -151,7 +147,6 @@ export class AdminSupportTicketsService {
       platform: value.platform ?? null,
       attachmentUrl: value.attachmentUrl ?? null,
       resolvedBy: this.normalizeAdminSummary(value.resolvedBy),
-      assignedAdmin: this.normalizeAdminSummary(value.assignedAdmin),
       internalNote: value.internalNote ?? null,
       resolutionMessage: value.resolutionMessage ?? null,
       statusHistory: (value.statusHistory ?? []).map(item => ({
@@ -224,7 +219,6 @@ export class AdminSupportTicketsService {
   private normalizePermissions(value: AdminSupportTicketPermissions | null | undefined): AdminSupportTicketPermissions {
     return {
       canView: value?.canView !== false,
-      canMarkInProgress: !!value?.canMarkInProgress,
       canResolve: !!value?.canResolve,
       canDismiss: !!value?.canDismiss,
       canReopen: !!value?.canReopen,
@@ -235,7 +229,6 @@ export class AdminSupportTicketsService {
   private normalizeCounts(value: AdminSupportTicketListCounts | null | undefined): AdminSupportTicketListCounts {
     return {
       openCount: this.toNumber(value?.openCount),
-      inProgressCount: this.toNumber(value?.inProgressCount),
       resolvedCount: this.toNumber(value?.resolvedCount),
       dismissedCount: this.toNumber(value?.dismissedCount),
       allCount: this.toNumber(value?.allCount),
@@ -245,7 +238,6 @@ export class AdminSupportTicketsService {
   private emptyCounts(): AdminSupportTicketListCounts {
     return {
       openCount: 0,
-      inProgressCount: 0,
       resolvedCount: 0,
       dismissedCount: 0,
       allCount: 0,
@@ -254,8 +246,6 @@ export class AdminSupportTicketsService {
 
   private normalizeStatus(value: unknown): AdminSupportTicketStatus {
     switch (String(value ?? '').trim()) {
-      case 'InProgress':
-        return 'InProgress';
       case 'Resolved':
         return 'Resolved';
       case 'Dismissed':

@@ -30,7 +30,7 @@ import {
 
 const PAGE_SIZE = 25;
 
-type TicketAction = 'inProgress' | 'resolve' | 'dismiss' | 'reopen' | 'saveNote';
+type TicketAction = 'resolve' | 'dismiss' | 'reopen' | 'saveNote';
 type TicketActionTarget = AdminSupportTicketListItem | AdminSupportTicketDetail;
 
 @Component({
@@ -55,7 +55,6 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
   readonly pageSize = PAGE_SIZE;
   readonly statusTabs: { label: string; value: AdminSupportTicketStatusFilter }[] = [
     { label: 'Open', value: 'open' },
-    { label: 'In Progress', value: 'inProgress' },
     { label: 'Resolved', value: 'resolved' },
     { label: 'Dismissed', value: 'dismissed' },
     { label: 'All', value: 'all' },
@@ -86,7 +85,6 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
   tickets: AdminSupportTicketListItem[] = [];
   counts: AdminSupportTicketListCounts = {
     openCount: 0,
-    inProgressCount: 0,
     resolvedCount: 0,
     dismissedCount: 0,
     allCount: 0,
@@ -189,7 +187,7 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
   }
 
   get unresolvedCount(): number {
-    return this.counts.openCount + this.counts.inProgressCount || this.supportReportsCount;
+    return this.counts.openCount || this.supportReportsCount;
   }
 
   get categoryFilterLabel(): string {
@@ -202,6 +200,32 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
 
   get currentSortLabel(): string {
     return this.sortOptions.find(option => option.value === this.sort)?.label ?? 'Newest First';
+  }
+
+  statusCount(status: AdminSupportTicketStatusFilter): number {
+    switch (status) {
+      case 'open':
+        return this.counts.openCount;
+      case 'resolved':
+        return this.counts.resolvedCount;
+      case 'dismissed':
+        return this.counts.dismissedCount;
+      default:
+        return this.counts.allCount;
+    }
+  }
+
+  statusCountClass(status: AdminSupportTicketStatusFilter): string {
+    switch (status) {
+      case 'open':
+        return 'bg-red-100 text-red-600';
+      case 'resolved':
+        return 'bg-emerald-100 text-emerald-700';
+      case 'dismissed':
+        return 'bg-gray-200 text-gray-600';
+      default:
+        return 'bg-slate-200 text-slate-600';
+    }
   }
 
   onSearchChange(): void {
@@ -303,11 +327,6 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  markInProgress(ticket: TicketActionTarget, event?: Event): void {
-    event?.stopPropagation();
-    this.runTicketAction('inProgress', ticket, this.noteForAction(ticket));
-  }
-
   resolveTicket(ticket: TicketActionTarget, event?: Event): void {
     event?.stopPropagation();
     this.runTicketAction('resolve', ticket, this.noteForAction(ticket));
@@ -329,8 +348,7 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
 
   hasTicketActions(ticket: TicketActionTarget): boolean {
     const permissions = ticket.permissions;
-    return permissions.canMarkInProgress ||
-      permissions.canResolve ||
+    return permissions.canResolve ||
       permissions.canDismiss ||
       permissions.canReopen;
   }
@@ -344,13 +362,11 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
   }
 
   statusLabel(status: AdminSupportTicketStatus): string {
-    return status === 'InProgress' ? 'In Progress' : status;
+    return status;
   }
 
   statusClass(status: AdminSupportTicketStatus): string {
     switch (status) {
-      case 'InProgress':
-        return 'bg-blue-50 text-blue-700 ring-1 ring-blue-200';
       case 'Resolved':
         return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
       case 'Dismissed':
@@ -428,7 +444,6 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
       hasAttachment: false,
       permissions: {
         canView: true,
-        canMarkInProgress: false,
         canResolve: false,
         canDismiss: false,
         canReopen: false,
@@ -488,7 +503,7 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
         this.nextSkip = page.nextSkip;
         this.hasMore = page.hasMore;
         this.counts = page.counts;
-        this.supportReportsCount = page.counts.openCount + page.counts.inProgressCount;
+        this.supportReportsCount = page.counts.openCount;
       },
       error: error => {
         if (sequence !== this.loadSequence) {
@@ -575,8 +590,6 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
 
   private actionRequest(action: TicketAction, ticketId: number, internalNote: string | null): Observable<AdminSupportTicketDetail> {
     switch (action) {
-      case 'inProgress':
-        return this.ticketsSvc.markInProgress$(ticketId, internalNote);
       case 'resolve':
         return this.ticketsSvc.resolve$(ticketId, internalNote);
       case 'dismiss':
@@ -625,8 +638,6 @@ export class SupportTicketsComponent implements OnInit, OnDestroy {
 
   private actionSuccessMessage(action: TicketAction): string {
     switch (action) {
-      case 'inProgress':
-        return 'Support ticket marked in progress.';
       case 'resolve':
         return 'Support ticket resolved.';
       case 'dismiss':

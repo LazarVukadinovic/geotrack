@@ -69,7 +69,6 @@ describe('AdminSupportTicketsService', () => {
           hasAttachment: false,
           permissions: {
             canView: true,
-            canMarkInProgress: true,
             canResolve: true,
             canDismiss: true,
             canReopen: false,
@@ -84,7 +83,6 @@ describe('AdminSupportTicketsService', () => {
       hasMore: false,
       counts: {
         openCount: 1,
-        inProgressCount: 0,
         resolvedCount: 0,
         dismissedCount: 0,
         allCount: 1,
@@ -130,7 +128,6 @@ describe('AdminSupportTicketsService', () => {
       statusHistory: [],
       permissions: {
         canView: true,
-        canMarkInProgress: false,
         canResolve: false,
         canDismiss: true,
         canReopen: true,

@@ -1,5 +1,5 @@
-export type AdminSupportTicketStatus = 'Open' | 'InProgress' | 'Resolved' | 'Dismissed';
-export type AdminSupportTicketStatusFilter = 'open' | 'inProgress' | 'resolved' | 'dismissed' | 'all';
+export type AdminSupportTicketStatus = 'Open' | 'Resolved' | 'Dismissed';
+export type AdminSupportTicketStatusFilter = 'open' | 'resolved' | 'dismissed' | 'all';
 export type AdminSupportTicketCategoryFilter =
   | 'all'
   | 'account-access'
@@ -30,7 +30,6 @@ export interface AdminSupportTicketAdminSummary {
 
 export interface AdminSupportTicketPermissions {
   canView: boolean;
-  canMarkInProgress: boolean;
   canResolve: boolean;
   canDismiss: boolean;
   canReopen: boolean;
@@ -72,7 +71,6 @@ export interface AdminSupportTicketDetail extends AdminSupportTicketListItem {
   platform?: string | null;
   attachmentUrl?: string | null;
   resolvedBy?: AdminSupportTicketAdminSummary | null;
-  assignedAdmin?: AdminSupportTicketAdminSummary | null;
   internalNote?: string | null;
   resolutionMessage?: string | null;
   statusHistory: AdminSupportTicketHistoryItem[];
@@ -80,7 +78,6 @@ export interface AdminSupportTicketDetail extends AdminSupportTicketListItem {
 
 export interface AdminSupportTicketListCounts {
   openCount: number;
-  inProgressCount: number;
   resolvedCount: number;
   dismissedCount: number;
   allCount: number;

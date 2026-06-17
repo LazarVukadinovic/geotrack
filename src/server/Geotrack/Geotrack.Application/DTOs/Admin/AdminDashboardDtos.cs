@@ -28,7 +28,6 @@ public class AdminDashboardStatsDto
     public int PendingReportsCount { get; set; }
     public int SupportTicketsCount { get; set; }
     public int OpenSupportTicketsCount { get; set; }
-    public int InProgressSupportTicketsCount { get; set; }
     public int ResolvedSupportTicketsCount { get; set; }
     public int DismissedSupportTicketsCount { get; set; }
     public int UnresolvedSupportTicketsCount { get; set; }

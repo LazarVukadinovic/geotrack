@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 
@@ -41,7 +42,6 @@ describe('SupportTicketsComponent', () => {
   let ticketsService: {
     getPage$: ReturnType<typeof vi.fn>;
     getDetail$: ReturnType<typeof vi.fn>;
-    markInProgress$: ReturnType<typeof vi.fn>;
     resolve$: ReturnType<typeof vi.fn>;
     dismiss$: ReturnType<typeof vi.fn>;
     reopen$: ReturnType<typeof vi.fn>;
@@ -54,7 +54,6 @@ describe('SupportTicketsComponent', () => {
     ticketsService = {
       getPage$: vi.fn((req: AdminSupportTicketPageRequest) => of(pageForRequest(req))),
       getDetail$: vi.fn((ticketId: number) => of(detailTicket(ticketId))),
-      markInProgress$: vi.fn((ticketId: number, note?: string | null) => of({ ...detailTicket(ticketId), status: 'InProgress', internalNote: note ?? null })),
       resolve$: vi.fn((ticketId: number, note?: string | null) => of({ ...detailTicket(ticketId), status: 'Resolved', internalNote: note ?? null })),
       dismiss$: vi.fn((ticketId: number, note?: string | null) => of({ ...detailTicket(ticketId), status: 'Dismissed', internalNote: note ?? null })),
       reopen$: vi.fn((ticketId: number, note?: string | null) => of({ ...detailTicket(ticketId), status: 'Open', internalNote: note ?? null })),
@@ -68,6 +67,7 @@ describe('SupportTicketsComponent', () => {
       providers: [
         { provide: AdminSupportTicketsService, useValue: ticketsService },
         { provide: AdminDashboardService, useValue: { loadDashboard: vi.fn(() => of({ badges: { supportReportsCount: 1 } })) } },
+        { provide: ActivatedRoute, useValue: { queryParams: of({}) } },
       ],
     })
       .overrideComponent(SupportTicketsComponent, {
@@ -88,6 +88,11 @@ describe('SupportTicketsComponent', () => {
       take: 25,
     }));
     expect(normalizedText()).toContain('Map issue');
+    expect(normalizedText()).toContain('Open 1');
+    expect(normalizedText()).toContain('Resolved 0');
+    expect(normalizedText()).toContain('Dismissed 0');
+    expect(normalizedText()).toContain('All 2');
+    expect(normalizedText()).not.toContain('In Progress');
   });
 
   it('appends tickets when Show More is clicked', () => {
@@ -141,7 +146,6 @@ function pageForRequest(req: AdminSupportTicketPageRequest): AdminSupportTickets
     hasMore: req.skip === 0,
     counts: {
       openCount: 1,
-      inProgressCount: 0,
       resolvedCount: 0,
       dismissedCount: 0,
       allCount: 2,
@@ -173,7 +177,6 @@ function ticketItem(ticketId: number, subject = 'Map issue'): AdminSupportTicket
     hasAttachment: false,
     permissions: {
       canView: true,
-      canMarkInProgress: true,
       canResolve: true,
       canDismiss: true,
       canReopen: false,

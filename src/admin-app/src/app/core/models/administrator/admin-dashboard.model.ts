@@ -16,7 +16,6 @@ export interface AdminDashboardStats {
   pendingReportsCount: number;
   supportTicketsCount: number;
   openSupportTicketsCount: number;
-  inProgressSupportTicketsCount: number;
   resolvedSupportTicketsCount: number;
   dismissedSupportTicketsCount: number;
   unresolvedSupportTicketsCount: number;

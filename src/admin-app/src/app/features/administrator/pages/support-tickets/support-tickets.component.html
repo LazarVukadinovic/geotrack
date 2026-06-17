@@ -133,12 +133,12 @@
               [class.text-gray-500]="statusFilter !== tab.value"
             >
               {{ tab.label }}
-              @if (tab.value === 'open' && counts.openCount > 0) {
-                <span class="ml-1 bg-red-100 text-red-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{{ counts.openCount }}</span>
-              }
-              @if (tab.value === 'inProgress' && counts.inProgressCount > 0) {
-                <span class="ml-1 bg-blue-100 text-blue-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{{ counts.inProgressCount }}</span>
-              }
+              <span
+                class="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                [class]="statusCountClass(tab.value)"
+              >
+                {{ statusCount(tab.value) }}
+              </span>
             </button>
           }
         </div>
@@ -338,11 +338,6 @@
         <button type="button" (click)="openDetail(ticket, $event)" class="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 bg-transparent border-0 cursor-pointer">
           View Details
         </button>
-        @if (ticket.permissions.canMarkInProgress) {
-          <button type="button" (click)="markInProgress(ticket, $event)" [disabled]="!!actionKey" class="w-full text-left px-4 py-2.5 text-xs text-blue-600 hover:bg-blue-50 bg-transparent border-0 cursor-pointer disabled:opacity-50">
-            Mark In Progress
-          </button>
-        }
         @if (ticket.permissions.canResolve) {
           <button type="button" (click)="resolveTicket(ticket, $event)" [disabled]="!!actionKey" class="w-full text-left px-4 py-2.5 text-xs text-emerald-600 hover:bg-emerald-50 bg-transparent border-0 cursor-pointer disabled:opacity-50">
             Resolve Ticket
@@ -437,7 +432,7 @@
               <p class="text-sm font-medium text-gray-800 mt-1">{{ formatDatetime(ticket.updatedAt || ticket.createdAt) }}</p>
             </div>
             <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-              <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Resolved</p>
+              <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Closed</p>
               <p class="text-sm font-medium text-gray-800 mt-1">{{ ticket.resolvedAt ? formatDatetime(ticket.resolvedAt) : '-' }}</p>
             </div>
           </div>
@@ -526,11 +521,6 @@
             @if (ticket.permissions.canReopen) {
               <button type="button" (click)="reopenTicket(ticket)" [disabled]="isAnyActionRunning(ticket.ticketId)" class="px-4 py-2 rounded-xl text-sm font-semibold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 disabled:opacity-50">
                 {{ isActionRunning(ticket.ticketId, 'reopen') ? 'Reopening...' : 'Reopen' }}
-              </button>
-            }
-            @if (ticket.permissions.canMarkInProgress) {
-              <button type="button" (click)="markInProgress(ticket)" [disabled]="isAnyActionRunning(ticket.ticketId)" class="px-4 py-2 rounded-xl text-sm font-semibold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 disabled:opacity-50">
-                {{ isActionRunning(ticket.ticketId, 'inProgress') ? 'Saving...' : 'Mark In Progress' }}
               </button>
             }
             @if (ticket.permissions.canDismiss) {

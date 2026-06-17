@@ -2133,16 +2133,10 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.ResolvedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasOne(x => x.AssignedAdmin)
-                .WithMany()
-                .HasForeignKey(x => x.AssignedAdminId)
-                .OnDelete(DeleteBehavior.SetNull);
-
             entity.HasIndex(x => new { x.UserId, x.CreatedAt });
             entity.HasIndex(x => new { x.Status, x.CreatedAt });
             entity.HasIndex(x => x.Priority);
             entity.HasIndex(x => x.ResolvedByUserId);
-            entity.HasIndex(x => x.AssignedAdminId);
         });
 
         modelBuilder.Entity<UserNotification>(entity =>

@@ -75,23 +75,6 @@ public sealed class AdminSupportTicketsController : ControllerBase
         }
     }
 
-    [HttpPost("{ticketId:int}/in-progress")]
-    public async Task<ActionResult<AdminSupportTicketDetailDto>> MarkInProgress(
-        [FromRoute] int ticketId,
-        [FromBody] AdminSupportTicketStatusUpdateRequestDto? request,
-        CancellationToken cancellationToken)
-    {
-        return await UpdateStatus(
-            ticketId,
-            new AdminSupportTicketStatusUpdateRequestDto
-            {
-                Status = SupportRequestStatuses.InProgress,
-                InternalNote = request?.InternalNote,
-                ResolutionMessage = request?.ResolutionMessage
-            },
-            cancellationToken);
-    }
-
     [HttpPost("{ticketId:int}/resolve")]
     public async Task<ActionResult<AdminSupportTicketDetailDto>> Resolve(
         [FromRoute] int ticketId,

@@ -71,12 +71,9 @@ public class AdminDashboardService : IAdminDashboardService
             .AsNoTracking()
             .CountAsync(ticket =>
                 ticket.Status == SupportRequestStatuses.Open ||
-                ticket.Status == "Received",
+                ticket.Status == "Received" ||
+                ticket.Status == "InProgress",
                 cancellationToken);
-
-        var inProgressSupportTicketsCount = await _db.SupportRequests
-            .AsNoTracking()
-            .CountAsync(ticket => ticket.Status == SupportRequestStatuses.InProgress, cancellationToken);
 
         var resolvedSupportTicketsCount = await _db.SupportRequests
             .AsNoTracking()
@@ -86,7 +83,7 @@ public class AdminDashboardService : IAdminDashboardService
             .AsNoTracking()
             .CountAsync(ticket => ticket.Status == SupportRequestStatuses.Dismissed, cancellationToken);
 
-        var unresolvedSupportTicketsCount = openSupportTicketsCount + inProgressSupportTicketsCount;
+        var unresolvedSupportTicketsCount = openSupportTicketsCount;
 
         var highPrioritySupportTicketsCount = await _db.SupportRequests
             .AsNoTracking()
@@ -94,7 +91,7 @@ public class AdminDashboardService : IAdminDashboardService
                 (
                     ticket.Status == SupportRequestStatuses.Open ||
                     ticket.Status == "Received" ||
-                    ticket.Status == SupportRequestStatuses.InProgress
+                    ticket.Status == "InProgress"
                 ) &&
                 (
                     ticket.Priority == SupportRequestPriorities.High ||
@@ -128,7 +125,6 @@ public class AdminDashboardService : IAdminDashboardService
                 PendingReportsCount = 0,
                 SupportTicketsCount = supportTicketsCount,
                 OpenSupportTicketsCount = openSupportTicketsCount,
-                InProgressSupportTicketsCount = inProgressSupportTicketsCount,
                 ResolvedSupportTicketsCount = resolvedSupportTicketsCount,
                 DismissedSupportTicketsCount = dismissedSupportTicketsCount,
                 UnresolvedSupportTicketsCount = unresolvedSupportTicketsCount,

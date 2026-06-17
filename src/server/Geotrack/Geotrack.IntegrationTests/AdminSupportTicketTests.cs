@@ -91,7 +91,6 @@ public sealed class AdminSupportTicketTests
         Assert.Equal("Support Reporter", item.Reporter.DisplayName);
         Assert.Equal("Open", item.Status);
         Assert.True(item.Permissions.CanView);
-        Assert.True(item.Permissions.CanMarkInProgress);
 
         var detail = await admin.Client.GetFromJsonAsync<AdminSupportTicketDetailDto>(
             $"/api/admin/support-tickets/{created.Id}",
@@ -177,16 +176,10 @@ public sealed class AdminSupportTicketTests
 
         using var admin = await LoginAdminAsync(app);
 
-        var inProgressResponse = await admin.Client.PostAsJsonAsync(
-            $"/api/admin/support-tickets/{firstId}/in-progress",
-            new AdminSupportTicketStatusUpdateRequestDto { InternalNote = "Investigating account access." });
-        inProgressResponse.EnsureSuccessStatusCode();
-
-        var inProgress = await inProgressResponse.Content.ReadFromJsonAsync<AdminSupportTicketDetailDto>(JsonOptions);
-        Assert.NotNull(inProgress);
-        Assert.Equal("InProgress", inProgress!.Status);
-        Assert.Equal(admin.UserId, inProgress.AssignedAdmin?.UserId);
-        Assert.Equal("Investigating account access.", inProgress.InternalNote);
+        var invalidInProgressResponse = await admin.Client.PostAsJsonAsync(
+            $"/api/admin/support-tickets/{firstId}/status",
+            new AdminSupportTicketStatusUpdateRequestDto { Status = "InProgress" });
+        Assert.Equal(HttpStatusCode.BadRequest, invalidInProgressResponse.StatusCode);
 
         var resolveResponse = await admin.Client.PostAsJsonAsync(
             $"/api/admin/support-tickets/{firstId}/resolve",
@@ -255,10 +248,9 @@ public sealed class AdminSupportTicketTests
         Assert.NotNull(dashboard);
         Assert.NotNull(allTickets);
         Assert.Equal(allTickets!.Counts.OpenCount, dashboard!.Stats.OpenSupportTicketsCount);
-        Assert.Equal(allTickets.Counts.InProgressCount, dashboard.Stats.InProgressSupportTicketsCount);
         Assert.Equal(allTickets.Counts.ResolvedCount, dashboard.Stats.ResolvedSupportTicketsCount);
         Assert.Equal(allTickets.Counts.DismissedCount, dashboard.Stats.DismissedSupportTicketsCount);
-        Assert.Equal(allTickets.Counts.OpenCount + allTickets.Counts.InProgressCount, dashboard.Stats.UnresolvedSupportTicketsCount);
+        Assert.Equal(allTickets.Counts.OpenCount, dashboard.Stats.UnresolvedSupportTicketsCount);
         Assert.Equal(dashboard.Stats.UnresolvedSupportTicketsCount, dashboard.Badges.SupportReportsCount);
     }
 

@@ -21,9 +21,7 @@ public class SupportRequest
     public int? ResolvedByUserId { get; set; }
     public string? InternalNote { get; set; }
     public string? ResolutionMessage { get; set; }
-    public int? AssignedAdminId { get; set; }
 
     public User? User { get; set; }
     public User? ResolvedByUser { get; set; }
-    public User? AssignedAdmin { get; set; }
 }

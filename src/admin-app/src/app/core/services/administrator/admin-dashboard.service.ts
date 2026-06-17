@@ -75,7 +75,6 @@ export class AdminDashboardService {
       pendingReportsCount: this.toNumber(value?.pendingReportsCount),
       supportTicketsCount: this.toNumber(value?.supportTicketsCount),
       openSupportTicketsCount: this.toNumber(value?.openSupportTicketsCount),
-      inProgressSupportTicketsCount: this.toNumber(value?.inProgressSupportTicketsCount),
       resolvedSupportTicketsCount: this.toNumber(value?.resolvedSupportTicketsCount),
       dismissedSupportTicketsCount: this.toNumber(value?.dismissedSupportTicketsCount),
       unresolvedSupportTicketsCount: this.toNumber(value?.unresolvedSupportTicketsCount),

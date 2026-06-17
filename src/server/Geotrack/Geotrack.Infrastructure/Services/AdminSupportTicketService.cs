@@ -13,6 +13,7 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
     private const int MessagePreviewLength = 180;
     private const int NotePreviewLength = 140;
     private const string LegacyReceivedStatus = "Received";
+    private const string LegacyInProgressStatus = "InProgress";
 
     private readonly AppDbContext _db;
 
@@ -76,7 +77,6 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
             .AsNoTracking()
             .Include(item => item.User)
             .Include(item => item.ResolvedByUser)
-            .Include(item => item.AssignedAdmin)
             .SingleOrDefaultAsync(item => item.Id == ticketId, cancellationToken);
 
         return ticket is null
@@ -102,6 +102,9 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
         if (ticket is null)
             throw new KeyNotFoundException("Support ticket was not found.");
 
+        var currentStatus = NormalizeStoredStatus(ticket.Status);
+        ValidateStatusTransition(currentStatus, nextStatus);
+
         var now = DateTime.UtcNow;
         ticket.Status = nextStatus;
         ticket.UpdatedAt = now;
@@ -116,20 +119,15 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
             ticket.ResolutionMessage = NormalizeOptionalText(request.ResolutionMessage, 2000);
         }
 
-        switch (nextStatus)
+        if (nextStatus == SupportRequestStatuses.Open)
         {
-            case SupportRequestStatuses.Open:
-                ticket.ResolvedAt = null;
-                ticket.ResolvedByUserId = null;
-                break;
-            case SupportRequestStatuses.InProgress:
-                ticket.AssignedAdminId ??= currentAdmin.UserId;
-                break;
-            case SupportRequestStatuses.Resolved:
-            case SupportRequestStatuses.Dismissed:
-                ticket.ResolvedAt = now;
-                ticket.ResolvedByUserId = currentAdmin.UserId;
-                break;
+            ticket.ResolvedAt = null;
+            ticket.ResolvedByUserId = null;
+        }
+        else
+        {
+            ticket.ResolvedAt = now;
+            ticket.ResolvedByUserId = currentAdmin.UserId;
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -191,9 +189,6 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
         return new AdminSupportTicketListCountsDto
         {
             OpenCount = await query.CountAsync(IsOpenStatusExpression(), cancellationToken),
-            InProgressCount = await query.CountAsync(
-                ticket => ticket.Status == SupportRequestStatuses.InProgress,
-                cancellationToken),
             ResolvedCount = await query.CountAsync(
                 ticket => ticket.Status == SupportRequestStatuses.Resolved,
                 cancellationToken),
@@ -211,13 +206,8 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
         return status switch
         {
             "open" => query.Where(IsOpenStatusExpression()),
-            "inProgress" => query.Where(ticket => ticket.Status == SupportRequestStatuses.InProgress),
             "resolved" => query.Where(ticket => ticket.Status == SupportRequestStatuses.Resolved),
             "dismissed" => query.Where(ticket => ticket.Status == SupportRequestStatuses.Dismissed),
-            "unresolved" => query.Where(ticket =>
-                ticket.Status == SupportRequestStatuses.Open ||
-                ticket.Status == LegacyReceivedStatus ||
-                ticket.Status == SupportRequestStatuses.InProgress),
             _ => query
         };
     }
@@ -313,7 +303,6 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
     {
         var status = NormalizeStoredStatus(ticket.Status);
         var resolvedBy = MapAdminSummary(ticket.ResolvedByUser);
-        var assignedAdmin = MapAdminSummary(ticket.AssignedAdmin);
 
         return new AdminSupportTicketDetailDto
         {
@@ -337,10 +326,9 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
             UpdatedAt = ticket.UpdatedAt,
             ResolvedAt = ticket.ResolvedAt,
             ResolvedBy = resolvedBy,
-            AssignedAdmin = assignedAdmin,
             InternalNote = ticket.InternalNote,
             ResolutionMessage = ticket.ResolutionMessage,
-            StatusHistory = BuildStatusHistory(ticket, status, resolvedBy, assignedAdmin),
+            StatusHistory = BuildStatusHistory(ticket, status, resolvedBy),
             Permissions = BuildPermissions(status)
         };
     }
@@ -348,8 +336,7 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
     private static List<AdminSupportTicketHistoryItemDto> BuildStatusHistory(
         SupportRequest ticket,
         string status,
-        AdminSupportTicketAdminSummaryDto? resolvedBy,
-        AdminSupportTicketAdminSummaryDto? assignedAdmin)
+        AdminSupportTicketAdminSummaryDto? resolvedBy)
     {
         var history = new List<AdminSupportTicketHistoryItemDto>
         {
@@ -360,17 +347,6 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
                 Note = "Support report submitted by user."
             }
         };
-
-        if (assignedAdmin is not null &&
-            (status == SupportRequestStatuses.InProgress || ticket.AssignedAdminId.HasValue))
-        {
-            history.Add(new AdminSupportTicketHistoryItemDto
-            {
-                Action = "Marked In Progress",
-                Actor = assignedAdmin,
-                CreatedAt = ticket.UpdatedAt ?? ticket.CreatedAt
-            });
-        }
 
         if (ticket.ResolvedAt.HasValue)
         {
@@ -439,9 +415,8 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
         return new AdminSupportTicketPermissionsDto
         {
             CanView = true,
-            CanMarkInProgress = status is SupportRequestStatuses.Open,
-            CanResolve = status != SupportRequestStatuses.Resolved,
-            CanDismiss = status != SupportRequestStatuses.Dismissed,
+            CanResolve = status == SupportRequestStatuses.Open,
+            CanDismiss = status == SupportRequestStatuses.Open,
             CanReopen = status is SupportRequestStatuses.Resolved or SupportRequestStatuses.Dismissed,
             CanAddNote = true
         };
@@ -451,11 +426,9 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
     {
         return NormalizeToken(value) switch
         {
-            "open" or "received" => "open",
-            "inprogress" or "in-progress" or "in_progress" => "inProgress",
+            "open" or "received" or "inprogress" or "in-progress" or "in_progress" or "unresolved" => "open",
             "resolved" => "resolved",
             "dismissed" => "dismissed",
-            "unresolved" => "unresolved",
             _ => "all"
         };
     }
@@ -465,10 +438,9 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
         return NormalizeToken(value) switch
         {
             "open" or "reopen" => SupportRequestStatuses.Open,
-            "inprogress" or "in-progress" or "in_progress" => SupportRequestStatuses.InProgress,
             "resolved" or "resolve" => SupportRequestStatuses.Resolved,
             "dismissed" or "dismiss" => SupportRequestStatuses.Dismissed,
-            _ => throw new InvalidOperationException("Invalid support ticket status.")
+            _ => throw new InvalidOperationException("Invalid support ticket status. Allowed statuses are Open, Resolved, and Dismissed.")
         };
     }
 
@@ -516,8 +488,7 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
     {
         return status?.Trim() switch
         {
-            LegacyReceivedStatus => SupportRequestStatuses.Open,
-            SupportRequestStatuses.InProgress => SupportRequestStatuses.InProgress,
+            LegacyReceivedStatus or LegacyInProgressStatus => SupportRequestStatuses.Open,
             SupportRequestStatuses.Resolved => SupportRequestStatuses.Resolved,
             SupportRequestStatuses.Dismissed => SupportRequestStatuses.Dismissed,
             _ => SupportRequestStatuses.Open
@@ -621,9 +592,27 @@ public sealed class AdminSupportTicketService : IAdminSupportTicketService
             .Replace("_", @"\_", StringComparison.Ordinal);
     }
 
+    private static void ValidateStatusTransition(string currentStatus, string nextStatus)
+    {
+        if (currentStatus == nextStatus)
+            return;
+
+        var isValid =
+            (currentStatus == SupportRequestStatuses.Open &&
+             nextStatus is SupportRequestStatuses.Resolved or SupportRequestStatuses.Dismissed) ||
+            (currentStatus is SupportRequestStatuses.Resolved or SupportRequestStatuses.Dismissed &&
+             nextStatus == SupportRequestStatuses.Open);
+
+        if (!isValid)
+            throw new InvalidOperationException($"Cannot change support ticket status from {currentStatus} to {nextStatus}. Reopen a closed ticket before closing it with a different status.");
+    }
+
     private static System.Linq.Expressions.Expression<Func<SupportRequest, bool>> IsOpenStatusExpression()
     {
-        return ticket => ticket.Status == SupportRequestStatuses.Open || ticket.Status == LegacyReceivedStatus;
+        return ticket =>
+            ticket.Status == SupportRequestStatuses.Open ||
+            ticket.Status == LegacyReceivedStatus ||
+            ticket.Status == LegacyInProgressStatus;
     }
 
     private sealed record CurrentAdmin(

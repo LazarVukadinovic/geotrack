@@ -2868,9 +2868,6 @@ namespace Geotrack.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("AssignedAdminId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("AttachmentUrl")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -2946,8 +2943,6 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AssignedAdminId");
 
                     b.HasIndex("Priority");
 
@@ -4126,11 +4121,6 @@ namespace Geotrack.Infrastructure.Migrations
 
             modelBuilder.Entity("Geotrack.Domain.Entities.Users.SupportRequest", b =>
                 {
-                    b.HasOne("Geotrack.Domain.Entities.Users.User", "AssignedAdmin")
-                        .WithMany()
-                        .HasForeignKey("AssignedAdminId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Geotrack.Domain.Entities.Users.User", "ResolvedByUser")
                         .WithMany()
                         .HasForeignKey("ResolvedByUserId")
@@ -4141,8 +4131,6 @@ namespace Geotrack.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("AssignedAdmin");
 
                     b.Navigation("ResolvedByUser");
 

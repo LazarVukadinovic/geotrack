@@ -26,7 +26,6 @@ public class AdminSupportTicketListResponseDto
 public class AdminSupportTicketListCountsDto
 {
     public int OpenCount { get; set; }
-    public int InProgressCount { get; set; }
     public int ResolvedCount { get; set; }
     public int DismissedCount { get; set; }
     public int AllCount { get; set; }
@@ -75,7 +74,6 @@ public class AdminSupportTicketDetailDto
     public DateTime? UpdatedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
     public AdminSupportTicketAdminSummaryDto? ResolvedBy { get; set; }
-    public AdminSupportTicketAdminSummaryDto? AssignedAdmin { get; set; }
     public string? InternalNote { get; set; }
     public string? ResolutionMessage { get; set; }
     public List<AdminSupportTicketHistoryItemDto> StatusHistory { get; set; } = new();
@@ -110,7 +108,6 @@ public class AdminSupportTicketHistoryItemDto
 public class AdminSupportTicketPermissionsDto
 {
     public bool CanView { get; set; }
-    public bool CanMarkInProgress { get; set; }
     public bool CanResolve { get; set; }
     public bool CanDismiss { get; set; }
     public bool CanReopen { get; set; }

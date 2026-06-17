@@ -126,6 +126,6 @@ export class AdminDashboardComponent implements OnInit, OnDestroy {
       return 'No unresolved tickets';
     }
 
-    return `${stats.openSupportTicketsCount} open, ${stats.inProgressSupportTicketsCount} in progress`;
+    return `${stats.openSupportTicketsCount} open`;
   }
 }
