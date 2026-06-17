@@ -39,10 +39,6 @@ public interface IAdminNotificationService
         ReviewReport report,
         CancellationToken cancellationToken = default);
 
-    Task CreateTerritoryContributionPendingReviewNotificationAsync(
-        PlaceContribution contribution,
-        CancellationToken cancellationToken = default);
-
     Task CreateRegionalContributionPendingReviewNotificationAsync(
         PlaceContribution contribution,
         CancellationToken cancellationToken = default);

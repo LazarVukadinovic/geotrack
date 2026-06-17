@@ -464,6 +464,7 @@ public sealed class AdminNotificationTests
         Assert.Contains(page.Items, item => item.Id == fixture.AssignedUnreadId && !item.IsRead);
         Assert.Contains(page.Items, item => item.Id == fixture.AssignedSecondUnreadId && !item.IsRead);
         Assert.Contains(page.Items, item => item.Id == fixture.AssignedRecentReadId && item.IsRead);
+        Assert.DoesNotContain(page.Items, item => item.Id == fixture.HiddenContributionNotificationId);
         Assert.DoesNotContain(page.Items, item => item.Id == fixture.HiddenReviewReportNotificationId);
         Assert.DoesNotContain(page.Items, item => item.Id == fixture.AssignedOldReadId);
         Assert.DoesNotContain(page.Items, item => item.Id == fixture.OtherTerritoryNotificationId);
@@ -504,7 +505,7 @@ public sealed class AdminNotificationTests
     }
 
     [Fact]
-    public async Task Territory_scoped_contribution_submission_creates_notification()
+    public async Task Territory_scoped_contribution_submission_notifies_regional_not_territory()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateContributionNotificationFixtureAsync(app);
@@ -551,15 +552,15 @@ public sealed class AdminNotificationTests
         await using (var scope = app.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var notification = await db.AdminNotifications.SingleAsync(item =>
+
+            // Territory Managers must not be notified about contribution/ownership requests.
+            var territoryNotificationExists = await db.AdminNotifications.AnyAsync(item =>
                 item.AudienceRole == RoleNames.TerritoryManager &&
                 item.Type == "ContributionPendingReview" &&
                 item.TargetType == "Contribution" &&
                 item.TargetId == created.Id);
 
-            Assert.Equal("Region", notification.ScopeType);
-            Assert.Equal(fixture.RegionId, notification.ScopeId);
-            Assert.StartsWith($"/territory/regions/{fixture.RegionId}", notification.TargetRoute, StringComparison.Ordinal);
+            Assert.False(territoryNotificationExists);
 
             var regionalNotification = await db.AdminNotifications.SingleAsync(item =>
                 item.AudienceRole == RoleNames.RegionalManager &&
@@ -580,10 +581,9 @@ public sealed class AdminNotificationTests
             JsonOptions);
 
         Assert.NotNull(page);
-        Assert.Contains(page!.Items, item =>
+        Assert.DoesNotContain(page!.Items, item =>
             item.Type == "ContributionPendingReview" &&
-            item.TargetId == created.Id &&
-            item.ScopeId == fixture.RegionId);
+            item.TargetId == created.Id);
 
         using var regional = await LoginAdminAppAsync(app, "elena@example.com", "password123");
         var regionalPage = await regional.Client.GetFromJsonAsync<AdminNotificationListDto>(
@@ -960,10 +960,10 @@ public sealed class AdminNotificationTests
 
         var assignedUnreadId = await AddNotificationAsync(
             app,
-            "ContributionPendingReview",
-            "Assigned contribution",
-            "A request is pending in the assigned region.",
-            "Contribution",
+            "RegionalManagerAssigned",
+            "Assigned manager update",
+            "A regional manager was assigned in the assigned region.",
+            "User",
             71001,
             audienceRole: RoleNames.TerritoryManager,
             scopeType: "Region",
@@ -971,11 +971,22 @@ public sealed class AdminNotificationTests
             scopeLabel: assignedRegion.Name);
         var assignedSecondUnreadId = await AddNotificationAsync(
             app,
-            "ContributionPendingReview",
-            "Assigned second contribution",
-            "Another content request is pending in the assigned region.",
-            "Contribution",
+            "RegionalManagerRemoved",
+            "Assigned manager removed",
+            "A regional manager was removed from the assigned region.",
+            "User",
             71002,
+            audienceRole: RoleNames.TerritoryManager,
+            scopeType: "Region",
+            scopeId: assignedRegion.Id,
+            scopeLabel: assignedRegion.Name);
+        var hiddenContributionNotificationId = await AddNotificationAsync(
+            app,
+            "ContributionPendingReview",
+            "Assigned contribution request",
+            "Contribution requests are handled by the regional manager, not the territory feed.",
+            "Contribution",
+            71008,
             audienceRole: RoleNames.TerritoryManager,
             scopeType: "Region",
             scopeId: assignedRegion.Id,
@@ -1021,10 +1032,10 @@ public sealed class AdminNotificationTests
             scopeLabel: assignedRegion.Name);
         var otherTerritoryNotificationId = await AddNotificationAsync(
             app,
-            "ContributionPendingReview",
-            "Other territory contribution",
-            "This request belongs to another territory.",
-            "Contribution",
+            "RegionCreated",
+            "Other territory region",
+            "This region belongs to another territory.",
+            "Region",
             71004,
             audienceRole: RoleNames.TerritoryManager,
             scopeType: "Region",
@@ -1041,6 +1052,7 @@ public sealed class AdminNotificationTests
         return new TerritoryNotificationFixture(
             assignedUnreadId,
             assignedSecondUnreadId,
+            hiddenContributionNotificationId,
             hiddenReviewReportNotificationId,
             assignedRecentReadId,
             assignedOldReadId,
@@ -1205,6 +1217,7 @@ public sealed class AdminNotificationTests
     private sealed record TerritoryNotificationFixture(
         int AssignedUnreadId,
         int AssignedSecondUnreadId,
+        int HiddenContributionNotificationId,
         int HiddenReviewReportNotificationId,
         int AssignedRecentReadId,
         int AssignedOldReadId,
