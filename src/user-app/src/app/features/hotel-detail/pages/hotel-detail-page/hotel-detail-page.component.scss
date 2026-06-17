@@ -328,7 +328,7 @@
 // ─── Sections ─────────────────────────────────────────────────────────────────
 
 .hd__section {
-  margin-bottom: 8px;
+  margin-bottom: 20px;
 
   &--last { margin-bottom: 0; }
 }
@@ -986,7 +986,7 @@
 
 // ─── Ownership status ──────────────────────────────────────────────────────────
 
-.hd__ownership-cta { margin-top: 14px; margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 10px; }
+.hd__ownership-action { display: flex; gap: 10px; }
 .hd__ownership-status { border-radius: 999px; padding: 10px 14px; font-size: 13px; font-weight: 800; }
 .hd__ownership-status--owned { background: rgba(16, 185, 129, 0.12); color: #065f46; }
 .hd__ownership-status--pending { background: rgba(245, 158, 11, 0.14); color: #92400e; }

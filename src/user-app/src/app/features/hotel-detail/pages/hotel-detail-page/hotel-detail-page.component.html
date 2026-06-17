@@ -168,25 +168,6 @@
           </div>
         }
 
-        @if (h.isOwnable) {
-          <div class="hd__ownership-cta">
-            @if (h.isOwnedByCurrentUser) {
-              <button type="button" class="hd__cta hd__cta--outline" (click)="navigateToOwnerEdit()">
-                Edit
-              </button>
-            } @else if (h.hasPendingOwnershipClaim || ownershipClaimSubmitted()) {
-              <div class="hd__ownership-pending">
-                <span class="hd__ownership-pending-title">Ownership request submitted.</span>
-                <span class="hd__ownership-pending-sub">A regional manager will review it</span>
-              </div>
-            } @else {
-              <button type="button" class="hd__cta hd__cta--outline" (click)="openOwnershipClaim()">
-                Request ownership
-              </button>
-            }
-          </div>
-        }
-
         @if (hasBookingPartners()) {
           <div class="hd__divider hd__divider--booking"></div>
 
@@ -528,6 +509,34 @@
 
           </div><!-- /.hd__detail-main -->
         </div><!-- /.hd__detail-grid -->
+
+        <!-- ── Ownership action ──────────────────────────────────────── -->
+        @if (h.isOwnable) {
+          <div class="hd__divider hd__divider--ownership"></div>
+
+          <section class="hd__section hd__section--ownership hd__section--last">
+            <div class="hd__ownership-action">
+              @if (h.isOwnedByCurrentUser) {
+                <button type="button" class="hd__cta hd__cta--outline" (click)="navigateToOwnerEdit()">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  Edit stay details
+                </button>
+              } @else if (h.hasPendingOwnershipClaim || ownershipClaimSubmitted()) {
+                <div class="hd__ownership-pending">
+                  <span class="hd__ownership-pending-title">Ownership request submitted.</span>
+                  <span class="hd__ownership-pending-sub">A regional manager will review it</span>
+                </div>
+              } @else {
+                <button type="button" class="hd__cta hd__cta--outline" (click)="openOwnershipClaim()">
+                  Request ownership
+                </button>
+              }
+            </div>
+          </section>
+        }
 
       </div><!-- /.hd__card -->
     </div><!-- /.hd__scroll -->
