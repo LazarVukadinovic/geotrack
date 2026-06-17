@@ -244,6 +244,25 @@ public class MapController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("current-destination")]
+    [EnableRateLimiting("map")]
+    public async Task<IActionResult> GetCurrentDestination(
+        [FromQuery] double? latitude,
+        [FromQuery] double? longitude,
+        [FromQuery] double? zoom,
+        CancellationToken cancellationToken)
+    {
+        if (!latitude.HasValue || !longitude.HasValue || !HasValidCoordinates(latitude.Value, longitude.Value))
+            return BadRequest(new { message = "Valid latitude and longitude are required." });
+
+        var effectiveZoom = NormalizeZoom(zoom);
+        return Ok(await _mapService.GetCurrentDestinationAsync(
+            latitude.Value,
+            longitude.Value,
+            effectiveZoom,
+            cancellationToken));
+    }
+
     [HttpGet("entities")]
     [EnableRateLimiting("map")]
     public async Task<IActionResult> GetEntities(

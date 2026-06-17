@@ -942,7 +942,7 @@ public class MapService : IMapService
                         .ThenBy(image => image.Id)
                         .Select(image => image.Url)
                         .FirstOrDefault(),
-                    DetailRoute = null,
+                    DetailRoute = $"/destinations/{destination.Id}",
                     Latitude = destination.Latitude,
                     Longitude = destination.Longitude,
                     Distance = null,
@@ -1059,6 +1059,88 @@ public class MapService : IMapService
             PlaceTypes = availablePlaceTypes,
             RecommendedTags = recommendedTags,
         };
+    }
+
+    public async Task<MapEntityMarkerDto?> GetCurrentDestinationAsync(
+        double latitude,
+        double longitude,
+        double zoom,
+        CancellationToken cancellationToken = default)
+    {
+        if (zoom < DestinationZoomThreshold)
+        {
+            return null;
+        }
+
+        var centerPoint = SpatialPointFactory.Create(latitude, longitude);
+        const string boundaryGeometryPropertyName = "BoundaryGeometry";
+
+        var containingDestination = await _db.Destinations
+            .AsNoTracking()
+            .Where(destination => destination.Status == PublishedStatus)
+            .Where(destination => EF.Property<Geometry?>(destination, boundaryGeometryPropertyName) != null)
+            .Where(destination => EF.Property<Geometry>(destination, boundaryGeometryPropertyName).Covers(centerPoint))
+            .OrderBy(destination => EF.Property<Geometry>(destination, boundaryGeometryPropertyName).Area)
+            .ThenBy(destination => destination.Name)
+            .Select(destination => new MapEntityMarkerDto
+            {
+                EntityType = "destination",
+                EntityId = destination.Id,
+                Title = destination.Name,
+                Subtitle = destination.DestinationType != null ? destination.DestinationType.Name : null,
+                CategoryLabel = "Destination",
+                ImageUrl = null,
+                DetailRoute = $"/destinations/{destination.Id}",
+                Latitude = destination.Latitude,
+                Longitude = destination.Longitude,
+                Distance = null,
+                IsSaved = false,
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (containingDestination is not null)
+        {
+            return containingDestination;
+        }
+
+        // Some older destinations may not have a boundary yet. In that case,
+        // use the nearest destination centre, but only within a zoom-sensitive
+        // radius so an unrelated destination is never shown for an empty area.
+        var fallbackRadiusMeters = zoom switch
+        {
+            >= 16d => 5_000d,
+            >= 14d => 15_000d,
+            >= 12d => 40_000d,
+            _ => 80_000d,
+        };
+
+        return await _db.Destinations
+            .AsNoTracking()
+            .Where(destination => destination.Status == PublishedStatus)
+            .Where(destination => EF.Property<Point?>(destination, SpatialPointFactory.CoordinatesPropertyName) != null)
+            .Select(destination => new
+            {
+                Destination = destination,
+                DistanceMeters = EF.Property<Point>(destination, SpatialPointFactory.CoordinatesPropertyName).Distance(centerPoint),
+            })
+            .Where(item => item.DistanceMeters <= fallbackRadiusMeters)
+            .OrderBy(item => item.DistanceMeters)
+            .ThenBy(item => item.Destination.Name)
+            .Select(item => new MapEntityMarkerDto
+            {
+                EntityType = "destination",
+                EntityId = item.Destination.Id,
+                Title = item.Destination.Name,
+                Subtitle = item.Destination.DestinationType != null ? item.Destination.DestinationType.Name : null,
+                CategoryLabel = "Destination",
+                ImageUrl = null,
+                DetailRoute = $"/destinations/{item.Destination.Id}",
+                Latitude = item.Destination.Latitude,
+                Longitude = item.Destination.Longitude,
+                Distance = null,
+                IsSaved = false,
+            })
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task<List<MapFilterOptionDto>> BuildRecommendedMapTagsAsync(

@@ -36,4 +36,9 @@ public interface IMapService
         IEnumerable<string>? categories,
         int? userId = null,
         CancellationToken cancellationToken = default);
+    Task<MapEntityMarkerDto?> GetCurrentDestinationAsync(
+        double latitude,
+        double longitude,
+        double zoom,
+        CancellationToken cancellationToken = default);
 }

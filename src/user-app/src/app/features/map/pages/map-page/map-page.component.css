@@ -62,9 +62,15 @@
 }
 
 .map-page__side-controls {
-  top: 50%;
-  transform: translateY(-50%);
+  top: 10.75rem;
+  transform: none;
   z-index: 10;
+}
+
+@media (max-width: 1023px) {
+  .map-page__side-controls--filters-open {
+    display: none;
+  }
 }
 
 .map-page__legend-button {
@@ -484,6 +490,8 @@
   }
 
   .map-page__side-controls {
+    top: var(--space-6, 1.5rem) !important;
     right: var(--space-6, 1.5rem) !important;
+    transform: none;
   }
 }

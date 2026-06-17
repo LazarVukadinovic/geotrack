@@ -93,6 +93,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private searchTimeout?: ReturnType<typeof setTimeout>;
   private searchSubscription?: Subscription;
   private searchRequestSeq = 0;
+  private destinationContextTimeout?: ReturnType<typeof setTimeout>;
+  private destinationContextSubscription?: Subscription;
+  private destinationContextRequestSeq = 0;
+  private dismissedDestinationId: number | null = null;
   private noDataSearchTimeout?: ReturnType<typeof setTimeout>;
   private filterCategories: string[] = [];
   private selectedCategoryLabelFilters: string[] = [];
@@ -286,6 +290,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
 
     this.cancelActiveSearch();
+    this.cancelDestinationContextRefresh();
+
+    if (this.destinationContextTimeout) {
+      clearTimeout(this.destinationContextTimeout);
+    }
 
     if (this.searchBlurTimeout) {
       clearTimeout(this.searchBlurTimeout);
@@ -586,6 +595,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
 
     if (result.type === 'destination' && result.id) {
+      this.dismissedDestinationId = null;
       this.focusedDestination = this.toDestinationMarkerFromSearchResult(result);
     }
 
@@ -994,11 +1004,14 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   openDestinationDetails(): void {
     const destination = this.focusedDestination;
-    if (!destination?.detailRoute) return;
-    void this.router.navigateByUrl(destination.detailRoute);
+    if (!destination) return;
+
+    const detailRoute = destination.detailRoute || `/destinations/${destination.entityId}`;
+    void this.router.navigateByUrl(detailRoute);
   }
 
   closeDestinationPreview(): void {
+    this.dismissedDestinationId = this.focusedDestination?.entityId ?? null;
     this.focusedDestination = null;
   }
 
@@ -1509,6 +1522,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private scheduleViewportLoad(debounceMs: number = VIEWPORT_DEBOUNCE_MS): void {
     if (!this.map) return;
 
+    this.scheduleCurrentDestinationRefresh(debounceMs);
+
     if (this.viewportLoadTimeout) {
       clearTimeout(this.viewportLoadTimeout);
       this.viewportLoadTimeout = undefined;
@@ -1523,6 +1538,86 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.viewportLoadTimeout = undefined;
       this.loadMarkersForViewport();
     }, debounceMs);
+  }
+
+  private scheduleCurrentDestinationRefresh(
+    debounceMs: number = VIEWPORT_DEBOUNCE_MS,
+  ): void {
+    if (!this.map) return;
+
+    if (this.destinationContextTimeout) {
+      clearTimeout(this.destinationContextTimeout);
+      this.destinationContextTimeout = undefined;
+    }
+
+    if (debounceMs <= 0) {
+      this.refreshCurrentDestination();
+      return;
+    }
+
+    this.destinationContextTimeout = setTimeout(() => {
+      this.destinationContextTimeout = undefined;
+      this.refreshCurrentDestination();
+    }, debounceMs);
+  }
+
+  private refreshCurrentDestination(): void {
+    if (!this.map) return;
+
+    const zoom = this.map.getZoom();
+    if (zoom < DESTINATION_ZOOM_THRESHOLD) {
+      this.cancelDestinationContextRefresh();
+      this.focusedDestination = null;
+      this.dismissedDestinationId = null;
+      this.cdr.detectChanges();
+      return;
+    }
+
+    const center = this.map.getCenter();
+    const seq = ++this.destinationContextRequestSeq;
+    this.destinationContextSubscription?.unsubscribe();
+    this.destinationContextSubscription = this.mapApi
+      .getCurrentDestination(center.lat, center.lng, zoom)
+      .subscribe({
+        next: (destination) => {
+          if (seq !== this.destinationContextRequestSeq) return;
+          this.destinationContextSubscription = undefined;
+
+          if (!destination) {
+            this.focusedDestination = null;
+            this.dismissedDestinationId = null;
+            this.cdr.detectChanges();
+            return;
+          }
+
+          if (
+            this.dismissedDestinationId !== null &&
+            this.dismissedDestinationId !== destination.entityId
+          ) {
+            this.dismissedDestinationId = null;
+          }
+
+          this.focusedDestination =
+            this.dismissedDestinationId === destination.entityId
+              ? null
+              : {
+                  ...destination,
+                  detailRoute:
+                    destination.detailRoute || `/destinations/${destination.entityId}`,
+                };
+          this.cdr.detectChanges();
+        },
+        error: () => {
+          if (seq !== this.destinationContextRequestSeq) return;
+          this.destinationContextSubscription = undefined;
+        },
+      });
+  }
+
+  private cancelDestinationContextRefresh(): void {
+    this.destinationContextRequestSeq += 1;
+    this.destinationContextSubscription?.unsubscribe();
+    this.destinationContextSubscription = undefined;
   }
 
   private loadMarkersForViewport(): void {
@@ -2069,7 +2164,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     if (marker.entityType === 'destination') {
       this.selectedPlace = null;
-      this.focusedDestination = marker;
+      this.dismissedDestinationId = null;
+      this.focusedDestination = {
+        ...marker,
+        detailRoute: marker.detailRoute || `/destinations/${marker.entityId}`,
+      };
       this.routeErrorMessage = '';
       this.routeInfoMessage = '';
       this.searchResults = [];

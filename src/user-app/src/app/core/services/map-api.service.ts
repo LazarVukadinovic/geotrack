@@ -161,6 +161,19 @@ export class MapApiService {
     return this.http.get<MapEntitiesResponse>('/api/map/entities', { params });
   }
 
+  getCurrentDestination(
+    latitude: number,
+    longitude: number,
+    zoom: number,
+  ): Observable<MapEntityMarker | null> {
+    return this.http.get<MapEntityMarker | null>('/api/map/current-destination', {
+      params: new HttpParams()
+        .set('latitude', String(latitude))
+        .set('longitude', String(longitude))
+        .set('zoom', String(zoom)),
+    });
+  }
+
   getMarkersInViewport(
     bounds: MapViewportBounds,
     zoom: number,

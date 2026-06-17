@@ -184,6 +184,54 @@ describe('MapPageComponent', () => {
     component.ngOnDestroy();
   });
 
+
+  it('updates the destination preview from the current map centre', () => {
+    const mapApi = createMapApi({
+      getCurrentDestination: vi.fn(() => of({
+        entityType: 'destination' as const,
+        entityId: 7,
+        title: 'Kragujevac',
+        detailRoute: null,
+        latitude: 44.01,
+        longitude: 20.91,
+        isSaved: false,
+      })),
+    });
+    const component = createComponent(undefined, mapApi);
+    const internals = component as any;
+    internals.map = {
+      getZoom: vi.fn(() => 13),
+      getCenter: vi.fn(() => ({ lat: 44.01, lng: 20.91 })),
+    };
+
+    internals.refreshCurrentDestination();
+
+    expect(mapApi.getCurrentDestination).toHaveBeenCalledWith(44.01, 20.91, 13);
+    expect(component.focusedDestination?.title).toBe('Kragujevac');
+    expect(component.focusedDestination?.detailRoute).toBe('/destinations/7');
+
+    internals.map = undefined;
+    component.ngOnDestroy();
+  });
+
+  it('always opens destination details even when the marker omitted its route', () => {
+    const component = createComponent();
+    component.focusedDestination = {
+      entityType: 'destination',
+      entityId: 11,
+      title: 'Kopaonik',
+      latitude: 43.28,
+      longitude: 20.81,
+      detailRoute: null,
+      isSaved: false,
+    };
+
+    component.openDestinationDetails();
+
+    expect((component as any).router.navigateByUrl).toHaveBeenCalledWith('/destinations/11');
+    component.ngOnDestroy();
+  });
+
   it('caches the same padded viewport that was actually requested', () => {
     const component = createComponent();
     const internals = component as any;
@@ -300,6 +348,7 @@ function createMapApi(overrides: Partial<MapApiService> = {}): MapApiService {
     getDestinations: vi.fn(() => of([])),
     search: vi.fn(() => of([])),
     getMarkersInViewport: vi.fn(() => of({ mode: 'entities', markers: [] })),
+    getCurrentDestination: vi.fn(() => of(null)),
     getWalkingRoute: vi.fn(() => of({ distanceMeters: 0, durationSeconds: 0, coordinates: [] })),
     getDrivingRoute: vi.fn(() => of({ distanceMeters: 0, durationSeconds: 0, coordinates: [] })),
     getEntities: vi.fn(() => of({ markers: [] })),
