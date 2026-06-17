@@ -14,12 +14,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, Subscription } from 'rxjs';
+import { debounceTime, finalize, Subject, Subscription } from 'rxjs';
 import { SidebarComponent } from '../../../../shared/components/sidebar/sidebar.component';
 import { TopbarComponent } from '../../../../shared/components/topbar/topbar.component';
 import { AuthService } from '../../../../core/services/auth.service';
 import { TerritoryDashboardService } from '../../../../core/services/territory-dashboard.service';
 import { MapTileLayerService } from '../../../../core/services/map-tile-layer.service';
+import { UsersService, TerritoryAssignableUser, TerritoryUserAvailableRegion } from '../../../../core/services/national/users.service';
 import {
   TerritoryAssignedTerritory,
   TerritoryRegionGeometry,
@@ -88,6 +89,24 @@ export class TerritoryRegionMapComponent implements OnInit, AfterViewInit, OnDes
   private pendingFitViewport = true;
   private readonly mapTileLayer = inject(MapTileLayerService);
 
+  // Assign Manager Modal state
+  assignModalOpen = false;
+  assignModalRegionName = '';
+  assignModalUserSearch = '';
+  assignModalUsers: TerritoryAssignableUser[] = [];
+  assignModalUsersLoading = false;
+  assignModalSelectedUser: TerritoryAssignableUser | null = null;
+  assignModalRegionSearch = '';
+  assignModalAvailableRegions: TerritoryUserAvailableRegion[] = [];
+  assignModalRegionsLoading = false;
+  assignModalSelectedRegions: TerritoryUserAvailableRegion[] = [];
+  assignModalSaving = false;
+  assignModalError: string | null = null;
+
+  private assignModalUserSearch$ = new Subject<string>();
+  private assignModalRegionSearch$ = new Subject<string>();
+  private assignModalSubscriptions: Subscription[] = [];
+
   constructor(
     private readonly zone: NgZone,
     private readonly cdr: ChangeDetectorRef,
@@ -95,6 +114,7 @@ export class TerritoryRegionMapComponent implements OnInit, AfterViewInit, OnDes
     private readonly router: Router,
     private readonly auth: AuthService,
     private readonly territoryDashboard: TerritoryDashboardService,
+    private readonly usersService: UsersService,
   ) {}
 
   ngOnInit(): void {
@@ -112,6 +132,7 @@ export class TerritoryRegionMapComponent implements OnInit, AfterViewInit, OnDes
     this.territoriesSubscription?.unsubscribe();
     this.mapSubscription?.unsubscribe();
     this.setupChangedSubscription?.unsubscribe();
+    this.assignModalSubscriptions.forEach(s => s.unsubscribe());
 
     if (this.map) {
       this.map.remove();
@@ -274,18 +295,158 @@ export class TerritoryRegionMapComponent implements OnInit, AfterViewInit, OnDes
     const region = this.selectedRegion;
     if (!region) return;
 
-    this.territoryDashboard.setActiveTerritoryId(region.territoryId);
-    this.router.navigate(['/territory/users'], {
-      queryParams: {
-        territoryId: region.territoryId,
-        regionId: region.regionId,
-      },
-      state: {
-        territoryId: region.territoryId,
-        regionId: region.regionId,
-        regionName: region.displayName || region.name,
-      },
-    });
+    this.openAssignModal(region);
+  }
+
+  openAssignModal(region: TerritoryRegionMapRegion): void {
+    this.assignModalOpen = true;
+    this.assignModalRegionName = region.displayName || region.name || '';
+    this.assignModalUserSearch = '';
+    this.assignModalUsers = [];
+    this.assignModalSelectedUser = null;
+    this.assignModalRegionSearch = '';
+    this.assignModalAvailableRegions = [];
+    this.assignModalSelectedRegions = [];
+    this.assignModalSaving = false;
+    this.assignModalError = null;
+
+    // Wire up debounced search inputs
+    this.assignModalSubscriptions.forEach(s => s.unsubscribe());
+    this.assignModalSubscriptions = [];
+
+    const userSub = this.assignModalUserSearch$
+      .pipe(debounceTime(300))
+      .subscribe(query => this.fetchAssignModalUsers(query));
+    const regionSub = this.assignModalRegionSearch$
+      .pipe(debounceTime(300))
+      .subscribe(query => this.fetchAssignModalRegions(query));
+
+    this.assignModalSubscriptions.push(userSub, regionSub);
+
+    // Pre-populate with the current manager if assigned
+    if (region.assignedManagers?.length) {
+      const manager = region.assignedManagers[0];
+      // Pre-fill search with manager display name to give context
+      this.assignModalUserSearch = manager.displayName || manager.email || '';
+    }
+
+    this.fetchAssignModalUsers(this.assignModalUserSearch);
+    this.notifyStateChanged();
+  }
+
+  closeAssignModal(): void {
+    this.assignModalOpen = false;
+    this.assignModalSubscriptions.forEach(s => s.unsubscribe());
+    this.assignModalSubscriptions = [];
+    this.notifyStateChanged();
+  }
+
+  onAssignModalUserSearchChange(): void {
+    this.assignModalUserSearch$.next(this.assignModalUserSearch);
+  }
+
+  onAssignModalRegionSearchChange(): void {
+    this.assignModalRegionSearch$.next(this.assignModalRegionSearch);
+  }
+
+  selectAssignModalUser(user: TerritoryAssignableUser): void {
+    this.assignModalSelectedUser = user;
+    this.assignModalAvailableRegions = [];
+    this.assignModalSelectedRegions = [];
+    this.assignModalRegionSearch = '';
+    this.fetchAssignModalRegions('');
+    this.notifyStateChanged();
+  }
+
+  addAssignModalRegion(region: TerritoryUserAvailableRegion): void {
+    if (!this.assignModalSelectedRegions.some(r => r.regionId === region.regionId)) {
+      this.assignModalSelectedRegions = [...this.assignModalSelectedRegions, region];
+    }
+    this.assignModalAvailableRegions = this.assignModalAvailableRegions.filter(r => r.regionId !== region.regionId);
+    this.notifyStateChanged();
+  }
+
+  removeAssignModalRegion(regionId: number): void {
+    this.assignModalSelectedRegions = this.assignModalSelectedRegions.filter(r => r.regionId !== regionId);
+    this.notifyStateChanged();
+  }
+
+  saveAssignModal(): void {
+    const user = this.assignModalSelectedUser;
+    const territoryId = this.activeTerritoryId;
+    if (!user || !territoryId) return;
+
+    const regionIds = this.assignModalSelectedRegions.map(r => r.regionId);
+    this.assignModalSaving = true;
+    this.assignModalError = null;
+    this.notifyStateChanged();
+
+    this.usersService.addRegionalManager$(user.userId, territoryId, regionIds)
+      .pipe(finalize(() => {
+        this.assignModalSaving = false;
+        this.notifyStateChanged();
+      }))
+      .subscribe({
+        next: () => {
+          this.closeAssignModal();
+          this.refresh();
+        },
+        error: (err: HttpErrorResponse) => {
+          this.assignModalError = err?.error?.message || err?.message || 'Failed to assign manager.';
+          this.notifyStateChanged();
+        },
+      });
+  }
+
+  private fetchAssignModalUsers(query: string): void {
+    const territoryId = this.activeTerritoryId;
+    if (!territoryId) return;
+
+    this.assignModalUsersLoading = true;
+    this.notifyStateChanged();
+
+    this.usersService.searchAssignableUsers$(territoryId, query, 20)
+      .pipe(finalize(() => {
+        this.assignModalUsersLoading = false;
+        this.notifyStateChanged();
+      }))
+      .subscribe({
+        next: users => {
+          this.assignModalUsers = users ?? [];
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.assignModalUsers = [];
+          this.notifyStateChanged();
+        },
+      });
+  }
+
+  private fetchAssignModalRegions(query: string): void {
+    const user = this.assignModalSelectedUser;
+    const territoryId = this.activeTerritoryId;
+    if (!user || !territoryId) return;
+
+    this.assignModalRegionsLoading = true;
+    this.notifyStateChanged();
+
+    this.usersService.getAvailableRegions$(user.userId, territoryId, query, 50)
+      .pipe(finalize(() => {
+        this.assignModalRegionsLoading = false;
+        this.notifyStateChanged();
+      }))
+      .subscribe({
+        next: regions => {
+          // Exclude already-selected
+          const selectedIds = new Set(this.assignModalSelectedRegions.map(r => r.regionId));
+          this.assignModalAvailableRegions = (regions ?? []).filter(r => !selectedIds.has(r.regionId));
+          this.notifyStateChanged();
+        },
+        error: () => {
+          this.assignModalAvailableRegions = [];
+          this.notifyStateChanged();
+        },
+      });
   }
 
   refresh(): void {

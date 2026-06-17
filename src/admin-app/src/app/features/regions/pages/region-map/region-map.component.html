@@ -294,3 +294,114 @@
     </main>
   </div>
 </div>
+
+<!-- Assign Manager Modal -->
+@if (assignModalOpen) {
+  <div class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" (click)="closeAssignModal()">
+    <div class="bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" style="width: 600px; max-width: 96vw; max-height: 90vh;" (click)="$event.stopPropagation()">
+      <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+        <h3 class="text-base font-bold text-gray-900">{{ assignModalRegionName ? 'Assign Manager — ' + assignModalRegionName : 'Assign Regional Manager' }}</h3>
+        <button type="button" (click)="closeAssignModal()" class="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer text-xl leading-none">&times;</button>
+      </div>
+
+      <div class="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+        @if (assignModalError) {
+          <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ assignModalError }}</div>
+        }
+
+        <!-- User search -->
+        <div class="space-y-2">
+          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">User</label>
+          <input
+            type="text"
+            [(ngModel)]="assignModalUserSearch"
+            (input)="onAssignModalUserSearchChange()"
+            placeholder="Search users by name or email..."
+            class="w-full px-3 py-2.5 text-sm text-gray-800 border border-gray-200 rounded-lg outline-none focus:border-blue-400 transition-colors"
+          />
+          <div class="rounded-xl border border-gray-100 overflow-hidden">
+            @if (assignModalUsersLoading) {
+              <div class="px-3 py-3 text-sm text-gray-400">Searching users...</div>
+            }
+            @for (user of assignModalUsers; track user.userId) {
+              <button
+                type="button"
+                (click)="selectAssignModalUser(user)"
+                class="w-full flex items-center gap-3 px-3 py-3 text-left border-0 border-b border-l-4 bg-white hover:bg-blue-50/40 cursor-pointer transition-all"
+                [ngClass]="assignModalSelectedUser?.userId === user.userId ? 'bg-blue-50 border-l-blue-600' : 'border-l-transparent border-gray-50'"
+              >
+                <span class="w-9 h-9 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                  @if (user.avatarUrl) {
+                    <img [src]="user.avatarUrl" alt="" class="w-full h-full object-cover rounded-full" />
+                  } @else {
+                    {{ user.initials }}
+                  }
+                </span>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-sm font-semibold truncate" [ngClass]="assignModalSelectedUser?.userId === user.userId ? 'text-blue-950' : 'text-gray-900'">{{ user.displayName }}</span>
+                  <span class="block text-xs truncate" [ngClass]="assignModalSelectedUser?.userId === user.userId ? 'text-blue-700' : 'text-gray-400'">{{ user.email }}</span>
+                </span>
+                @if (user.roles.length) {
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{{ user.roles[0] }}</span>
+                }
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- Region selection -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Regions</label>
+            <span class="text-xs text-gray-400">{{ activeTerritoryName }}</span>
+          </div>
+          @if (assignModalSelectedRegions.length === 0) {
+            <p class="text-sm text-gray-400">No regions selected.</p>
+          } @else {
+            <div class="flex flex-wrap gap-1">
+              @for (r of assignModalSelectedRegions; track r.regionId) {
+                <span class="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">
+                  {{ r.displayName || r.regionName }}
+                  <button type="button" (click)="removeAssignModalRegion(r.regionId)" class="text-blue-500 hover:text-blue-800 bg-transparent border-none cursor-pointer leading-none">&times;</button>
+                </span>
+              }
+            </div>
+          }
+          <input
+            type="text"
+            [(ngModel)]="assignModalRegionSearch"
+            (input)="onAssignModalRegionSearchChange()"
+            [disabled]="!assignModalSelectedUser"
+            placeholder="{{ assignModalSelectedUser ? 'Search available regions...' : 'Select a user to load available regions.' }}"
+            class="w-full px-3 py-2.5 text-sm text-gray-800 border border-gray-200 rounded-lg outline-none focus:border-blue-400 transition-colors disabled:bg-gray-50 disabled:text-gray-400"
+          />
+          @if (assignModalRegionsLoading) {
+            <p class="text-xs text-gray-400">Loading regions...</p>
+          }
+          @for (r of assignModalAvailableRegions; track r.regionId) {
+            <button
+              type="button"
+              (click)="addAssignModalRegion(r)"
+              class="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-800 border border-gray-100 rounded-lg hover:bg-blue-50 cursor-pointer bg-white"
+            >
+              <span class="flex-1">{{ r.displayName || r.regionName }}</span>
+              <span class="text-xs text-blue-600 font-semibold">+ Add</span>
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+        <button type="button" (click)="closeAssignModal()" [disabled]="assignModalSaving"
+          class="rounded-lg px-5 py-2.5 text-sm font-semibold text-gray-600 border border-gray-200 bg-white hover:bg-gray-50 cursor-pointer disabled:opacity-50">
+          Cancel
+        </button>
+        <button type="button" (click)="saveAssignModal()" [disabled]="assignModalSaving || !assignModalSelectedUser"
+          class="rounded-lg px-6 py-2.5 text-sm font-semibold text-white border-0 cursor-pointer disabled:opacity-50"
+          style="background: linear-gradient(135deg, #1565d8 0%, #1a86e8 100%);">
+          {{ assignModalSaving ? 'Saving...' : 'Add Regional Manager' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
