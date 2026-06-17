@@ -44,6 +44,15 @@ public class GetMapMarkersResponseDto
 {
     public string Mode { get; set; } = string.Empty;
     public List<MapEntityMarkerDto> Markers { get; set; } = new();
+    public List<MapFilterOptionDto> RecommendedTags { get; set; } = new();
+}
+
+public class MapFilterOptionDto
+{
+    public int Id { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public int Count { get; set; }
+    public double Score { get; set; }
 }
 
 public class MapEntityMarkerDto
@@ -53,6 +62,10 @@ public class MapEntityMarkerDto
     public string Title { get; set; } = string.Empty;
     public string? Subtitle { get; set; }
     public string? CategoryLabel { get; set; }
+    public int? PlaceTypeId { get; set; }
+    public string? PlaceTypeLabel { get; set; }
+    public List<int> TagIds { get; set; } = new();
+    public List<string> TagLabels { get; set; } = new();
     public string? ImageUrl { get; set; }
     public string? DetailRoute { get; set; }
     public double Latitude { get; set; }

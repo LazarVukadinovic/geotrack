@@ -12,12 +12,16 @@
     </p>
 
     @if (loadErrorMessage) {
-      <div class="map-page__status-card absolute rounded-2xl bg-white/95 shadow-xl border border-red-100 px-4 py-3">
+      <div
+        class="map-page__status-card absolute rounded-2xl bg-white/95 shadow-xl border border-red-100 px-4 py-3"
+      >
         <p class="text-sm font-semibold text-slate-800">Map results unavailable</p>
         <p class="text-xs text-slate-500 mt-1">{{ loadErrorMessage }}</p>
       </div>
     } @else if (!isLoading && emptyStateMessage) {
-      <div class="map-page__status-card absolute rounded-2xl bg-white/95 shadow-xl border border-slate-200 px-4 py-3">
+      <div
+        class="map-page__status-card absolute rounded-2xl bg-white/95 shadow-xl border border-slate-200 px-4 py-3"
+      >
         <p class="text-sm font-semibold text-slate-800">Zoom in to discover places</p>
         <p class="text-xs text-slate-500 mt-1">{{ emptyStateMessage }}</p>
       </div>
@@ -25,40 +29,87 @@
 
     @if (!isLoading && showNoDataModal) {
       <div class="map-page__no-data-overlay absolute inset-0 flex items-center justify-center">
-        <div class="map-page__no-data-card bg-white mx-4 p-6 max-w-sm w-full text-center"
+        <div
+          class="map-page__no-data-card bg-white mx-4 p-6 max-w-sm w-full text-center"
           role="dialog"
           aria-modal="true"
           aria-labelledby="map-no-data-title"
           aria-describedby="map-no-data-description"
-          style="border-radius: 28px; border: 1px solid rgba(26,43,76,0.08); box-shadow: 0 18px 48px rgba(26,43,76,0.1);">
-
+          style="
+            border-radius: 28px;
+            border: 1px solid rgba(26, 43, 76, 0.08);
+            box-shadow: 0 18px 48px rgba(26, 43, 76, 0.1);
+          "
+        >
           <div class="flex justify-center mb-4">
-            <div class="flex items-center justify-center rounded-full"
-              style="width: 76px; height: 76px; background: #fff7ed;">
-              <svg style="width: 42px; height: 42px;" class="text-[#e8570a]" viewBox="0 0 24 24" fill="none">
-                <path d="M12 21s7-4.9 7-11a7 7 0 1 0-14 0c0 6.1 7 11 7 11Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                <path d="M9.8 9.8h.01M14.2 9.8h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-                <path d="M9 14c1.8-1.1 4.2-1.1 6 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <div
+              class="flex items-center justify-center rounded-full"
+              style="width: 76px; height: 76px; background: #fff7ed"
+            >
+              <svg
+                style="width: 42px; height: 42px"
+                class="text-[#e8570a]"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <path
+                  d="M12 21s7-4.9 7-11a7 7 0 1 0-14 0c0 6.1 7 11 7 11Z"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M9.8 9.8h.01M14.2 9.8h.01"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M9 14c1.8-1.1 4.2-1.1 6 0"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                />
               </svg>
             </div>
           </div>
 
-          <p class="text-[#e8570a] font-extrabold uppercase mb-1"
-            style="font-size: 0.75rem; letter-spacing: 0.08em;">No destination nearby yet</p>
-          <h2 id="map-no-data-title" class="font-extrabold text-[#1a2b4a] leading-tight mb-2"
-            style="font-size: 1.35rem;">{{ noDataHeading }}</h2>
+          <p
+            class="text-[#e8570a] font-extrabold uppercase mb-1"
+            style="font-size: 0.75rem; letter-spacing: 0.08em"
+          >
+            No destination nearby yet
+          </p>
+          <h2
+            id="map-no-data-title"
+            class="font-extrabold text-[#1a2b4a] leading-tight mb-2"
+            style="font-size: 1.35rem"
+          >
+            {{ noDataHeading }}
+          </h2>
           <p id="map-no-data-description" class="text-slate-500 text-sm leading-relaxed mb-5">
             {{ noDataBody }}
           </p>
 
           <div class="relative mb-2 text-left">
             <div class="absolute inset-y-0 left-3.5 flex items-center pointer-events-none">
-              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+              <svg
+                class="w-4 h-4 text-slate-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"
+                />
               </svg>
             </div>
-            <label class="visually-hidden" for="map-no-data-destination-search">Filter destinations</label>
+            <label class="visually-hidden" for="map-no-data-destination-search"
+              >Filter destinations</label
+            >
             <input
               id="map-no-data-destination-search"
               name="destinationFilter"
@@ -72,28 +123,40 @@
               [(ngModel)]="noDataSearchQuery"
               placeholder="Filter destinations…"
               class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 text-sm text-slate-700 outline-none focus:border-[#1a2b4a] focus:bg-white transition"
-              style="border-radius: 999px;"
+              style="border-radius: 999px"
             />
           </div>
 
           @if (filteredDestinations.length > 0) {
-            <ul class="bg-white border border-slate-100 overflow-hidden mb-4 max-h-44 overflow-y-auto text-left"
-              style="border-radius: 16px;">
+            <ul
+              class="bg-white border border-slate-100 overflow-hidden mb-4 max-h-44 overflow-y-auto text-left"
+              style="border-radius: 16px"
+            >
               @for (result of filteredDestinations; track searchResultTrackKey(result, $index)) {
                 <li class="border-b border-slate-50 last:border-0">
                   <button
                     type="button"
                     (click)="selectNoDataDestination(result)"
-                    class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer text-left bg-transparent border-none">
-                    <span class="flex-none w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center" aria-hidden="true">
+                    class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer text-left bg-transparent border-none"
+                  >
+                    <span
+                      class="flex-none w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center"
+                      aria-hidden="true"
+                    >
                       <svg class="w-3 h-3 text-[#e8570a]" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                        <path
+                          d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                        />
                       </svg>
                     </span>
                     <span class="min-w-0">
-                      <span class="block text-sm font-medium text-slate-800 truncate">{{ result.name }}</span>
+                      <span class="block text-sm font-medium text-slate-800 truncate">{{
+                        result.name
+                      }}</span>
                       @if (result.subtitle) {
-                        <span class="block text-xs text-slate-400 truncate">{{ result.subtitle }}</span>
+                        <span class="block text-xs text-slate-400 truncate">{{
+                          result.subtitle
+                        }}</span>
                       }
                     </span>
                   </button>
@@ -108,33 +171,51 @@
               <button
                 type="button"
                 (click)="retryLoadDestinations()"
-                class="text-xs font-bold text-[#1a2b4a] underline underline-offset-2">
+                class="text-xs font-bold text-[#1a2b4a] underline underline-offset-2"
+              >
                 Retry
               </button>
             </div>
           } @else if (allDestinations.length === 0) {
-            <p class="text-xs text-slate-400 text-center mb-4">No public destinations are available yet.</p>
+            <p class="text-xs text-slate-400 text-center mb-4">
+              No public destinations are available yet.
+            </p>
           } @else {
-            <p class="text-xs text-slate-400 text-center mb-4">No destinations match your search.</p>
+            <p class="text-xs text-slate-400 text-center mb-4">
+              No destinations match your search.
+            </p>
           }
 
           <button
             type="button"
             (click)="exploreAnyway()"
             class="w-full font-extrabold text-sm text-[#1a2b4a] transition-colors hover:bg-slate-50"
-            style="min-height: 46px; border-radius: 999px; border: 1px solid rgba(26,43,76,0.12); background: #ffffff;">
+            style="
+              min-height: 46px;
+              border-radius: 999px;
+              border: 1px solid rgba(26, 43, 76, 0.12);
+              background: #ffffff;
+            "
+          >
             Explore anyway
           </button>
         </div>
       </div>
     }
 
-    <div class="map-page__controls-panel absolute top-0 left-0 right-0 px-4 pt-4 pb-3" style="z-index: 5;">
+    <div
+      class="map-page__controls-panel absolute top-0 left-0 right-0 px-4 pt-4 pb-3"
+      style="z-index: 5"
+    >
       <div class="relative mb-3">
         <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
           <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"
+            />
           </svg>
         </div>
         <label class="visually-hidden" for="map-destination-search">Search places on the map</label>
@@ -156,34 +237,83 @@
           class="w-full pl-10 pr-4 py-3 bg-white rounded-2xl text-sm font-medium text-slate-700 outline-none shadow-md"
         />
 
-        @if (isSearchFocused && (searchResults.length > 0 || (!searchQuery.trim() && allDestinations.length > 0) || searchQuery.trim().length > 0)) {
-          <div class="absolute left-0 right-0 bg-white rounded-2xl shadow-xl overflow-hidden" style="top: calc(100% + 6px); z-index: 20; max-height: 280px; overflow-y: auto;">
-            @if (searchQuery.trim() && searchResults.length === 0) {
-              <p class="px-4 py-4 text-sm text-slate-400 text-center">No destinations found for "{{ searchQuery }}"</p>
-        } @else {
-            <ul>
-              @for (result of (searchResults.length > 0 ? searchResults : allDestinations); track searchResultTrackKey(result, $index)) {
-                <li class="border-b border-slate-50 last:border-0">
-                  <button
-                    type="button"
-                    (click)="selectSearchResult(result)"
-                    class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer text-left bg-transparent border-none">
-                    <span class="flex-none w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center" aria-hidden="true">
-                      <svg class="w-3 h-3 text-[#e8570a]" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                      </svg>
-                    </span>
-                    <span class="min-w-0">
-                      <span class="block text-sm font-medium text-slate-800 truncate">{{ result.name }}</span>
-                      @if (result.subtitle) {
-                        <span class="block text-xs text-slate-400 truncate">{{ result.subtitle }}</span>
-                      }
-                    </span>
-                  </button>
-                </li>
-              }
-            </ul>
-          }
+        @if (
+          isSearchFocused &&
+          (searchQuery.trim().length > 0 ||
+            isSearching ||
+            (!searchQuery.trim() &&
+              (allDestinations.length > 0 || isLoadingDestinations || destinationLoadError)))
+        ) {
+          <div
+            class="absolute left-0 right-0 bg-white rounded-2xl shadow-xl overflow-hidden"
+            style="top: calc(100% + 6px); z-index: 20; max-height: 280px; overflow-y: auto"
+          >
+            @if (searchQuery.trim().length === 1) {
+              <p class="px-4 py-4 text-sm text-slate-400 text-center">
+                Type at least 2 characters to search.
+              </p>
+            } @else if (searchQuery.trim().length >= 2 && isSearching) {
+              <p class="px-4 py-4 text-sm text-slate-400 text-center" aria-live="polite">
+                Searching…
+              </p>
+            } @else if (searchQuery.trim().length >= 2 && searchErrorMessage) {
+              <p class="px-4 py-4 text-sm text-red-500 text-center">{{ searchErrorMessage }}</p>
+            } @else if (searchQuery.trim().length >= 2 && searchResults.length === 0) {
+              <p class="px-4 py-4 text-sm text-slate-400 text-center">
+                No results found for "{{ searchQuery }}"
+              </p>
+            } @else if (!searchQuery.trim() && isLoadingDestinations) {
+              <p class="px-4 py-4 text-sm text-slate-400 text-center" aria-live="polite">
+                Loading destinations…
+              </p>
+            } @else if (!searchQuery.trim() && destinationLoadError) {
+              <div class="px-4 py-4 text-center">
+                <p class="text-sm text-red-500 mb-2">{{ destinationLoadError }}</p>
+                <button
+                  type="button"
+                  (click)="retryLoadDestinations()"
+                  class="text-xs font-bold text-[#1a2b4a] underline underline-offset-2"
+                >
+                  Retry
+                </button>
+              </div>
+            } @else {
+              <ul>
+                @for (
+                  result of searchQuery.trim() ? searchResults : allDestinations;
+                  track searchResultTrackKey(result, $index)
+                ) {
+                  <li class="border-b border-slate-50 last:border-0">
+                    <button
+                      type="button"
+                      (click)="selectSearchResult(result)"
+                      class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer text-left bg-transparent border-none"
+                    >
+                      <span
+                        class="flex-none w-6 h-6 bg-orange-50 rounded-full flex items-center justify-center"
+                        aria-hidden="true"
+                      >
+                        <svg class="w-3 h-3 text-[#e8570a]" fill="currentColor" viewBox="0 0 24 24">
+                          <path
+                            d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                          />
+                        </svg>
+                      </span>
+                      <span class="min-w-0">
+                        <span class="block text-sm font-medium text-slate-800 truncate">{{
+                          result.name
+                        }}</span>
+                        @if (result.subtitle) {
+                          <span class="block text-xs text-slate-400 truncate">{{
+                            result.subtitle
+                          }}</span>
+                        }
+                      </span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
           </div>
         }
       </div>
@@ -193,14 +323,15 @@
           <button
             type="button"
             (click)="selectCategory(cat)"
-            [attr.aria-pressed]="activeCategory === cat.id && !hasActiveFilters"
+            [attr.aria-pressed]="activeCategory === cat.id"
             class="flex-none px-5 py-2 rounded-full border text-sm font-semibold transition-colors duration-200 whitespace-nowrap shadow-sm"
-            [class.bg-[#1a2b4a]]="activeCategory === cat.id && !hasActiveFilters"
-            [class.border-[#1a2b4a]]="activeCategory === cat.id && !hasActiveFilters"
-            [class.text-white]="activeCategory === cat.id && !hasActiveFilters"
-            [class.bg-white]="activeCategory !== cat.id || hasActiveFilters"
-            [class.border-slate-200]="activeCategory !== cat.id || hasActiveFilters"
-            [class.text-slate-600]="activeCategory !== cat.id || hasActiveFilters">
+            [class.bg-[#1a2b4a]]="activeCategory === cat.id"
+            [class.border-[#1a2b4a]]="activeCategory === cat.id"
+            [class.text-white]="activeCategory === cat.id"
+            [class.bg-white]="activeCategory !== cat.id"
+            [class.border-slate-200]="activeCategory !== cat.id"
+            [class.text-slate-600]="activeCategory !== cat.id"
+          >
             {{ cat.label }}
           </button>
         }
@@ -216,60 +347,88 @@
           [class.bg-white]="!isMoreActive"
           [class.border-slate-200]="!isMoreActive"
           [class.text-slate-600]="!isMoreActive"
-          class="flex-none px-5 py-2 rounded-full border text-sm font-semibold whitespace-nowrap shadow-sm flex items-center gap-1 transition-colors duration-200">
+          class="flex-none px-5 py-2 rounded-full border text-sm font-semibold whitespace-nowrap shadow-sm flex items-center gap-1 transition-colors duration-200"
+        >
           More
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 5l7 7-7 7"
+            />
           </svg>
         </button>
       </div>
 
       @if (isMoreFiltersOpen) {
-        <section id="map-more-filters-panel" class="map-page__more-panel" aria-label="More map filters">
+        <section
+          id="map-more-filters-panel"
+          class="map-page__more-panel"
+          aria-label="More map filters"
+        >
           <div class="map-page__more-header">
             <div>
-              <p class="map-page__more-title">More filters</p>
-              <p class="map-page__more-kicker">Current map area</p>
+              <p class="map-page__more-title">Recommended for you</p>
+              <p class="map-page__more-kicker">Based on your interests and activity</p>
             </div>
             <div class="map-page__more-actions">
-              @if (hasActiveFilters) {
-                <button type="button" class="map-page__more-clear" (click)="clearMoreFilters()">Clear</button>
+              @if (hasRecommendedTagFilters) {
+                <button type="button" class="map-page__more-clear" (click)="clearMoreFilters()">
+                  Clear
+                </button>
               }
-              <button type="button" class="map-page__more-close" (click)="closeMoreFilters()" aria-label="Collapse more filters">
+              <button
+                type="button"
+                class="map-page__more-close"
+                (click)="closeMoreFilters()"
+                aria-label="Collapse more filters"
+              >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M5 15l7-7 7 7"
+                  />
                 </svg>
               </button>
             </div>
           </div>
 
           @if (availableMoreFilters.length > 0) {
-            <div class="map-page__more-chip-list" role="list" aria-label="Backend map categories">
+            <div class="map-page__more-chip-list" role="list" aria-label="Recommended tag filters">
               @for (filter of availableMoreFilters; track filter.id) {
                 <button
                   type="button"
                   class="map-page__more-chip"
                   [class.map-page__more-chip--active]="isMoreFilterSelected(filter)"
-                  (click)="toggleMoreFilter(filter)">
+                  (click)="toggleMoreFilter(filter)"
+                >
                   <span>{{ filter.label }}</span>
                   <span class="map-page__more-count">{{ filter.count }}</span>
                 </button>
               }
             </div>
           } @else {
-            <p class="map-page__more-empty">No extra backend categories in this map view yet.</p>
+            <p class="map-page__more-empty">
+              No recommended tags are available for the places in this area yet.
+            </p>
           }
         </section>
       }
     </div>
 
-    <div class="absolute right-3 flex flex-col gap-0" style="z-index: 5; top: 150px;">
-      <div class="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden flex flex-col">
+    <div class="absolute right-3 flex flex-col gap-0" style="z-index: 5; top: 150px">
+      <div
+        class="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden flex flex-col"
+      >
         <button
           type="button"
           (click)="zoomIn()"
           aria-label="Zoom in"
-          class="w-10 h-10 flex items-center justify-center text-slate-600 text-xl font-light active:bg-slate-50 transition">
+          class="w-10 h-10 flex items-center justify-center text-slate-600 text-xl font-light active:bg-slate-50 transition"
+        >
           +
         </button>
         <div class="h-px bg-slate-100"></div>
@@ -277,7 +436,8 @@
           type="button"
           (click)="zoomOut()"
           aria-label="Zoom out"
-          class="w-10 h-10 flex items-center justify-center text-slate-600 text-xl font-light active:bg-slate-50 transition">
+          class="w-10 h-10 flex items-center justify-center text-slate-600 text-xl font-light active:bg-slate-50 transition"
+        >
           −
         </button>
       </div>
@@ -293,58 +453,76 @@
         aria-label="Map legend"
         class="map-page__legend-button absolute right-3 w-10 h-10 bg-white rounded-full shadow-md border border-slate-100 flex items-center justify-center text-slate-500 active:bg-slate-50 transition-colors"
         [class.text-[#1a2b4a]]="showLegend"
-        [class.border-[#1a2b4a]]="showLegend">
+        [class.border-[#1a2b4a]]="showLegend"
+      >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/>
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"
+          />
         </svg>
       </button>
     }
 
     <!-- Legend modal -->
     @if (showLegend) {
-      <div class="map-page__legend-overlay absolute inset-0 flex items-center justify-center"
-        (click)="showLegend = false">
+      <div
+        class="map-page__legend-overlay absolute inset-0 flex items-center justify-center"
+        (click)="showLegend = false"
+      >
         <div
           id="map-legend-dialog"
           class="map-page__legend-card bg-white rounded-2xl shadow-xl border border-slate-100 p-5"
           role="dialog"
           aria-modal="true"
           aria-labelledby="map-legend-title"
-          (click)="$event.stopPropagation()">
+          (click)="$event.stopPropagation()"
+        >
           <div class="flex items-center justify-between mb-4">
-            <p id="map-legend-title" class="text-xs font-extrabold uppercase tracking-wide text-slate-400">Legend</p>
-            <button type="button" (click)="showLegend = false" aria-label="Close legend"
-              class="w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 transition-colors">
+            <p
+              id="map-legend-title"
+              class="text-xs font-extrabold uppercase tracking-wide text-slate-400"
+            >
+              Legend
+            </p>
+            <button
+              type="button"
+              (click)="showLegend = false"
+              aria-label="Close legend"
+              class="w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 transition-colors"
+            >
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2.5"
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
           <ul class="flex flex-col gap-3">
             <li class="flex items-center gap-3">
-              <span class="map-page__legend-dot" style="background: #2f855a;"></span>
+              <span class="map-page__legend-dot" style="background: #2f855a"></span>
               <div>
                 <p class="text-sm font-semibold text-slate-700">Place</p>
                 <p class="text-xs text-slate-400">Restaurants, attractions, points of interest</p>
               </div>
             </li>
             <li class="flex items-center gap-3">
-              <span class="map-page__legend-dot" style="background: #e8570a;"></span>
+              <span class="map-page__legend-dot" style="background: #e8570a"></span>
               <div>
                 <p class="text-sm font-semibold text-slate-700">Stay</p>
                 <p class="text-xs text-slate-400">Hotels, hostels, apartments</p>
               </div>
             </li>
             <li class="flex items-center gap-3">
-              <span class="map-page__legend-dot" style="background:  #2563eb;"></span>
-              <div>
-                <p class="text-sm font-semibold text-slate-700">Event</p>
-                <p class="text-xs text-slate-400">Concerts, festivals, exhibitions</p>
-              </div>
-            </li>
-            <li class="flex items-center gap-3">
-              <span class="map-page__legend-dot map-page__legend-dot--lg" style="background: #1a2b4a;"></span>
+              <span
+                class="map-page__legend-dot map-page__legend-dot--lg"
+                style="background: #1a2b4a"
+              ></span>
               <div>
                 <p class="text-sm font-semibold text-slate-700">Destination</p>
                 <p class="text-xs text-slate-400">City or region to explore</p>
@@ -359,21 +537,26 @@
       type="button"
       (click)="locateMe()"
       [attr.aria-label]="isLocating ? 'Locating you' : 'Use my location'"
-      class="map-page__locate-button absolute right-3 w-11 h-11 bg-[#e8570a] rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-all">
+      class="map-page__locate-button absolute right-3 w-11 h-11 bg-[#e8570a] rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-all"
+    >
       @if (!isLocating) {
         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06z"/>
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06z"
+          />
         </svg>
       } @else {
-        <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+        <div
+          class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+        ></div>
       }
     </button>
 
     @if (selectedPlace; as place) {
-      <div
-        class="map-page__preview-card absolute bg-white rounded-2xl shadow-xl overflow-hidden">
-
+      <div class="map-page__preview-card absolute bg-white rounded-2xl shadow-xl overflow-hidden">
         <div class="flex gap-3 p-4">
           <div class="flex-none w-20 h-20 bg-slate-100 rounded-xl overflow-hidden relative">
             @if (place.imageUrl) {
@@ -387,18 +570,36 @@
               />
             } @else {
               <div class="absolute inset-0 flex items-center justify-center">
-                <svg class="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                    d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                <svg
+                  class="w-8 h-8 text-slate-300"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                  />
                 </svg>
               </div>
             }
           </div>
 
           <div class="flex-1 min-w-0">
-            <h3 class="text-base font-bold text-slate-800 leading-tight mb-0.5">{{ place.title }}</h3>
+            <h3 class="text-base font-bold text-slate-800 leading-tight mb-0.5">
+              {{ place.title }}
+            </h3>
             <p class="text-xs text-slate-400 mb-1.5">
-              {{ place.categoryLabel || (place.entityType === 'stay' ? 'Stay' : place.entityType === 'event' ? 'Event' : 'Place') }}
+              {{
+                place.categoryLabel ||
+                  (place.entityType === 'stay'
+                    ? 'Stay'
+                    : place.entityType === 'event'
+                      ? 'Event'
+                      : 'Place')
+              }}
             </p>
             @if (place.subtitle) {
               <p class="text-xs text-slate-500 mb-1 truncate">{{ place.subtitle }}</p>
@@ -407,8 +608,12 @@
               <div class="flex items-center gap-3 text-xs text-slate-500">
                 <span class="flex items-center gap-1">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
                   </svg>
                   {{ place.distance }}
                 </span>
@@ -420,9 +625,15 @@
             type="button"
             (click)="closePlace()"
             aria-label="Close selected place preview"
-            class="flex-none self-start w-6 h-6 flex items-center justify-center text-slate-300 hover:text-slate-500 transition-colors">
+            class="flex-none self-start w-6 h-6 flex items-center justify-center text-slate-300 hover:text-slate-500 transition-colors"
+          >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -443,9 +654,15 @@
             <button
               type="button"
               (click)="openDetails()"
-              class="flex-1 py-3 bg-[#1a2b4a] rounded-2xl text-white text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+              class="flex-1 py-3 bg-[#1a2b4a] rounded-2xl text-white text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12H9m3-3-3 3 3 3m9 4V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/>
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15 12H9m3-3-3 3 3 3m9 4V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"
+                />
               </svg>
               View Details
             </button>
@@ -456,13 +673,20 @@
             (click)="openDirections()"
             [disabled]="isLoadingRoute"
             class="flex-1 py-3 bg-white border border-slate-200 rounded-2xl text-slate-700 text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-            [class.opacity-60]="isLoadingRoute">
+            [class.opacity-60]="isLoadingRoute"
+          >
             @if (isLoadingRoute) {
-              <div class="w-4 h-4 border-2 border-[#e8570a] border-t-transparent rounded-full animate-spin"></div>
+              <div
+                class="w-4 h-4 border-2 border-[#e8570a] border-t-transparent rounded-full animate-spin"
+              ></div>
             } @else {
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                />
               </svg>
             }
             {{ isLoadingRoute ? 'Calculating…' : 'Directions' }}
@@ -473,12 +697,17 @@
           <button
             type="button"
             (click)="startPinToPinRoute()"
-            class="w-full py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 text-xs font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+            class="w-full py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 text-xs font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+          >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.8"/>
-              <circle cx="19" cy="18" r="2" stroke="currentColor" stroke-width="1.8"/>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                d="M5 8v3a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4"/>
+              <circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.8" />
+              <circle cx="19" cy="18" r="2" stroke="currentColor" stroke-width="1.8" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.8"
+                d="M5 8v3a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4"
+              />
             </svg>
             Route between pins
           </button>
@@ -494,27 +723,61 @@
               <button
                 type="button"
                 (click)="selectFromStack(item)"
-                class="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors text-left">
+                class="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors text-left"
+              >
                 <div class="flex-none w-10 h-10 bg-slate-100 rounded-xl overflow-hidden relative">
                   @if (item.imageUrl) {
-                    <img appImageFallback [src]="item.imageUrl" class="w-full h-full object-cover" alt="" />
+                    <img
+                      appImageFallback
+                      [src]="item.imageUrl"
+                      class="w-full h-full object-cover"
+                      alt=""
+                    />
                   } @else {
                     <div class="absolute inset-0 flex items-center justify-center">
-                      <svg class="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                          d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                      <svg
+                        class="w-5 h-5 text-slate-300"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="1.5"
+                          d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                        />
                       </svg>
                     </div>
                   }
                 </div>
                 <div class="flex-1 min-w-0">
-                  <p class="text-sm font-bold text-slate-800 leading-tight truncate">{{ item.title }}</p>
+                  <p class="text-sm font-bold text-slate-800 leading-tight truncate">
+                    {{ item.title }}
+                  </p>
                   <p class="text-xs text-slate-400 mt-0.5">
-                    {{ item.categoryLabel || (item.entityType === 'stay' ? 'Stay' : item.entityType === 'event' ? 'Event' : 'Place') }}
+                    {{
+                      item.categoryLabel ||
+                        (item.entityType === 'stay'
+                          ? 'Stay'
+                          : item.entityType === 'event'
+                            ? 'Event'
+                            : 'Place')
+                    }}
                   </p>
                 </div>
-                <svg class="flex-none w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                <svg
+                  class="flex-none w-4 h-4 text-slate-300"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 5l7 7-7 7"
+                  />
                 </svg>
               </button>
             </li>
@@ -525,21 +788,38 @@
 
     @if (isPinToPinMode) {
       <div class="map-page__pin-to-pin-banner absolute left-0 right-0 flex justify-center px-3">
-        <div class="w-full bg-[#1a2b4a] text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl">
-          <svg class="w-5 h-5 flex-none text-[#e8570a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.8"/>
-            <circle cx="19" cy="18" r="2" stroke="currentColor" stroke-width="1.8"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-              d="M5 8v3a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4"/>
+        <div
+          class="w-full bg-[#1a2b4a] text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl"
+        >
+          <svg
+            class="w-5 h-5 flex-none text-[#e8570a]"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.8" />
+            <circle cx="19" cy="18" r="2" stroke="currentColor" stroke-width="1.8" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.8"
+              d="M5 8v3a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4"
+            />
           </svg>
           <p class="text-sm font-medium flex-1">Tap a pin to set the destination</p>
           <button
             type="button"
             (click)="cancelPinToPinMode()"
             class="flex-none w-7 h-7 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-            aria-label="Cancel pin selection">
+            aria-label="Cancel pin selection"
+          >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>

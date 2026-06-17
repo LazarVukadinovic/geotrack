@@ -7,6 +7,7 @@ import { MapFilterOption, MapFilterStateService } from '../../services/map-filte
 interface Category {
   id: string;
   label: string;
+  count?: number;
 }
 
 @Component({
@@ -19,12 +20,6 @@ export class Filters {
   selectedCategories: string[] = [];
   selectedCategoryLabelFilters: string[] = [];
 
-  allCategories: Category[] = [
-    { id: 'places', label: 'Places' },
-    { id: 'stays', label: 'Stays' },
-    { id: 'events', label: 'Events' },
-  ];
-
   constructor(
     private router: Router,
     private analytics: AnalyticsService,
@@ -35,20 +30,35 @@ export class Filters {
     this.selectedCategoryLabelFilters = savedFilters.categoryLabelIds;
   }
 
+  allCategories(): Category[] {
+    return [
+      { id: 'all', label: 'All' },
+      ...this.mapFilterState.availablePlaceTypes().map(option => ({
+        id: option.id,
+        label: option.label,
+        count: option.count,
+      })),
+    ];
+  }
+
   availableMoreFilters(): MapFilterOption[] {
     return this.mapFilterState.availableMoreFilters();
   }
 
   toggleCategory(cat: Category): void {
-    if (this.isSelected(cat)) {
-      this.selectedCategories = this.selectedCategories.filter((id) => id !== cat.id);
-    } else {
-      this.selectedCategories = [...this.selectedCategories, cat.id];
+    if (cat.id === 'all' || this.selectedCategories.includes(cat.id)) {
+      this.selectedCategories = [];
+      return;
     }
+
+    // A place can only have one place type, so primary filters are mutually exclusive.
+    this.selectedCategories = [cat.id];
   }
 
   isSelected(cat: Category): boolean {
-    return this.selectedCategories.includes(cat.id);
+    return cat.id === 'all'
+      ? this.selectedCategories.length === 0
+      : this.selectedCategories.includes(cat.id);
   }
 
   toggleMoreFilter(filter: MapFilterOption): void {
@@ -77,8 +87,8 @@ export class Filters {
       this.analytics.track('filter_applied', {
         metadata: {
           surface: 'map_filters',
-          categories: [],
-          categoryLabels: [],
+          placeTypes: [],
+          recommendedTags: [],
           cleared: true,
         },
       });
@@ -101,8 +111,8 @@ export class Filters {
       this.analytics.track('filter_applied', {
         metadata: {
           surface: 'map_filters',
-          categories: nextCategories,
-          categoryLabels: this.mapFilterState.labelsForCategoryLabelIds(nextCategoryLabelIds),
+          placeTypes: nextCategories,
+          recommendedTags: this.mapFilterState.labelsForCategoryLabelIds(nextCategoryLabelIds),
         },
       });
     }

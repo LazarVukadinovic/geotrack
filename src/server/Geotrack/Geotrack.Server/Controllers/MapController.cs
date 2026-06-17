@@ -212,10 +212,6 @@ public class MapController : ControllerBase
             return BadRequest(new { message = "Valid north/south/east/west bounds are required." });
         }
 
-        var boundsError = ValidateBounds(north.Value, south.Value, east.Value, west.Value, effectiveZoom);
-        if (boundsError is not null)
-            return boundsError;
-
         var categoriesError = TryParseDelimitedValues(
             categories,
             AllowedCategories,
@@ -224,6 +220,16 @@ public class MapController : ControllerBase
             out var categoryList);
         if (categoriesError is not null)
             return categoriesError;
+
+        var boundsError = ValidateBounds(
+            north.Value,
+            south.Value,
+            east.Value,
+            west.Value,
+            effectiveZoom,
+            categoryList.Count > 0);
+        if (boundsError is not null)
+            return boundsError;
 
         var result = await _mapService.GetMarkersInViewportAsync(
             north.Value,
@@ -326,13 +332,20 @@ public class MapController : ControllerBase
         return null;
     }
 
-    private IActionResult? ValidateBounds(double north, double south, double east, double west, double zoom)
+    private IActionResult? ValidateBounds(
+        double north,
+        double south,
+        double east,
+        double west,
+        double zoom,
+        bool entityModeRequested)
     {
         if (!HasValidBounds(north, south, east, west))
             return BadRequest(new { message = "Valid north/south/east/west bounds are required." });
 
-        if (zoom >= DestinationZoomThreshold &&
-            (north - south > MaxEntityViewportLatitudeSpan || east - west > MaxEntityViewportLongitudeSpan))
+        if ((zoom >= DestinationZoomThreshold || entityModeRequested) &&
+            (north - south > MaxEntityViewportLatitudeSpan ||
+             GetLongitudeSpan(east, west) > MaxEntityViewportLongitudeSpan))
         {
             return BadRequest(new { message = "Viewport bounds are too large for entity map results." });
         }
@@ -385,8 +398,13 @@ public class MapController : ControllerBase
             return false;
         if (east < -180 || east > 180 || west < -180 || west > 180)
             return false;
-        return north > south && east > west;
+        return north > south && GetLongitudeSpan(east, west) > 0d;
     }
+
+    private static double GetLongitudeSpan(double east, double west) =>
+        east > west
+            ? east - west
+            : (180d - west) + (east + 180d);
 
     private static double NormalizeZoom(double? zoom)
     {

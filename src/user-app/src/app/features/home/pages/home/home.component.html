@@ -1,5 +1,4 @@
 <div class="relative h-[100dvh] w-full overflow-hidden">
-
   <!-- ── BACKGROUND MAP ── -->
   <div id="bg-map" class="absolute inset-0 w-full h-full"></div>
 
@@ -12,30 +11,39 @@
   </div>
 
   <!-- ── CENTERED CONTENT ── -->
-  <div class="absolute inset-0 z-10 flex flex-col items-center justify-center -translate-y-10 px-6 gap-5">
-
+  <div
+    class="absolute inset-0 z-10 flex flex-col items-center justify-center -translate-y-10 px-6 gap-5"
+  >
     <!-- Headline -->
     <div class="text-center">
-      <p class="text-white/60 text-xs font-semibold tracking-[0.25em] uppercase mb-3">Discover the world</p>
+      <p class="text-white/60 text-xs font-semibold tracking-[0.25em] uppercase mb-3">
+        Discover the world
+      </p>
       <h1 class="text-white text-[2.2rem] font-bold leading-tight tracking-tight drop-shadow-lg">
-        Find Your Next<br/>Adventure
+        Find Your Next<br />Adventure
       </h1>
     </div>
 
     <!-- Search bar -->
-    <div class="w-full max-w-sm mt-2">
+    <div class="relative w-full max-w-sm mt-2">
       <div class="relative">
         <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
           <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"
+            />
           </svg>
         </div>
-        <label class="visually-hidden" for="home-destination-search">Search for a destination</label>
+        <label class="visually-hidden" for="home-map-search"
+          >Search destinations, locations, places, stays, and events</label
+        >
         <input
           #searchInput
-          id="home-destination-search"
-          name="destinationSearch"
+          id="home-map-search"
+          name="homeMapSearchQuery"
           type="search"
           autocomplete="off"
           inputmode="search"
@@ -45,47 +53,118 @@
           spellcheck="false"
           placeholder="Where do you want to go?"
           [(ngModel)]="searchQuery"
-          (input)="onSearch($any($event.target).value)"
+          (input)="onSearchInput($any($event.target).value)"
+          (focus)="onSearchFocus()"
+          (blur)="onSearchBlur()"
           (keydown.escape)="clearSearch()"
           class="w-full pl-10 pr-4 py-4 bg-white rounded-2xl text-sm text-slate-800 placeholder-slate-400 outline-none shadow-2xl focus:ring-2 focus:ring-[#e8570a] transition-all duration-200"
         />
       </div>
 
-      <!-- Search results dropdown -->
-      @if (searchResults.length > 0) {
-        <div class="mt-2 bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <ul>
-            @for (result of searchResults; track result.name + ':' + result.latitude + ':' + result.longitude) {
-              <li
-                (click)="selectResult(result)"
-                class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 active:bg-slate-100 cursor-pointer border-b border-slate-50 last:border-0 transition-colors duration-150">
-                <div class="flex-none w-7 h-7 bg-orange-50 rounded-full flex items-center justify-center">
-                  <svg class="w-3.5 h-3.5 text-[#e8570a]" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5z"/>
-                  </svg>
-                </div>
-                <div class="min-w-0">
-                  <p class="text-sm font-semibold text-slate-800 truncate">{{ getResultName(result) }}</p>
-                  <p class="text-xs text-slate-400 truncate">{{ getResultSubtitle(result) }}</p>
-                </div>
-              </li>
-            }
-          </ul>
+      @if (
+        isSearchFocused &&
+        (searchQuery.trim().length > 0 ||
+          isSearching ||
+          (!searchQuery.trim() &&
+            (allDestinations.length > 0 || isLoadingDestinations || destinationLoadError)))
+      ) {
+        <div
+          class="absolute left-0 right-0 bg-white rounded-2xl shadow-2xl overflow-hidden"
+          style="top: calc(100% + 8px); z-index: 30; max-height: 300px; overflow-y: auto"
+        >
+          @if (searchQuery.trim().length === 1) {
+            <p class="px-4 py-4 text-sm text-slate-400 text-center">
+              Type at least 2 characters to search.
+            </p>
+          } @else if (searchQuery.trim().length >= 2 && isSearching) {
+            <p class="px-4 py-4 text-sm text-slate-400 text-center" aria-live="polite">
+              Searching…
+            </p>
+          } @else if (searchQuery.trim().length >= 2 && searchErrorMessage) {
+            <p class="px-4 py-4 text-sm text-red-500 text-center">{{ searchErrorMessage }}</p>
+          } @else if (searchQuery.trim().length >= 2 && searchResults.length === 0) {
+            <p class="px-4 py-4 text-sm text-slate-400 text-center">
+              No results found for "{{ searchQuery }}"
+            </p>
+          } @else if (!searchQuery.trim() && isLoadingDestinations) {
+            <p class="px-4 py-4 text-sm text-slate-400 text-center" aria-live="polite">
+              Loading destinations…
+            </p>
+          } @else if (!searchQuery.trim() && destinationLoadError) {
+            <div class="px-4 py-4 text-center">
+              <p class="text-sm text-red-500 mb-2">{{ destinationLoadError }}</p>
+              <button
+                type="button"
+                (click)="retryLoadDestinations()"
+                class="text-xs font-bold text-[#1a2b4a] underline underline-offset-2"
+              >
+                Retry
+              </button>
+            </div>
+          } @else {
+            <ul>
+              @for (
+                result of searchQuery.trim() ? searchResults : allDestinations;
+                track searchResultTrackKey(result, $index)
+              ) {
+                <li class="border-b border-slate-50 last:border-0">
+                  <button
+                    type="button"
+                    (click)="selectResult(result)"
+                    class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 active:bg-slate-100 cursor-pointer text-left bg-transparent border-none transition-colors duration-150"
+                  >
+                    <span
+                      class="flex-none w-7 h-7 bg-orange-50 rounded-full flex items-center justify-center"
+                      aria-hidden="true"
+                    >
+                      <svg
+                        class="w-3.5 h-3.5 text-[#e8570a]"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                        />
+                      </svg>
+                    </span>
+                    <span class="min-w-0">
+                      <span class="block text-sm font-semibold text-slate-800 truncate">{{
+                        result.name
+                      }}</span>
+                      @if (getResultSubtitle(result)) {
+                        <span class="block text-xs text-slate-400 truncate">{{
+                          getResultSubtitle(result)
+                        }}</span>
+                      }
+                    </span>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
         </div>
       }
     </div>
     <!-- Use my location -->
-    <button (click)="requestLocation()"
+    <button
+      (click)="requestLocation()"
       [disabled]="isLocating"
       class="flex items-center gap-1.5 text-white text-sm font-semibold transition-opacity"
-      [class.opacity-60]="isLocating">
+      [class.opacity-60]="isLocating"
+    >
       @if (isLocating) {
-        <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+        <div
+          class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"
+        ></div>
       }
       @if (!isLocating) {
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/>
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"
+          />
         </svg>
       }
       {{ isLocating ? 'Getting location…' : 'Use my current location' }}

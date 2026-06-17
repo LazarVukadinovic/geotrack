@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angula
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import maplibregl, { Map } from 'maplibre-gl';
+import { Subscription } from 'rxjs';
 import { DestinationService } from '../../../../core/services/destination.service';
 import { LocationService } from '../../../../core/services/location.service';
 import { MapApiService, MapSearchResult } from '../../../../core/services/map-api.service';
@@ -27,12 +28,21 @@ export class Home implements OnInit, OnDestroy {
 
   private bgMap?: Map;
   private searchTimeout?: ReturnType<typeof setTimeout>;
+  private searchSubscription?: Subscription;
+  private searchRequestSeq = 0;
+  private searchBlurTimeout?: ReturnType<typeof setTimeout>;
   private resizeObserver?: ResizeObserver;
   private animationFrameId: number | null = null;
   private isDestroyed = false;
 
   searchQuery = '';
   searchResults: MapSearchResult[] = [];
+  allDestinations: MapSearchResult[] = [];
+  isSearching = false;
+  searchErrorMessage = '';
+  isSearchFocused = false;
+  isLoadingDestinations = false;
+  destinationLoadError = '';
   isLocating = false;
 
   ngOnInit(): void {
@@ -46,6 +56,12 @@ export class Home implements OnInit, OnDestroy {
     if (this.searchTimeout) {
       clearTimeout(this.searchTimeout);
     }
+
+    if (this.searchBlurTimeout) {
+      clearTimeout(this.searchBlurTimeout);
+    }
+
+    this.cancelActiveSearch();
 
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
@@ -83,7 +99,7 @@ export class Home implements OnInit, OnDestroy {
       this.bgMap?.resize();
       requestAnimationFrame(() => this.bgMap?.resize());
 
-      this.bgMap?.getStyle().layers?.forEach(layer => {
+      this.bgMap?.getStyle().layers?.forEach((layer) => {
         if (layer.type === 'symbol') {
           this.bgMap?.setLayoutProperty(layer.id, 'visibility', 'none');
         }
@@ -102,7 +118,7 @@ export class Home implements OnInit, OnDestroy {
     const animate = () => {
       if (this.isDestroyed || !this.bgMap) return;
 
-      lng += 0.10;
+      lng += 0.1;
       if (lng > 180) lng = -180;
 
       this.bgMap.setCenter([lng, 20.0]);
@@ -114,41 +130,121 @@ export class Home implements OnInit, OnDestroy {
 
   /* Search / manual destination */
 
-  onSearch(value: string): void {
-    clearTimeout(this.searchTimeout);
+  onSearchFocus(): void {
+    if (this.searchBlurTimeout) {
+      clearTimeout(this.searchBlurTimeout);
+      this.searchBlurTimeout = undefined;
+    }
 
-    if (value.trim().length < 2) {
+    this.isSearchFocused = true;
+    this.loadDestinationsIfNeeded();
+    this.cdr.detectChanges();
+  }
+
+  onSearchBlur(): void {
+    this.searchBlurTimeout = setTimeout(() => {
+      this.isSearchFocused = false;
+      this.cdr.detectChanges();
+    }, 200);
+  }
+
+  onSearchInput(value: string): void {
+    this.searchQuery = value;
+    this.isSearchFocused = true;
+
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+      this.searchTimeout = undefined;
+    }
+
+    this.cancelActiveSearch();
+    this.searchErrorMessage = '';
+
+    const trimmedQuery = value.trim();
+    if (trimmedQuery.length < 2) {
+      this.isSearching = false;
       this.searchResults = [];
+      this.cdr.detectChanges();
       return;
     }
 
-    this.searchTimeout = setTimeout(() => this.geocode(value), 150);
+    this.isSearching = true;
+    this.searchResults = [];
+    const requestId = this.searchRequestSeq;
+
+    this.searchTimeout = setTimeout(() => {
+      this.searchTimeout = undefined;
+      this.searchSubscription = this.mapApi.search(trimmedQuery).subscribe({
+        next: (results) => {
+          if (requestId !== this.searchRequestSeq || this.searchQuery.trim() !== trimmedQuery)
+            return;
+          this.searchResults = results;
+          this.isSearching = false;
+          this.searchErrorMessage = '';
+          this.cdr.detectChanges();
+        },
+        error: () => {
+          if (requestId !== this.searchRequestSeq || this.searchQuery.trim() !== trimmedQuery)
+            return;
+          this.searchResults = [];
+          this.isSearching = false;
+          this.searchErrorMessage = 'Search is unavailable right now. Please try again.';
+          this.cdr.detectChanges();
+        },
+      });
+    }, 150);
+
+    this.cdr.detectChanges();
   }
 
-  private geocode(query: string): void {
-    this.mapApi.search(query, 'destination').subscribe({
+  private loadDestinationsIfNeeded(force = false): void {
+    if (!force && (this.allDestinations.length > 0 || this.isLoadingDestinations)) return;
+
+    this.isLoadingDestinations = true;
+    this.destinationLoadError = '';
+    this.mapApi.getDestinations().subscribe({
       next: (results) => {
-        this.searchResults = results;
+        this.allDestinations = results;
+        this.isLoadingDestinations = false;
+        this.destinationLoadError = '';
+        this.cdr.detectChanges();
       },
       error: () => {
-        this.searchResults = [];
+        this.isLoadingDestinations = false;
+        this.destinationLoadError = 'Destinations are unavailable right now.';
+        this.cdr.detectChanges();
       },
     });
   }
 
+  retryLoadDestinations(): void {
+    this.loadDestinationsIfNeeded(true);
+  }
+
   /**
-   * Manual destination flow — no GPS permission needed.
-   * Sets the destination in LocationService, preloads Explore data, then opens the map.
+   * Opens the map at the selected destination, location, place, stay, or event.
+   * Destination results also preload the destination Explore feed.
    */
   selectResult(result: MapSearchResult): void {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+      this.searchTimeout = undefined;
+    }
+    this.cancelActiveSearch();
+
     const committedQuery = this.searchQuery.trim();
     const resultCount = this.searchResults.length;
-    const selectedIndex = this.searchResults.findIndex((candidate) =>
-      candidate.name === result.name &&
-      candidate.latitude === result.latitude &&
-      candidate.longitude === result.longitude);
+    const selectedIndex = this.searchResults.findIndex(
+      (candidate) =>
+        candidate.name === result.name &&
+        candidate.latitude === result.latitude &&
+        candidate.longitude === result.longitude,
+    );
 
     this.searchResults = [];
+    this.isSearching = false;
+    this.searchErrorMessage = '';
+    this.isSearchFocused = false;
 
     const name = result.name;
     const lat = result.latitude;
@@ -160,10 +256,11 @@ export class Home implements OnInit, OnDestroy {
     this.locationSvc.setManualDestination(lat, lon, name);
     this.analytics.track('search_performed', {
       metadata: {
-        surface: 'home_destination_entry',
+        surface: 'home',
         queryLength: committedQuery.length || name.length,
         resultCount,
         selectedIndex: selectedIndex >= 0 ? selectedIndex : null,
+        resultType: result.type ?? null,
       },
     });
 
@@ -176,43 +273,91 @@ export class Home implements OnInit, OnDestroy {
       });
 
       this.exploreSvc.loadForDestination(result.id).finally(() => {
-        this.finishLocationFlow(() => this.router.navigate(['/map'], {
-          replaceUrl: true,
-          queryParams: { destinationId: result.id },
-          state: {
-            name,
-            lat,
-            lon,
-            fromExplore: true,
-          },
-        }));
+        this.finishLocationFlow(() =>
+          this.router.navigate(['/map'], {
+            replaceUrl: true,
+            queryParams: { destinationId: result.id },
+            state: {
+              name,
+              lat,
+              lon,
+              fromExplore: true,
+            },
+          }),
+        );
       });
       return;
     }
 
-    this.exploreSvc.loadForLocation(lat, lon).then(() => {
-      this.finishLocationFlow(() => this.router.navigate(['/map'], {
-        replaceUrl: true,
-        state: {
-          name,
-          lat,
-          lon,
-        },
-      }));
+    const mapFocus = this.toMapFocus(result);
+    this.exploreSvc.loadForLocation(lat, lon).finally(() => {
+      this.finishLocationFlow(() =>
+        this.router.navigate(['/map'], {
+          replaceUrl: true,
+          state: {
+            name,
+            lat,
+            lon,
+            ...(mapFocus ? { mapFocus } : {}),
+          },
+        }),
+      );
     });
   }
 
   clearSearch(): void {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+      this.searchTimeout = undefined;
+    }
+    this.cancelActiveSearch();
     this.searchQuery = '';
     this.searchResults = [];
-  }
-
-  getResultName(result: MapSearchResult): string {
-    return result.name;
+    this.isSearching = false;
+    this.searchErrorMessage = '';
+    this.cdr.detectChanges();
   }
 
   getResultSubtitle(result: MapSearchResult): string {
-    return result.subtitle ?? '';
+    return result.subtitle ?? result.parentName ?? '';
+  }
+
+  searchResultTrackKey(result: MapSearchResult, index: number): string {
+    if (result.type && result.id) return `${result.type}:${result.id}`;
+    return [result.type ?? 'unknown', result.name, result.latitude, result.longitude, index].join(
+      ':',
+    );
+  }
+
+  private cancelActiveSearch(): void {
+    this.searchRequestSeq += 1;
+    this.searchSubscription?.unsubscribe();
+    this.searchSubscription = undefined;
+  }
+
+  private toMapFocus(result: MapSearchResult): Record<string, unknown> | null {
+    if (!result.id || !result.type || !['place', 'stay', 'event'].includes(result.type)) {
+      return null;
+    }
+
+    const entityType = result.type;
+    return {
+      entityType,
+      entityId: result.id,
+      title: result.name,
+      subtitle: result.subtitle ?? result.parentName ?? null,
+      categoryLabel: entityType === 'stay' ? 'Stay' : entityType === 'event' ? 'Event' : 'Place',
+      imageUrl: null,
+      detailRoute:
+        entityType === 'stay'
+          ? `/stays/${result.id}`
+          : entityType === 'event'
+            ? `/events/${result.id}`
+            : `/places/${result.id}`,
+      latitude: result.latitude,
+      longitude: result.longitude,
+      isSaved: false,
+    };
   }
 
   /* Use my current location */
@@ -230,29 +375,33 @@ export class Home implements OnInit, OnDestroy {
       const coords = await this.locationSvc.requestGps();
       await this.exploreSvc.loadForLocation(coords.latitude, coords.longitude);
 
-      this.finishLocationFlow(() => this.router.navigate(['/map'], {
-        replaceUrl: true,
-        state: {
-          name: 'Current Location',
-          lat: coords.latitude,
-          lon: coords.longitude,
-          isUserLocation: true,
-        },
-      }));
+      this.finishLocationFlow(() =>
+        this.router.navigate(['/map'], {
+          replaceUrl: true,
+          state: {
+            name: 'Current Location',
+            lat: coords.latitude,
+            lon: coords.longitude,
+            isUserLocation: true,
+          },
+        }),
+      );
     } catch {
       const approximateLoc = await this.locationSvc.ensureIpFallback();
 
       if (approximateLoc) {
         await this.exploreSvc.loadForLocation(approximateLoc.latitude, approximateLoc.longitude);
-        this.finishLocationFlow(() => this.router.navigate(['/map'], {
-          replaceUrl: true,
-          state: {
-            name: 'Current Location',
-            lat: approximateLoc.latitude,
-            lon: approximateLoc.longitude,
-            isUserLocation: true,
-          },
-        }));
+        this.finishLocationFlow(() =>
+          this.router.navigate(['/map'], {
+            replaceUrl: true,
+            state: {
+              name: 'Current Location',
+              lat: approximateLoc.latitude,
+              lon: approximateLoc.longitude,
+              isUserLocation: true,
+            },
+          }),
+        );
         return;
       }
 

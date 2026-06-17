@@ -40,6 +40,10 @@ export interface MapEntityMarker {
   title: string;
   subtitle?: string | null;
   categoryLabel?: string | null;
+  placeTypeId?: number | null;
+  placeTypeLabel?: string | null;
+  tagIds?: number[];
+  tagLabels?: string[];
   imageUrl?: string | null;
   detailRoute?: string | null;
   latitude: number;
@@ -62,9 +66,17 @@ export interface MapViewportBounds {
   west: number;
 }
 
+export interface MapFilterOptionResponse {
+  id: number;
+  label: string;
+  count: number;
+  score?: number;
+}
+
 export interface MapMarkersResponse {
   mode: MapMarkersMode;
   markers: MapEntityMarker[];
+  recommendedTags?: MapFilterOptionResponse[];
 }
 
 @Injectable({ providedIn: 'root' })

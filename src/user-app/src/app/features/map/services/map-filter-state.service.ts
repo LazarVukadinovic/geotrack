@@ -1,10 +1,15 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { MapEntityMarker } from '../../../core/services/map-api.service';
+import {
+  MapEntityMarker,
+  MapFilterOptionResponse,
+} from '../../../core/services/map-api.service';
 
 export interface MapFilterOption {
   id: string;
+  valueId: number;
   label: string;
   count: number;
+  score?: number;
 }
 
 export interface StoredMapFilters {
@@ -19,14 +24,18 @@ export interface MapFilterSelection {
 }
 
 export const MAP_FILTERS_STORAGE_KEY = 'mapFilters';
+const MAP_AVAILABLE_PLACE_TYPES_STORAGE_KEY = 'mapAvailablePlaceTypes';
 const MAP_AVAILABLE_FILTERS_STORAGE_KEY = 'mapAvailableFilters';
-const ALLOWED_CATEGORY_IDS = new Set(['places', 'stays', 'events']);
+const PLACE_TYPE_PREFIX = 'place-type:';
+const TAG_PREFIX = 'tag:';
 
 @Injectable({ providedIn: 'root' })
 export class MapFilterStateService {
-  private readonly categoryLabelById = new Map<string, string>();
-  private readonly _availableMoreFilters = signal<MapFilterOption[]>(this.readAvailableMoreFilters());
+  private readonly labelById = new Map<string, string>();
+  private readonly _availablePlaceTypes = signal<MapFilterOption[]>(this.readOptions(MAP_AVAILABLE_PLACE_TYPES_STORAGE_KEY));
+  private readonly _availableMoreFilters = signal<MapFilterOption[]>(this.readOptions(MAP_AVAILABLE_FILTERS_STORAGE_KEY));
 
+  readonly availablePlaceTypes = computed(() => this._availablePlaceTypes());
   readonly availableMoreFilters = computed(() => this._availableMoreFilters());
 
   readSelection(): MapFilterSelection {
@@ -34,11 +43,11 @@ export class MapFilterStateService {
     const savedCategories = Array.isArray(saved?.categories)
       ? saved.categories.filter((value): value is string => typeof value === 'string')
       : [];
-    const savedCategoryLabels = Array.isArray(saved?.categoryLabels)
+    const savedTags = Array.isArray(saved?.categoryLabels)
       ? saved.categoryLabels.filter((value): value is string => typeof value === 'string')
       : [];
     const categories = this.normalizeCategories(savedCategories);
-    const categoryLabelIds = this.normalizeCategoryLabelFilters(savedCategoryLabels);
+    const categoryLabelIds = this.normalizeCategoryLabelIds(savedTags);
 
     return {
       categories,
@@ -48,18 +57,17 @@ export class MapFilterStateService {
   }
 
   persistSelection(categories: string[], categoryLabelIds: string[]): void {
-    const normalizedCategories = this.normalizeCategories(categories);
-    const normalizedCategoryLabelIds = this.normalizeCategoryLabelIds(categoryLabelIds);
-    const categoryLabels = this.labelsForCategoryLabelIds(normalizedCategoryLabelIds);
+    const normalizedCategories = this.normalizeCategories(categories).slice(0, 1);
+    const normalizedTagIds = this.normalizeCategoryLabelIds(categoryLabelIds);
 
-    if (normalizedCategories.length === 0 && categoryLabels.length === 0) {
+    if (normalizedCategories.length === 0 && normalizedTagIds.length === 0) {
       this.removeStorageItem(MAP_FILTERS_STORAGE_KEY);
       return;
     }
 
     this.setStorageJson(MAP_FILTERS_STORAGE_KEY, {
       categories: normalizedCategories,
-      categoryLabels,
+      categoryLabels: normalizedTagIds,
     } satisfies StoredMapFilters);
   }
 
@@ -67,59 +75,102 @@ export class MapFilterStateService {
     this.removeStorageItem(MAP_FILTERS_STORAGE_KEY);
   }
 
-  rebuildAvailableMoreFilters(markers: MapEntityMarker[], selectedCategoryLabelIds: string[]): MapFilterOption[] {
-    const filtersById = new Map<string, MapFilterOption>();
+  rebuildAvailablePlaceTypes(markers: MapEntityMarker[], selectedCategoryIds: string[]): MapFilterOption[] {
+    const byId = new Map<string, MapFilterOption>();
 
     for (const marker of markers) {
-      if (marker.entityType === 'destination') continue;
+      if (marker.entityType === 'destination' || typeof marker.placeTypeId !== 'number') continue;
 
-      const label = this.cleanCategoryLabel(marker.categoryLabel);
+      const label = this.cleanLabel(marker.placeTypeLabel ?? marker.categoryLabel);
       if (!label) continue;
 
-      const id = this.toCategoryLabelFilterId(label);
-      if (!id) continue;
-
-      this.categoryLabelById.set(id, label);
-      const existing = filtersById.get(id);
+      const id = this.placeTypeFilterId(marker.placeTypeId);
+      this.labelById.set(id, label);
+      const existing = byId.get(id);
       if (existing) {
         existing.count += 1;
       } else {
-        filtersById.set(id, { id, label, count: 1 });
+        byId.set(id, {
+          id,
+          valueId: marker.placeTypeId,
+          label,
+          count: 1,
+        });
       }
     }
 
-    for (const id of selectedCategoryLabelIds) {
-      if (filtersById.has(id)) continue;
-
-      const label = this.categoryLabelById.get(id);
-      if (label) {
-        filtersById.set(id, { id, label, count: 0 });
-      }
-    }
-
-    const filters = this.sortFilterOptions([...filtersById.values()]);
-    this._availableMoreFilters.set(filters);
-    this.setStorageJson(MAP_AVAILABLE_FILTERS_STORAGE_KEY, filters);
-    return filters;
+    this.restoreSelectedOptions(byId, selectedCategoryIds);
+    const options = this.sortOptions([...byId.values()]);
+    this._availablePlaceTypes.set(options);
+    this.setStorageJson(MAP_AVAILABLE_PLACE_TYPES_STORAGE_KEY, options);
+    return options;
   }
 
-  filterMarkersByCategoryLabels(markers: MapEntityMarker[], selectedCategoryLabelIds: string[]): MapEntityMarker[] {
-    if (selectedCategoryLabelIds.length === 0) {
-      return markers;
+  setRecommendedTagFilters(
+    recommendedTags: MapFilterOptionResponse[] | undefined,
+    selectedTagIds: string[],
+  ): MapFilterOption[] {
+    const byId = new Map<string, MapFilterOption>();
+
+    for (const tag of recommendedTags ?? []) {
+      if (!Number.isInteger(tag.id) || tag.id <= 0) continue;
+      const label = this.cleanLabel(tag.label);
+      if (!label) continue;
+
+      const id = this.tagFilterId(tag.id);
+      this.labelById.set(id, label);
+      byId.set(id, {
+        id,
+        valueId: tag.id,
+        label,
+        count: Math.max(0, Math.floor(tag.count ?? 0)),
+        score: typeof tag.score === 'number' && Number.isFinite(tag.score) ? tag.score : 0,
+      });
     }
 
-    const selected = new Set(selectedCategoryLabelIds);
+    this.restoreSelectedOptions(byId, selectedTagIds);
+    const options = [...byId.values()]
+      .sort((left, right) => (right.score ?? 0) - (left.score ?? 0) || right.count - left.count || left.label.localeCompare(right.label));
+    this._availableMoreFilters.set(options);
+    this.setStorageJson(MAP_AVAILABLE_FILTERS_STORAGE_KEY, options);
+    return options;
+  }
+
+  filterMarkers(
+    markers: MapEntityMarker[],
+    selectedCategoryIds: string[],
+    selectedTagIds: string[],
+  ): MapEntityMarker[] {
+    const selectedPlaceTypeIds = new Set(
+      this.normalizeCategories(selectedCategoryIds)
+        .map((id) => this.parseId(id, PLACE_TYPE_PREFIX))
+        .filter((id): id is number => id !== null),
+    );
+    const selectedTags = new Set(
+      this.normalizeCategoryLabelIds(selectedTagIds)
+        .map((id) => this.parseId(id, TAG_PREFIX))
+        .filter((id): id is number => id !== null),
+    );
+
+    if (selectedPlaceTypeIds.size === 0 && selectedTags.size === 0) return markers;
+
     return markers.filter((marker) => {
       if (marker.entityType === 'destination') return true;
 
-      const label = this.cleanCategoryLabel(marker.categoryLabel);
-      return label ? selected.has(this.toCategoryLabelFilterId(label)) : false;
+      if (selectedPlaceTypeIds.size > 0 &&
+        (typeof marker.placeTypeId !== 'number' || !selectedPlaceTypeIds.has(marker.placeTypeId))) {
+        return false;
+      }
+
+      if (selectedTags.size === 0) return true;
+      const markerTagIds = new Set(marker.tagIds ?? []);
+      return [...selectedTags].every((tagId) => markerTagIds.has(tagId));
     });
   }
 
   toggleCategoryLabelFilter(currentIds: string[], filter: MapFilterOption): string[] {
-    this.categoryLabelById.set(filter.id, filter.label);
-    const next = new Set(currentIds);
+    this.labelById.set(filter.id, filter.label);
+    const next = new Set(this.normalizeCategoryLabelIds(currentIds));
 
     if (next.has(filter.id)) {
       next.delete(filter.id);
@@ -132,81 +183,90 @@ export class MapFilterStateService {
 
   labelsForCategoryLabelIds(ids: string[]): string[] {
     return this.normalizeCategoryLabelIds(ids)
-      .map((id) => this.categoryLabelById.get(id))
+      .map((id) => this.labelById.get(id))
       .filter((label): label is string => typeof label === 'string' && label.length > 0);
   }
 
   normalizeCategories(categories: string[]): string[] {
-    return [...new Set(
-      categories
-        .map((category) => category.trim().toLowerCase())
-        .filter((category) => ALLOWED_CATEGORY_IDS.has(category)),
-    )].sort();
-  }
-
-  normalizeCategoryLabelFilters(labels: string[]): string[] {
-    const ids: string[] = [];
-
-    for (const value of labels) {
-      const label = this.cleanCategoryLabel(value);
-      if (!label) continue;
-
-      const id = this.toCategoryLabelFilterId(label);
-      if (!id || ids.includes(id)) continue;
-
-      this.categoryLabelById.set(id, label);
-      ids.push(id);
-    }
-
-    return this.normalizeCategoryLabelIds(ids);
+    const ids = categories
+      .map((category) => category.trim().toLowerCase())
+      .filter((category) => this.parseId(category, PLACE_TYPE_PREFIX) !== null);
+    return [...new Set(ids)].slice(0, 1);
   }
 
   normalizeCategoryLabelIds(ids: string[]): string[] {
-    return [...new Set(ids.map((id) => id.trim().toLowerCase()).filter(Boolean))]
-      .sort((left, right) => {
-        const leftLabel = this.categoryLabelById.get(left) ?? left;
-        const rightLabel = this.categoryLabelById.get(right) ?? right;
-        return leftLabel.localeCompare(rightLabel);
-      });
+    return [...new Set(
+      ids
+        .map((id) => id.trim().toLowerCase())
+        .filter((id) => this.parseId(id, TAG_PREFIX) !== null),
+    )].sort((left, right) => {
+      const leftLabel = this.labelById.get(left) ?? left;
+      const rightLabel = this.labelById.get(right) ?? right;
+      return leftLabel.localeCompare(rightLabel);
+    });
   }
 
-  private readAvailableMoreFilters(): MapFilterOption[] {
-    const saved = this.readJson<unknown>(MAP_AVAILABLE_FILTERS_STORAGE_KEY);
+  private restoreSelectedOptions(target: Map<string, MapFilterOption>, selectedIds: string[]): void {
+    for (const id of selectedIds) {
+      if (target.has(id)) continue;
+      const valueId = this.parseId(id, id.startsWith(PLACE_TYPE_PREFIX) ? PLACE_TYPE_PREFIX : TAG_PREFIX);
+      const label = this.labelById.get(id);
+      if (valueId !== null && label) {
+        target.set(id, { id, valueId, label, count: 0 });
+      }
+    }
+  }
+
+  private readOptions(key: string): MapFilterOption[] {
+    const saved = this.readJson<unknown>(key);
     if (!Array.isArray(saved)) return [];
 
-    const filtersById = new Map<string, MapFilterOption>();
-
-    for (const value of saved) {
-      if (!value || typeof value !== 'object') continue;
-
-      const item = value as Partial<MapFilterOption>;
-      const label = this.cleanCategoryLabel(item.label);
+    const result: MapFilterOption[] = [];
+    for (const item of saved) {
+      if (!item || typeof item !== 'object') continue;
+      const option = item as Partial<MapFilterOption>;
+      if (typeof option.id !== 'string' || typeof option.valueId !== 'number') continue;
+      const label = this.cleanLabel(option.label);
       if (!label) continue;
 
-      const id = this.toCategoryLabelFilterId(label);
-      if (!id) continue;
-
-      const count = typeof item.count === 'number' && Number.isFinite(item.count) && item.count > 0
-        ? Math.floor(item.count)
-        : 0;
-
-      this.categoryLabelById.set(id, label);
-      filtersById.set(id, { id, label, count });
+      const normalized: MapFilterOption = {
+        id: option.id,
+        valueId: option.valueId,
+        label,
+        count: typeof option.count === 'number' && Number.isFinite(option.count) ? Math.max(0, Math.floor(option.count)) : 0,
+        score: typeof option.score === 'number' && Number.isFinite(option.score) ? option.score : 0,
+      };
+      this.labelById.set(normalized.id, normalized.label);
+      result.push(normalized);
     }
 
-    return this.sortFilterOptions([...filtersById.values()]);
+    return result;
   }
 
-  private sortFilterOptions(filters: MapFilterOption[]): MapFilterOption[] {
-    return filters.sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+  private sortOptions(options: MapFilterOption[]): MapFilterOption[] {
+    const stayFirst = (label: string): number => label.toLowerCase() === 'stays' ? 0 : 1;
+    return options.sort((left, right) =>
+      stayFirst(left.label) - stayFirst(right.label) ||
+      right.count - left.count ||
+      left.label.localeCompare(right.label));
   }
 
-  private cleanCategoryLabel(value: string | null | undefined): string {
+  private placeTypeFilterId(id: number): string {
+    return `${PLACE_TYPE_PREFIX}${id}`;
+  }
+
+  private tagFilterId(id: number): string {
+    return `${TAG_PREFIX}${id}`;
+  }
+
+  private parseId(value: string, prefix: string): number | null {
+    if (!value.startsWith(prefix)) return null;
+    const parsed = Number(value.slice(prefix.length));
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  private cleanLabel(value: string | null | undefined): string {
     return (value ?? '').trim().replace(/\s+/g, ' ');
-  }
-
-  private toCategoryLabelFilterId(label: string): string {
-    return label.trim().toLowerCase();
   }
 
   private readJson<T>(key: string): T | null {

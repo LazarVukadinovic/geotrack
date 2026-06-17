@@ -2,6 +2,7 @@ import { AfterViewInit, ChangeDetectorRef, Component, NgZone, OnDestroy } from '
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import maplibregl, {
   GeoJSONSource,
   Map as MapLibreMap,
@@ -88,6 +89,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private map!: MapLibreMap;
   private searchTimeout?: ReturnType<typeof setTimeout>;
+  private searchSubscription?: Subscription;
+  private searchRequestSeq = 0;
   private noDataSearchTimeout?: ReturnType<typeof setTimeout>;
   private filterCategories: string[] = [];
   private selectedCategoryLabelFilters: string[] = [];
@@ -124,6 +127,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   searchQuery = '';
   searchResults: MapSearchResult[] = [];
+  isSearching = false;
+  searchErrorMessage = '';
   isSearchFocused = false;
   noDataSearchQuery = '';
   noDataSearchResults: MapSearchResult[] = [];
@@ -143,12 +148,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   isPinToPinMode = false;
   pinToPinOrigin: MapEntityMarker | null = null;
 
-  categories = [
-    { id: 'all', label: 'All' },
-    { id: 'places', label: 'Places' },
-    { id: 'stays', label: 'Stays' },
-    { id: 'events', label: 'Events' },
-  ];
+  categories: Array<{ id: string; label: string; count?: number }> = [{ id: 'all', label: 'All' }];
 
   availableMoreFilters: MapFilterOption[] = [];
 
@@ -183,12 +183,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.destinationLat = state.lat ?? this.destinationLat;
       this.destinationLon = state.lon ?? this.destinationLon;
       this.isUserLocation = state.isUserLocation === true;
-      sessionStorage.setItem('mapLocation', JSON.stringify({
-        name: this.destinationName,
-        lat: this.destinationLat,
-        lon: this.destinationLon,
-        isUserLocation: this.isUserLocation,
-      }));
+      sessionStorage.setItem(
+        'mapLocation',
+        JSON.stringify({
+          name: this.destinationName,
+          lat: this.destinationLat,
+          lon: this.destinationLon,
+          isUserLocation: this.isUserLocation,
+        }),
+      );
     }
 
     this.navigatedWithDestination = !!(
@@ -215,23 +218,31 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     const savedFilters = this.mapFilterState.readSelection();
     this.filterCategories = savedFilters.categories;
+    this.activeCategory = this.filterCategories[0] ?? 'all';
     this.selectedCategoryLabelFilters = savedFilters.categoryLabelIds;
     this.syncActiveFilters();
 
     if (state?.cleared) {
       this.filterCategories = [];
+      this.activeCategory = 'all';
       this.selectedCategoryLabelFilters = [];
       this.hasActiveFilters = false;
       this.mapFilterState.clearSelection();
     }
 
     const isInternalMapNav = !!(state?.fromFilters || state?.mapPreviewRestore);
-    if (!isInternalMapNav && !this.navigatedWithDestination && !this.initialMapFocus && this.destinationSvc.isDestinationMode()) {
+    if (
+      !isInternalMapNav &&
+      !this.navigatedWithDestination &&
+      !this.initialMapFocus &&
+      this.destinationSvc.isDestinationMode()
+    ) {
       const dsLat = this.destinationSvc.latitude();
       const dsLon = this.destinationSvc.longitude();
       const dsName = this.destinationSvc.name();
       if (typeof dsLat === 'number' && typeof dsLon === 'number' && dsName) {
-        const coordsAlreadyMatch = savedLocation &&
+        const coordsAlreadyMatch =
+          savedLocation &&
           Math.abs((savedLocation.lat ?? 0) - dsLat) < 0.001 &&
           Math.abs((savedLocation.lon ?? 0) - dsLon) < 0.001;
         if (!coordsAlreadyMatch) {
@@ -262,6 +273,12 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       clearTimeout(this.noDataSearchTimeout);
     }
 
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+    }
+
+    this.cancelActiveSearch();
+
     if (this.searchBlurTimeout) {
       clearTimeout(this.searchBlurTimeout);
     }
@@ -287,13 +304,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   get isMoreActive(): boolean {
-    return this.hasActiveFilters || this.isMoreFiltersOpen;
+    return this.selectedCategoryLabelFilters.length > 0 || this.isMoreFiltersOpen;
+  }
+
+  get hasRecommendedTagFilters(): boolean {
+    return this.selectedCategoryLabelFilters.length > 0;
   }
 
   get mapAccessibilitySummary(): string {
-    const selected = this.selectedPlace
-      ? ` Selected marker: ${this.selectedPlace.title}.`
-      : '';
+    const selected = this.selectedPlace ? ` Selected marker: ${this.selectedPlace.title}.` : '';
     const state = this.loadErrorMessage
       ? ` Map results unavailable: ${this.loadErrorMessage}`
       : this.emptyStateMessage
@@ -314,11 +333,17 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   get filteredDestinations(): MapSearchResult[] {
     const q = this.noDataSearchQuery.trim().toLowerCase();
     if (!q) return this.allDestinations;
-    return this.allDestinations.filter(d => d.name.toLowerCase().includes(q) || (d.subtitle ?? '').toLowerCase().includes(q));
+    return this.allDestinations.filter(
+      (d) => d.name.toLowerCase().includes(q) || (d.subtitle ?? '').toLowerCase().includes(q),
+    );
   }
 
   get noDataHeading(): string {
-    if (!this.isLoadingDestinations && !this.destinationLoadError && this.allDestinations.length === 0) {
+    if (
+      !this.isLoadingDestinations &&
+      !this.destinationLoadError &&
+      this.allDestinations.length === 0
+    ) {
       return 'GeoTrack does not have public destinations available yet.';
     }
 
@@ -326,11 +351,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   get noDataBody(): string {
-    if (!this.isLoadingDestinations && !this.destinationLoadError && this.allDestinations.length === 0) {
-      return 'Try again later after public places, stays, or events have been published.';
+    if (
+      !this.isLoadingDestinations &&
+      !this.destinationLoadError &&
+      this.allDestinations.length === 0
+    ) {
+      return 'Try again later after public places have been published.';
     }
 
-    return 'Try searching for another destination where GeoTrack has places, stays, and events mapped.';
+    return 'Try searching for another destination where GeoTrack has places mapped.';
   }
 
   private loadDestinationsIfNeeded(force = false): void {
@@ -391,34 +420,70 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onSearchInput(value: string): void {
+    this.searchQuery = value;
     this.isSearchFocused = true;
-    clearTimeout(this.searchTimeout);
-    if (value.trim().length < 2) {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+      this.searchTimeout = undefined;
+    }
+    this.cancelActiveSearch();
+
+    const trimmedQuery = value.trim();
+    this.searchErrorMessage = '';
+
+    if (trimmedQuery.length < 2) {
+      this.isSearching = false;
       this.searchResults = [];
+      this.cdr.detectChanges();
       return;
     }
 
+    this.isSearching = true;
+    this.searchResults = [];
+    const requestId = this.searchRequestSeq;
+
     this.searchTimeout = setTimeout(() => {
-      this.mapApi.search(value).subscribe({
+      this.searchTimeout = undefined;
+      this.searchSubscription = this.mapApi.search(trimmedQuery).subscribe({
         next: (results) => {
+          if (requestId !== this.searchRequestSeq || this.searchQuery.trim() !== trimmedQuery)
+            return;
           this.searchResults = results;
+          this.isSearching = false;
+          this.searchErrorMessage = '';
           this.cdr.detectChanges();
         },
         error: () => {
+          if (requestId !== this.searchRequestSeq || this.searchQuery.trim() !== trimmedQuery)
+            return;
           this.searchResults = [];
+          this.isSearching = false;
+          this.searchErrorMessage = 'Search is unavailable right now. Please try again.';
           this.cdr.detectChanges();
         },
       });
     }, 150);
+
+    this.cdr.detectChanges();
   }
 
   selectSearchResult(result: MapSearchResult): void {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+      this.searchTimeout = undefined;
+    }
+    this.cancelActiveSearch();
+    this.isSearching = false;
+    this.searchErrorMessage = '';
+
     const committedQuery = this.searchQuery.trim();
     const resultCount = this.searchResults.length;
-    const selectedIndex = this.searchResults.findIndex((candidate) =>
-      candidate.name === result.name &&
-      candidate.latitude === result.latitude &&
-      candidate.longitude === result.longitude);
+    const selectedIndex = this.searchResults.findIndex(
+      (candidate) =>
+        candidate.name === result.name &&
+        candidate.latitude === result.latitude &&
+        candidate.longitude === result.longitude,
+    );
     this.searchResults = [];
     this.noDataSearchResults = [];
     this.isSearchFocused = false;
@@ -431,15 +496,19 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = ''; this.routeInfoMessage = '';
+    this.routeErrorMessage = '';
+    this.routeInfoMessage = '';
     this.clearRoute();
 
-    sessionStorage.setItem('mapLocation', JSON.stringify({
-      name: result.name,
-      lat: result.latitude,
-      lon: result.longitude,
-      isUserLocation: false,
-    }));
+    sessionStorage.setItem(
+      'mapLocation',
+      JSON.stringify({
+        name: result.name,
+        lat: result.latitude,
+        lon: result.longitude,
+        isUserLocation: false,
+      }),
+    );
 
     if (result.id && (result.type === 'destination' || !result.type)) {
       this.destinationSvc.setDestinationOverride({
@@ -479,8 +548,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       },
     });
     this.invalidateMarkerCache();
-    this.scheduleViewportLoad(0);
     this.cdr.detectChanges();
+  }
+
+  private cancelActiveSearch(): void {
+    this.searchRequestSeq += 1;
+    this.searchSubscription?.unsubscribe();
+    this.searchSubscription = undefined;
   }
 
   private toMarkerFromSearchResult(result: MapSearchResult): MapEntityMarker | null {
@@ -503,7 +577,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     };
   }
 
-  private entityTypeFromSearchResult(result: MapSearchResult): MapEntityMarker['entityType'] | null {
+  private entityTypeFromSearchResult(
+    result: MapSearchResult,
+  ): MapEntityMarker['entityType'] | null {
     switch (result.type) {
       case 'place':
         return 'place';
@@ -516,7 +592,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private detailRouteForSearchResult(result: MapSearchResult, entityType: MapEntityMarker['entityType']): string {
+  private detailRouteForSearchResult(
+    result: MapSearchResult,
+    entityType: MapEntityMarker['entityType'],
+  ): string {
     if (!result.id) return '';
     if (entityType === 'stay') return `/stays/${result.id}`;
     if (entityType === 'event') return `/events/${result.id}`;
@@ -539,27 +618,24 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const typedId = result.type && result.id ? `${result.type}:${result.id}` : null;
     if (typedId) return typedId;
 
-    return [
-      result.type ?? 'unknown',
-      result.name,
-      result.latitude,
-      result.longitude,
-      index,
-    ].join(':');
+    return [result.type ?? 'unknown', result.name, result.latitude, result.longitude, index].join(
+      ':',
+    );
   }
 
   private writeSearchResultMapViewState(result: MapSearchResult, zoom: number): void {
     try {
-      sessionStorage.setItem(MAP_VIEW_STATE_KEY, JSON.stringify({
-        center: [result.longitude, result.latitude],
-        zoom,
-        destinationId: result.id && (result.type === 'destination' || !result.type)
-          ? result.id
-          : null,
-      }));
+      sessionStorage.setItem(
+        MAP_VIEW_STATE_KEY,
+        JSON.stringify({
+          center: [result.longitude, result.latitude],
+          zoom,
+          destinationId:
+            result.id && (result.type === 'destination' || !result.type) ? result.id : null,
+        }),
+      );
       sessionStorage.setItem(MAP_OPENED_THIS_SESSION_KEY, 'true');
-    } catch {
-    }
+    } catch {}
   }
 
   locateMe(): void {
@@ -597,31 +673,24 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   selectCategory(category: { id: string; label: string }): void {
-    if (this.activeCategory === category.id && !this.hasActiveFilters) {
-      return;
-    }
+    if (this.activeCategory === category.id) return;
 
     this.activeCategory = category.id;
-    this.filterCategories = [];
-    this.selectedCategoryLabelFilters = [];
-    this.hasActiveFilters = false;
+    this.filterCategories = category.id === 'all' ? [] : [category.id];
     this.isMoreFiltersOpen = false;
-    this.preserveSelectedPlaceFromNavigation = false;
-    this.clearMapFocusHistoryState();
-    this.selectedPlace = null;
-    this.routeErrorMessage = ''; this.routeInfoMessage = '';
-    this.clearRoute();
-    this.mapFilterState.clearSelection();
+    this.syncActiveFilters();
+    this.persistMapFilters();
+    this.clearSelectionForFilterChange();
 
     this.analytics.track('filter_applied', {
       metadata: {
         surface: 'map',
-        category: category.id,
+        placeType: category.id === 'all' ? null : category.label,
+        recommendedTags: this.selectedMoreFilterLabels(),
       },
     });
 
-    this.invalidateMarkerCache();
-    this.scheduleViewportLoad(0);
+    this.renderFilteredMarkers();
   }
 
   onMoreFiltersClick(): void {
@@ -638,27 +707,24 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   clearMoreFilters(): void {
-    const hadServerCategories = this.filterCategories.length > 0;
-    const hadFilters = this.hasActiveFilters;
-
-    this.filterCategories = [];
+    const hadTagFilters = this.selectedCategoryLabelFilters.length > 0;
     this.selectedCategoryLabelFilters = [];
     this.syncActiveFilters();
-    this.mapFilterState.clearSelection();
+    this.persistMapFilters();
 
-    if (hadFilters) {
+    if (hadTagFilters) {
       this.analytics.track('filter_applied', {
         metadata: {
           surface: 'map_inline_filters',
-          categories: [],
-          categoryLabels: [],
+          placeType: this.activeCategory === 'all' ? null : this.activeCategory,
+          recommendedTags: [],
           cleared: true,
         },
       });
     }
 
     this.clearSelectionForFilterChange();
-    this.refreshMarkersAfterMoreFilterChange(hadServerCategories);
+    this.renderFilteredMarkers();
   }
 
   toggleMoreFilter(filter: MapFilterOption): void {
@@ -672,13 +738,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.analytics.track('filter_applied', {
       metadata: {
         surface: 'map_inline_filters',
-        categories: this.filterCategories,
-        categoryLabels: this.selectedMoreFilterLabels(),
+        placeType: this.activeCategory === 'all' ? null : this.activeCategory,
+        recommendedTags: this.selectedMoreFilterLabels(),
       },
     });
 
     this.clearSelectionForFilterChange();
-    this.refreshMarkersAfterMoreFilterChange(false);
+    this.renderFilteredMarkers();
   }
 
   isMoreFilterSelected(filter: MapFilterOption): boolean {
@@ -693,7 +759,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const routeRequestId = ++this.routeRequestSeq;
 
     this.isLoadingRoute = true;
-    this.routeErrorMessage = ''; this.routeInfoMessage = '';
+    this.routeErrorMessage = '';
+    this.routeInfoMessage = '';
     this.clearRoute();
     this.cdr.detectChanges();
 
@@ -719,8 +786,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
 
     const straightLineKm = this.haversineKm(
-      origin.latitude, origin.longitude,
-      selectedPlace.latitude, selectedPlace.longitude,
+      origin.latitude,
+      origin.longitude,
+      selectedPlace.latitude,
+      selectedPlace.longitude,
     );
     const useDriving = straightLineKm > 30;
 
@@ -736,8 +805,18 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     });
 
     const routeRequest = useDriving
-      ? this.mapApi.getDrivingRoute(origin.latitude, origin.longitude, selectedPlace.latitude, selectedPlace.longitude)
-      : this.mapApi.getWalkingRoute(origin.latitude, origin.longitude, selectedPlace.latitude, selectedPlace.longitude);
+      ? this.mapApi.getDrivingRoute(
+          origin.latitude,
+          origin.longitude,
+          selectedPlace.latitude,
+          selectedPlace.longitude,
+        )
+      : this.mapApi.getWalkingRoute(
+          origin.latitude,
+          origin.longitude,
+          selectedPlace.latitude,
+          selectedPlace.longitude,
+        );
 
     routeRequest.subscribe({
       next: (route) => {
@@ -802,9 +881,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const distanceMeters = route.distanceMeters;
     if (typeof distanceMeters === 'number' && distanceMeters > 0) {
       const km = distanceMeters / 1000;
-      const kmLabel = km >= 10
-        ? `${Math.round(km)} km`
-        : `${km.toFixed(1)} km`;
+      const kmLabel = km >= 10 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`;
       parts.push(kmLabel);
     }
 
@@ -828,7 +905,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = ''; this.routeInfoMessage = '';
+    this.routeErrorMessage = '';
+    this.routeInfoMessage = '';
     this.isPinToPinMode = false;
     this.pinToPinOrigin = null;
     this.clearRoute();
@@ -870,8 +948,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.cdr.detectChanges();
 
     const straightLineKm = this.haversineKm(
-      origin.latitude, origin.longitude,
-      destination.latitude, destination.longitude,
+      origin.latitude,
+      origin.longitude,
+      destination.latitude,
+      destination.longitude,
     );
     const useDriving = straightLineKm > 30;
 
@@ -887,8 +967,18 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     });
 
     const routeRequest = useDriving
-      ? this.mapApi.getDrivingRoute(origin.latitude, origin.longitude, destination.latitude, destination.longitude)
-      : this.mapApi.getWalkingRoute(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
+      ? this.mapApi.getDrivingRoute(
+          origin.latitude,
+          origin.longitude,
+          destination.latitude,
+          destination.longitude,
+        )
+      : this.mapApi.getWalkingRoute(
+          origin.latitude,
+          origin.longitude,
+          destination.latitude,
+          destination.longitude,
+        );
 
     routeRequest.subscribe({
       next: (route) => {
@@ -936,6 +1026,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       style: MAP_STYLE_URL,
       center: initialView.center,
       zoom: initialView.zoom,
+      renderWorldCopies: false,
       attributionControl: false,
       fadeDuration: 0,
       trackResize: true,
@@ -970,7 +1061,6 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     this.map.on('click', (event: MapMouseEvent) => this.onMapClick(event));
   }
-
 
   private hideExternalPoiLayers(): void {
     const layers = this.map.getStyle().layers ?? [];
@@ -1022,16 +1112,19 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       const sourceLayer = String(layerLike['source-layer'] ?? '').toLowerCase();
       const searchableName = `${id} ${sourceLayer}`;
 
-      const isImportantBaseLabel = keepLabelKeywords.some(keyword => searchableName.includes(keyword));
+      const isImportantBaseLabel = keepLabelKeywords.some((keyword) =>
+        searchableName.includes(keyword),
+      );
       if (isImportantBaseLabel) continue;
 
-      const looksLikePoiLayer = poiLayerKeywords.some(keyword => searchableName.includes(keyword));
+      const looksLikePoiLayer = poiLayerKeywords.some((keyword) =>
+        searchableName.includes(keyword),
+      );
       if (!looksLikePoiLayer) continue;
 
       try {
         this.map.setLayoutProperty(layerLike.id, 'visibility', 'none');
-      } catch {
-      }
+      } catch {}
     }
   }
 
@@ -1049,7 +1142,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private shouldIgnoreMapBackgroundClick(event: MapMouseEvent): boolean {
     const target = event.originalEvent.target;
-    if (target instanceof Element && (target.closest('.gt-marker') || target.closest('.gt-marker-stack'))) {
+    if (
+      target instanceof Element &&
+      (target.closest('.gt-marker') || target.closest('.gt-marker-stack'))
+    ) {
       return true;
     }
 
@@ -1086,7 +1182,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
         const destinationChanged = dsId != null && savedViewDestId !== dsId;
 
         const currentSaved = this.readSessionJson<{ lat?: number; lon?: number }>('mapLocation');
-        const coordsMatch = currentSaved &&
+        const coordsMatch =
+          currentSaved &&
           Math.abs((currentSaved.lat ?? 0) - dsLat) < 0.001 &&
           Math.abs((currentSaved.lon ?? 0) - dsLon) < 0.001;
 
@@ -1105,7 +1202,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       return savedView;
     }
 
-    const origin = exactLocation ?? await this.locationSvc.resolveRoutingOrigin();
+    const origin = exactLocation ?? (await this.locationSvc.resolveRoutingOrigin());
     if (origin && this.hasUsableCoordinates(origin.latitude, origin.longitude)) {
       return {
         center: [origin.longitude, origin.latitude],
@@ -1118,7 +1215,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       return savedView;
     }
 
-    this.loadErrorMessage = "GeoTrack couldn't determine your current location, so the map opened at the last selected destination.";
+    this.loadErrorMessage =
+      "GeoTrack couldn't determine your current location, so the map opened at the last selected destination.";
     this.cdr.detectChanges();
 
     return {
@@ -1138,8 +1236,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private markMapOpenedThisSession(): void {
     try {
       sessionStorage.setItem(MAP_OPENED_THIS_SESSION_KEY, 'true');
-    } catch {
-    }
+    } catch {}
   }
 
   private persistMapViewState(): void {
@@ -1149,14 +1246,16 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       const destinationId = this.destinationSvc.isDestinationMode()
         ? (this.destinationSvc.id() ?? null)
         : null;
-      sessionStorage.setItem(MAP_VIEW_STATE_KEY, JSON.stringify({
-        center: [center.lng, center.lat],
-        zoom,
-        destinationId,
-      }));
+      sessionStorage.setItem(
+        MAP_VIEW_STATE_KEY,
+        JSON.stringify({
+          center: [center.lng, center.lat],
+          zoom,
+          destinationId,
+        }),
+      );
       this.markMapOpenedThisSession();
-    } catch {
-    }
+    } catch {}
   }
 
   private readSavedMapViewState(): MapInitialView | null {
@@ -1164,11 +1263,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const center = savedView?.center;
     const zoom = savedView?.zoom;
 
-    if (!center ||
+    if (
+      !center ||
       center.length !== 2 ||
       !this.hasUsableCoordinates(center[1], center[0]) ||
       typeof zoom !== 'number' ||
-      !Number.isFinite(zoom)) {
+      !Number.isFinite(zoom)
+    ) {
       return null;
     }
 
@@ -1189,10 +1290,12 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const longitude = value.longitude;
     const title = typeof value.title === 'string' ? value.title.trim() : '';
 
-    if (!Number.isFinite(entityId) ||
+    if (
+      !Number.isFinite(entityId) ||
       entityId <= 0 ||
       !title ||
-      !this.hasUsableCoordinates(latitude, longitude)) {
+      !this.hasUsableCoordinates(latitude, longitude)
+    ) {
       return null;
     }
 
@@ -1201,9 +1304,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       entityId,
       title,
       subtitle: typeof value.subtitle === 'string' && value.subtitle.trim() ? value.subtitle : null,
-      categoryLabel: typeof value.categoryLabel === 'string' && value.categoryLabel.trim() ? value.categoryLabel : null,
+      categoryLabel:
+        typeof value.categoryLabel === 'string' && value.categoryLabel.trim()
+          ? value.categoryLabel
+          : null,
       imageUrl: typeof value.imageUrl === 'string' && value.imageUrl.trim() ? value.imageUrl : null,
-      detailRoute: typeof value.detailRoute === 'string' && value.detailRoute.trim() ? value.detailRoute : null,
+      detailRoute:
+        typeof value.detailRoute === 'string' && value.detailRoute.trim()
+          ? value.detailRoute
+          : null,
       latitude: latitude as number,
       longitude: longitude as number,
       distance: typeof value.distance === 'string' && value.distance.trim() ? value.distance : null,
@@ -1216,13 +1325,16 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     if (!mapFocus) return;
 
     try {
-      globalThis.history.replaceState({
-        ...(history.state ?? {}),
-        mapFocus,
-        mapPreviewRestore: true,
-      } satisfies MapNavigationState, '', this.router.url);
-    } catch {
-    }
+      globalThis.history.replaceState(
+        {
+          ...(history.state ?? {}),
+          mapFocus,
+          mapPreviewRestore: true,
+        } satisfies MapNavigationState,
+        '',
+        this.router.url,
+      );
+    } catch {}
   }
 
   private clearMapFocusHistoryState(): void {
@@ -1234,8 +1346,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       delete nextState.mapFocus;
       delete nextState.mapPreviewRestore;
       globalThis.history.replaceState(nextState, '', this.router.url);
-    } catch {
-    }
+    } catch {}
   }
 
   private scheduleViewportLoad(debounceMs: number = VIEWPORT_DEBOUNCE_MS): void {
@@ -1262,52 +1373,131 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     const mapBounds = this.map.getBounds();
     const zoom = this.map.getZoom();
-    const bounds: MapViewportBounds = {
+    const visibleBounds = this.normalizeViewportBounds({
       north: mapBounds.getNorth(),
       south: mapBounds.getSouth(),
       east: mapBounds.getEast(),
       west: mapBounds.getWest(),
-    };
+    });
 
-    const expectedMode: MapMarkersMode = zoom < DESTINATION_ZOOM_THRESHOLD ? 'destinations' : 'entities';
+    const expectedMode: MapMarkersMode =
+      zoom < DESTINATION_ZOOM_THRESHOLD ? 'destinations' : 'entities';
 
-    if (this.isWithinCachedViewport(bounds, expectedMode)) {
+    if (this.isWithinCachedViewport(visibleBounds, expectedMode)) {
       return;
     }
+
+    const requestedBounds = this.expandViewportBounds(visibleBounds, VIEWPORT_CACHE_PADDING);
 
     const seq = ++this.requestSeq;
     this.isLoading = true;
     this.loadErrorMessage = '';
     this.cdr.detectChanges();
 
-    this.mapApi.getMarkersInViewport(bounds, zoom, this.getRequestedCategories()).subscribe({
-      next: (response) => {
-        if (seq !== this.requestSeq) return;
-        this.lastFetchedViewport = { ...bounds, mode: response.mode };
-        this.applyMarkers(response);
-        this.isLoading = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        if (seq !== this.requestSeq) return;
-        this.isLoading = false;
-        this.loadErrorMessage = "GeoTrack couldn't load backend-backed map results right now.";
-        this.cdr.detectChanges();
-      },
-    });
+    this.mapApi
+      .getMarkersInViewport(requestedBounds, zoom, this.getRequestedCategories())
+      .subscribe({
+        next: (response) => {
+          if (seq !== this.requestSeq) return;
+          this.lastFetchedViewport = { ...requestedBounds, mode: response.mode };
+          this.applyMarkers(response);
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        },
+        error: () => {
+          if (seq !== this.requestSeq) return;
+          this.isLoading = false;
+          this.loadErrorMessage = "GeoTrack couldn't load backend-backed map results right now.";
+          this.cdr.detectChanges();
+        },
+      });
   }
 
   private isWithinCachedViewport(bounds: MapViewportBounds, mode: MapMarkersMode): boolean {
     const last = this.lastFetchedViewport;
     if (!last || last.mode !== mode) return false;
 
-    const dy = (last.north - last.south) * VIEWPORT_CACHE_PADDING;
-    const dx = (last.east - last.west) * VIEWPORT_CACHE_PADDING;
+    return (
+      bounds.north <= last.north &&
+      bounds.south >= last.south &&
+      this.isLongitudeRangeContained(bounds, last)
+    );
+  }
 
-    return bounds.north <= last.north + dy
-      && bounds.south >= last.south - dy
-      && bounds.east <= last.east + dx
-      && bounds.west >= last.west - dx;
+  private expandViewportBounds(bounds: MapViewportBounds, paddingRatio: number): MapViewportBounds {
+    const latitudePadding = (bounds.north - bounds.south) * paddingRatio;
+    const longitudeSpan = this.longitudeSpan(bounds);
+    const longitudePadding = longitudeSpan * paddingRatio;
+    const unwrappedEast = bounds.east > bounds.west ? bounds.east : bounds.east + 360;
+
+    return this.normalizeViewportBounds({
+      north: bounds.north + latitudePadding,
+      south: bounds.south - latitudePadding,
+      east: unwrappedEast + longitudePadding,
+      west: bounds.west - longitudePadding,
+    });
+  }
+
+  private normalizeViewportBounds(bounds: MapViewportBounds): MapViewportBounds {
+    let north = Math.min(90, Math.max(-90, bounds.north));
+    let south = Math.min(90, Math.max(-90, bounds.south));
+    const rawLongitudeSpan = bounds.east - bounds.west;
+    let east = this.normalizeLongitude(bounds.east);
+    let west = this.normalizeLongitude(bounds.west);
+
+    if (north <= south) {
+      const center = (north + south) / 2;
+      north = Math.min(90, center + 0.000001);
+      south = Math.max(-90, center - 0.000001);
+    }
+
+    if (Math.abs(rawLongitudeSpan) >= 360) {
+      east = 180;
+      west = -180;
+    } else if (east === west) {
+      east = Math.min(180, east + 0.000001);
+      west = Math.max(-180, west - 0.000001);
+    }
+
+    return { north, south, east, west };
+  }
+
+  private normalizeLongitude(longitude: number): number {
+    if (longitude === 180) return 180;
+    const normalized = ((((longitude + 180) % 360) + 360) % 360) - 180;
+    return Object.is(normalized, -0) ? 0 : normalized;
+  }
+
+  private longitudeSpan(bounds: MapViewportBounds): number {
+    if (bounds.west === -180 && bounds.east === 180) return 360;
+    return bounds.east > bounds.west
+      ? bounds.east - bounds.west
+      : 180 - bounds.west + (bounds.east + 180);
+  }
+
+  private isLongitudeRangeContained(inner: MapViewportBounds, outer: MapViewportBounds): boolean {
+    if (this.longitudeSpan(outer) >= 359.999999) return true;
+
+    const innerIntervals = this.longitudeIntervals(inner);
+    const outerIntervals = this.longitudeIntervals(outer);
+    return innerIntervals.every(([innerWest, innerEast]) =>
+      outerIntervals.some(
+        ([outerWest, outerEast]) => innerWest >= outerWest && innerEast <= outerEast,
+      ),
+    );
+  }
+
+  private longitudeIntervals(bounds: MapViewportBounds): Array<[number, number]> {
+    if (this.longitudeSpan(bounds) >= 359.999999) return [[-180, 180]];
+    if (bounds.east > bounds.west) return [[bounds.west, bounds.east]];
+    return [
+      [bounds.west, 180],
+      [-180, bounds.east],
+    ];
+  }
+
+  private hasEntityOnlyFilters(): boolean {
+    return this.filterCategories.length > 0 || this.selectedCategoryLabelFilters.length > 0;
   }
 
   private invalidateMarkerCache(): void {
@@ -1316,7 +1506,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private applyMarkers(response: MapMarkersResponse): void {
     this.rawViewportMarkers = response.markers ?? [];
-    this.rebuildAvailableMoreFilters(this.rawViewportMarkers);
+
+    if (response.mode === 'entities') {
+      this.rebuildAvailableFilters(response);
+    } else {
+      this.restoreAvailableFiltersFromState();
+    }
+
     this.renderMarkers(this.filterMarkersByMoreFilters(this.rawViewportMarkers), response.mode);
   }
 
@@ -1417,7 +1613,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     if (this.selectedPlace) {
       const selectedKey = this.getMarkerKey(this.selectedPlace);
       const stillVisible = this.markersByKey.get(selectedKey);
-      const stillInViewport = markers.some(m => this.getMarkerKey(m) === selectedKey);
+      const stillInViewport = markers.some((m) => this.getMarkerKey(m) === selectedKey);
       if (stillVisible) {
         this.selectedPlace = stillVisible.data;
         this.preserveSelectedPlaceFromNavigation = false;
@@ -1433,8 +1629,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       const firstKey = this.getMarkerKey(this.stackedPlacePicker[0]);
       const coordKey = `${this.stackedPlacePicker[0].latitude.toFixed(COORD_PRECISION)},${this.stackedPlacePicker[0].longitude.toFixed(COORD_PRECISION)}`;
       const stackKey = `stack:${coordKey}`;
-      const stillExists = this.stackMarkersByKey.has(stackKey) ||
-        markers.some(m => this.getMarkerKey(m) === firstKey);
+      const stillExists =
+        this.stackMarkersByKey.has(stackKey) ||
+        markers.some((m) => this.getMarkerKey(m) === firstKey);
       if (!stillExists) {
         this.stackedPlacePicker = null;
       }
@@ -1446,8 +1643,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     } else if (mode === 'destinations') {
       this.emptyStateMessage = 'Pan or zoom in to discover destinations.';
       this.showNoDataModal = false;
-    } else if (this.selectedCategoryLabelFilters.length > 0) {
-      this.emptyStateMessage = 'No results in this area match those filters.';
+    } else if (this.hasEntityOnlyFilters()) {
+      this.emptyStateMessage = 'No places in this area match those filters.';
       this.showNoDataModal = false;
     } else {
       this.emptyStateMessage = '';
@@ -1458,7 +1655,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private createMarkerEntry(marker: MapEntityMarker, displayLat?: number, displayLon?: number): MarkerEntry {
+  private createMarkerEntry(
+    marker: MapEntityMarker,
+    displayLat?: number,
+    displayLon?: number,
+  ): MarkerEntry {
     const button = document.createElement('button');
     button.type = 'button';
 
@@ -1482,7 +1683,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const mapMarker = new maplibregl.Marker({ element: button, anchor: 'center' })
       .setLngLat([pinLon, pinLat])
       .addTo(this.map);
-    mapMarker.on('click', (event) => this.onMapLibreMarkerClick(event as { originalEvent?: MouseEvent }, key, marker));
+    mapMarker.on('click', (event) =>
+      this.onMapLibreMarkerClick(event as { originalEvent?: MouseEvent }, key, marker),
+    );
 
     const entry: MarkerEntry = { data: marker, marker: mapMarker, imageElement: img };
     this.refreshMarkerDom(entry, marker);
@@ -1502,21 +1705,24 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     const getGroup = (): MapEntityMarker[] => this.stackGroupByElement.get(button) ?? [];
     let lastActivatedAt = 0;
     const stopMarkerEvent = (event: Event): void => {
-      event.preventDefault();
       event.stopPropagation();
     };
     const activate = (event: Event): void => {
-      stopMarkerEvent(event);
+      event.preventDefault();
+      event.stopPropagation();
 
       const now = Date.now();
       if (now - lastActivatedAt < MARKER_ACTIVATION_DEDUPE_MS) return;
       lastActivatedAt = now;
+      this.lastMarkerActivationKey = `stack:${group[0]?.latitude}:${group[0]?.longitude}`;
+      this.lastMarkerActivationAt = now;
       this.openStackPicker(getGroup());
     };
 
     button.addEventListener('pointerdown', stopMarkerEvent);
     button.addEventListener('pointerup', (event) => {
-      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      event.stopPropagation();
+      if (event.pointerType === 'mouse') return;
       activate(event);
     });
     button.addEventListener('click', (event) => {
@@ -1534,22 +1740,65 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private refreshStackMarkerDom(button: HTMLElement, group: MapEntityMarker[]): void {
     this.stackGroupByElement.set(button, group);
     const typeClass = `gt-marker-stack--${group[0].entityType}`;
-    button.classList.remove('gt-marker-stack--place', 'gt-marker-stack--stay', 'gt-marker-stack--event');
+    button.classList.remove(
+      'gt-marker-stack--place',
+      'gt-marker-stack--stay',
+      'gt-marker-stack--event',
+    );
     button.classList.add('gt-marker-stack', typeClass);
-    button.setAttribute('aria-label', group.map(m => m.title).join(', '));
+    button.setAttribute(
+      'aria-label',
+      `${group.length} places here: ${group.map((m) => m.title).join(', ')}`,
+    );
+    button.setAttribute('title', `${group.length} places here`);
+    Object.assign(button.style, {
+      width: '52px',
+      height: '52px',
+      padding: '0',
+      border: '0',
+      background: 'transparent',
+      cursor: 'pointer',
+      pointerEvents: 'auto',
+      position: 'relative',
+      touchAction: 'manipulation',
+      zIndex: '20',
+    });
     button.innerHTML = '';
 
     const layers = Math.min(group.length, 3);
     for (let i = layers; i >= 1; i--) {
       const layer = document.createElement('span');
       layer.className = `gt-marker-stack__layer gt-marker-stack__layer--${i}`;
+      const offset = (layers - i) * 4;
+      Object.assign(layer.style, {
+        position: 'absolute',
+        left: `${offset}px`,
+        top: `${offset}px`,
+        width: '42px',
+        height: '42px',
+        borderRadius: '50%',
+        overflow: 'hidden',
+        border: '3px solid white',
+        background: '#e2e8f0',
+        boxShadow: '0 4px 12px rgba(15, 23, 42, 0.28)',
+        pointerEvents: 'none',
+      });
 
       const img = document.createElement('img');
       img.alt = '';
       img.draggable = false;
+      Object.assign(img.style, {
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        display: 'block',
+        pointerEvents: 'none',
+      });
       const src = group[layers - i]?.imageUrl ?? EXPLORE_IMAGE_FALLBACK;
       img.src = src;
-      img.addEventListener('error', () => { img.src = EXPLORE_IMAGE_FALLBACK; });
+      img.addEventListener('error', () => {
+        img.src = EXPLORE_IMAGE_FALLBACK;
+      });
 
       layer.appendChild(img);
       button.appendChild(layer);
@@ -1559,7 +1808,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private openStackPicker(group: MapEntityMarker[]): void {
     this.ngZone.run(() => {
       this.selectedPlace = null;
-      this.routeErrorMessage = ''; this.routeInfoMessage = '';
+      this.routeErrorMessage = '';
+      this.routeInfoMessage = '';
       this.clearRoute();
       this.stackedPlacePicker = group;
       this.cdr.detectChanges();
@@ -1578,7 +1828,12 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private refreshMarkerDom(entry: MarkerEntry, marker: MapEntityMarker): void {
     const button = entry.marker.getElement();
     button.classList.add('gt-marker');
-    button.classList.remove('gt-marker--place', 'gt-marker--stay', 'gt-marker--event', 'gt-marker--destination');
+    button.classList.remove(
+      'gt-marker--place',
+      'gt-marker--stay',
+      'gt-marker--event',
+      'gt-marker--destination',
+    );
     button.classList.add(`gt-marker--${marker.entityType}`);
 
     const ariaLabel = `Open ${this.markerTypeLabel(marker)} marker: ${marker.title}`;
@@ -1609,7 +1864,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.activateMarker(key, marker);
   }
 
-  private onMapLibreMarkerClick(event: { originalEvent?: MouseEvent }, key: string, marker: MapEntityMarker): void {
+  private onMapLibreMarkerClick(
+    event: { originalEvent?: MouseEvent },
+    key: string,
+    marker: MapEntityMarker,
+  ): void {
     event.originalEvent?.preventDefault();
     event.originalEvent?.stopPropagation();
     this.activateMarker(key, marker);
@@ -1623,7 +1882,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
 
     const now = Date.now();
-    if (this.lastMarkerActivationKey === key && now - this.lastMarkerActivationAt < MARKER_ACTIVATION_DEDUPE_MS) {
+    if (
+      this.lastMarkerActivationKey === key &&
+      now - this.lastMarkerActivationAt < MARKER_ACTIVATION_DEDUPE_MS
+    ) {
       return;
     }
 
@@ -1647,7 +1909,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     if (marker.entityType === 'destination') {
       this.selectedPlace = null;
-      this.routeErrorMessage = ''; this.routeInfoMessage = '';
+      this.routeErrorMessage = '';
+      this.routeInfoMessage = '';
       this.searchResults = [];
       this.clearRoute();
       this.noDataModalDismissed = true;
@@ -1658,12 +1921,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       this.searchQuery = marker.title;
       this.isUserLocation = false;
 
-      sessionStorage.setItem('mapLocation', JSON.stringify({
-        name: marker.title,
-        lat: marker.latitude,
-        lon: marker.longitude,
-        isUserLocation: false,
-      }));
+      sessionStorage.setItem(
+        'mapLocation',
+        JSON.stringify({
+          name: marker.title,
+          lat: marker.latitude,
+          lon: marker.longitude,
+          isUserLocation: false,
+        }),
+      );
 
       this.destinationSvc.setDestinationOverride({
         id: marker.entityId,
@@ -1692,7 +1958,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
 
     this.selectedPlace = marker;
-    this.routeErrorMessage = ''; this.routeInfoMessage = '';
+    this.routeErrorMessage = '';
+    this.routeInfoMessage = '';
     this.clearRoute();
     this.analytics.track('map_marker_opened', {
       entityType: this.toAnalyticsEntityType(marker),
@@ -1706,20 +1973,12 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private getRequestedCategories(): string[] {
-    if (this.filterCategories.length > 0) {
-      return this.filterCategories;
-    }
-
-    return this.activeCategory === 'all' ? [] : [this.activeCategory];
+    // The viewport endpoint now returns only places (including stays). Place type
+    // and recommended-tag filters are applied to that result set on the client.
+    return [];
   }
 
-  private refreshMarkersAfterMoreFilterChange(serverCategoriesChanged: boolean): void {
-    if (serverCategoriesChanged) {
-      this.invalidateMarkerCache();
-      this.scheduleViewportLoad(0);
-      return;
-    }
-
+  private renderFilteredMarkers(): void {
     this.renderMarkers(this.filterMarkersByMoreFilters(this.rawViewportMarkers), this.currentMode);
     this.cdr.detectChanges();
   }
@@ -1728,19 +1987,46 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = ''; this.routeInfoMessage = '';
+    this.stackedPlacePicker = null;
+    this.routeErrorMessage = '';
+    this.routeInfoMessage = '';
     this.clearRoute();
   }
 
-  private rebuildAvailableMoreFilters(markers: MapEntityMarker[]): void {
-    this.availableMoreFilters = this.mapFilterState.rebuildAvailableMoreFilters(
-      markers,
+  private rebuildAvailableFilters(response: MapMarkersResponse): void {
+    const placeTypes = this.mapFilterState.rebuildAvailablePlaceTypes(
+      this.rawViewportMarkers,
+      this.filterCategories,
+    );
+    this.categories = [
+      { id: 'all', label: 'All' },
+      ...placeTypes.map((option) => ({ id: option.id, label: option.label, count: option.count })),
+    ];
+
+    this.availableMoreFilters = this.mapFilterState.setRecommendedTagFilters(
+      response.recommendedTags,
       this.selectedCategoryLabelFilters,
     );
   }
 
+  private restoreAvailableFiltersFromState(): void {
+    this.categories = [
+      { id: 'all', label: 'All' },
+      ...this.mapFilterState.availablePlaceTypes().map((option) => ({
+        id: option.id,
+        label: option.label,
+        count: option.count,
+      })),
+    ];
+    this.availableMoreFilters = this.mapFilterState.availableMoreFilters();
+  }
+
   private filterMarkersByMoreFilters(markers: MapEntityMarker[]): MapEntityMarker[] {
-    return this.mapFilterState.filterMarkersByCategoryLabels(markers, this.selectedCategoryLabelFilters);
+    return this.mapFilterState.filterMarkers(
+      markers,
+      this.filterCategories,
+      this.selectedCategoryLabelFilters,
+    );
   }
 
   private persistMapFilters(): void {
@@ -1752,13 +2038,17 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private syncActiveFilters(): void {
-    this.hasActiveFilters = this.filterCategories.length > 0 || this.selectedCategoryLabelFilters.length > 0;
+    this.activeCategory = this.filterCategories[0] ?? 'all';
+    this.hasActiveFilters =
+      this.filterCategories.length > 0 || this.selectedCategoryLabelFilters.length > 0;
   }
 
   private isDesktopViewport(): boolean {
-    return typeof window !== 'undefined' &&
+    return (
+      typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
-      window.matchMedia('(min-width: 1024px)').matches;
+      window.matchMedia('(min-width: 1024px)').matches
+    );
   }
 
   private getMarkerKey(marker: MapEntityMarker): string {
@@ -1767,10 +2057,14 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
   private toAnalyticsEntityType(marker: MapEntityMarker): AnalyticsEntityType {
     switch (marker.entityType) {
-      case 'stay': return 'hotel';
-      case 'event': return 'event';
-      case 'destination': return 'destination';
-      default: return 'place';
+      case 'stay':
+        return 'hotel';
+      case 'event':
+        return 'event';
+      case 'destination':
+        return 'destination';
+      default:
+        return 'place';
     }
   }
 
@@ -1782,7 +2076,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private shouldPreserveSelectedPlaceDuringMarkerRefresh(): boolean {
-    return this.preserveSelectedPlaceFromNavigation || this.isLoadingRoute || this.hasRenderedRoute();
+    return (
+      this.preserveSelectedPlaceFromNavigation || this.isLoadingRoute || this.hasRenderedRoute()
+    );
   }
 
   private hasRenderedRoute(): boolean {
@@ -1790,9 +2086,11 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private isCurrentRouteRequest(routeRequestId: number, selectedKey: string): boolean {
-    return routeRequestId === this.routeRequestSeq &&
+    return (
+      routeRequestId === this.routeRequestSeq &&
       this.selectedPlace !== null &&
-      this.getMarkerKey(this.selectedPlace) === selectedKey;
+      this.getMarkerKey(this.selectedPlace) === selectedKey
+    );
   }
 
   private getExactUserLocation(): ResolvedLocation | null {
@@ -1805,8 +2103,12 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       : null;
   }
 
-  private hasUsableCoordinates(latitude: number | null | undefined, longitude: number | null | undefined): boolean {
-    return typeof latitude === 'number' &&
+  private hasUsableCoordinates(
+    latitude: number | null | undefined,
+    longitude: number | null | undefined,
+  ): boolean {
+    return (
+      typeof latitude === 'number' &&
       typeof longitude === 'number' &&
       Number.isFinite(latitude) &&
       Number.isFinite(longitude) &&
@@ -1814,11 +2116,14 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       latitude <= 90 &&
       longitude >= -180 &&
       longitude <= 180 &&
-      (latitude !== 0 || longitude !== 0);
+      (latitude !== 0 || longitude !== 0)
+    );
   }
 
   private drawRoute(route: MapRouteResult): void {
-    const coordinates = route.coordinates.map((point) => [point.longitude, point.latitude] as [number, number]);
+    const coordinates = route.coordinates.map(
+      (point) => [point.longitude, point.latitude] as [number, number],
+    );
     if (coordinates.length < 2) {
       this.routeInfoMessage = '';
       this.routeErrorMessage = 'Directions are unavailable right now.';
@@ -1827,14 +2132,16 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
 
     const data: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
-      features: [{
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates,
+      features: [
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates,
+          },
+          properties: {},
         },
-        properties: {},
-      }],
+      ],
     };
 
     if (this.map.getSource(this.ROUTE_SOURCE)) {
@@ -1864,7 +2171,9 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     origin?: { latitude: number; longitude: number } | null,
     destination?: { latitude: number; longitude: number } | null,
   ): void {
-    const routeCoords = route.coordinates.map((point) => [point.longitude, point.latitude] as [number, number]);
+    const routeCoords = route.coordinates.map(
+      (point) => [point.longitude, point.latitude] as [number, number],
+    );
     if (routeCoords.length < 2) return;
 
     const allCoords: [number, number][] = [...routeCoords];
@@ -1881,7 +2190,10 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       new maplibregl.LngLatBounds(allCoords[0], allCoords[0]),
     );
 
-    this.map.fitBounds(bounds, { padding: { top: 100, bottom: 260, left: 80, right: 80 }, duration: 900 });
+    this.map.fitBounds(bounds, {
+      padding: { top: 100, bottom: 260, left: 80, right: 80 },
+      duration: 900,
+    });
   }
 
   clearRoute(): void {
@@ -1893,11 +2205,13 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private placeUserMarker(lat: number, lon: number): void {
     const data: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
-      features: [{
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [lon, lat] },
-        properties: {},
-      }],
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [lon, lat] },
+          properties: {},
+        },
+      ],
     };
 
     if (this.map.getSource(this.USER_SOURCE)) {
@@ -1944,7 +2258,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = ''; this.routeInfoMessage = '';
+    this.routeErrorMessage = '';
+    this.routeInfoMessage = '';
     this.clearRoute();
     this.noDataModalDismissed = false;
 
@@ -1965,12 +2280,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     }
     this.locationSvc.startMapLocationUpdates((loc) => this.handleMapLocationUpdate(loc));
 
-    sessionStorage.setItem('mapLocation', JSON.stringify({
-      name: 'My Location',
-      lat,
-      lon,
-      isUserLocation: true,
-    }));
+    sessionStorage.setItem(
+      'mapLocation',
+      JSON.stringify({
+        name: 'My Location',
+        lat,
+        lon,
+        isUserLocation: true,
+      }),
+    );
 
     this.isLocating = false;
     this.invalidateMarkerCache();
@@ -2006,7 +2324,8 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     this.preserveSelectedPlaceFromNavigation = false;
     this.clearMapFocusHistoryState();
     this.selectedPlace = null;
-    this.routeErrorMessage = ''; this.routeInfoMessage = '';
+    this.routeErrorMessage = '';
+    this.routeInfoMessage = '';
     this.clearRoute();
 
     this.map.resize();
@@ -2017,15 +2336,17 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
       padding: { top: 120, bottom: 0, left: 0, right: 0 },
     });
 
-    sessionStorage.setItem('mapLocation', JSON.stringify({
-      name: this.destinationName,
-      lat: loc.latitude,
-      lon: loc.longitude,
-      isUserLocation: false,
-    }));
+    sessionStorage.setItem(
+      'mapLocation',
+      JSON.stringify({
+        name: this.destinationName,
+        lat: loc.latitude,
+        lon: loc.longitude,
+        isUserLocation: false,
+      }),
+    );
 
     this.invalidateMarkerCache();
-    this.scheduleViewportLoad(0);
     this.cdr.detectChanges();
   }
 
@@ -2039,12 +2360,15 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
     if (this.isUserLocation) {
       this.destinationLat = loc.latitude;
       this.destinationLon = loc.longitude;
-      sessionStorage.setItem('mapLocation', JSON.stringify({
-        name: 'My Location',
-        lat: loc.latitude,
-        lon: loc.longitude,
-        isUserLocation: true,
-      }));
+      sessionStorage.setItem(
+        'mapLocation',
+        JSON.stringify({
+          name: 'My Location',
+          lat: loc.latitude,
+          lon: loc.longitude,
+          isUserLocation: true,
+        }),
+      );
     }
   }
 
@@ -2058,7 +2382,7 @@ export class MapPageComponent implements AfterViewInit, OnDestroy {
   private readSessionJson<T>(key: string): T | null {
     try {
       const raw = sessionStorage.getItem(key);
-      return raw ? JSON.parse(raw) as T : null;
+      return raw ? (JSON.parse(raw) as T) : null;
     } catch {
       sessionStorage.removeItem(key);
       return null;

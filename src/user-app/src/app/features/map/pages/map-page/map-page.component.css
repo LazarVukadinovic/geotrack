@@ -183,11 +183,12 @@
 
   .map-page__controls-panel .overflow-x-auto {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+    align-items: center;
     gap: var(--space-2, 0.5rem);
     margin-top: 0;
     padding-bottom: 0;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .map-page__more-panel {

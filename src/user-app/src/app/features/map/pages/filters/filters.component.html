@@ -4,69 +4,88 @@
   <div style="background: linear-gradient(to bottom, #2d4a7a 0%, #5b7fa6 40%, #a8c4d8 70%, #fafaf9 100%);"
     class="px-6 pt-10 pb-10">
     <div class="pt-6 flex items-center justify-between mb-6">
-      <button (click)="goBack()" class="w-8 h-8 flex items-center justify-center text-white/80">
+      <button (click)="goBack()" class="w-8 h-8 flex items-center justify-center text-white/80" aria-label="Back to map">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
         </svg>
       </button>
       <span class="text-sm font-bold text-white/90 tracking-wide">Filters</span>
-      <button (click)="clearAll()" class="text-xs font-semibold text-white/60">Clear all</button>
+      <button (click)="clearAll()" class="text-xs font-semibold text-white/70">Clear all</button>
     </div>
-    <h1 class="text-2xl font-bold text-[#0f172a] tracking-tight mb-1">Choose filters</h1>
-    <p class="text-base text-slate-600">Select which backend-backed results to show on the map.</p>
+    <h1 class="text-2xl font-bold text-[#0f172a] tracking-tight mb-1">Personalise the map</h1>
+    <p class="text-base text-slate-600">Choose a place type and interests that matter to you.</p>
   </div>
 
   <!-- Content -->
   <div class="flex-1 px-6 pt-6 pb-6 flex flex-col">
 
-    <!-- Categories section -->
-    <p class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-3">Categories</p>
-    <div
-      class="flex flex-wrap justify-center gap-2"
-      [class.mb-4]="availableMoreFilters().length > 0"
-      [class.mb-8]="availableMoreFilters().length === 0">
-      <button
-        *ngFor="let cat of allCategories"
-        (click)="toggleCategory(cat)"
-        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-200"
-        [class.bg-[#1a2b4a]]="isSelected(cat)"
-        [class.border-[#1a2b4a]]="isSelected(cat)"
-        [class.text-white]="isSelected(cat)"
-        [class.bg-white]="!isSelected(cat)"
-        [class.border-slate-200]="!isSelected(cat)"
-        [class.text-slate-600]="!isSelected(cat)">
-        {{ cat.label }}
-      </button>
-    </div>
-
-    @if (availableMoreFilters().length > 0) {
-      <div class="flex flex-wrap justify-center gap-2 mb-8" role="list" aria-label="Backend map categories">
+    <section aria-labelledby="place-types-heading">
+      <p id="place-types-heading" class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Place types</p>
+      <p class="ml-1 text-xs text-slate-500 mb-3">Choose one type or keep all places visible.</p>
+      <div class="flex flex-wrap gap-2 mb-8" role="list" aria-label="Place type filters">
         <button
-          *ngFor="let filter of availableMoreFilters()"
-          (click)="toggleMoreFilter(filter)"
-          class="inline-flex max-w-full items-center gap-2 px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-200"
-          [class.bg-[#1a2b4a]]="isMoreFilterSelected(filter)"
-          [class.border-[#1a2b4a]]="isMoreFilterSelected(filter)"
-          [class.text-white]="isMoreFilterSelected(filter)"
-          [class.bg-white]="!isMoreFilterSelected(filter)"
-          [class.border-slate-200]="!isMoreFilterSelected(filter)"
-          [class.text-slate-600]="!isMoreFilterSelected(filter)">
-          <span>{{ filter.label }}</span>
-          <span
-            class="min-w-5 h-5 px-1 rounded-full text-[11px] font-bold flex items-center justify-center"
-            [class.text-white]="isMoreFilterSelected(filter)"
-            [class.bg-slate-100]="!isMoreFilterSelected(filter)"
-            [class.text-slate-500]="!isMoreFilterSelected(filter)"
-            [style.background-color]="isMoreFilterSelected(filter) ? 'rgba(255, 255, 255, 0.2)' : null">
-            {{ filter.count }}
-          </span>
+          *ngFor="let cat of allCategories()"
+          (click)="toggleCategory(cat)"
+          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-200"
+          [class.bg-[#1a2b4a]]="isSelected(cat)"
+          [class.border-[#1a2b4a]]="isSelected(cat)"
+          [class.text-white]="isSelected(cat)"
+          [class.bg-white]="!isSelected(cat)"
+          [class.border-slate-200]="!isSelected(cat)"
+          [class.text-slate-600]="!isSelected(cat)">
+          <span>{{ cat.label }}</span>
+          @if (cat.count !== undefined) {
+            <span
+              class="min-w-5 h-5 px-1 rounded-full text-[11px] font-bold flex items-center justify-center"
+              [class.text-white]="isSelected(cat)"
+              [class.bg-slate-100]="!isSelected(cat)"
+              [class.text-slate-500]="!isSelected(cat)"
+              [style.background-color]="isSelected(cat) ? 'rgba(255, 255, 255, 0.2)' : null">
+              {{ cat.count }}
+            </span>
+          }
         </button>
       </div>
-    }
+    </section>
+
+    <section aria-labelledby="recommended-heading">
+      <p id="recommended-heading" class="ml-1 text-[11px] font-bold tracking-[0.15em] text-slate-500 uppercase mb-2">Recommended for you</p>
+      <p class="ml-1 text-xs text-slate-500 mb-3">Based on your selected interests, activity and popular tags in this map area.</p>
+
+      @if (availableMoreFilters().length > 0) {
+        <div class="flex flex-wrap gap-2 mb-8" role="list" aria-label="Recommended tag filters">
+          <button
+            *ngFor="let filter of availableMoreFilters()"
+            (click)="toggleMoreFilter(filter)"
+            class="inline-flex max-w-full items-center gap-2 px-4 py-2.5 rounded-full border text-sm font-medium transition-colors duration-200"
+            [class.bg-[#1a2b4a]]="isMoreFilterSelected(filter)"
+            [class.border-[#1a2b4a]]="isMoreFilterSelected(filter)"
+            [class.text-white]="isMoreFilterSelected(filter)"
+            [class.bg-white]="!isMoreFilterSelected(filter)"
+            [class.border-slate-200]="!isMoreFilterSelected(filter)"
+            [class.text-slate-600]="!isMoreFilterSelected(filter)">
+            <span>{{ filter.label }}</span>
+            <span
+              class="min-w-5 h-5 px-1 rounded-full text-[11px] font-bold flex items-center justify-center"
+              [class.text-white]="isMoreFilterSelected(filter)"
+              [class.bg-slate-100]="!isMoreFilterSelected(filter)"
+              [class.text-slate-500]="!isMoreFilterSelected(filter)"
+              [style.background-color]="isMoreFilterSelected(filter) ? 'rgba(255, 255, 255, 0.2)' : null">
+              {{ filter.count }}
+            </span>
+          </button>
+        </div>
+      } @else {
+        <div class="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-4 mb-8">
+          <p class="text-sm font-semibold text-slate-700">Recommendations appear after the map loads places.</p>
+          <p class="text-xs text-slate-500 mt-1">Return to the map and zoom into an area to see relevant tags.</p>
+        </div>
+      }
+    </section>
 
     <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 mb-8">
       <p class="text-sm font-semibold text-slate-700">Map scope</p>
-      <p class="text-xs text-slate-500 mt-1">The map loads only what's currently in view, so results scale with how you pan and zoom. Distance presets aren't needed.</p>
+      <p class="text-xs text-slate-500 mt-1">When zoomed in, the map shows places only, including stays. Zoom out far enough to switch to destinations.</p>
     </div>
 
     <!-- Apply button -->

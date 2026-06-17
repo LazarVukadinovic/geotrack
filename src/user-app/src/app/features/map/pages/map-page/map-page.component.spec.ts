@@ -1,7 +1,7 @@
 import type { ChangeDetectorRef } from '@angular/core';
 import type { NgZone } from '@angular/core';
 import type { Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { AnalyticsService } from '../../../../core/services/analytics.service';
 import type { DestinationService } from '../../../../core/services/destination.service';
@@ -36,8 +36,8 @@ describe('MapPageComponent', () => {
 
   it('marks the More filter control active when persisted filters exist', () => {
     const component = createComponent({
-      categories: ['places'],
-      categoryLabelIds: ['coffee'],
+      categories: ['place-type:7'],
+      categoryLabelIds: ['tag:12'],
     });
 
     expect(component.hasActiveFilters).toBe(true);
@@ -69,7 +69,7 @@ describe('MapPageComponent', () => {
     });
     const component = createComponent(undefined, mapApi);
 
-    component.onSearchFocus();
+    (component as any).loadDestinationsIfNeeded();
 
     expect(mapApi.getDestinations).toHaveBeenCalledTimes(1);
     expect(component.allDestinations.map(destination => destination.name)).toEqual(['Dubrovnik', 'Kragujevac']);
@@ -86,7 +86,7 @@ describe('MapPageComponent', () => {
     });
     const component = createComponent(undefined, mapApi);
 
-    component.onSearchFocus();
+    (component as any).loadDestinationsIfNeeded();
 
     expect(component.destinationLoadError).toBe('Destinations are unavailable right now.');
     expect(component.noDataHeading).toBe("GeoTrack doesn't have content for this area yet.");
@@ -100,10 +100,111 @@ describe('MapPageComponent', () => {
     });
     const component = createComponent(undefined, mapApi);
 
-    component.onSearchFocus();
+    (component as any).loadDestinationsIfNeeded();
 
     expect(component.allDestinations).toEqual([]);
     expect(component.noDataHeading).toBe('GeoTrack does not have public destinations available yet.');
+
+    component.ngOnDestroy();
+  });
+
+  it('cancels stale searches so an older response cannot replace newer results', () => {
+    vi.useFakeTimers();
+    const firstSearch = new Subject<any[]>();
+    const secondSearch = new Subject<any[]>();
+    const mapApi = createMapApi({
+      search: vi.fn((query: string) => query === 'be' ? firstSearch : secondSearch),
+    });
+    const component = createComponent(undefined, mapApi);
+
+    component.onSearchInput('be');
+    vi.advanceTimersByTime(150);
+    component.onSearchInput('bel');
+    vi.advanceTimersByTime(150);
+
+    firstSearch.next([{
+      id: 1,
+      type: 'destination',
+      name: 'Old result',
+      latitude: 1,
+      longitude: 1,
+    }]);
+    expect(component.searchResults).toEqual([]);
+
+    secondSearch.next([{
+      id: 2,
+      type: 'destination',
+      name: 'Belgrade',
+      latitude: 44.8,
+      longitude: 20.4,
+    }]);
+    expect(component.searchResults.map(result => result.name)).toEqual(['Belgrade']);
+    expect(component.isSearching).toBe(false);
+
+    component.ngOnDestroy();
+    vi.useRealTimers();
+  });
+
+  it('caches the same padded viewport that was actually requested', () => {
+    const component = createComponent();
+    const internals = component as any;
+    const visibleBounds = { north: 45, south: 44, east: 21, west: 20 };
+    const requestedBounds = internals.expandViewportBounds(visibleBounds, 0.1);
+
+    internals.lastFetchedViewport = { ...requestedBounds, mode: 'entities' };
+
+    expect(internals.isWithinCachedViewport(visibleBounds, 'entities')).toBe(true);
+    expect(internals.isWithinCachedViewport({
+      ...visibleBounds,
+      east: requestedBounds.east + 0.01,
+    }, 'entities')).toBe(false);
+
+    component.ngOnDestroy();
+  });
+
+  it('keeps destination mode available when zoomed out even if place filters are selected', () => {
+    const mapApi = createMapApi({
+      getMarkersInViewport: vi.fn(() => of({ mode: 'destinations' as const, markers: [] })),
+    });
+    const component = createComponent({ categories: ['place-type:7'], categoryLabelIds: [] }, mapApi);
+    const internals = component as any;
+    internals.map = {
+      getZoom: vi.fn(() => 8),
+      getBounds: vi.fn(() => ({
+        getNorth: () => 45,
+        getSouth: () => 43,
+        getEast: () => 22,
+        getWest: () => 19,
+      })),
+    };
+
+    internals.loadMarkersForViewport();
+
+    expect(mapApi.getMarkersInViewport).toHaveBeenCalledWith(
+      expect.any(Object),
+      8,
+      [],
+    );
+    expect(component.currentMode).toBe('destinations');
+
+    internals.map = undefined;
+    component.ngOnDestroy();
+  });
+
+  it('normalizes and caches viewports that cross the international date line', () => {
+    const component = createComponent();
+    const internals = component as any;
+    const visibleBounds = internals.normalizeViewportBounds({
+      north: 20,
+      south: 10,
+      west: 170,
+      east: 190,
+    });
+    const requestedBounds = internals.expandViewportBounds(visibleBounds, 0.1);
+
+    expect(visibleBounds).toEqual({ north: 20, south: 10, west: 170, east: -170 });
+    internals.lastFetchedViewport = { ...requestedBounds, mode: 'destinations' };
+    expect(internals.isWithinCachedViewport(visibleBounds, 'destinations')).toBe(true);
 
     component.ngOnDestroy();
   });
@@ -135,11 +236,14 @@ function createComponent(
     {
       readSelection: vi.fn(() => savedFilters),
       clearSelection: vi.fn(),
-      toggleCategoryLabelFilter: vi.fn(),
+      toggleCategoryLabelFilter: vi.fn((ids: string[]) => ids),
       persistSelection: vi.fn(),
       labelsForCategoryLabelIds: vi.fn(() => []),
-      rebuildAvailableMoreFilters: vi.fn(() => []),
-      filterMarkersByCategoryLabels: vi.fn((markers) => markers),
+      rebuildAvailablePlaceTypes: vi.fn(() => []),
+      setRecommendedTagFilters: vi.fn(() => []),
+      filterMarkers: vi.fn((markers) => markers),
+      availablePlaceTypes: vi.fn(() => []),
+      availableMoreFilters: vi.fn(() => []),
     } as unknown as MapFilterStateService,
     {
       isDestinationMode: vi.fn(() => false),
