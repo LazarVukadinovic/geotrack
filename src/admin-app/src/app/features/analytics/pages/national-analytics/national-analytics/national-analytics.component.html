@@ -299,30 +299,51 @@
                 <ng-container *ngIf="contentQualityChartData as cq">
                   <ng-container *ngIf="!cq.isEmpty; else noQualityData">
                     <div style="overflow-x: auto;">
-                    <svg [attr.viewBox]="'0 0 ' + cq.svgWidth + ' 160'" [style.min-width.px]="cq.svgWidth" style="height:160px; display:block;">
-                      <line x1="60" [attr.x2]="cq.svgWidth - 10" y1="10" [attr.x2]="cq.svgWidth - 10" y2="10" stroke="#f1f5f9" stroke-width="1"/>
-                      <line x1="60" [attr.x2]="cq.svgWidth - 10" y1="50" [attr.x2]="cq.svgWidth - 10" y2="50" stroke="#f1f5f9" stroke-width="1"/>
-                      <line x1="60" [attr.x2]="cq.svgWidth - 10" y1="90" [attr.x2]="cq.svgWidth - 10" y2="90" stroke="#f1f5f9" stroke-width="1"/>
-                      <line x1="60" [attr.x2]="cq.svgWidth - 10" y1="130" [attr.x2]="cq.svgWidth - 10" y2="130" stroke="#f1f5f9" stroke-width="1"/>
+                    <svg [attr.viewBox]="'0 0 ' + cq.svgWidth + ' 230'" [style.min-width.px]="cq.svgWidth" style="height:230px; display:block;">
+                      <!-- Grid lines -->
+                      <line x1="60" [attr.x2]="cq.svgWidth - 30" y1="10"  y2="10"  stroke="#f1f5f9" stroke-width="1"/>
+                      <line x1="60" [attr.x2]="cq.svgWidth - 30" y1="50"  y2="50"  stroke="#f1f5f9" stroke-width="1"/>
+                      <line x1="60" [attr.x2]="cq.svgWidth - 30" y1="90"  y2="90"  stroke="#f1f5f9" stroke-width="1"/>
+                      <line x1="60" [attr.x2]="cq.svgWidth - 30" y1="130" y2="130" stroke="#e2e8f0" stroke-width="1"/>
+                      <!-- Left Y-axis: reviews -->
                       <text *ngFor="let label of cq.yLabels" x="54" [attr.y]="label.y" text-anchor="end" font-size="10" fill="#94a3b8">{{ label.text }}</text>
-                      <rect *ngFor="let bar of cq.bars" [attr.x]="bar.x" [attr.y]="bar.y" width="40" [attr.height]="bar.height" rx="3" fill="#dbeafe">
+                      <!-- Right Y-axis: avg rating 0–5 -->
+                      <line [attr.x1]="cq.svgWidth - 28" [attr.x2]="cq.svgWidth - 28" y1="10" y2="130" stroke="#dbeafe" stroke-width="1" stroke-dasharray="3,3"/>
+                      <text [attr.x]="cq.svgWidth - 24" y="14"  text-anchor="start" font-size="9" fill="#2563eb" opacity="0.75">5.0★</text>
+                      <text [attr.x]="cq.svgWidth - 24" y="54"  text-anchor="start" font-size="9" fill="#2563eb" opacity="0.75">3.3</text>
+                      <text [attr.x]="cq.svgWidth - 24" y="94"  text-anchor="start" font-size="9" fill="#2563eb" opacity="0.75">1.7</text>
+                      <text [attr.x]="cq.svgWidth - 24" y="134" text-anchor="start" font-size="9" fill="#2563eb" opacity="0.75">0.0</text>
+                      <!-- Bars -->
+                      <rect *ngFor="let bar of cq.bars" [attr.x]="bar.x" [attr.y]="bar.y" width="36" [attr.height]="bar.height > 0 ? bar.height : 3" rx="3" [attr.fill]="bar.height > 0 ? '#3b82f6' : '#e2e8f0'" [attr.opacity]="bar.height > 0 ? '0.75' : '0.5'">
                         <title>{{ bar.label }}: {{ bar.value }} reviews</title>
                       </rect>
-                      <polyline *ngIf="cq.dots.length > 1" [attr.points]="cq.polyline" fill="none" stroke="#2563eb" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4,3" opacity="0.5"/>
-                      <circle *ngFor="let dot of cq.dots" [attr.cx]="dot.x" [attr.cy]="dot.y" r="5" fill="#2563eb">
-                        <title>Average rating: {{ dot.rating | number:'1.1-2' }}</title>
+                      <!-- Rating line -->
+                      <polyline *ngIf="cq.dots.length > 1" [attr.points]="cq.polyline" fill="none" stroke="#1d4ed8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6,3" opacity="0.8"/>
+                      <!-- Rating dots -->
+                      <circle *ngFor="let dot of cq.dots" [attr.cx]="dot.x" [attr.cy]="dot.y" r="6" fill="white" stroke="#1d4ed8" stroke-width="2.5">
+                        <title>Avg rating: {{ dot.rating | number:'1.1-2' }}</title>
                       </circle>
-                      <text *ngFor="let label of cq.labels" [attr.x]="label.x" y="150" text-anchor="middle" font-size="9" fill="#94a3b8">{{ label.text }}</text>
+                      <!-- X-axis labels rotated -45° -->
+                      <text
+                        *ngFor="let label of cq.labels"
+                        [attr.x]="label.x"
+                        y="150"
+                        [attr.transform]="'rotate(-45 ' + label.x + ' 150)'"
+                        text-anchor="end"
+                        font-size="11"
+                        fill="#475569"
+                      >{{ label.text }}</text>
                     </svg>
                     </div>
-                    <div class="flex items-center gap-6 mt-1">
+                    <div class="flex items-center gap-6 mt-2">
                       <div class="flex items-center gap-2">
-                        <span class="w-4 h-3 rounded inline-block" style="background:#dbeafe;"></span>
+                        <span class="w-4 h-3 rounded inline-block" style="background:#93c5fd; opacity:0.7;"></span>
                         <span class="text-xs text-gray-500">Total reviews</span>
                       </div>
                       <div class="flex items-center gap-2">
-                        <span class="w-4 h-0.5 inline-block" style="background:#2563eb; border-top: 2px dashed #2563eb;"></span>
-                        <span class="text-xs text-gray-500">Avg rating</span>
+                        <span class="w-4 h-0 inline-block" style="border-top: 2px dashed #2563eb; opacity:0.6;"></span>
+                        <span class="w-2.5 h-2.5 rounded-full inline-block border-2 border-blue-600 bg-white"></span>
+                        <span class="text-xs text-gray-500">Avg rating (0–5)</span>
                       </div>
                     </div>
                   </ng-container>
