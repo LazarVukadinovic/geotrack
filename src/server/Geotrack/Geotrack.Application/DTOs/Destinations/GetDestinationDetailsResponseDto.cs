@@ -21,6 +21,7 @@ public class GetDestinationDetailsResponseDto
     public List<int> SavedCollectionIds { get; set; } = new();
     public List<PublicEntityImageDto> Images { get; set; } = new();
     public List<DestinationSectionPreviewDto> Sections { get; set; } = new();
+    public List<DestinationSectionPlaceItemDto> TopPlaces { get; set; } = new();
     public List<DestinationRelatedItemDto> SimilarDestinations { get; set; } = new();
 }
 

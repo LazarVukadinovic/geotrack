@@ -1,5 +1,5 @@
 import { CommonModule, Location as BrowserLocation } from '@angular/common';
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -67,11 +67,15 @@ interface HierarchyDetail {
   rating?: number | null;
   reviewsCount?: number | null;
   parent?: DetailParentLink | null;
+  parentTerritoryId?: string | null;
   images: EntityImage[];
   sections: DetailSectionPreview[];
   relatedEvents: DetailItem[];
+  topPlaces: DetailItem[];
   similarDestinations: DetailItem[];
   similarLocations: DetailItem[];
+  similarRegions: DetailItem[];
+  similarCountries: DetailItem[];
   reviews: ReviewItem[];
   hasMoreReviews: boolean;
   totalReviewsCount: number;
@@ -113,15 +117,13 @@ export class EntityHierarchyDetailPageComponent {
   protected readonly descriptionExpanded = signal(false);
   protected readonly galleryOpen = signal(false);
   protected readonly galleryStartIndex = signal(0);
-  protected readonly currentShowcaseIndex = signal(0);
-  protected readonly incomingShowcaseIndex = signal<number | null>(null);
-  protected readonly regionDropdownOpen = signal(false);
-  protected readonly visibleRegionCount = signal(5);
-  private showcaseTransitionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  protected readonly scrollProgress = signal(0);
   protected readonly currentType = signal<EntityType | null>(null);
   protected readonly visibleReviewsCount = signal(3);
   protected readonly expandedReviewIds = signal<Set<string>>(new Set());
   protected readonly isLoggedIn = computed(() => this.auth.isLoggedIn());
+
+  private readonly ehdScroll = viewChild<ElementRef<HTMLElement>>('ehdScroll');
 
   protected readonly canReview = computed(() => {
     const d = this.detail();
@@ -134,15 +136,38 @@ export class EntityHierarchyDetailPageComponent {
     return getCoverImageUrl(d.images, d.images[0]?.url ?? '');
   });
 
+  // Tags are not modelled for hierarchy entities in the database; the entity
+  // type label is used as a placeholder category chip so the layout matches the
+  // place detail page (cover → tags → title).
+  protected readonly displayTags = computed<string[]>(() => {
+    const d = this.detail();
+    return d ? [d.typeLabel] : [];
+  });
+
+  // Regions and territories frequently have no stored description. Fall back to
+  // a friendly placeholder so the "About" section always reads well.
+  protected readonly displayDescription = computed<string>(() => {
+    const d = this.detail();
+    if (!d) return '';
+    const text = (d.description ?? '').trim();
+    if (text.length > 0) return text;
+
+    switch (d.type) {
+      case 'region':
+        return `Explore the destinations, highlights and hidden gems across ${d.title}.`;
+      case 'territory':
+        return `Discover the regions, destinations and places that make up ${d.title}.`;
+      case 'destination':
+        return `Explore what ${d.title} has to offer.`;
+      default:
+        return `Discover ${d.title}.`;
+    }
+  });
+
   protected readonly galleryImages = computed(() => {
     const d = this.detail();
     if (!d) return [];
 
-    // The hierarchy detail showcase must rotate through every image assigned
-    // to the entity, not only images marked as gallery. Cover/card images are
-    // real visual assets too, so include them in the automatic slideshow and
-    // in the opened photo gallery. This is especially important for entities
-    // that have a cover/card image plus additional gallery photos.
     const seenUrls = new Set<string>();
     return d.images.filter(image => {
       const key = image.url.trim().toLowerCase();
@@ -152,43 +177,13 @@ export class EntityHierarchyDetailPageComponent {
     });
   });
 
-  protected readonly showcaseImages = computed(() => {
-    return this.galleryImages();
-  });
-
-  protected readonly currentShowcaseImage = computed(() => {
-    const images = this.showcaseImages();
-    if (images.length === 0) return null;
-    return images[this.currentShowcaseIndex() % images.length] ?? images[0];
-  });
-
-  protected readonly currentShowcaseGalleryIndex = computed(() => {
-    const images = this.showcaseImages();
-    return images.length > 0 ? this.currentShowcaseIndex() % images.length : 0;
-  });
-
-  protected readonly incomingShowcaseImage = computed(() => {
-    const images = this.showcaseImages();
-    const incomingIndex = this.incomingShowcaseIndex();
-    if (images.length === 0 || incomingIndex == null) return null;
-    return images[incomingIndex % images.length] ?? null;
-  });
-
-  protected readonly incomingShowcaseGalleryIndex = computed(() => {
-    const images = this.showcaseImages();
-    const incomingIndex = this.incomingShowcaseIndex();
-    return images.length > 0 && incomingIndex != null ? incomingIndex % images.length : 0;
-  });
+  protected readonly showcaseImages = computed(() => this.galleryImages());
 
   protected readonly territoryRegions = computed(() => {
     const d = this.detail();
     if (!d || d.type !== 'territory') return [];
     return this.uniqueItems(d.sections.flatMap(section => this.sectionItems(section)));
   });
-
-  protected readonly visibleTerritoryRegions = computed(() => this.territoryRegions().slice(0, this.visibleRegionCount()));
-
-  protected readonly hiddenTerritoryRegionsCount = computed(() => Math.max(0, this.territoryRegions().length - this.visibleTerritoryRegions().length));
 
   protected readonly locationPlaces = computed(() => {
     const d = this.detail();
@@ -217,13 +212,6 @@ export class EntityHierarchyDetailPageComponent {
   });
 
   constructor() {
-    // Interval between image advances: 1400ms
-    const showcaseTimerId = setInterval(() => this.advanceShowcase(), 1400);
-    this.destroyRef.onDestroy(() => {
-      clearInterval(showcaseTimerId);
-      this.clearShowcaseTransitionTimeout();
-    });
-
     this.ri.configure({
       targetType: () => this.resolveReviewTargetType(),
       onEditSuccess: () => {
@@ -247,14 +235,13 @@ export class EntityHierarchyDetailPageComponent {
         this.currentType.set(type ?? null);
         this.ri.clearReportNotice();
         this.galleryOpen.set(false);
-        this.currentShowcaseIndex.set(0);
-        this.incomingShowcaseIndex.set(null);
-        this.visibleRegionCount.set(5);
-        this.regionDropdownOpen.set(false);
-        this.clearShowcaseTransitionTimeout();
+        this.scrollProgress.set(0);
         this.descriptionExpanded.set(false);
         this.visibleReviewsCount.set(3);
         this.expandedReviewIds.set(new Set());
+
+        const el = this.ehdScroll()?.nativeElement;
+        if (el) el.scrollTop = 0;
 
         if (!type || !id || Number.isNaN(Number(id))) {
           this.loadState.set('notFound');
@@ -266,8 +253,23 @@ export class EntityHierarchyDetailPageComponent {
       });
   }
 
+  protected onScroll(event: Event): void {
+    const scrollTop = (event.currentTarget as Element).scrollTop;
+    this.scrollProgress.set(Math.min(scrollTop / 200, 1));
+  }
+
   protected goBack(): void {
     this.browserLocation.back();
+  }
+
+  protected share(): void {
+    const title = this.detail()?.title ?? '';
+    const url = globalThis.location.href;
+    if (navigator.share) {
+      navigator.share({ title, text: title, url }).catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      });
+    }
   }
 
   protected openGallery(startIndex = 0): void {
@@ -277,6 +279,11 @@ export class EntityHierarchyDetailPageComponent {
 
   protected closeGallery(): void {
     this.galleryOpen.set(false);
+  }
+
+  protected hasLongAbout(text: string | null | undefined): boolean {
+    const value = (text ?? '').trim();
+    return value.length > 200 || value.split(/\r\n|\r|\n/).length > 4;
   }
 
   protected submitReview = (draft: ReviewDraft): Observable<unknown> => {
@@ -348,19 +355,6 @@ export class EntityHierarchyDetailPageComponent {
     this.ri.goToAuthorReviews(review);
   }
 
-  protected onRegionSelected(regionRoute: string): void {
-    if (!regionRoute) return;
-    void this.router.navigateByUrl(regionRoute);
-  }
-
-  protected toggleRegionDropdown(): void {
-    this.regionDropdownOpen.update(open => !open);
-  }
-
-  protected showMoreRegions(): void {
-    this.visibleRegionCount.update(current => current + 5);
-  }
-
   /**
    * Returns a duplicated array to enable infinite loop scroll.
    * The scroll handler (onTrackScroll) resets position seamlessly
@@ -382,12 +376,9 @@ export class EntityHierarchyDetailPageComponent {
     const half = Math.floor(el.scrollWidth / 2);
     if (half <= 0) return;
 
-    // Scrolled past end of first set → jump back to matching position in first set
     if (el.scrollLeft >= half) {
       el.scrollLeft = el.scrollLeft - half;
-    }
-    // Scrolled before start (shouldn't happen normally, but handle reverse drag)
-    else if (el.scrollLeft <= 0 && el.scrollWidth > el.clientWidth) {
+    } else if (el.scrollLeft <= 0 && el.scrollWidth > el.clientWidth) {
       el.scrollLeft = half + el.scrollLeft;
     }
   }
@@ -399,37 +390,16 @@ export class EntityHierarchyDetailPageComponent {
     return [...locations, ...places, ...events];
   }
 
-  private advanceShowcase(): void {
-    const images = this.showcaseImages();
-    if (images.length <= 1 || this.incomingShowcaseIndex() != null) return;
-
-    const nextIndex = (this.currentShowcaseIndex() + 1) % images.length;
-    this.incomingShowcaseIndex.set(nextIndex);
-    this.clearShowcaseTransitionTimeout();
-    // Transition duration: 680ms
-    this.showcaseTransitionTimeoutId = setTimeout(() => {
-      this.currentShowcaseIndex.set(nextIndex);
-      this.incomingShowcaseIndex.set(null);
-      this.showcaseTransitionTimeoutId = null;
-    }, 680);
-  }
-
-  private clearShowcaseTransitionTimeout(): void {
-    if (this.showcaseTransitionTimeoutId == null) return;
-    clearTimeout(this.showcaseTransitionTimeoutId);
-    this.showcaseTransitionTimeoutId = null;
-  }
-
   private load(type: EntityType, id: string): void {
     this.loadState.set('loading');
     this.detail.set(null);
-    this.regionDropdownOpen.set(false);
-    this.visibleRegionCount.set(5);
 
     this.http.get<Record<string, unknown>>(this.endpoint(type, id)).subscribe({
       next: (dto) => {
-        this.detail.set(this.mapDto(type, dto));
+        const mapped = this.mapDto(type, dto);
+        this.detail.set(mapped);
         this.loadReviews(type, id);
+        this.loadRelatedEntities(mapped);
         this.trackDetailView(type, dto);
         this.loadState.set('loaded');
       },
@@ -438,6 +408,52 @@ export class EntityHierarchyDetailPageComponent {
         this.loadState.set(err?.status === 404 ? 'notFound' : 'error');
       },
     });
+  }
+
+  /**
+   * Loads "similar regions" (sibling regions in the same territory) and
+   * "similar countries" (other territories) via existing endpoints. These are
+   * not part of the primary detail payload, so they are fetched lazily and
+   * merged into the detail signal once available.
+   */
+  private loadRelatedEntities(detail: HierarchyDetail): void {
+    if (detail.type === 'region' && detail.parentTerritoryId) {
+      const territoryId = detail.parentTerritoryId;
+      this.http.get<Record<string, unknown>>(`/api/Territory/${territoryId}`)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (dto) => {
+            const regions = Array.isArray(dto['regions']) ? dto['regions'] as Record<string, unknown>[] : [];
+            const items = regions
+              .filter(r => String(r['id']) !== detail.id)
+              .map(r => this.mapItem({ ...r, route: `/regions/${r['id']}` }, 'location'));
+            this.patchDetail(detail, current => ({ ...current, similarRegions: items }));
+          },
+          error: () => {},
+        });
+    }
+
+    if (detail.type === 'territory') {
+      this.http.get<Record<string, unknown>>('/api/Territory')
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (dto) => {
+            const territories = Array.isArray(dto['territories']) ? dto['territories'] as Record<string, unknown>[] : [];
+            const items = territories
+              .filter(t => String(t['id']) !== detail.id)
+              .map(t => this.mapItem({ ...t, route: `/territories/${t['id']}` }, 'location'));
+            this.patchDetail(detail, current => ({ ...current, similarCountries: items }));
+          },
+          error: () => {},
+        });
+    }
+  }
+
+  private patchDetail(reference: HierarchyDetail, update: (current: HierarchyDetail) => HierarchyDetail): void {
+    this.detail.update(current =>
+      current && current.type === reference.type && current.id === reference.id
+        ? update(current)
+        : current);
   }
 
   private loadReviews(type: EntityType, id: string): void {
@@ -513,6 +529,13 @@ export class EntityHierarchyDetailPageComponent {
       reviews: [],
       hasMoreReviews: false,
       totalReviewsCount: this.toNullableNumber(dto['reviewsCount']) ?? 0,
+      topPlaces: [] as DetailItem[],
+      similarDestinations: [] as DetailItem[],
+      similarLocations: [] as DetailItem[],
+      similarRegions: [] as DetailItem[],
+      similarCountries: [] as DetailItem[],
+      relatedEvents: [] as DetailItem[],
+      parentTerritoryId: null as string | null,
     };
 
     if (type === 'location') {
@@ -526,7 +549,6 @@ export class EntityHierarchyDetailPageComponent {
         sections: this.mapLocationSections(dto),
         relatedEvents: this.mapRelated(dto['relatedEvents'], 'event'),
         similarLocations: this.mapRelated(dto['similarLocations'], 'location'),
-        similarDestinations: [],
       };
     }
 
@@ -539,9 +561,8 @@ export class EntityHierarchyDetailPageComponent {
         typeLabel: 'Destination',
         parent: regionId ? { label: 'Region', name: regionName ?? `Region #${regionId}`, route: `/regions/${regionId}` } : null,
         sections: this.mapSectionsWithRoutes(dto, false),
-        relatedEvents: [],
+        topPlaces: this.mapTopPlaces(dto['topPlaces']),
         similarDestinations: this.mapRelated(dto['similarDestinations'], 'destination'),
-        similarLocations: [],
       };
     }
 
@@ -554,13 +575,11 @@ export class EntityHierarchyDetailPageComponent {
         type,
         typeLabel: 'Region',
         parent: territoryId ? { label: 'Territory', name: territoryName ?? `Territory #${territoryId}`, route: `/territories/${territoryId}` } : null,
+        parentTerritoryId: territoryId,
         sections: destinations.length ? [{
           sectionTitle: 'Destinations',
           locations: destinations.map(d => ({ ...d, route: `/destinations/${d['id']}` })),
         }] : [],
-        relatedEvents: [],
-        similarDestinations: [],
-        similarLocations: [],
       };
     }
 
@@ -574,10 +593,13 @@ export class EntityHierarchyDetailPageComponent {
         sectionTitle: 'Regions',
         locations: regions.map(r => ({ ...r, route: `/regions/${r['id']}` })),
       }] : [],
-      relatedEvents: [],
-      similarDestinations: [],
-      similarLocations: [],
     };
+  }
+
+  private mapTopPlaces(value: unknown): DetailItem[] {
+    if (!Array.isArray(value)) return [];
+    return (value as Record<string, unknown>[]).map(item =>
+      this.mapItem({ ...item, route: `/places/${item['id']}` }, 'place'));
   }
 
   private mapSectionsWithRoutes(dto: Record<string, unknown>, includePlaces = true): DetailSectionPreview[] {

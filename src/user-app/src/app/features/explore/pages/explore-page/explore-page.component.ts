@@ -216,7 +216,7 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
     const destinationName = this.selectedDestination()?.name?.trim()
       || this.destinationSvc.name()?.trim();
 
-    return destinationName ? `Explore ${destinationName}` : 'Explore destination';
+    return destinationName ? `Explore ${destinationName}...` : 'Explore destination...';
   });
 
   protected readonly showLocationUpgrade = computed(() =>
