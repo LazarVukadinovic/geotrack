@@ -212,18 +212,11 @@ export class ExplorePageComponent implements AfterViewInit, OnDestroy {
 
   protected readonly heroCity = computed(() => this.heroLocation().city);
   protected readonly heroCountry = computed(() => this.heroLocation().country);
-  protected readonly contextLine = computed(() => {
-    if (this.destinationSvc.isDestinationMode()) {
-      const name = this.destinationSvc.name() || 'this destination';
-      return `Exploring ${name}. Results are based on this destination.`;
-    }
+  protected readonly exploreSearchPlaceholder = computed(() => {
+    const destinationName = this.selectedDestination()?.name?.trim()
+      || this.destinationSvc.name()?.trim();
 
-    const source = this.locationSvc.location()?.source;
-    if (source === 'gps') return 'Using exact location.';
-    if (source === 'manual') return 'Using selected location.';
-    if (source === 'approximate') return 'Using approximate location from IP.';
-    if (this.locationSvc.loading()) return 'Resolving approximate location from IP.';
-    return 'Location unavailable.';
+    return destinationName ? `Explore ${destinationName}` : 'Explore destination';
   });
 
   protected readonly showLocationUpgrade = computed(() =>

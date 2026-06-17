@@ -55,7 +55,7 @@
         <div class="explore-page__search">
           <app-search-bar
             [value]="searchQuery()"
-            placeholder="Search places and areas here"
+            [placeholder]="exploreSearchPlaceholder()"
             controlId="explore-search"
             controlName="exploreSearch"
             label="Search places and areas in this destination"
@@ -195,8 +195,6 @@
           }
         </div>
       }
-
-      <p class="explore-page__context">{{ contextLine() }}</p>
 
       @if (showLocationUpgrade()) {
         <div class="explore-page__location-mode">

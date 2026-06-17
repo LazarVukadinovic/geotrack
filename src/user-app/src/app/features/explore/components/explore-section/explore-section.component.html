@@ -38,6 +38,17 @@
               (error)="onImgError(item.id)"
             />
 
+            @if (item.statusBadge) {
+              <span
+                class="explore-section__status-badge"
+                [class.explore-section__status-badge--success]="item.statusBadge.tone === 'success'"
+                [class.explore-section__status-badge--warning]="item.statusBadge.tone === 'warning'"
+                [class.explore-section__status-badge--muted]="item.statusBadge.tone === 'muted'"
+              >
+                {{ item.statusBadge.label }}
+              </span>
+            }
+
             @if (showFavoriteButton() && canSave(item)) {
               <app-favorite-button
                 class="explore-section__save"
@@ -62,17 +73,6 @@
                     <span>{{ item.locationName }}</span>
                   }
                 </p>
-              }
-
-              @if (item.statusBadge) {
-                <span
-                  class="explore-section__status-badge"
-                  [class.explore-section__status-badge--success]="item.statusBadge.tone === 'success'"
-                  [class.explore-section__status-badge--warning]="item.statusBadge.tone === 'warning'"
-                  [class.explore-section__status-badge--muted]="item.statusBadge.tone === 'muted'"
-                >
-                  {{ item.statusBadge.label }}
-                </span>
               }
             </div>
 
