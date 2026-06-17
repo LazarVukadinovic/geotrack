@@ -445,9 +445,6 @@ public sealed class TerritoryAnalyticsService : ITerritoryAnalyticsService
         var locationIds = EntityIds(entities, AnalyticsEntityTypes.Location);
         var placeIds = EntityIds(entities, AnalyticsEntityTypes.Place);
         var eventIds = EntityIds(entities, AnalyticsEntityTypes.Event);
-        var regionByDestinationId = entities
-            .Where(entity => entity.EntityType == AnalyticsEntityTypes.Destination)
-            .ToDictionary(entity => entity.EntityId, entity => entity.RegionId);
         var entityByKey = entities.ToDictionary(entity => new EntityKey(entity.EntityType, entity.EntityId));
 
         var eventTypes = ViewEventTypes.Concat(ExternalClickEventTypes).ToArray();
@@ -460,8 +457,7 @@ public sealed class TerritoryAnalyticsService : ITerritoryAnalyticsService
                 (evt.EntityId.HasValue && evt.EntityType == AnalyticsEntityTypes.Location && locationIds.Contains(evt.EntityId.Value)) ||
                 (evt.EntityId.HasValue && evt.EntityType == AnalyticsEntityTypes.Place && placeIds.Contains(evt.EntityId.Value)) ||
                 (evt.EntityId.HasValue && evt.EntityType == AnalyticsEntityTypes.Hotel && placeIds.Contains(evt.EntityId.Value)) ||
-                (evt.EntityId.HasValue && evt.EntityType == AnalyticsEntityTypes.Event && eventIds.Contains(evt.EntityId.Value)) ||
-                (evt.DestinationId.HasValue && destinationIds.Contains(evt.DestinationId.Value)))
+                (evt.EntityId.HasValue && evt.EntityType == AnalyticsEntityTypes.Event && eventIds.Contains(evt.EntityId.Value)))
             .Select(evt => new
             {
                 evt.Id,
@@ -488,14 +484,6 @@ public sealed class TerritoryAnalyticsService : ITerritoryAnalyticsService
             {
                 regionId = entity.RegionId;
             }
-            else if (evt.DestinationId.HasValue &&
-                     regionByDestinationId.TryGetValue(evt.DestinationId.Value, out var destinationRegionId))
-            {
-                entityType = AnalyticsEntityTypes.Destination;
-                entityId = evt.DestinationId.Value;
-                regionId = destinationRegionId;
-            }
-
             if (entityType is null || !entityId.HasValue || regionId <= 0)
                 continue;
 

@@ -504,6 +504,9 @@ export class NewLocationComponent implements OnInit, AfterViewInit, OnDestroy {
         this.centerLat = dto.latitude ?? null;
         this.centerLng = dto.longitude ?? null;
         this.zoneConfirmed = this.hasValidCenter();
+        if (this.zoneConfirmed && this.centerLat !== null && this.centerLng !== null) {
+          this.validateSelectedPoint(this.centerLat, this.centerLng);
+        }
 
         this.cardImageUrl = dto.cardImageUrl ?? dto.imageUrl ?? null;
         this.cardImageName = this.cardImageUrl ? 'Existing card image' : '';

@@ -52,7 +52,6 @@
 
           @if (d.parent) {
             <a class="ehd__parent" [routerLink]="d.parent.route">
-              <span>{{ d.parent.label }}</span>
               <strong>{{ d.parent.name }}</strong>
             </a>
           }
@@ -93,7 +92,6 @@
 
         @if (d.parent) {
           <a class="ehd__parent" [routerLink]="d.parent.route">
-            <span>{{ d.parent.label }}</span>
             <strong>{{ d.parent.name }}</strong>
           </a>
         }
@@ -158,32 +156,6 @@
         } @else {
           <p class="ehd__muted">No regions with published destinations yet.</p>
         }
-      </section>
-    }
-
-    @if ((d.type === 'destination' || d.type === 'location')) {
-      <section class="ehd__panel ehd__panel--showcase">
-        <div class="ehd__showcase" aria-label="Entity photos">
-          @if (currentShowcaseImage(); as image) {
-            <button
-              type="button"
-              class="ehd__showcase-slide ehd__showcase-slide--current"
-              (click)="openGallery(currentShowcaseGalleryIndex())"
-            >
-              <img [src]="image.url" [alt]="image.altText || d.title" appImageFallback>
-            </button>
-          }
-
-          @if (incomingShowcaseImage(); as image) {
-            <button
-              type="button"
-              class="ehd__showcase-slide ehd__showcase-slide--incoming"
-              (click)="openGallery(incomingShowcaseGalleryIndex())"
-            >
-              <img [src]="image.url" [alt]="image.altText || d.title" appImageFallback>
-            </button>
-          }
-        </div>
       </section>
     }
 

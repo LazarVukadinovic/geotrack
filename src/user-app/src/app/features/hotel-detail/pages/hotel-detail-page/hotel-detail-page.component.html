@@ -243,7 +243,7 @@
 
         <div class="hd__detail-grid">
           <div class="hd__detail-side">
-            @if (h.contactEmail || h.phoneNumber) {
+            @if (h.contactEmail || h.phoneNumber || h.contactPhone) {
               <div class="hd__divider hd__divider--contact"></div>
 
               <section class="hd__section hd__section--contact">
@@ -255,10 +255,10 @@
                       <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ h.contactEmail }}</span>
                     </a>
                   }
-                  @if (h.phoneNumber) {
-                    <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'tel:' + h.phoneNumber">
+                  @if (h.phoneNumber || h.contactPhone) {
+                    <a class="flex flex-col gap-1 py-3 border-b border-[#f0f1f5] last:border-b-0 no-underline" [href]="'tel:' + (h.phoneNumber || h.contactPhone)">
                       <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wide">Phone</span>
-                      <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ h.phoneNumber }}</span>
+                      <span class="text-sm font-semibold text-slate-600 leading-normal break-all">{{ h.phoneNumber || h.contactPhone }}</span>
                     </a>
                   }
                 </div>

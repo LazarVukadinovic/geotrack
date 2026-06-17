@@ -279,6 +279,15 @@
                 />
               </div>
               <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Contact Email</label>
+                <input
+                  type="email"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                  placeholder="contact@example.com"
+                  [(ngModel)]="contactEmail"
+                />
+              </div>
+              <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Admission / Price Range</label>
                 <input
                   class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
@@ -286,15 +295,69 @@
                   [(ngModel)]="admissionPrice"
                 />
               </div>
-              <div>
-                <label class="block text-xs font-semibold text-gray-600 mb-1">Booking / External Link</label>
-                <input
-                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
-                  placeholder="https://"
-                  [(ngModel)]="bookingLink"
-                />
-              </div>
+              @if (isStayType) {
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600 mb-1">Booking / External Link</label>
+                  <input
+                    class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-500"
+                    placeholder="https://"
+                    [(ngModel)]="bookingLink"
+                  />
+                </div>
+              }
             </div>
+          </div>
+
+          <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
+            <div class="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 class="text-sm font-bold text-gray-900 mb-0.5">Amenities</h3>
+                <p class="text-xs text-gray-500">These appear on the user-facing place detail page.</p>
+              </div>
+              <span class="text-xs font-semibold text-gray-500">{{ selectedAmenityCount }} selected</span>
+            </div>
+
+            @if (amenitiesLoading) {
+              <p class="text-xs text-gray-500">Loading amenities...</p>
+            } @else if (availableAmenities.length === 0) {
+              <p class="text-xs text-amber-600">No amenities are available for the selected place type.</p>
+            } @else {
+              <div class="grid grid-cols-2 gap-2 md:grid-cols-3">
+                @for (amenity of availableAmenities; track amenity.id) {
+                  <button
+                    type="button"
+                    class="flex items-center gap-2 rounded-2xl border px-3 py-2 text-left transition-all duration-200"
+                    [class.border-blue-500]="isAmenitySelected(amenity.id)"
+                    [class.bg-blue-50]="isAmenitySelected(amenity.id)"
+                    [class.text-blue-800]="isAmenitySelected(amenity.id)"
+                    [class.shadow-sm]="isAmenitySelected(amenity.id)"
+                    [class.border-gray-200]="!isAmenitySelected(amenity.id)"
+                    [class.bg-gray-50]="!isAmenitySelected(amenity.id)"
+                    [class.text-gray-600]="!isAmenitySelected(amenity.id)"
+                    (click)="toggleAmenity(amenity.id)"
+                  >
+                    <span
+                      class="flex h-8 w-8 flex-none items-center justify-center rounded-full"
+                      [class.bg-blue-600]="isAmenitySelected(amenity.id)"
+                      [class.text-white]="isAmenitySelected(amenity.id)"
+                      [class.bg-gray-200]="!isAmenitySelected(amenity.id)"
+                      [class.text-gray-500]="!isAmenitySelected(amenity.id)"
+                    >
+                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path
+                          d="M5 12.5 9.5 17 19 7"
+                          stroke="currentColor"
+                          stroke-width="2.3"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        />
+                      </svg>
+                    </span>
+                    <span class="min-w-0 break-words text-sm font-semibold leading-snug">{{ amenity.label }}</span>
+                  </button>
+                }
+              </div>
+            }
           </div>
 
           <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">

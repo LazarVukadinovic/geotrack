@@ -345,6 +345,7 @@ public class PlaceService : IPlaceService
             Category = DisplayTextSafety.CleanOptional(place.PlaceType?.Name)?.ToLowerInvariant(),
             ContactEmail = DisplayTextSafety.CleanOptional(place.ContactEmail),
             PhoneNumber = DisplayTextSafety.CleanOptional(place.Number),
+            ContactPhone = DisplayTextSafety.CleanOptional(place.Number),
             AdmissionPriceRange = DisplayTextSafety.CleanOptional(place.AdmissionPriceRange),
             BookingExternalLink = DisplayTextSafety.CleanOptional(place.BookingExternalLink),
             Amenities = amenities,
@@ -480,6 +481,7 @@ public class PlaceService : IPlaceService
             Website = DisplayTextSafety.CleanOptional(place.Website),
             ContactEmail = DisplayTextSafety.CleanOptional(place.ContactEmail),
             PhoneNumber = DisplayTextSafety.CleanOptional(place.Number),
+            ContactPhone = DisplayTextSafety.CleanOptional(place.Number),
             AdmissionPriceRange = DisplayTextSafety.CleanOptional(place.AdmissionPriceRange),
             BestTimeToVisit = DisplayTextSafety.CleanOptional(place.BestTimeToVisit),
             VisitorTips = DisplayTextSafety.CleanOptional(place.VisitorTips),
@@ -1606,9 +1608,10 @@ public class PlaceService : IPlaceService
             changedFields.Add(nameof(request.ContactEmail));
         }
 
-        if (request.PhoneNumber != null)
+        var requestedPhone = request.PhoneNumber ?? request.ContactPhone;
+        if (requestedPhone != null)
         {
-            place.Number = NormalizeOwnerUpdatePhone(request.PhoneNumber);
+            place.Number = NormalizeOwnerUpdatePhone(requestedPhone);
             changedFields.Add(nameof(request.PhoneNumber));
         }
 
@@ -1819,6 +1822,7 @@ public class PlaceService : IPlaceService
             Category = DisplayTextSafety.CleanOptional(refreshedPlace.PlaceType?.Name)?.ToLowerInvariant(),
             ContactEmail = DisplayTextSafety.CleanOptional(refreshedPlace.ContactEmail),
             PhoneNumber = DisplayTextSafety.CleanOptional(refreshedPlace.Number),
+            ContactPhone = DisplayTextSafety.CleanOptional(refreshedPlace.Number),
             AdmissionPriceRange = DisplayTextSafety.CleanOptional(refreshedPlace.AdmissionPriceRange),
             BookingExternalLink = DisplayTextSafety.CleanOptional(refreshedPlace.BookingExternalLink),
             Amenities = ownerUpdateAmenities,

@@ -46,6 +46,7 @@ public class RegionalPlaceDetailDto : RegionalPlaceListItemDto
     public string? OpeningHours { get; set; }
     public string? ContactEmail { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? ContactPhone { get; set; }
     public string? Website { get; set; }
     public string? AdmissionPriceRange { get; set; }
     public string? BookingExternalLink { get; set; }
@@ -90,6 +91,7 @@ public class RegionalPlaceUpdateRequestDto
     public string? OpeningHours { get; set; }
     public string? ContactEmail { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? ContactPhone { get; set; }
     public string? Website { get; set; }
     public string? AdmissionPriceRange { get; set; }
     public string? BookingExternalLink { get; set; }
@@ -106,6 +108,7 @@ public class RegionalPlaceUpdateRequestDto
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public List<int>? TagIds { get; set; }
+    public List<string>? Amenities { get; set; }
     public string? CardImageUrl { get; set; }
     public string? CoverImageUrl { get; set; }
     public List<string>? GalleryImageUrls { get; set; }
@@ -130,12 +133,15 @@ public class RegionalPlaceCreateRequestDto
     public string? AccessNotes { get; set; }
     public string? AccessibilityNotes { get; set; }
     public string? Website { get; set; }
+    public string? PhoneNumber { get; set; }
     public string? ContactPhone { get; set; }
+    public string? ContactEmail { get; set; }
     public string? AdmissionPriceRange { get; set; }
     public string? BookingExternalLink { get; set; }
     public bool OperatingHoursEnabled { get; set; }
     public List<RegionalPlaceOperatingHourDto> OperatingHours { get; set; } = new();
     public List<int> TagIds { get; set; } = new();
+    public List<string> Amenities { get; set; } = new();
 
     public string? CardImageUrl { get; set; }
     public string? CoverImageUrl { get; set; }

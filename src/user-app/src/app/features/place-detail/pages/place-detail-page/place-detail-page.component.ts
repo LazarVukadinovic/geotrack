@@ -149,7 +149,7 @@ export class PlaceDetailPageComponent {
 
   protected readonly hasOperationalInformation = computed(() => {
     const p = this.place();
-    return !!p && !!(p.website || p.contactEmail || p.phoneNumber);
+    return !!p && !!(p.website || p.contactEmail || p.phoneNumber || p.contactPhone);
   });
 
   private readonly locationRequestKey = computed(() => {

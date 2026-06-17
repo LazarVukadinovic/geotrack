@@ -90,7 +90,7 @@ describe('StepDetailsComponent', () => {
     expect(component.openingHoursError).toBe('Opening hours are required for this place type.');
   });
 
-  it('uses native time inputs so letters cannot be entered as opening hours', () => {
+  it('keeps text inputs for opening hours and uses the custom time picker', () => {
     fixture.componentRef.setInput('isAccommodation', false);
     fixture.componentRef.setInput('placeType', 'Bar');
     fixture.detectChanges();
@@ -98,8 +98,9 @@ describe('StepDetailsComponent', () => {
     const timeInput = fixture.nativeElement.querySelector('input[name="openingHours-Monday-open"]') as HTMLInputElement;
 
     expect(timeInput).toBeTruthy();
-    expect(timeInput.type).toBe('time');
-    timeInput.value = 'a';
-    expect(timeInput.value).toBe('');
+    expect(timeInput.type).toBe('text');
+    expect(timeInput.inputMode).toBe('numeric');
+    expect(timeInput.getAttribute('pattern')).toBe('^([01]\\d|2[0-3]):[0-5]\\d$');
+    expect(timeInput.classList.contains('gt-custom-time-input')).toBe(true);
   });
 });

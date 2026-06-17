@@ -44,7 +44,7 @@ import {
   RegionalPlaceTypeDto,
   RegionalStayTypeDto,
   RegionalPlaceUpdateRequest,
-} from '../../../../core/models/place.model';
+} from '../../../../core/models/administrator/place.model';
 import { normalizeEditorDescriptionHtml } from '../../../../shared/utils/description-formatting';
 import {
   applyAssignedRegionViewport,
@@ -83,8 +83,10 @@ interface PlaceFormDraft {
   accessibilityNotes: string;
   website: string;
   contactPhone: string;
+  contactEmail: string;
   admissionPrice: string;
   bookingLink: string;
+  amenities: string[];
   opsEnabled: boolean;
   open24Hours: boolean;
   days: DayHours[];
@@ -99,6 +101,17 @@ interface PlaceFormDraft {
   cardImageName: string;
   coverImageName: string;
   galleryImageNames: string[];
+}
+
+interface AmenityOption {
+  id: string;
+  label: string;
+}
+
+interface AmenityOptionsResponse {
+  amenities?: AmenityOption[] | null;
+  stayAmenities?: AmenityOption[] | null;
+  amenityIdsByPlaceType?: Record<string, string[] | null> | null;
 }
 
 interface CreateDestinationReturnState {
@@ -167,6 +180,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   parentDestinationsLoading = false;
   parentLocationsLoading = false;
   placeTypesLoading = false;
+  amenitiesLoading = false;
   hasLinkedContribution = false;
   tagsLoading = false;
   tagSearchLoading = false;
@@ -196,6 +210,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   accessibilityNotes = '';
   website = '';
   contactPhone = '';
+  contactEmail = '';
   admissionPrice = '';
   bookingLink = '';
   opsEnabled = false;
@@ -208,9 +223,12 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   placeTypes: RegionalPlaceTypeDto[] = [];
   stayTypes: RegionalStayTypeDto[] = [];
   placeTags: RegionalPlaceTagDto[] = [];
+  amenityOptions: AmenityOption[] = [];
+  amenityIdsByPlaceType: Record<string, string[]> | null = null;
   classItems: ClassItem[] = [];
   additionalTagResults: RegionalPlaceTagDto[] = [];
   selectedTagIds = new Set<number>();
+  selectedAmenities = new Set<string>();
   classificationExpanded = false;
 
   isBold = false;
@@ -269,6 +287,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
   private parentLocationsSubscription: Subscription | null = null;
   private placeTypesSubscription: Subscription | null = null;
   private tagsSubscription: Subscription | null = null;
+  private amenitiesSubscription: Subscription | null = null;
   private tagSearchSubscription: Subscription | null = null;
   private createSubscription: Subscription | null = null;
   private reverseGeocodeSubscription: Subscription | null = null;
@@ -312,6 +331,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.loadPlaceTypes();
     this.loadStayTypes();
     this.loadPlaceTags();
+    this.loadAmenityOptions();
     this.registerDraftSource();
   }
 
@@ -335,6 +355,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.parentLocationsSubscription?.unsubscribe();
     this.placeTypesSubscription?.unsubscribe();
     this.tagsSubscription?.unsubscribe();
+    this.amenitiesSubscription?.unsubscribe();
     this.tagSearchSubscription?.unsubscribe();
     this.createSubscription?.unsubscribe();
     this.reverseGeocodeSubscription?.unsubscribe();
@@ -414,11 +435,13 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       if (!this.stayTypeId) {
         this.stayTypeId = this.stayTypes[0]?.id ?? null;
       }
+      this.syncSelectedAmenitiesWithAvailableAmenities();
       return;
     }
 
     this.stayTypeId = null;
     this.bookingLink = '';
+    this.syncSelectedAmenitiesWithAvailableAmenities();
   }
 
   get selectedStayTypeName(): string {
@@ -429,6 +452,24 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.placeTags
       .filter(tag => this.selectedTagIds.has(tag.id))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  get availableAmenities(): AmenityOption[] {
+    if (this.amenityOptions.length === 0) {
+      return [];
+    }
+
+    const ids = this.amenityIdsByPlaceType?.[normalizeAmenityKey(this.selectedPlaceTypeName)];
+    if (ids === undefined) {
+      return this.amenityOptions;
+    }
+
+    const allowed = new Set(normalizeAmenityIds(ids));
+    return this.amenityOptions.filter(option => allowed.has(option.id));
+  }
+
+  get selectedAmenityCount(): number {
+    return this.selectedAmenityList().length;
   }
 
   get visibleTagGroups(): SelectableTagGroup<RegionalPlaceTagDto>[] {
@@ -724,6 +765,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
           ) {
             this.placeTypeId = null;
           }
+          this.syncSelectedAmenitiesWithAvailableAmenities();
         },
         error: error => this.handleLoadError(error, 'Unable to load place types.'),
       });
@@ -771,6 +813,43 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
+  loadAmenityOptions(): void {
+    this.amenitiesLoading = true;
+    this.notifyStateChanged();
+
+    this.amenitiesSubscription?.unsubscribe();
+    this.amenitiesSubscription = this.http
+      .get<AmenityOptionsResponse>('/api/contributions/feature-options')
+      .pipe(
+        finalize(() => {
+          this.amenitiesLoading = false;
+          this.notifyStateChanged();
+        }),
+      )
+      .subscribe({
+        next: response => {
+          const amenities = dedupeAmenityOptions([
+            ...normalizeAmenityOptions(response.amenities),
+            ...normalizeAmenityOptions(response.stayAmenities),
+          ]);
+          this.amenityOptions = amenities;
+
+          const byType: Record<string, string[]> = {};
+          for (const [placeType, ids] of Object.entries(response.amenityIdsByPlaceType ?? {})) {
+            byType[normalizeAmenityKey(placeType)] = normalizeAmenityIds(ids ?? []);
+          }
+          this.amenityIdsByPlaceType = Object.keys(byType).length > 0 ? byType : null;
+
+          this.syncSelectedAmenitiesWithAvailableAmenities();
+        },
+        error: () => {
+          this.amenityOptions = [];
+          this.amenityIdsByPlaceType = null;
+          this.syncSelectedAmenitiesWithAvailableAmenities();
+        },
+      });
+  }
+
   private loadPlaceForEditIfNeeded(): void {
     if (!this.isEditMode || !this.editPlaceId || !this.activeRegionId) {
       return;
@@ -799,9 +878,11 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
         this.accessNotes = dto.accessNotes ?? '';
         this.accessibilityNotes = dto.accessibilityNotes ?? '';
         this.website = dto.website ?? '';
-        this.contactPhone = dto.phoneNumber ?? dto.contactPhone ?? '';
+        this.contactPhone = firstNonBlank(dto.phoneNumber, dto.contactPhone) ?? '';
+        this.contactEmail = dto.contactEmail ?? '';
         this.admissionPrice = dto.admissionPriceRange ?? '';
         this.bookingLink = dto.bookingExternalLink ?? '';
+        this.selectedAmenities = new Set(normalizeAmenityIds((dto.amenities ?? []).map(amenity => amenity.name)));
         this.streetAddress = dto.address ?? '';
         this.opsEnabled = Boolean(dto.operatingHoursEnabled);
         this.applyOperatingHours(dto.operatingHours ?? []);
@@ -832,6 +913,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
           ...item,
           checked: this.selectedTagIds.has(item.tag.id),
         }));
+        this.syncSelectedAmenitiesWithAvailableAmenities();
 
         setTimeout(() => {
           if (this.editorRef?.nativeElement) {
@@ -899,6 +981,21 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       this.selectedTagIds.delete(item.tag.id);
     }
     this.notifyStateChanged();
+  }
+
+  toggleAmenity(id: string): void {
+    const normalized = normalizeAmenityIds([id])[0] ?? id;
+    if (this.isAmenitySelected(normalized)) {
+      this.selectedAmenities.delete(normalized);
+    } else {
+      this.selectedAmenities.add(normalized);
+    }
+    this.notifyStateChanged();
+  }
+
+  isAmenitySelected(id: string): boolean {
+    const normalized = normalizeAmenityIds([id])[0] ?? id;
+    return this.selectedAmenities.has(normalized);
   }
 
   toggleClassificationExpanded(): void {
@@ -1554,6 +1651,9 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const contactPhone = this.normalizePhone(this.contactPhone);
     if (contactPhone === false) return null;
 
+    const contactEmail = this.normalizeEmail(this.contactEmail);
+    if (contactEmail === false) return null;
+
     const operatingHours = this.buildOperatingHoursPayload();
     if (!operatingHours) return null;
 
@@ -1576,9 +1676,12 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       accessNotes: this.accessNotes.trim() || null,
       accessibilityNotes: this.accessibilityNotes.trim() || null,
       website,
+      phoneNumber: contactPhone,
       contactPhone,
+      contactEmail,
       admissionPriceRange: this.admissionPrice.trim() || null,
       bookingExternalLink: this.isStayType ? bookingLink : null,
+      amenities: this.selectedAmenityList(),
       operatingHoursEnabled: this.opsEnabled,
       operatingHours,
       tagIds: this.selectedTagIdList(),
@@ -1671,6 +1774,9 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     const contactPhone = this.normalizePhone(this.contactPhone);
     if (contactPhone === false) return null;
 
+    const contactEmail = this.normalizeEmail(this.contactEmail);
+    if (contactEmail === false) return null;
+
     const operatingHours = this.buildOperatingHoursPayload();
     if (!operatingHours) return null;
 
@@ -1691,9 +1797,12 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       accessNotes: this.accessNotes.trim() || null,
       accessibilityNotes: this.accessibilityNotes.trim() || null,
       website,
-      phoneNumber: contactPhone,
+      contactEmail: contactEmail ?? '',
+      phoneNumber: contactPhone ?? '',
+      contactPhone: contactPhone ?? '',
       admissionPriceRange: this.admissionPrice.trim() || null,
       bookingExternalLink: this.isStayType ? bookingLink : null,
+      amenities: this.selectedAmenityList(),
       operatingHoursEnabled: this.opsEnabled,
       operatingHours,
       tagIds: this.selectedTagIdList(),
@@ -2153,11 +2262,31 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       .sort((a, b) => a - b);
   }
 
+  private selectedAmenityList(): string[] {
+    const allowed = new Set(this.availableAmenities.map(option => option.id));
+    return [...this.selectedAmenities]
+      .map(id => normalizeAmenityIds([id])[0] ?? id)
+      .filter(id => allowed.size === 0 || allowed.has(id))
+      .filter((id, index, values) => values.indexOf(id) === index)
+      .sort((a, b) => a.localeCompare(b));
+  }
+
   private syncSelectedTagsWithAvailableTags(): void {
     const allowedIds = this.availableTagIdSet();
     if (allowedIds.size === 0) return;
 
     this.selectedTagIds = new Set([...this.selectedTagIds].filter(id => allowedIds.has(id)));
+  }
+
+  private syncSelectedAmenitiesWithAvailableAmenities(): void {
+    if (this.amenityOptions.length === 0) return;
+
+    const allowedIds = new Set(this.availableAmenities.map(option => option.id));
+    this.selectedAmenities = new Set(
+      [...this.selectedAmenities]
+        .map(id => normalizeAmenityIds([id])[0] ?? id)
+        .filter(id => allowedIds.size === 0 || allowedIds.has(id)),
+    );
   }
 
   private availableTagIdSet(): Set<number> {
@@ -2502,6 +2631,23 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  private normalizeEmail(value: string): string | null | false {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    if (trimmed.length > 200) {
+      this.errorMessage = 'Contact email is too long.';
+      return false;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      this.errorMessage = 'Contact email is invalid.';
+      return false;
+    }
+
+    return trimmed;
+  }
+
   private normalizePhone(value: string): string | null | false {
     const normalized = value.trim();
     if (!normalized) return null;
@@ -2698,8 +2844,10 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       Boolean(snapshot.accessibilityNotes.trim()) ||
       Boolean(snapshot.website.trim()) ||
       Boolean(snapshot.contactPhone.trim()) ||
+      Boolean(snapshot.contactEmail.trim()) ||
       Boolean(snapshot.admissionPrice.trim()) ||
       Boolean(snapshot.bookingLink.trim()) ||
+      snapshot.amenities.length > 0 ||
       Boolean(snapshot.streetAddress.trim()) ||
       Boolean(snapshot.descriptionHtml) ||
       Boolean(snapshot.parentDestinationId) ||
@@ -2732,8 +2880,10 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
       accessibilityNotes: this.accessibilityNotes,
       website: this.website,
       contactPhone: this.contactPhone,
+      contactEmail: this.contactEmail,
       admissionPrice: this.admissionPrice,
       bookingLink: this.bookingLink,
+      amenities: this.selectedAmenityList(),
       opsEnabled: this.opsEnabled,
       open24Hours: this.open24Hours,
       days: this.days.map(day => ({ ...day })),
@@ -2857,8 +3007,10 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.accessibilityNotes = payload.accessibilityNotes ?? this.accessibilityNotes;
     this.website = payload.website ?? this.website;
     this.contactPhone = payload.contactPhone ?? this.contactPhone;
+    this.contactEmail = payload.contactEmail ?? this.contactEmail;
     this.admissionPrice = payload.admissionPrice ?? this.admissionPrice;
     this.bookingLink = payload.bookingLink ?? this.bookingLink;
+    this.selectedAmenities = new Set(normalizeAmenityIds(payload.amenities ?? []));
     this.opsEnabled = Boolean(payload.opsEnabled);
     this.open24Hours = Boolean(payload.open24Hours);
     this.days = Array.isArray(payload.days) ? payload.days.map(day => ({ ...day })) : this.days;
@@ -2870,6 +3022,7 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     this.pinConfirmed = Boolean(payload.pinConfirmed);
     this.selectedTagIds = new Set(payload.selectedTagIds ?? []);
     this.syncSelectedTagsWithAvailableTags();
+    this.syncSelectedAmenitiesWithAvailableAmenities();
     this.classItems = this.classItems.map(item => ({
       ...item,
       checked: this.selectedTagIds.has(item.tag.id),
@@ -2948,3 +3101,90 @@ export class NewPlaceComponent implements OnInit, AfterViewInit, OnDestroy {
     return true;
   }
 }
+
+function normalizeAmenityOptions(values: readonly AmenityOption[] | null | undefined): AmenityOption[] {
+  return (values ?? [])
+    .map(option => ({
+      id: normalizeAmenityIds([option.id])[0] ?? option.id?.trim() ?? '',
+      label: option.label?.trim() ?? '',
+    }))
+    .filter(option => option.id && option.label);
+}
+
+function firstNonBlank(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
+function dedupeAmenityOptions(values: readonly AmenityOption[]): AmenityOption[] {
+  const seen = new Set<string>();
+  const result: AmenityOption[] = [];
+
+  for (const option of values) {
+    const id = normalizeAmenityIds([option.id])[0] ?? option.id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    result.push({ ...option, id });
+  }
+
+  return result.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function normalizeAmenityIds(values: readonly string[] | null | undefined): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values ?? []) {
+    const key = normalizeAmenityKey(value);
+    if (!key) continue;
+
+    const id = AMENITY_ID_ALIASES[key] ?? key;
+    if (seen.has(id)) continue;
+
+    seen.add(id);
+    normalized.push(id);
+  }
+
+  return normalized;
+}
+
+function normalizeAmenityKey(value: string): string {
+  return value
+    .trim()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+const AMENITY_ID_ALIASES: Record<string, string> = {
+  'free-wifi': 'wifi',
+  'free-wi-fi': 'wifi',
+  'wi-fi': 'wifi',
+  'swimming-pool': 'pool',
+  'breakfast-included': 'breakfast',
+  'included-breakfast': 'breakfast',
+  'free-parking': 'parking',
+  'spa-wellness': 'spa',
+  'spa-and-wellness': 'spa',
+  fitness: 'gym',
+  'fitness-center': 'gym',
+  'fitness-centre': 'gym',
+  restaurant: 'dining',
+  'on-site-dining': 'dining',
+  'onsite-dining': 'dining',
+  'on-site-restaurant': 'dining',
+  'onsite-restaurant': 'dining',
+  'a-c': 'ac',
+  'air-conditioning': 'ac',
+  'air-conditioned': 'ac',
+  'air-conditioner': 'ac',
+  'outdoor-seating': 'outdoor',
+  'sea-view': 'sea',
+};

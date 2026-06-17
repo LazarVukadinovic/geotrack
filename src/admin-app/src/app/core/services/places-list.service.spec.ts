@@ -55,6 +55,7 @@ describe('PlacesListService', () => {
       latitude: 44.1,
       longitude: 20.2,
       streetAddress: 'Main street 1',
+      amenities: ['wifi', 'parking'],
       operatingHoursEnabled: false,
       operatingHours: [],
       tagIds: [1, 2],
@@ -66,6 +67,7 @@ describe('PlacesListService', () => {
     expect(request.request.body.locationId).toBe(11);
     expect(request.request.body.placeTypeId).toBe(3);
     expect(request.request.body.tagIds).toEqual([1, 2]);
+    expect(request.request.body.amenities).toEqual(['wifi', 'parking']);
     expect(request.request.body.internalReferenceId).toBeUndefined();
     request.flush({
       id: 41,

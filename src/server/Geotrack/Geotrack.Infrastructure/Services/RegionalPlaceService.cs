@@ -407,7 +407,8 @@ public class RegionalPlaceService : IRegionalPlaceService
                 AccessNotes = NormalizeOptionalText(request.AccessNotes, 1000, "Access notes are too long."),
                 AccessibilityNotes = NormalizeOptionalText(request.AccessibilityNotes, 1000, "Accessibility notes are too long."),
                 Website = NormalizeUrl(request.Website, "Website URL is invalid."),
-                Number = NormalizePhone(request.ContactPhone),
+                Number = NormalizePhone(request.ContactPhone ?? request.PhoneNumber),
+                ContactEmail = NormalizeContactEmail(request.ContactEmail),
                 AdmissionPriceRange = NormalizeOptionalText(request.AdmissionPriceRange, 200, "Admission / price range is too long."),
                 BookingExternalLink = isStayPlace
                     ? NormalizeUrl(request.BookingExternalLink, "Booking / external link is invalid.")
@@ -435,6 +436,8 @@ public class RegionalPlaceService : IRegionalPlaceService
 
             _db.Places.Add(place);
             await _db.SaveChangesAsync();
+
+            await SyncAmenitiesAsync(place.Id, isStayPlace, request.Amenities ?? []);
 
             _db.EntityImages.AddRange(AddRequiredCreateImages(request, place.Id, place.Name, now));
 
@@ -530,6 +533,11 @@ public class RegionalPlaceService : IRegionalPlaceService
         if (!becomingStay)
         {
             place.BookingExternalLink = null;
+        }
+
+        if (request.Amenities is not null)
+        {
+            await SyncAmenitiesAsync(place.Id, becomingStay, request.Amenities);
         }
 
         if (parentLocationChanged || request.Latitude.HasValue || request.Longitude.HasValue)
@@ -1015,9 +1023,10 @@ public class RegionalPlaceService : IRegionalPlaceService
             place.ContactEmail = contactEmail.Length == 0 ? null : contactEmail;
         }
 
-        if (request.PhoneNumber is not null)
+        var requestedPhone = request.ContactPhone ?? request.PhoneNumber;
+        if (requestedPhone is not null)
         {
-            var phoneNumber = request.PhoneNumber.Trim();
+            var phoneNumber = requestedPhone.Trim();
             if (phoneNumber.Length > 50)
                 throw new InvalidOperationException("Phone number is too long.");
 
@@ -1185,6 +1194,156 @@ public class RegionalPlaceService : IRegionalPlaceService
             .ToListAsync();
     }
 
+    private async Task SyncAmenitiesAsync(int placeId, bool isStayPlace, IEnumerable<string>? amenityNames)
+    {
+        if (isStayPlace)
+        {
+            await SyncStayAmenitiesAsync(placeId, amenityNames);
+            return;
+        }
+
+        await SyncPlaceAmenitiesAsync(placeId, amenityNames);
+    }
+
+    private async Task SyncPlaceAmenitiesAsync(int placeId, IEnumerable<string>? amenityNames)
+    {
+        var normalized = NormalizeAmenityNames(amenityNames);
+        var existing = await _db.PlaceAmenities
+            .Where(placeAmenity => placeAmenity.PlaceId == placeId)
+            .ToListAsync();
+        _db.PlaceAmenities.RemoveRange(existing);
+
+        if (normalized.Count == 0)
+            return;
+
+        var alias = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["dining"] = "restaurant"
+        };
+        var keys = normalized
+            .Select(value => alias.GetValueOrDefault(SlugifyToken(value), SlugifyToken(value)))
+            .Select(value => value.ToLowerInvariant())
+            .Distinct()
+            .ToList();
+        var amenities = await _db.Amenities
+            .Where(amenity =>
+                keys.Contains((amenity.Icon ?? string.Empty).ToLower()) ||
+                keys.Contains((amenity.Name ?? string.Empty).ToLower()))
+            .ToListAsync();
+
+        foreach (var amenity in amenities.DistinctBy(amenity => amenity.Id))
+        {
+            _db.PlaceAmenities.Add(new PlaceAmenity
+            {
+                PlaceId = placeId,
+                AmenityId = amenity.Id
+            });
+        }
+    }
+
+    private async Task SyncStayAmenitiesAsync(int placeId, IEnumerable<string>? amenityNames)
+    {
+        var normalized = NormalizeAmenityNames(amenityNames)
+            .Select(SlugifyToken)
+            .ToList();
+
+        var existing = await _db.StayStayAmenities
+            .Where(stayAmenity => stayAmenity.StayPlaceId == placeId)
+            .ToListAsync();
+        _db.StayStayAmenities.RemoveRange(existing);
+
+        if (normalized.Count == 0)
+            return;
+
+        var amenities = await ResolveStayAmenitiesAsync(normalized);
+        foreach (var amenity in amenities
+            .GroupBy(amenity => amenity.Slug, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First()))
+        {
+            _db.StayStayAmenities.Add(new StayStayAmenity
+            {
+                StayPlaceId = placeId,
+                StayAmenity = amenity
+            });
+        }
+    }
+
+    private async Task<List<StayAmenity>> ResolveStayAmenitiesAsync(List<string> normalized)
+    {
+        var alias = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["wifi"] = "free-wifi",
+            ["pool"] = "swimming-pool",
+            ["breakfast"] = "breakfast-included",
+            ["gym"] = "fitness-center",
+            ["ac"] = "air-conditioning",
+            ["dining"] = "restaurant",
+            ["outdoor"] = "outdoor-seating",
+            ["sea"] = "sea-view",
+            ["family"] = "family-friendly"
+        };
+
+        var slugs = normalized
+            .Select(value => alias.GetValueOrDefault(value, value))
+            .Select(value => value.ToLowerInvariant())
+            .Distinct()
+            .ToList();
+        var knownDefinitions = new Dictionary<string, (string Name, string Icon, string Description)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["outdoor-seating"] = ("Outdoor Seating", "outdoor", "Outdoor seating or open-air areas"),
+            ["sea-view"] = ("Sea View", "sea", "Sea view available"),
+            ["family-friendly"] = ("Family Friendly", "family", "Family-friendly facilities or setting")
+        };
+        var compactSlugs = slugs
+            .Select(value => value.Replace("-", string.Empty, StringComparison.Ordinal))
+            .Distinct()
+            .ToList();
+
+        var amenities = await _db.StayAmenities
+            .Where(amenity =>
+                slugs.Contains((amenity.Slug ?? string.Empty).ToLower()) ||
+                slugs.Contains((amenity.Name ?? string.Empty).ToLower()) ||
+                compactSlugs.Contains(((amenity.Slug ?? string.Empty).ToLower()).Replace("-", string.Empty)) ||
+                compactSlugs.Contains(((amenity.Name ?? string.Empty).ToLower()).Replace("-", string.Empty)))
+            .ToListAsync();
+
+        var existingSlugs = amenities.Select(amenity => amenity.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var slug in slugs.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (existingSlugs.Contains(slug) || !knownDefinitions.TryGetValue(slug, out var definition))
+                continue;
+
+            var amenity = new StayAmenity
+            {
+                Name = definition.Name,
+                Slug = slug,
+                IconKey = definition.Icon,
+                Description = definition.Description
+            };
+            _db.StayAmenities.Add(amenity);
+            amenities.Add(amenity);
+        }
+
+        return amenities;
+    }
+
+    private static List<string> NormalizeAmenityNames(IEnumerable<string>? values)
+    {
+        var normalized = new List<string>();
+
+        foreach (var value in values ?? Array.Empty<string>())
+        {
+            var item = NormalizeOptionalText(value, 80, "Amenity is too long.");
+            if (item is null)
+                continue;
+
+            if (!normalized.Contains(item, StringComparer.OrdinalIgnoreCase))
+                normalized.Add(item);
+        }
+
+        return normalized;
+    }
+
     private static PlaceCoordinates ResolveRequiredCoordinates(double? latitude, double? longitude)
     {
         if (!latitude.HasValue || !longitude.HasValue)
@@ -1345,6 +1504,18 @@ public class RegionalPlaceService : IRegionalPlaceService
         return uri.ToString();
     }
 
+    private static string? NormalizeContactEmail(string? value)
+    {
+        var normalized = NormalizeOptionalText(value, 200, "Contact email is too long.");
+        if (normalized is null)
+            return null;
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^[^\s@]+@[^\s@]+\.[^\s@]+$"))
+            throw new InvalidOperationException("Contact email is invalid.");
+
+        return normalized;
+    }
+
     private static string? NormalizePhone(string? value)
     {
         var normalized = NormalizeOptionalText(value, 50, "Contact phone is too long.");
@@ -1383,6 +1554,20 @@ public class RegionalPlaceService : IRegionalPlaceService
             throw new InvalidOperationException(tooLongMessage);
 
         return normalized;
+    }
+
+    private static string SlugifyToken(string value)
+    {
+        var chars = value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '-')
+            .ToArray();
+
+        var slug = string.Join(string.Empty, chars)
+            .Split('-', StringSplitOptions.RemoveEmptyEntries);
+
+        return string.Join("-", slug);
     }
 
     private string NormalizeRichDescription(string? value, int maxLength, string tooLongMessage)
@@ -1492,6 +1677,7 @@ public class RegionalPlaceService : IRegionalPlaceService
             OpeningHours = row.OpeningHours,
             ContactEmail = row.ContactEmail,
             PhoneNumber = row.PhoneNumber,
+            ContactPhone = row.PhoneNumber,
             Website = row.Website,
             AdmissionPriceRange = row.AdmissionPriceRange,
             BookingExternalLink = row.BookingExternalLink,

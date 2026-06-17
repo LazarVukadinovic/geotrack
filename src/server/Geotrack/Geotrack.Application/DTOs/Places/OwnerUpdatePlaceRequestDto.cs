@@ -11,6 +11,7 @@ public class OwnerUpdatePlaceRequestDto
     public string? Website { get; set; }
     public string? ContactEmail { get; set; }
     public string? PhoneNumber { get; set; }
+    public string? ContactPhone { get; set; }
     public string? AdmissionPriceRange { get; set; }
     public string? BookingExternalLink { get; set; }
     public List<string>? Tags { get; set; }
