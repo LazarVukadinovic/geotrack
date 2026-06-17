@@ -287,6 +287,32 @@ public static class SeedData
         }
     }
 
+    /// <summary>
+    /// Ensures the user-facing interest catalogue is present even when optional demo/public
+    /// content seeding is disabled. Interest topics are required application reference data,
+    /// not demo content, and the operation is idempotent.
+    /// </summary>
+    public static async Task EnsureInterestCatalogAsync(AppDbContext db)
+    {
+        await InitializationLock.WaitAsync();
+
+        try
+        {
+            // Do not run the full demo taxonomy seeder here: existing tag configuration may
+            // be maintained through the admin app. The interest catalogue only needs the
+            // currently available tags to restore any missing topics and links.
+            var tagLookup = await db.Tags
+                .Include(tag => tag.TagType)
+                .ToDictionaryAsync(tag => tag.Slug, StringComparer.OrdinalIgnoreCase);
+
+            await EnsureInterestTopicsAsync(db, tagLookup);
+        }
+        finally
+        {
+            InitializationLock.Release();
+        }
+    }
+
     private static async Task EnsureRequiredPublicContentCoreAsync(AppDbContext db)
     {
         await db.Database.MigrateAsync();
