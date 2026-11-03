@@ -1,59 +1,22 @@
-# AdminApp
+# GeoTrack Admin App
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.2.
-
-## Development server
-
-To start a local development server, run:
+Angular frontend for GeoTrack administration, moderation, and territory management.
+Run these commands from `src/admin-app`:
 
 ```bash
-ng serve
+npm ci
+npm start
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+The development server listens on `http://localhost:4300`. `proxy.conf.json`
+forwards `/api` and `/media` to the backend at `http://localhost:5003`.
 
 ```bash
-ng generate component component-name
+npm run test:ci
+npm run build:production
+npm run serve:static
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+The production build is written to `dist/admin-app/browser`. The static server
+starts on port `10132` by default; production HTTPS and backend configuration are
+in the [root README](../../README.md). Tests use Vitest; no e2e target is configured.

@@ -17,6 +17,7 @@ artifacts/
 TestResults/
 BenchmarkDotNet.Artifacts/
 **/.codexobj/
+**/codex-obj/
 *.tmp
 publish
 
@@ -74,8 +75,7 @@ yarn.lock.*
 pnpm-lock.yaml.*
 
 # Environment files
-src/environments/*.local.ts
-src/environments/environment.*.local.ts
+**/environments/*.local.ts
 .env
 .env.*
 !.env.example
@@ -83,7 +83,7 @@ src/environments/environment.*.local.ts
 # =========================
 # PostgreSQL / database related
 # =========================
-*.sql
+*.dump.sql
 *.dump
 *.backup
 *.bak
@@ -113,9 +113,13 @@ src/server/Geotrack/Geotrack.Server/media/uploads/regional/*
 # =========================
 src/server/Geotrack/Geotrack.Server/media/source/
 
-# Scripts dependencies
-scripts/node_modules/
-scripts/package-lock.json
+# Local certificates and private keys
+*.pfx
+*.p12
+*.key
+*.pem
+*.crt
+*.cer
 
 # =========================
 # OS files

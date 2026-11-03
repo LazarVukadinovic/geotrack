@@ -1,8 +1,0 @@
-﻿{
-  "servers": {
-    "paymentdetail": {
-      "type": "http",
-      "url": "http://localhost:5141/mcp"
-    }
-  }
-}

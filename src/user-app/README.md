@@ -5,7 +5,7 @@
 ## Lokalno pokretanje
 
 ```bash
-npm install
+npm ci
 npm run start
 ```
 
@@ -23,4 +23,4 @@ npm test -- --watch=false
 - Autentikacija/sesija, trenutni korisnik, tagovi/interesovanja, favoriti, kolekcije i glavni tokovi za listanje i prikaz detalja sadržaja integrisani su sa backend-om.
 - Neki lokalni `data/` fajlovi po funkcionalnostima i dalje postoje kao fiksni primeri podataka ili rezervni sadržaj za izolovane UI celine, ali ponašanje kolekcija, autentikacije i profila tokom rada aplikacije više nije zasnovano samo na mock podacima.
 
-Za full-stack podešavanje, backend tajne i demo kredencijale pogledajte u [README](../README.md) fajlu u korenu repozitorijuma.
+Za full-stack podešavanje, backend tajne i demo kredencijale pogledajte u [README](../../README.md) fajlu u korenu repozitorijuma.

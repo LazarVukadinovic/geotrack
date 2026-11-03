@@ -6,7 +6,7 @@ Backend je ASP.NET Core API koji čuva katalog, korisnike, recenzije, kolekcije,
 
 Ask Agent je backend-managed AI funkcionalnost za pitanja nad GeoTrack katalogom. Angular ne prikazuje provider/model/key opcije i ne šalje korisničke API ključeve; chat se izvršava preko server-side Gemini key pool-a. GeoTrack MCP je zaseban remote HTTP JSON-RPC tool endpoint za spoljne AI alate koji podržavaju MCP.
 
-## Korisnici za testiranje
+## Objavljene aplikacije
 - Korisnička aplikacija: `https://softeng.pmf.kg.ac.rs:10131`
 - Administrativna aplikacija: `https://softeng.pmf.kg.ac.rs:10132`
 - Backend: `https://softeng.pmf.kg.ac.rs:10133`
@@ -39,7 +39,9 @@ Svi korisnici koriste istu lozinku:
 
 Za lokalni rad obično treba:
 
-- PostgreSQL baza sa PostGIS ekstenzijom;
+- Node.js kompatibilan sa Angular CLI (`^20.19.0`, `^22.12.0` ili `>=24.0.0`) i npm 11.9.0;
+- .NET SDK koji podržava `net8.0` i .NET 8 / ASP.NET Core 8 runtime;
+- PostgreSQL sa ekstenzijama `postgis`, `pg_trgm` i `unaccent`;
 - backend na `http://localhost:5003`;
 - `user-app` na `http://localhost:4200`;
 - `admin-app` na `http://localhost:4300`;
@@ -151,85 +153,71 @@ Trenutno ponašanje UI-ja:
 
 ## Struktura projekta
 
-- `user-app` - Angular korisnički frontend.
-- `admin-app` - Angular Regional Manager/admin površina.
-- `server/Geotrack` - .NET solution.
-  - `Geotrack.Domain` - entiteti i enum-i.
-  - `Geotrack.Application` - DTO-ovi, interfejsi servisa i opcije.
-  - `Geotrack.Infrastructure` - EF Core `AppDbContext`, repozitorijumi, servisi, migracije i Agent/MCP alatni sloj.
-  - `Geotrack.Server` - API kontroleri, DI/startup, middleware i statički `/media` fajlovi.
-  - `Geotrack.IntegrationTests` - integracioni testovi.
-
-## Pokretanje frontend-a lokalno
-
-Komande se pokreću iz ovog `src` foldera:
-
-```bash
-cd user-app
-npm install
-npm run start
+```text
+geotrack/
+├── scripts/                       # održavanje seed slika, npm manifest i lockfile
+├── src/
+│   ├── admin-app/                  # Angular administracija
+│   │   ├── public/                 # statički resursi
+│   │   ├── src/app/                # core, features, shared; testovi uz izvorni kod
+│   │   └── server.js               # Express server za produkcioni build
+│   ├── user-app/                   # Angular korisnička aplikacija
+│   │   ├── public/
+│   │   ├── src/app/                # core, features, shared; testovi uz izvorni kod
+│   │   └── server.js
+│   └── server/Geotrack/
+│       ├── Geotrack.Domain/        # entiteti i enum-i
+│       ├── Geotrack.Application/   # DTO-ovi, interfejsi i opcije
+│       ├── Geotrack.Infrastructure/ # EF Core, migracije, repozitorijumi i servisi
+│       ├── Geotrack.Server/        # API, konfiguracija, Data/ i media/
+│       ├── Geotrack.IntegrationTests/
+│       └── Geotrack.sln
+├── .gitignore
+└── README.md
 ```
 
-Angular dev server za korisničku aplikaciju je podrazumevano na `http://localhost:4200/`. `user-app/proxy.conf.json` prosleđuje `/api` i `/media` ka `http://localhost:5003`, pa lokalni frontend očekuje da backend radi na tom portu. U Windows PowerShell-u možete koristiti `npm.cmd` umesto `npm` ako je potrebno.
+Angular konfiguracija, manifesti i lockfile-ovi ostaju uz svoje aplikacije.
+.NET projekti i integracioni testovi ostaju u zajedničkom solution-u.
+Repozitorijum trenutno nema Docker konfiguraciju ni CI/CD workflow.
 
-Admin aplikacija koristi isti backend i lokalno se obično pokreće na `http://localhost:4300/`:
+## Instalacija i lokalno pokretanje
+
+Sve naredne komande koriste **koren repozitorijuma** kao radni direktorijum,
+osim gde je drugačije navedeno. Nije potrebna globalna instalacija Angular CLI-ja.
+U Windows PowerShell-u možete koristiti `npm.cmd` umesto `npm` ako je potrebno.
 
 ```bash
-cd admin-app
-npm install
-npm run start -- --port 4300
+npm --prefix src/user-app ci
+npm --prefix src/admin-app ci
+dotnet restore src/server/Geotrack/Geotrack.sln
 ```
 
-`admin-app/proxy.conf.json` takođe prosleđuje `/api` i `/media` ka `http://localhost:5003`. Backend Development CORS politika dozvoljava lokalne origin-e za korisničku aplikaciju na portu `4200` i admin aplikaciju na portu `4300`.
-
-Build frontend-a:
+Lokalne tajne podesite za postojeći `Geotrack.Server` UserSecretsId:
 
 ```bash
-cd user-app
-npm run build
-```
-
-Testovi frontend-a:
-
-```bash
-cd user-app
-npm run test:ci
-```
-
-Za admin aplikaciju iste komande se pokreću iz `admin-app` foldera.
-
-## Pokretanje bekenda
-
-Preduslovi:
-
-- .NET 8 SDK
-- PostgreSQL baza
-- instaliran PostGIS za PostgreSQL server
-
-Osnovno podešavanje lokalnih tajni:
-
-```bash
-dotnet user-secrets init --project server/Geotrack/Geotrack.Server
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=geotrack;Username=<korisnik>;Password=<lozinka>" --project server/Geotrack/Geotrack.Server
-dotnet user-secrets set "Jwt:Key" "<random-string-od-najmanje-32-karaktera>" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=geotrack;Username=<korisnik>;Password=<lozinka>" --project src/server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Jwt:Key" "<random-string-od-najmanje-32-karaktera>" --project src/server/Geotrack/Geotrack.Server
 ```
 
 `Jwt:Issuer` i `Jwt:Audience` imaju netajne podrazumevane vrednosti u `appsettings.json`.
-
-Restore, build i pokretanje:
+U odvojenim terminalima pokrenite:
 
 ```bash
-dotnet restore server/Geotrack/Geotrack.sln
-dotnet build server/Geotrack/Geotrack.sln
-dotnet run --project server/Geotrack/Geotrack.Server
+dotnet run --project src/server/Geotrack/Geotrack.Server --launch-profile http
+npm --prefix src/user-app start
+npm --prefix src/admin-app start
 ```
 
-Backend u razvojnom profilu sluša na `http://localhost:5003`. U Development modu pri startu proverava PostGIS, automatski primenjuje EF migracije i pokreće seed podataka.
+Backend sluša na `http://localhost:5003`, user-app na `http://localhost:4200`,
+a admin-app na `http://localhost:4300`. Oba `proxy.conf.json` fajla prosleđuju
+`/api` i `/media` ka backend-u; Development CORS dozvoljava oba frontend origin-a.
+Development startup automatski primenjuje migracije i konfigurisan seed.
 
-Ako migracije želite da primenite ručno preko `dotnet-ef`, iz `src` foldera koristite:
+Za ručne migracije, uz instaliran `dotnet-ef` alat kompatibilan sa EF Core 8,
+iz korena repozitorijuma koristite:
 
 ```bash
-dotnet ef database update --project server/Geotrack/Geotrack.Infrastructure --startup-project server/Geotrack/Geotrack.Server
+dotnet ef database update --project src/server/Geotrack/Geotrack.Infrastructure --startup-project src/server/Geotrack/Geotrack.Server
 ```
 
 ## Konfiguracija baze
@@ -242,19 +230,90 @@ U Development modu server pokušava:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS unaccent;
 ```
 
 Ako korisnik baze nema dozvolu za to, ekstenziju napravite ručno nad bazom pre pokretanja aplikacije.
 
-## Testovi
-
-Backend integracioni testovi su u `server/Geotrack/Geotrack.IntegrationTests`:
+## Provera i produkcioni build
 
 ```bash
-dotnet test server/Geotrack/Geotrack.sln
+npm --prefix src/user-app run test:ci
+npm --prefix src/admin-app run test:ci
+dotnet test src/server/Geotrack/Geotrack.sln
+npm --prefix src/user-app run build:production
+npm --prefix src/admin-app run build:production
+dotnet publish src/server/Geotrack/Geotrack.Server -c Release -o artifacts/server
 ```
 
-Frontend testovi se pokreću kroz `npm run test:ci` u `user-app` ili `admin-app` folderu.
+Frontend testovi koriste Vitest. Backend testovi koriste xUnit i kreiraju pa brišu
+privremene PostgreSQL baze; lokalna konekcija se čita iz user-secrets ili
+`ConnectionStrings__DefaultConnection`. Test korisnik baze mora da ima dozvolu za
+kreiranje baza i uključivanje `postgis`, `pg_trgm` i `unaccent` ekstenzija.
+Nisu konfigurisane posebne lint, format-check ili e2e komande. Angular build
+proverava TypeScript i Angular šablone; `dotnet build` proverava C# projekte.
+
+## Produkciono pokretanje
+
+Frontend build-ovi su u `src/user-app/dist/user-app/browser` i
+`src/admin-app/dist/admin-app/browser`. Postojeći Express serveri se pokreću sa:
+
+```bash
+npm --prefix src/user-app run serve:static
+npm --prefix src/admin-app run serve:static
+```
+
+Za produkciju podesite `NODE_ENV=production`, `HTTPS_PFX_PATH` i po potrebi
+`HTTPS_PFX_PASSWORD`. Podrazumevani portovi su `10131` i `10132`; `PORT` ih menja.
+`BACKEND_ORIGIN` određuje odredište `/media` preusmeravanja. Express ne prosleđuje
+`/api`: frontend produkcioni URL-ovi su u
+`src/app/environments/environment.production.ts` svake aplikacije i izmene tih
+URL-ova zahtevaju novi build.
+
+Backend pokrenite iz direktorijuma `artifacts/server` komandom
+`dotnet Geotrack.Server.dll`, uz `ASPNETCORE_ENVIRONMENT=Production`, connection
+string, JWT ključ i HTTPS/Kestrel ili reverse-proxy podešavanja okruženja.
+Sačuvajte `media/seed`, `Data/Agent/agent-taxonomy.json`, potrebne boundary fajlove,
+trajni `media/uploads` i Data Protection ključeve pri deployment-u.
+`appsettings.Production.json` uključuje automatske migracije, operational seed i
+public-content seed: pregledajte tu konfiguraciju pre pokretanja nad postojećom bazom.
+`/health/live` proverava proces, a `/health/ready` dostupnost baze.
+
+## Email konfiguracija
+
+Backend koristi eksterni SMTP provider za potvrdu email adrese i reset lozinke.
+Podesite sledeća imena preko environment-a ili odgovarajućih user-secrets ključeva:
+
+```text
+Email__Enabled=true
+Email__Host=smtp.example.com
+Email__Port=587
+Email__UseSsl=true
+Email__UserName=<smtp-korisnik>
+Email__Password=<smtp-lozinka>
+Email__FromEmail=no-reply@example.com
+Email__FromName=GeoTrack
+Email__FrontendBaseUrl=<javni-URL-korisnicke-aplikacije>
+```
+
+Kada je `Email:Enabled=false` (lokalni default), generisani linkovi se upisuju u
+backend log umesto slanja. Produkcija zahteva stvarno SMTP podešavanje.
+
+## Održavanje seed slika
+
+`scripts/convert-images.mjs` pretvara lokalne originale iz
+`src/server/Geotrack/Geotrack.Server/media/source` u WebP fajlove u susednom
+`media/seed` direktorijumu (maksimalna širina 1400 px, kvalitet 82):
+
+```bash
+npm --prefix scripts ci
+npm --prefix scripts run convert
+```
+
+Skripta rešava putanje u odnosu na sopstvenu lokaciju, nezavisno od radnog
+direktorijuma. Originali su ignorisani; potrebne seed slike se commit-uju i
+referenciraju kroz `SeedWebp("naziv-fajla")` u `SeedData.cs`.
 
 ## Ask Agent
 
@@ -277,11 +336,11 @@ Za lokalno testiranje možete napraviti Gemini API key u Google AI Studio-u. Nem
 Podešavanje preko user-secrets:
 
 ```bash
-dotnet user-secrets set "Gemini:ApiKeys:0" "<GEMINI_API_KEY_1>" --project server/Geotrack/Geotrack.Server
-dotnet user-secrets set "Gemini:ApiKeys:1" "<GEMINI_API_KEY_2>" --project server/Geotrack/Geotrack.Server
-dotnet user-secrets set "Gemini:Model" "gemini-3.1-flash-lite" --project server/Geotrack/Geotrack.Server
-dotnet user-secrets set "Gemini:FallbackModels:0" "gemini-3.5-flash" --project server/Geotrack/Geotrack.Server
-dotnet user-secrets set "Gemini:KeyCooldownSeconds" "300" --project server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:ApiKeys:0" "<GEMINI_API_KEY_1>" --project src/server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:ApiKeys:1" "<GEMINI_API_KEY_2>" --project src/server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:Model" "gemini-3.1-flash-lite" --project src/server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:FallbackModels:0" "gemini-3.5-flash" --project src/server/Geotrack/Geotrack.Server
+dotnet user-secrets set "Gemini:KeyCooldownSeconds" "300" --project src/server/Geotrack/Geotrack.Server
 ```
 
 Ista podešavanja kao environment variable imena:
@@ -354,5 +413,4 @@ Za javni ChatGPT/Claude connector potreban je javni HTTPS URL, ne `localhost`. P
 - OpenAI i Claude provider adapteri nisu aktivni; trenutno su nedostupni scaffolding provideri.
 - Produkcioni deployment treba da podesi trajno čuvanje Data Protection ključeva pre oslanjanja na sačuvane korisničke AI ključeve.
 - Javni MCP connector zahteva HTTPS deployment.
-- `admin-app` ima lokalni Regional Manager tok; produkcioni packaging/deployment treba posebno proveriti.
 - Angular build ima stroge bundle/style budget-e u `user-app/angular.json`; veće SCSS izmene mogu da izazovu budget upozorenja.

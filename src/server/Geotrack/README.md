@@ -1,16 +1,17 @@
 # GeoTrack Server
 
-`server/Geotrack` sadrži .NET 8 API, EF Core model/migracije i integracione testove.
+`src/server/Geotrack` sadrži .NET 8 API, EF Core model/migracije i integracione testove.
+
+Komande ispod pokreću se iz `src/server/Geotrack`. Za instalaciju, frontend i
+produkciono pokretanje pogledajte [root README](../../../README.md).
 
 ## Potrebne lokalne tajne
 
 Ovo podesite jednom pomoću user-secrets:
 
 ```bash
-cd Geotrack.Server
-dotnet user-secrets init
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=geotrack;Username=postgres;Password=<your-password>"
-dotnet user-secrets set "Jwt:Key" "<a-random-32+-character-string>"
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=geotrack;Username=postgres;Password=<your-password>" --project Geotrack.Server
+dotnet user-secrets set "Jwt:Key" "<a-random-32+-character-string>" --project Geotrack.Server
 ```
 
 `Jwt:Issuer` i `Jwt:Audience` dolaze kao podrazumevane vrednosti koje nisu tajne u `appsettings.json`. Aplikacija sada odmah prekida pokretanje ako nedostaje connection string ili JWT ključ.

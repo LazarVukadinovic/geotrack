@@ -5,9 +5,9 @@
  *   1. Ubaci originalne slike (jpg, png, webp, avif…) u:
  *      src/server/Geotrack/Geotrack.Server/media/source/
  *
- *   2. U tom folderu pokreni:
+ *   2. Iz korena repozitorijuma pokreni:
  *      cd scripts
- *      npm install       (samo prvi put)
+ *      npm ci            (samo prvi put)
  *      npm run convert
  *
  *   3. Konvertovane .webp slike se pojavljuju u:
