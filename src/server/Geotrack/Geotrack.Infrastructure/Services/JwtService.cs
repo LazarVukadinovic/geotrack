@@ -15,10 +15,14 @@ public class JwtService : IJwtService
 
     private readonly IConfiguration _config;
     private readonly int _accessTokenLifetimeMinutes;
+    private readonly string _signingKey;
 
     public JwtService(IConfiguration config)
     {
         _config = config;
+        _signingKey = JwtConfiguration.RequireSigningKey(config);
+        _ = JwtConfiguration.RequireValue(config, "Jwt:Issuer");
+        _ = JwtConfiguration.RequireValue(config, "Jwt:Audience");
         _accessTokenLifetimeMinutes = ResolveAccessTokenLifetimeMinutes(config);
     }
 
@@ -28,7 +32,7 @@ public class JwtService : IJwtService
     public string GenerateAccessToken(int userId, IEnumerable<string> roles)
     {
         var key = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(_config["Jwt:Key"]!)
+            Encoding.UTF8.GetBytes(_signingKey)
         );
 
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

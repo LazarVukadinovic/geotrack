@@ -30,7 +30,7 @@ public sealed class TerritoryRegionCreationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateRegionCreationFixtureAsync(app);
 
-        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await manager.PostAsJsonAsync(
             "/api/admin/territory/regions",
             BuildCreateRequest(fixture.AssignedTerritoryId));
@@ -69,7 +69,7 @@ public sealed class TerritoryRegionCreationTests
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateRegionCreationFixtureAsync(app);
-        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var outside = BuildCreateRequest(fixture.AssignedTerritoryId, "Outside Region");
         outside.Boundary!.Coordinates =
@@ -124,7 +124,7 @@ public sealed class TerritoryRegionCreationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateRegionCreationFixtureAsync(app);
 
-        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var request = BuildCreateRequest(fixture.AssignedTerritoryId, "Touching Boundary");
         request.Boundary!.Coordinates =
         [
@@ -164,7 +164,7 @@ public sealed class TerritoryRegionCreationTests
             BuildCreateRequest(fixture.AssignedTerritoryId));
         Assert.Equal(HttpStatusCode.Forbidden, associateResponse.StatusCode);
 
-        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var unassignedResponse = await manager.PostAsJsonAsync(
             "/api/admin/territory/regions",
             BuildCreateRequest(fixture.UnassignedTerritoryId));
@@ -177,7 +177,7 @@ public sealed class TerritoryRegionCreationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var territoryId = await CreateAssignedTerritoryWithoutBoundaryAsync(app);
 
-        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await manager.PostAsJsonAsync(
             "/api/admin/territory/regions",
             BuildCreateRequest(territoryId));
@@ -195,7 +195,7 @@ public sealed class TerritoryRegionCreationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateRegionCreationFixtureAsync(app, createExistingRegionBoundary: true);
 
-        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var context = await manager.GetFromJsonAsync<TerritoryRegionCreateContextDto>(
             $"/api/admin/territory/regions/create-context?territoryId={fixture.AssignedTerritoryId}");
 
@@ -374,7 +374,7 @@ public sealed class TerritoryRegionCreationTests
             var fixture = await CreateAdm1CandidateFixtureAsync(app, createExistingCandidateRegion: true);
             Assert.NotNull(fixture.ExistingRegionId);
 
-            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
             var response = await admin.PostAsync(
                 "/api/admin/territories/boundaries/import-local-adm1?force=false",
                 content: null);
@@ -422,7 +422,7 @@ public sealed class TerritoryRegionCreationTests
                 $"/api/admin/territory/regions/boundary-candidates?territoryId={fixture.AssignedTerritoryId}&level=ADM1");
             Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
 
-            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
             var forbidden = await manager.GetAsync(
                 $"/api/admin/territory/regions/boundary-candidates?territoryId={fixture.UnassignedTerritoryId}&level=ADM1");
             Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
@@ -482,7 +482,7 @@ public sealed class TerritoryRegionCreationTests
             Assert.False(outside.CanSelect);
             Assert.False(outside.IsInsideAssignedTerritory);
 
-            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
             var diagnostics = await admin.GetFromJsonAsync<BoundaryCandidateDiagnosticsDto>(
                 "/api/admin/territory/regions/boundary-candidates/diagnostics?countryIso3=TAA&level=ADM1");
             Assert.NotNull(diagnostics);
@@ -515,7 +515,7 @@ public sealed class TerritoryRegionCreationTests
                 });
             var fixture = await CreateAdm1CandidateFixtureAsync(app);
             await ImportAdmBoundaryCandidatesAsync(app, "ADM1");
-            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
             var request = new TerritoryRegionCreateRequestDto
             {

@@ -59,6 +59,10 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
             ?? throw new InvalidOperationException(
                 "ConnectionStrings:DefaultConnection is required in user-secrets or the environment to run integration tests.");
 
+        var databaseHost = new NpgsqlConnectionStringBuilder(_baseConnectionString).Host;
+        if (databaseHost is not ("localhost" or "127.0.0.1" or "::1"))
+            throw new InvalidOperationException("Integration tests require a local PostgreSQL instance.");
+
         ConfigureEarlyProductionEnvironment(config);
 
         _testConnectionString = new NpgsqlConnectionStringBuilder(_baseConnectionString)
@@ -86,6 +90,39 @@ internal sealed class GeotrackApiFactory : WebApplicationFactory<Program>, IAsyn
                 {
                     ["ConnectionStrings:DefaultConnection"] = _testConnectionString,
                 });
+
+            // Explicit test-only provisioning. No test password is a server fallback.
+            var fixtureAccounts = new (string Name, string Email, string Username)[]
+            {
+                ("Admin", "zika@gmail.com", "zika"),
+                ("ContentModerator", "moderator@gmail.com", "moderator"),
+                ("CroatiaTerritoryManager", "mika@gmail.com", "mika"),
+                ("CroatiaRegionalManager", "pera@gmail.com", "pera"),
+                ("SerbiaTerritoryManager", "nikola@gmail.com", "nikola"),
+                ("SerbiaRegionalManager", "serbia.regional@gmail.com", "serbia-regional")
+            };
+            var fixtureConfiguration = new Dictionary<string, string?> { ["Seed:EnableOperationalSeed"] = "true" };
+            foreach (var account in fixtureAccounts)
+            {
+                var prefix = $"Seed:OperationalUsers:{account.Name}";
+                fixtureConfiguration[$"{prefix}:Enabled"] = "true";
+                fixtureConfiguration[$"{prefix}:Email"] = account.Email;
+                fixtureConfiguration[$"{prefix}:Username"] = account.Username;
+                fixtureConfiguration[$"{prefix}:Password"] = "TEST-only-Fixture-9284!";
+                var (firstName, lastName, displayName) = account.Name switch
+                {
+                    "Admin" => ("Zika", "Admin", "Zika"),
+                    "ContentModerator" => ("Content", "Moderator", "Content Moderator"),
+                    "CroatiaTerritoryManager" => ("Mika", "Territory Manager", "Mika"),
+                    "CroatiaRegionalManager" => ("Pera", "Regional Manager", "Pera"),
+                    "SerbiaTerritoryManager" => ("Nikola", "Territory Manager", "Nikola Territory Manager"),
+                    _ => ("Serbia", "Regional Manager", "Serbia Regional Manager")
+                };
+                fixtureConfiguration[$"{prefix}:FirstName"] = firstName;
+                fixtureConfiguration[$"{prefix}:LastName"] = lastName;
+                fixtureConfiguration[$"{prefix}:DisplayName"] = displayName;
+            }
+            config.AddInMemoryCollection(fixtureConfiguration);
 
             if (_configurationOverrides.Count > 0)
             {

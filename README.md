@@ -11,29 +11,64 @@ Ask Agent je backend-managed AI funkcionalnost za pitanja nad GeoTrack katalogom
 - Administrativna aplikacija: `https://softeng.pmf.kg.ac.rs:10132`
 - Backend: `https://softeng.pmf.kg.ac.rs:10133`
 
-## Korisnici za testiranje (dolenavedeni korisnici rade za obe aplikacije)
+## Bezbedno inicijalno podešavanje administratora
 
-Svi korisnici koriste istu lozinku:
+Privilegovani nalozi nemaju podrazumevanu lozinku i ne kreiraju se automatski ni u
+Development ni u Production okruženju. Za početnog administratora uključite oba
+navedena prekidača i dostavite vrednosti iz zaštićenog deployment okruženja ili
+postojećeg sistema za tajne:
 
-`Proba123!`
+```text
+Seed__EnableOperationalSeed=true
+Seed__OperationalUsers__Admin__Enabled=true
+Seed__OperationalUsers__Admin__Email=<adresa-vlasnika-naloga>
+Seed__OperationalUsers__Admin__Username=<jedinstveno-korisnicko-ime>
+Seed__OperationalUsers__Admin__Password=<jedinstvena-nasumicna-lozinka>
+```
 
-### Administrator
+Oznake u uglastim zagradama nisu stvarne vrednosti. Lozinka mora da ima 16–256
+znakova, najmanje 10 različitih znakova, veliko i malo slovo, cifru i specijalni
+znak. Ne sme da sadrži korisničko ime, celu email adresu, kontrolne znakove ili
+`<` / `>`. Generišite je u menadžeru lozinki i čuvajte je odvojeno za svaki nalog.
+Aplikacija ne skraćuje lozinku niti uklanja razmake. Ne unosite tajne u Git,
+komandnu istoriju, CI izlaz ili deljene konfiguracione fajlove.
 
-- Email: `zika@gmail.com`
+Za lokalni razvoj koristite .NET User Secrets za `Geotrack.Server`, sa istim
+ključevima i `:` umesto `__`, ili promenljive okruženja procesa. User Secrets
+služe za lokalni razvoj; produkcioni deployment mora bezbedno da dostavi tajne.
+Backend ne učitava `.env` niti `appsettings.*.local.json` automatski.
 
-### Hrvatska / HRV
+Provera svih uključenih naloga prethodi migracijama i unosu korisnika. Prazna ili
+neispravna konfiguracija prekida pokretanje bez rezervne lozinke. Novi nalog dobija
+postojeći ASP.NET Identity password hash i odgovarajuću ulogu; vlasništvo nad
+adresom mora da proveri operater jer inicijalni administratorski nalog ima potvrđenu
+email adresu. Postojeći nalog sa istom adresom i očekivanom ulogom ostaje neizmenjen:
+lozinka, profil, potvrda adrese, suspenzija, brisanje i dodeljeni regioni se ne
+obnavljaju. Konflikt sa običnim nalogom, duplikat adrese ili zauzeto korisničko ime
+prekida inicijalizaciju. Ponovno pokretanje ne menja postojeću lozinku.
 
-- Teritorijalni menadžer: `mika@gmail.com`
-- Regionalni menadžer za Dubrovnik-Neretva: `pera@gmail.com`
+Posle uspešnog prvog prijavljivanja postavite `Seed__EnableOperationalSeed=false`
+i uklonite početnu lozinku iz deployment konfiguracije. Bez ovog koraka izričito
+uključena inicijalizacija može ponovo da napravi fizički obrisan nalog. Oporavak
+pristupa i promenu lozinke radite kroz odobrene administratorske tokove.
 
-### Srbija / SRB
+Po potrebi se na isti način mogu izričito uključiti odeljci `ContentModerator`,
+`CroatiaTerritoryManager`, `CroatiaRegionalManager`, `SerbiaTerritoryManager` i
+`SerbiaRegionalManager`. Svaki zahteva sopstvene `Enabled`, `Email`, `Username` i
+`Password` vrednosti; adrese i korisnička imena moraju biti različiti. Novi menadžeri
+dobijaju postojeće HRV/SRB teritorijalne ili regionalne dodele. Uobičajeno je dovoljno
+inicijalizovati jednog administratora i ostale naloge voditi kroz administraciju.
+Stari `Seed:Demo*` podaci nisu izvor produkcionih kredencijala.
 
-- Teritorijalni menadžer: `nikola@gmail.com`
-- Regionalni menadžer za Šumadiju (`Sumadija District` u seed podacima): `serbia.regional@gmail.com`
+Javni seed kreira katalog bez korisnika. Demo sadržaj sa običnim probnim korisnicima
+ograničen je na Development; `Seed:RunInProduction` ne može da omogući demo korisnike
+u produkciji. Koristite odvojenu lokalnu bazu, nikada produkcionu bazu sa Development
+okruženjem. Privilegovane test fixture lozinke postoje samo u test projektu.
 
-### Content Moderator
-
-- Email: `moderator@gmail.com`
+Ranije objavljene lozinke nisu promenjene ovim izmenama. Ovlašćeni operater mora da
+proveri postojeće privilegovane naloge, rotira izložene kredencijale baze i JWT
+ključeve i zasebno razreši izlaganje u Git istoriji. Rotacija JWT ključa poništava
+stare access tokene, ali sama po sebi ne opoziva refresh tokene.
 
 ## Lokalno pokretanje ukratko
 
@@ -47,7 +82,7 @@ Za lokalni rad obično treba:
 - `admin-app` na `http://localhost:4300`;
 - lokalni geoBoundaries fajlovi ako testirate teritorijalne i regionalne granice.
 
-U Development modu backend automatski primenjuje migracije i pokreće operational/demo seed ako je konfiguracija ostavljena kao u `appsettings.Development.json`.
+U Development modu backend automatski primenjuje migracije i pokreće demo sadržaj. Privilegovani bootstrap je isključen dok se izričito ne konfiguriše.
 
 ## Lokalni boundary / GeoJSON fajlovi
 
@@ -200,6 +235,10 @@ dotnet user-secrets set "Jwt:Key" "<random-string-od-najmanje-32-karaktera>" --p
 ```
 
 `Jwt:Issuer` i `Jwt:Audience` imaju netajne podrazumevane vrednosti u `appsettings.json`.
+`Jwt__Key` mora biti zasebna, nasumično generisana tajna (preporučeno najmanje 32
+nasumična bajta kodirana kao Base64); proverava se minimum od 32 UTF-8 bajta i
+odbijaju prazne, jednolične vrednosti i placeholder-i. Baza se konfiguriše preko
+`ConnectionStrings__DefaultConnection`, bez podrazumevane lozinke.
 U odvojenim terminalima pokrenite:
 
 ```bash
@@ -224,7 +263,7 @@ dotnet ef database update --project src/server/Geotrack/Geotrack.Infrastructure 
 
 GeoTrack koristi PostgreSQL sa PostGIS ekstenzijom. `AppDbContext` registruje `postgis`, koristi `UseNetTopologySuite()` i ima `geography(point)` kolone i GIST indekse za destinacije, lokacije, mesta i događaje.
 
-Connection string se podešava kroz user-secrets, environment variable ili lokalni `appsettings.*.json`. Ne stavljajte lozinke u git. Design-time `AppDbContextFactory` može da pročita `ConnectionStrings__DefaultConnection` iz environment-a ili user-secrets vrednost iz `Geotrack.Server` projekta.
+Connection string se podešava kroz user-secrets ili environment variable; praćeni `appsettings*.json` fajlovi moraju ostati bez tajni. Ne stavljajte lozinke u git. Design-time `AppDbContextFactory` može da pročita `ConnectionStrings__DefaultConnection` iz environment-a ili user-secrets vrednost iz `Geotrack.Server` projekta.
 
 U Development modu server pokušava:
 
@@ -249,7 +288,7 @@ dotnet publish src/server/Geotrack/Geotrack.Server -c Release -o artifacts/serve
 
 Frontend testovi koriste Vitest. Backend testovi koriste xUnit i kreiraju pa brišu
 privremene PostgreSQL baze; lokalna konekcija se čita iz user-secrets ili
-`ConnectionStrings__DefaultConnection`. Test korisnik baze mora da ima dozvolu za
+`ConnectionStrings__DefaultConnection`. Test infrastruktura prihvata samo lokalni PostgreSQL (`localhost`, `127.0.0.1` ili `::1`). Test korisnik baze mora da ima dozvolu za
 kreiranje baza i uključivanje `postgis`, `pg_trgm` i `unaccent` ekstenzija.
 Nisu konfigurisane posebne lint, format-check ili e2e komande. Angular build
 proverava TypeScript i Angular šablone; `dotnet build` proverava C# projekte.
@@ -276,8 +315,9 @@ Backend pokrenite iz direktorijuma `artifacts/server` komandom
 string, JWT ključ i HTTPS/Kestrel ili reverse-proxy podešavanja okruženja.
 Sačuvajte `media/seed`, `Data/Agent/agent-taxonomy.json`, potrebne boundary fajlove,
 trajni `media/uploads` i Data Protection ključeve pri deployment-u.
-`appsettings.Production.json` uključuje automatske migracije, operational seed i
-public-content seed: pregledajte tu konfiguraciju pre pokretanja nad postojećom bazom.
+`appsettings.Production.json` uključuje automatske migracije i public-content seed
+bez kreiranja korisnika. Privilegovani bootstrap je podrazumevano isključen.
+Pregledajte konfiguraciju pre pokretanja nad postojećom bazom.
 `/health/live` proverava proces, a `/health/ready` dostupnost baze.
 
 ## Email konfiguracija
@@ -297,8 +337,11 @@ Email__FromName=GeoTrack
 Email__FrontendBaseUrl=<javni-URL-korisnicke-aplikacije>
 ```
 
-Kada je `Email:Enabled=false` (lokalni default), generisani linkovi se upisuju u
-backend log umesto slanja. Produkcija zahteva stvarno SMTP podešavanje.
+Kada je `Email:Enabled=false` (podrazumevano), poruke se ne šalju. Log sadrži samo
+režim isporuke i status `Suppressed`; adrese, naslovi, sadržaj i autentikacioni linkovi
+se ne beleže. Za registraciju, potvrdu email adrese i reset lozinke stvarnih korisnika
+podesite i uključite SMTP. Za lokalno pregledanje poruka koristite izdvojeni lokalni
+SMTP prijemnik sa probnim nalozima. Ne preusmeravajte sadržaj poruka u logove.
 
 ## Održavanje seed slika
 

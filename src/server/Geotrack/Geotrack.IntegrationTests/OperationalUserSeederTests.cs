@@ -24,7 +24,7 @@ public sealed class OperationalUserSeederTests
     private const string CroatiaRegionalManagerEmail = "pera@gmail.com";
     private const string SerbiaTerritoryManagerEmail = "nikola@gmail.com";
     private const string SerbiaRegionalManagerEmail = "serbia.regional@gmail.com";
-    private const string SeedPassword = "Proba123!";
+    private const string SeedPassword = "TEST-only-Fixture-9284!";
 
     [Fact]
     public async Task Development_startup_operational_seed_creates_required_users_roles_and_assignments()
@@ -66,7 +66,7 @@ public sealed class OperationalUserSeederTests
     }
 
     [Fact]
-    public async Task Production_operational_seed_is_idempotent_and_preserves_existing_profile_and_password()
+    public async Task Production_bootstrap_preserves_profile_password_suspension_and_revoked_assignments()
     {
         await using var app = await GeotrackApiFactory.CreateAsync(Environments.Production);
 
@@ -93,7 +93,6 @@ public sealed class OperationalUserSeederTests
         var adminRoleAssignment = await db.UserRoles.SingleAsync(userRole =>
             userRole.UserId == admin.Id &&
             userRole.RoleId == adminRole.Id);
-        db.UserRoles.Remove(adminRoleAssignment);
 
         var croatia = await db.Territories.SingleAsync(territory => territory.CountryIso3 == "HRV");
         var serbia = await db.Territories.SingleAsync(territory => territory.CountryIso3 == "SRB");
@@ -137,25 +136,24 @@ public sealed class OperationalUserSeederTests
         Assert.Equal("Existing", admin.FirstName);
         Assert.Equal("Administrator", admin.LastName);
         Assert.Equal("Existing Administrator", admin.DisplayName);
-        Assert.False(admin.IsSuspended);
-        Assert.False(admin.IsDeleted);
-        Assert.False(admin.NeedsInterestsOnboarding);
+        Assert.True(admin.IsSuspended);
+        Assert.True(admin.IsDeleted);
+        Assert.True(admin.NeedsInterestsOnboarding);
         Assert.NotEqual(PasswordVerificationResult.Failed,
             hasher.VerifyHashedPassword(admin, admin.PasswordHash, "Existing123!"));
         Assert.Equal(PasswordVerificationResult.Failed,
             hasher.VerifyHashedPassword(admin, admin.PasswordHash, SeedPassword));
 
-        await AssertRequiredOperationalStateAsync(db);
         Assert.Equal(1, await db.UserRoles.CountAsync(userRole =>
             userRole.UserId == admin.Id &&
             userRole.RoleId == adminRole.Id));
-        Assert.Equal(1, await db.TerritoryManagerTerritories.CountAsync(assignment =>
+        Assert.Equal(0, await db.TerritoryManagerTerritories.CountAsync(assignment =>
             assignment.UserId == croatiaManager.Id &&
             assignment.TerritoryId == croatia.Id));
         Assert.Equal(1, await db.TerritoryManagerTerritories.CountAsync(assignment =>
             assignment.UserId == croatiaManager.Id &&
             assignment.TerritoryId == serbia.Id));
-        Assert.Equal(1, await db.RegionalManagerRegions.CountAsync(assignment =>
+        Assert.Equal(0, await db.RegionalManagerRegions.CountAsync(assignment =>
             assignment.UserId == regionalManager.Id &&
             assignment.RegionId == dubrovnik.Id &&
             assignment.IsActive));

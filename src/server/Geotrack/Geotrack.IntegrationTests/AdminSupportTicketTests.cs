@@ -323,7 +323,7 @@ public sealed class AdminSupportTicketTests
             new LoginRequestDto
             {
                 Email = "zika@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
                 RememberMe = false
             });
         response.EnsureSuccessStatusCode();

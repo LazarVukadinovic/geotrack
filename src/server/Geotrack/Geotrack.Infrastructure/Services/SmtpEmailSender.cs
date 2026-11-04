@@ -31,10 +31,9 @@ public class SmtpEmailSender : IEmailSender
         if (!_options.Enabled)
         {
             _logger.LogWarning(
-                "Email sending is disabled. To: {ToEmail}; Subject: {Subject}; Body: {TextBody}",
-                toEmail,
-                subject,
-                textBody);
+                "Email delivery {DeliveryMode}: {Status}.",
+                "Disabled",
+                "Suppressed");
             return;
         }
 
@@ -70,6 +69,16 @@ public class SmtpEmailSender : IEmailSender
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        await client.SendMailAsync(message);
+        try
+        {
+            await client.SendMailAsync(message, cancellationToken);
+            _logger.LogInformation("Email delivery {DeliveryMode}: {Status}.", "Smtp", "Sent");
+        }
+        catch (SmtpException)
+        {
+            // SMTP exception messages can include recipients and remote server replies.
+            _logger.LogWarning("Email delivery {DeliveryMode}: {Status}.", "Smtp", "Failed");
+            throw new InvalidOperationException("Email delivery failed.");
+        }
     }
 }

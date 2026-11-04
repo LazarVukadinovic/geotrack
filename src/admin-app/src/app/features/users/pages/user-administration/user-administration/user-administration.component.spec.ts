@@ -784,7 +784,7 @@ describe('UserAdministrationComponent', () => {
 
   function loginAsAdmin(roles: string[]): void {
     const auth = TestBed.inject(AuthService);
-    auth.login('mika@gmail.com', 'Proba123!').subscribe();
+    auth.login('mika@gmail.com', 'TEST-only-Fixture-9284!').subscribe();
     const request = http.expectOne('/api/admin/auth/login');
     expect(request.request.method).toBe('POST');
     const response = {

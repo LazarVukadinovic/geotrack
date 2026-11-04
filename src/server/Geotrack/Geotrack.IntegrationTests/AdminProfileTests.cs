@@ -520,7 +520,7 @@ public sealed class AdminProfileTests
             new LoginRequestDto
             {
                 Email = "zika@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
             });
         response.EnsureSuccessStatusCode();
 
@@ -539,7 +539,7 @@ public sealed class AdminProfileTests
             new LoginRequestDto
             {
                 Email = "moderator@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
             });
         response.EnsureSuccessStatusCode();
 
@@ -558,7 +558,7 @@ public sealed class AdminProfileTests
             new LoginRequestDto
             {
                 Email = "mika@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
             });
         response.EnsureSuccessStatusCode();
 

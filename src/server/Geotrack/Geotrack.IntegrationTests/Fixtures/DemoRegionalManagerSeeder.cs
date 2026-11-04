@@ -1,5 +1,8 @@
+// Integration-test fixture only. This file is not compiled or published with the server.
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Geotrack.Application.Security;
-using Geotrack.Domain.Entities.Core;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure;
 using Microsoft.AspNetCore.Identity;
@@ -7,15 +10,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Server;
 
-public static class DemoTerritoryManagerSeeder
+public static class DemoRegionalManagerSeeder
 {
-    public const string EnabledConfigKey = "Seed:DemoTerritoryManager:Enabled";
+    public const string EnabledConfigKey = "Seed:DemoRegionalManager:Enabled";
 
-    private const string ConfigSectionName = "Seed:DemoTerritoryManager";
-    private const string DefaultEmail = "mika@gmail.com";
-    private const string DefaultPassword = "Proba123!";
-    private const string DefaultUsername = "mika";
-    private const string DefaultTerritoryName = "Croatia";
+    private const string ConfigSectionName = "Seed:DemoRegionalManager";
+    private const string DefaultEmail = "pera@gmail.com";
+    private const string DefaultPassword = "TEST-only-Fixture-9284!";
+    private const string DefaultUsername = "pera";
+    private const int DefaultRegionId = 1;
 
     public static bool IsEnabled(IHostEnvironment environment, IConfiguration configuration)
     {
@@ -23,7 +26,7 @@ public static class DemoTerritoryManagerSeeder
         return configured ?? environment.IsDevelopment();
     }
 
-    public static async Task<DemoTerritoryManagerSeedResult> EnsureAsync(
+    public static async Task<DemoRegionalManagerSeedResult> EnsureAsync(
         AppDbContext db,
         IConfiguration configuration,
         ILogger? logger = null,
@@ -34,15 +37,33 @@ public static class DemoTerritoryManagerSeeder
         var password = string.IsNullOrWhiteSpace(section["Password"])
             ? DefaultPassword
             : section["Password"]!.Trim();
-        var territoryName = string.IsNullOrWhiteSpace(section["TerritoryName"])
-            ? DefaultTerritoryName
-            : section["TerritoryName"]!.Trim();
+        var regionId = section.GetValue<int?>("RegionId") ?? DefaultRegionId;
+
+        var region = await db.Regions
+            .AsNoTracking()
+            .SingleOrDefaultAsync(existing => existing.Id == regionId, cancellationToken);
+
+        if (region is null)
+        {
+            logger?.LogWarning(
+                "Skipping demo Regional Manager seed because configured RegionId {RegionId} does not exist.",
+                regionId);
+            return DemoRegionalManagerSeedResult.Skipped(regionId, "Configured region was not found.");
+        }
+
+        if (!IsExpectedDemoRegionName(region.Name))
+        {
+            logger?.LogWarning(
+                "Demo Regional Manager seed is using configured RegionId {RegionId}, but the region name is {RegionName}.",
+                regionId,
+                region.Name);
+        }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
         var hasher = new PasswordHasher<User>();
-        var role = await EnsureTerritoryManagerRoleAsync(db, logger, cancellationToken);
+        var role = await EnsureRegionalManagerRoleAsync(db, logger, cancellationToken);
         var user = await FindUserByEmailAsync(db, email, cancellationToken);
 
         var createdUser = false;
@@ -54,9 +75,9 @@ public static class DemoTerritoryManagerSeeder
             {
                 Username = await ResolveNewUsernameAsync(db, email, cancellationToken),
                 Email = email,
-                FirstName = "Mika",
-                LastName = "Territory Manager",
-                DisplayName = "Mika",
+                FirstName = "Pera",
+                LastName = "Regional Manager",
+                DisplayName = "Pera",
                 PhoneNumber = string.Empty,
                 NeedsInterestsOnboarding = false,
                 CreatedAt = now
@@ -91,60 +112,31 @@ public static class DemoTerritoryManagerSeeder
             createdUserRole = true;
         }
 
-        var createdTerritoryManager = false;
-        var territoryManager = await db.TerritoryManagers.FindAsync(
-            new object?[] { user.Id },
+        var createdRegionAssignment = false;
+        var reactivatedRegionAssignment = false;
+        var assignment = await db.RegionalManagerRegions.FindAsync(
+            new object?[] { user.Id, regionId },
             cancellationToken);
 
-        if (territoryManager is null)
+        if (assignment is null)
         {
-            db.TerritoryManagers.Add(new TerritoryManager
+            db.RegionalManagerRegions.Add(new RegionalManagerRegion
             {
-                UserId = user.Id
+                UserId = user.Id,
+                RegionId = regionId,
+                IsActive = true,
+                CreatedAt = now
             });
-            createdTerritoryManager = true;
+            createdRegionAssignment = true;
         }
-
-        var territory = await FindTerritoryAsync(db, territoryName, cancellationToken);
-        var createdTerritoryAssignment = false;
-        string? skippedTerritoryAssignmentReason = null;
-
-        if (territory is null)
+        else if (!assignment.IsActive)
         {
-            skippedTerritoryAssignmentReason = $"Territory '{territoryName}' was not found.";
-            logger?.LogWarning(
-                "Demo Territory Manager user {Email} was seeded without a territory assignment because {Reason}",
-                email,
-                skippedTerritoryAssignmentReason);
-        }
-        else
-        {
-            var staleAssignments = await db.TerritoryManagerTerritories
-                .Where(existing => existing.UserId == user.Id && existing.TerritoryId != territory.Id)
-                .ToListAsync(cancellationToken);
-
-            if (staleAssignments.Count > 0)
-            {
-                db.TerritoryManagerTerritories.RemoveRange(staleAssignments);
-            }
-
-            var hasAssignment = await db.TerritoryManagerTerritories.AnyAsync(
-                existing => existing.UserId == user.Id && existing.TerritoryId == territory.Id,
-                cancellationToken);
-
-            if (!hasAssignment)
-            {
-                db.TerritoryManagerTerritories.Add(new TerritoryManagerTerritory
-                {
-                    UserId = user.Id,
-                    TerritoryId = territory.Id,
-                    CreatedAt = now
-                });
-                createdTerritoryAssignment = true;
-            }
+            assignment.IsActive = true;
+            assignment.UpdatedAt = now;
+            reactivatedRegionAssignment = true;
         }
 
-        if (createdUserRole || createdTerritoryManager || createdTerritoryAssignment || db.ChangeTracker.HasChanges())
+        if (createdUserRole || createdRegionAssignment || reactivatedRegionAssignment)
         {
             await db.SaveChangesAsync(cancellationToken);
         }
@@ -152,30 +144,31 @@ public static class DemoTerritoryManagerSeeder
         await transaction.CommitAsync(cancellationToken);
 
         logger?.LogInformation(
-            "Ensured demo Territory Manager user {Email}.",
-            email);
+            "Ensured demo Regional Manager user {Email} for RegionId {RegionId}.",
+            email,
+            regionId);
 
-        return new DemoTerritoryManagerSeedResult(
+        return new DemoRegionalManagerSeedResult(
             Seeded: true,
             UserId: user.Id,
             RoleId: role.Id,
-            TerritoryId: territory?.Id,
+            RegionId: regionId,
             CreatedUser: createdUser,
             PasswordUpdated: passwordUpdated,
             CreatedUserRole: createdUserRole,
-            CreatedTerritoryManager: createdTerritoryManager,
-            CreatedTerritoryAssignment: createdTerritoryAssignment,
-            SkippedTerritoryAssignmentReason: skippedTerritoryAssignmentReason);
+            CreatedRegionAssignment: createdRegionAssignment,
+            ReactivatedRegionAssignment: reactivatedRegionAssignment,
+            SkippedReason: null);
     }
 
-    private static async Task<Role> EnsureTerritoryManagerRoleAsync(
+    private static async Task<Role> EnsureRegionalManagerRoleAsync(
         AppDbContext db,
         ILogger? logger,
         CancellationToken cancellationToken)
     {
-        var role = await db.Roles.FirstOrDefaultAsync(
-            existing => existing.Name == RoleNames.TerritoryManager,
-            cancellationToken);
+        var roles = await db.Roles.ToListAsync(cancellationToken);
+        var role = roles.FirstOrDefault(existing =>
+            RoleNames.Normalize(existing.Name) == RoleNames.RegionalManager);
 
         if (role is not null)
         {
@@ -184,15 +177,15 @@ public static class DemoTerritoryManagerSeeder
 
         role = new Role
         {
-            Name = RoleNames.TerritoryManager,
-            Description = "Can manage territories and assigned regions.",
+            Name = RoleNames.RegionalManager,
+            Description = "Can review and approve regional user contributions.",
             CreatedAt = DateTime.UtcNow
         };
 
         db.Roles.Add(role);
         await db.SaveChangesAsync(cancellationToken);
 
-        logger?.LogWarning("Territory Manager role was missing and was created by the demo seed.");
+        logger?.LogWarning("Regional Manager role was missing and was created by the demo seed.");
         return role;
     }
 
@@ -208,39 +201,6 @@ public static class DemoTerritoryManagerSeeder
 
         return matches.FirstOrDefault(existing => existing.Email == normalizedEmail)
             ?? matches.FirstOrDefault();
-    }
-
-    private static async Task<Territory?> FindTerritoryAsync(
-        AppDbContext db,
-        string territoryName,
-        CancellationToken cancellationToken)
-    {
-        var candidates = new[]
-            {
-                territoryName,
-                DefaultTerritoryName,
-                "Hrvatska",
-                "Republika Hrvatska",
-                "Republic of Croatia"
-            }
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name.Trim().ToLowerInvariant())
-            .Distinct()
-            .ToList();
-
-        foreach (var candidate in candidates)
-        {
-            var territory = await db.Territories.FirstOrDefaultAsync(
-                existing => existing.Name.ToLower() == candidate,
-                cancellationToken);
-
-            if (territory is not null)
-            {
-                return territory;
-            }
-        }
-
-        return null;
     }
 
     private static async Task<string> ResolveNewUsernameAsync(
@@ -306,16 +266,36 @@ public static class DemoTerritoryManagerSeeder
             ? DefaultEmail
             : email.Trim().ToLowerInvariant();
     }
+
+    private static bool IsExpectedDemoRegionName(string name)
+    {
+        var normalized = name.Trim().ToLowerInvariant();
+        return normalized is "dubrovnik-neretva" or "dubrovnik neretva" or "dalmatia" or "dalmacija";
+    }
 }
 
-public sealed record DemoTerritoryManagerSeedResult(
+public sealed record DemoRegionalManagerSeedResult(
     bool Seeded,
     int? UserId,
     int? RoleId,
-    int? TerritoryId,
+    int RegionId,
     bool CreatedUser,
     bool PasswordUpdated,
     bool CreatedUserRole,
-    bool CreatedTerritoryManager,
-    bool CreatedTerritoryAssignment,
-    string? SkippedTerritoryAssignmentReason);
+    bool CreatedRegionAssignment,
+    bool ReactivatedRegionAssignment,
+    string? SkippedReason)
+{
+    public static DemoRegionalManagerSeedResult Skipped(int regionId, string reason) =>
+        new(
+            Seeded: false,
+            UserId: null,
+            RoleId: null,
+            RegionId: regionId,
+            CreatedUser: false,
+            PasswordUpdated: false,
+            CreatedUserRole: false,
+            CreatedRegionAssignment: false,
+            ReactivatedRegionAssignment: false,
+            SkippedReason: reason);
+}

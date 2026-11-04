@@ -43,7 +43,7 @@ public sealed class AdminTerritoryManagementTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app, assignManagerEmail: "marko.p@example.com");
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var detail = await admin.GetFromJsonAsync<AdminTerritoryDetailDto>(
             $"/api/admin/territories/{fixture.TerritoryId}");
 
@@ -69,7 +69,7 @@ public sealed class AdminTerritoryManagementTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var detail = await admin.GetFromJsonAsync<AdminTerritoryDetailDto>(
             $"/api/admin/territories/{fixture.TerritoryId}");
 
@@ -89,7 +89,7 @@ public sealed class AdminTerritoryManagementTests
         var firstManagerId = await GetUserIdAsync(app, "marko.p@example.com");
         var secondManagerId = await GetUserIdAsync(app, "elena@example.com");
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
 
         var assignedResponse = await admin.PutAsJsonAsync(
             $"/api/admin/territories/{fixture.TerritoryId}/manager",
@@ -137,7 +137,7 @@ public sealed class AdminTerritoryManagementTests
         var fixture = await CreateFixtureAsync(app, withBoundary: false);
         var managerId = await GetUserIdAsync(app, "marko.p@example.com");
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var assignResponse = await admin.PutAsJsonAsync(
             $"/api/admin/territories/{fixture.TerritoryId}/manager",
             new AdminAssignTerritoryManagerRequestDto { ManagerUserId = managerId });
@@ -175,7 +175,7 @@ public sealed class AdminTerritoryManagementTests
             await db.SaveChangesAsync();
         }
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await admin.PutAsJsonAsync(
             $"/api/admin/territories/{fixture.TerritoryId}/manager",
             new AdminAssignTerritoryManagerRequestDto { ManagerUserId = managerId });
@@ -779,7 +779,7 @@ public sealed class AdminTerritoryManagementTests
             Assert.Contains("cannot be assigned", feature.Properties.BoundaryRequiredMessage);
 
             var managerId = await GetUserIdAsync(app, "marko.p@example.com");
-            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
             var assignResponse = await admin.PutAsJsonAsync(
                 $"/api/admin/territories/{disputed.Id}/manager",
                 new AdminAssignTerritoryManagerRequestDto { ManagerUserId = managerId });
@@ -1517,7 +1517,7 @@ public sealed class AdminTerritoryManagementTests
                     ["BoundaryImport:Adm0GeoJsonPath"] = adm0Path
                 });
 
-            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
             var importResponse = await admin.PostAsync(
                 "/api/admin/territories/boundaries/import-local-adm0?force=false",
                 content: null);
@@ -1775,7 +1775,7 @@ public sealed class AdminTerritoryManagementTests
                 Assert.Equal(0, importSummary.FailedCount);
             }
 
-            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
             var listResponse = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
                 $"/api/admin/territory/regions/boundary-candidates?territoryId={territoryId}&level=ADM1&take=2");
 
@@ -1830,7 +1830,7 @@ public sealed class AdminTerritoryManagementTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var boundaryResponse = await admin.GetAsync("/api/admin/territories/map/boundaries");
         boundaryResponse.EnsureSuccessStatusCode();
         Assert.True(boundaryResponse.Headers.ETag is not null);
@@ -1896,7 +1896,7 @@ public sealed class AdminTerritoryManagementTests
             await db.SaveChangesAsync();
         }
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var map = await admin.GetFromJsonAsync<AdminTerritoryMapFeatureCollectionDto>("/api/admin/territories/map");
         var feature = Assert.Single(map!.Features, item => item.Properties.TerritoryId == fixture.TerritoryId);
 
@@ -1931,7 +1931,7 @@ public sealed class AdminTerritoryManagementTests
             await db.SaveChangesAsync();
         }
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var map = await admin.GetFromJsonAsync<AdminTerritoryMapFeatureCollectionDto>("/api/admin/territories/map");
         var feature = Assert.Single(map!.Features, item => item.Properties.TerritoryId == fixture.TerritoryId);
 
@@ -1959,7 +1959,7 @@ public sealed class AdminTerritoryManagementTests
             await db.SaveChangesAsync();
         }
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await admin.PostAsync(
             "/api/admin/territories/boundaries/rebuild-display-geometry",
             content: null);
@@ -2028,7 +2028,7 @@ public sealed class AdminTerritoryManagementTests
             await db.SaveChangesAsync();
         }
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var before = await admin.GetFromJsonAsync<AdminTerritoryMapFeatureCollectionDto>("/api/admin/territories/map");
         var beforeFeature = Assert.Single(before!.Features, item => item.Properties.Iso3 == "TKM");
         Assert.Null(beforeFeature.Geometry);
@@ -2096,7 +2096,7 @@ public sealed class AdminTerritoryManagementTests
             await db.SaveChangesAsync();
         }
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await admin.PostAsync(
             "/api/admin/territories/boundaries/rebuild-display-geometry?onlyMissing=true&iso3=ZZZ&force=false",
             content: null);
@@ -2174,7 +2174,7 @@ public sealed class AdminTerritoryManagementTests
             largestFullPolygonArea = LargestPolygonArea(geometry);
         }
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await admin.PostAsync(
             "/api/admin/territories/boundaries/rebuild-display-geometry?onlyMissing=true&iso3=RUS&force=false",
             content: null);
@@ -2247,7 +2247,7 @@ public sealed class AdminTerritoryManagementTests
             await db.SaveChangesAsync();
         }
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var debug = await admin.GetFromJsonAsync<BoundaryGeometryDebugDto>(
             "/api/admin/territories/boundaries/debug/RUS");
 
@@ -2391,7 +2391,7 @@ public sealed class AdminTerritoryManagementTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app, assignManagerEmail: "marko.p@example.com");
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await admin.GetAsync("/api/admin/territories/map");
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();
@@ -2417,7 +2417,7 @@ public sealed class AdminTerritoryManagementTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app, withBoundary: false);
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var map = await admin.GetFromJsonAsync<AdminTerritoryMapFeatureCollectionDto>("/api/admin/territories/map");
 
         Assert.NotNull(map);
@@ -2478,7 +2478,7 @@ public sealed class AdminTerritoryManagementTests
         var fixture = await CreateFixtureAsync(app);
         await GrantUserRoleAsync(app, "marko.p@example.com", RoleNames.RegionalManager);
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var result = await admin.GetFromJsonAsync<AdminTerritoryManagerSearchResponseDto>(
             $"/api/admin/territories/{fixture.TerritoryId}/assignable-managers?query=marko&take=10");
 

@@ -38,10 +38,10 @@ public sealed class DemoRegionalManagerSeederTests
                 .ToListAsync();
 
             var user = Assert.Single(users);
-            Assert.NotEqual("Proba123!", user.PasswordHash);
+            Assert.NotEqual("TEST-only-Fixture-9284!", user.PasswordHash);
 
             var passwordResult = new PasswordHasher<User>()
-                .VerifyHashedPassword(user, user.PasswordHash, "Proba123!");
+                .VerifyHashedPassword(user, user.PasswordHash, "TEST-only-Fixture-9284!");
             Assert.NotEqual(PasswordVerificationResult.Failed, passwordResult);
 
             Assert.Contains(user.UserRoles, userRole =>
@@ -65,7 +65,7 @@ public sealed class DemoRegionalManagerSeederTests
             new LoginRequestDto
             {
                 Email = "pera@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
                 RememberMe = false
             });
 
@@ -125,7 +125,7 @@ public sealed class DemoRegionalManagerSeederTests
         Assert.Equal(user.Id, seededUser.Id);
 
         var passwordResult = new PasswordHasher<User>()
-            .VerifyHashedPassword(seededUser, seededUser.PasswordHash, "Proba123!");
+            .VerifyHashedPassword(seededUser, seededUser.PasswordHash, "TEST-only-Fixture-9284!");
         Assert.NotEqual(PasswordVerificationResult.Failed, passwordResult);
 
         Assert.Equal(1, await db.UserRoles.CountAsync(existing =>

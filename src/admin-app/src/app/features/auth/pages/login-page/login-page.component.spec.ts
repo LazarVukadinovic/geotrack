@@ -65,7 +65,7 @@ describe('LoginComponent', () => {
     const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     component.email.set('mika@gmail.com');
-    component.password.set('Proba123!');
+    component.password.set('TEST-only-Fixture-9284!');
     component.onSubmit();
 
     const response = {
@@ -95,7 +95,7 @@ describe('LoginComponent', () => {
     const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     component.email.set('zika@gmail.com');
-    component.password.set('Proba123!');
+    component.password.set('TEST-only-Fixture-9284!');
     component.onSubmit();
 
     const response = {

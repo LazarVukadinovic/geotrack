@@ -77,7 +77,7 @@ public sealed class AdminReviewManagementTests
         var regionalResponse = await regionalManager.Client.GetAsync("/api/admin/reviews");
         Assert.Equal(HttpStatusCode.Forbidden, regionalResponse.StatusCode);
 
-        using var territoryManager = await LoginAdminAppAsync(app, "mika@gmail.com", "Proba123!");
+        using var territoryManager = await LoginAdminAppAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var territoryResponse = await territoryManager.Client.GetAsync("/api/admin/reviews");
         Assert.Equal(HttpStatusCode.Forbidden, territoryResponse.StatusCode);
     }
@@ -395,12 +395,12 @@ public sealed class AdminReviewManagementTests
 
     private static async Task<AuthenticatedClient> LoginAdminAsync(GeotrackApiFactory app)
     {
-        return await LoginAdminAppAsync(app, "zika@gmail.com", "Proba123!");
+        return await LoginAdminAppAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
     }
 
     private static async Task<AuthenticatedClient> LoginModeratorAsync(GeotrackApiFactory app)
     {
-        return await LoginAdminAppAsync(app, "moderator@gmail.com", "Proba123!");
+        return await LoginAdminAppAsync(app, "moderator@gmail.com", "TEST-only-Fixture-9284!");
     }
 
     private static async Task<AuthenticatedClient> LoginAdminAppAsync(

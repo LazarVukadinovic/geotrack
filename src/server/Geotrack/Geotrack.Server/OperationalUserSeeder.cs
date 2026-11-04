@@ -12,25 +12,6 @@ public static class OperationalUserSeeder
     public const string EnabledConfigKey = "Seed:EnableOperationalSeed";
     public const string OperationalUsersEnabledConfigKey = "Seed:OperationalUsers:Enabled";
 
-    private const string DefaultPassword = "Proba123!";
-
-    private const string AdminEmail = "zika@gmail.com";
-    private const string AdminUsername = "zika";
-
-    private const string ContentModeratorEmail = "moderator@gmail.com";
-    private const string ContentModeratorUsername = "moderator";
-
-    private const string CroatiaTerritoryManagerEmail = "mika@gmail.com";
-    private const string CroatiaTerritoryManagerUsername = "mika";
-
-    private const string CroatiaRegionalManagerEmail = "pera@gmail.com";
-    private const string CroatiaRegionalManagerUsername = "pera";
-
-    private const string SerbiaTerritoryManagerEmail = "nikola@gmail.com";
-    private const string SerbiaTerritoryManagerUsername = "nikola";
-    private const string SerbiaRegionalManagerEmail = "serbia.regional@gmail.com";
-    private const string SerbiaRegionalManagerUsername = "serbia-regional";
-
     private const string CroatiaName = "Croatia";
     private const string CroatiaIso2 = "HR";
     private const string CroatiaIso3 = "HRV";
@@ -52,14 +33,10 @@ public static class OperationalUserSeeder
         new(RoleNames.RegisteredUser, "Regular authenticated user.")
     ];
 
-    public static bool IsEnabled(IHostEnvironment environment, IConfiguration configuration)
-    {
-        var configured =
-            configuration.GetValue<bool?>(EnabledConfigKey)
-            ?? configuration.GetValue<bool?>(OperationalUsersEnabledConfigKey);
-
-        return configured ?? environment.IsDevelopment();
-    }
+    public static bool IsEnabled(IHostEnvironment environment, IConfiguration configuration) =>
+        configuration.GetValue<bool?>(EnabledConfigKey)
+        ?? configuration.GetValue<bool?>(OperationalUsersEnabledConfigKey)
+        ?? false;
 
     public static async Task<OperationalUserSeedResult> EnsureAsync(
         AppDbContext db,
@@ -67,185 +44,99 @@ public static class OperationalUserSeeder
         ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {
+        var accounts = BootstrapAccountConfiguration.Read(configuration);
+        if (accounts.Count == 0)
+            return new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            db.ChangeTracker.Clear();
+            return await EnsureCoreAsync(db, accounts, logger, cancellationToken);
+        });
+    }
+
+    private static async Task<OperationalUserSeedResult> EnsureCoreAsync(
+        AppDbContext db,
+        IReadOnlyList<BootstrapAccountConfiguration> accounts,
+        ILogger? logger,
+        CancellationToken cancellationToken)
+    {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // Serialize bootstrap across application instances, using the existing PostgreSQL database.
+        await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(741926305)", cancellationToken);
 
         var now = DateTime.UtcNow;
-        var roles = await EnsureRolesAsync(db, now, logger, cancellationToken);
+        var ids = new Dictionary<string, int>();
+        var croatiaId = 0;
+        var croatiaRegionId = 0;
+        var serbiaId = 0;
+        var serbiaRegionId = 0;
 
-        var croatia = await EnsureTerritoryAsync(
-            db,
-            CroatiaName,
-            CroatiaIso2,
-            CroatiaIso3,
-            ["Croatia", "Hrvatska", "Republika Hrvatska", "Republic of Croatia"],
-            now,
-            logger,
-            cancellationToken);
+        foreach (var account in accounts)
+        {
+            var matches = await db.Users.Include(user => user.UserRoles).ThenInclude(ur => ur.Role)
+                .Where(user => user.Email.ToLower() == account.Email)
+                .ToListAsync(cancellationToken);
+            if (matches.Count > 0)
+            {
+                if (matches.Count != 1 || !matches[0].UserRoles.Any(ur => RoleNames.Normalize(ur.Role.Name) == account.Role))
+                    throw new InvalidOperationException("Bootstrap account conflicts with an existing account. Resolve through authorized account management.");
 
-        var dubrovnikNeretva = await EnsureRegionAsync(
-            db,
-            croatia,
-            CroatiaSeedRegionName,
-            ["Dalmatia", "Dalmacija", "Dubrovnik Neretva", "Dubrovnik-Neretva"],
-            now,
-            logger,
-            cancellationToken);
+                // Never reset a hash, restore a revoked assignment, confirm email, or reactivate an account.
+                ids[account.Name] = matches[0].Id;
+                logger?.LogInformation("Privileged bootstrap {AccountType}: {Status}.", account.Name, "ExistingAccountPreserved");
+                continue;
+            }
 
-        var serbia = await EnsureTerritoryAsync(
-            db,
-            SerbiaName,
-            SerbiaIso2,
-            SerbiaIso3,
-            ["Serbia", "Srbija", "Republic of Serbia", "Republika Srbija"],
-            now,
-            logger,
-            cancellationToken);
+            if (await UsernameExistsAsync(db, account.Username, cancellationToken))
+                throw new InvalidOperationException("Bootstrap username conflicts with an existing account.");
 
-        var sumadija = await EnsureRegionAsync(
-            db,
-            serbia,
-            SerbiaSeedRegionName,
-            ["Sumadija District", "Šumadija District", "Sumadija", "Šumadija"],
-            now,
-            logger,
-            cancellationToken);
+            var roles = await EnsureRolesAsync(db, now, logger, cancellationToken);
+            var user = new User
+            {
+                Email = account.Email, Username = account.Username,
+                FirstName = account.FirstName, LastName = account.LastName, DisplayName = account.DisplayName,
+                IsEmailConfirmed = true, EmailConfirmedAt = now,
+                NeedsInterestsOnboarding = false, CreatedAt = now
+            };
+            user.PasswordHash = new PasswordHasher<User>().HashPassword(user, account.Password);
+            db.Users.Add(user);
+            await db.SaveChangesAsync(cancellationToken);
+            await EnsureUserRoleAsync(db, user, roles[account.Role], cancellationToken);
 
-        var adminUser = await EnsureUserAsync(
-            db,
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:Admin", "Seed:DemoAdmin", "Email", AdminEmail),
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:Admin", "Seed:DemoAdmin", "Username", AdminUsername),
-            "Zika",
-            "Admin",
-            "Zika",
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:Admin", "Seed:DemoAdmin", "Password", DefaultPassword),
-            location: null,
-            now,
-            cancellationToken);
-        await EnsureUserRoleAsync(db, adminUser.User, roles[RoleNames.Admin], cancellationToken);
-        logger?.LogInformation("Ensured operational Admin user {Email}.", adminUser.User.Email);
+            if (account.Role is RoleNames.TerritoryManager or RoleNames.RegionalManager)
+            {
+                var isCroatia = account.Name.StartsWith("Croatia", StringComparison.Ordinal);
+                var territory = await EnsureTerritoryAsync(db,
+                    isCroatia ? CroatiaName : SerbiaName, isCroatia ? CroatiaIso2 : SerbiaIso2,
+                    isCroatia ? CroatiaIso3 : SerbiaIso3,
+                    isCroatia ? ["Croatia", "Hrvatska", "Republika Hrvatska", "Republic of Croatia"]
+                        : ["Serbia", "Srbija", "Republic of Serbia", "Republika Srbija"],
+                    now, logger, cancellationToken);
+                if (isCroatia) croatiaId = territory.Id; else serbiaId = territory.Id;
 
-        var contentModeratorUser = await EnsureUserAsync(
-            db,
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:ContentModerator", "Seed:DemoContentModerator", "Email", ContentModeratorEmail),
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:ContentModerator", "Seed:DemoContentModerator", "Username", ContentModeratorUsername),
-            "Content",
-            "Moderator",
-            "Content Moderator",
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:ContentModerator", "Seed:DemoContentModerator", "Password", DefaultPassword),
-            location: null,
-            now,
-            cancellationToken);
-        await EnsureUserRoleAsync(db, contentModeratorUser.User, roles[RoleNames.ContentModerator], cancellationToken);
-        logger?.LogInformation(
-            "Ensured operational Content Moderator user {Email}.",
-            contentModeratorUser.User.Email);
+                if (account.Role == RoleNames.TerritoryManager)
+                    await EnsureTerritoryManagerAsync(db, user, roles[account.Role], territory, now, cancellationToken);
+                else
+                {
+                    var region = await EnsureRegionAsync(db, territory,
+                        isCroatia ? CroatiaSeedRegionName : SerbiaSeedRegionName,
+                        isCroatia ? ["Dalmatia", "Dalmacija", "Dubrovnik Neretva", "Dubrovnik-Neretva"]
+                            : ["Sumadija District", "Šumadija District", "Sumadija", "Šumadija"],
+                        now, logger, cancellationToken);
+                    if (isCroatia) croatiaRegionId = region.Id; else serbiaRegionId = region.Id;
+                    await EnsureRegionalManagerAsync(db, user, roles[account.Role], region, now, cancellationToken);
+                }
+            }
+            ids[account.Name] = user.Id;
+            logger?.LogInformation("Privileged bootstrap {AccountType}: {Status}.", account.Name, "Created");
+        }
 
-        var croatiaTerritoryManagerUser = await EnsureUserAsync(
-            db,
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:CroatiaTerritoryManager", "Seed:DemoTerritoryManager", "Email", CroatiaTerritoryManagerEmail),
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:CroatiaTerritoryManager", "Seed:DemoTerritoryManager", "Username", CroatiaTerritoryManagerUsername),
-            "Mika",
-            "Territory Manager",
-            "Mika",
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:CroatiaTerritoryManager", "Seed:DemoTerritoryManager", "Password", DefaultPassword),
-            CroatiaName,
-            now,
-            cancellationToken);
-        await EnsureTerritoryManagerAsync(
-            db,
-            croatiaTerritoryManagerUser.User,
-            roles[RoleNames.TerritoryManager],
-            croatia,
-            now,
-            cancellationToken);
-        logger?.LogInformation(
-            "Ensured operational Territory Manager {Email} assigned to {TerritoryName}.",
-            croatiaTerritoryManagerUser.User.Email,
-            croatia.Name);
-
-        var croatiaRegionalManagerUser = await EnsureUserAsync(
-            db,
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:CroatiaRegionalManager", "Seed:DemoRegionalManager", "Email", CroatiaRegionalManagerEmail),
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:CroatiaRegionalManager", "Seed:DemoRegionalManager", "Username", CroatiaRegionalManagerUsername),
-            "Pera",
-            "Regional Manager",
-            "Pera",
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:CroatiaRegionalManager", "Seed:DemoRegionalManager", "Password", DefaultPassword),
-            dubrovnikNeretva.Name,
-            now,
-            cancellationToken);
-        await EnsureRegionalManagerAsync(
-            db,
-            croatiaRegionalManagerUser.User,
-            roles[RoleNames.RegionalManager],
-            dubrovnikNeretva,
-            now,
-            cancellationToken);
-        logger?.LogInformation(
-            "Ensured operational Regional Manager {Email} assigned to {RegionName}.",
-            croatiaRegionalManagerUser.User.Email,
-            dubrovnikNeretva.Name);
-
-        var serbiaTerritoryManagerUser = await EnsureUserAsync(
-            db,
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:SerbiaTerritoryManager", "Seed:SerbiaTerritoryManager", "Email", SerbiaTerritoryManagerEmail),
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:SerbiaTerritoryManager", "Seed:SerbiaTerritoryManager", "Username", SerbiaTerritoryManagerUsername),
-            "Nikola",
-            "Territory Manager",
-            "Nikola Territory Manager",
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:SerbiaTerritoryManager", "Seed:SerbiaTerritoryManager", "Password", DefaultPassword),
-            SerbiaName,
-            now,
-            cancellationToken);
-        await EnsureTerritoryManagerAsync(
-            db,
-            serbiaTerritoryManagerUser.User,
-            roles[RoleNames.TerritoryManager],
-            serbia,
-            now,
-            cancellationToken);
-        logger?.LogInformation(
-            "Ensured operational Territory Manager {Email} assigned to {TerritoryName}.",
-            serbiaTerritoryManagerUser.User.Email,
-            serbia.Name);
-
-        var serbiaRegionalManagerUser = await EnsureUserAsync(
-            db,
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:SerbiaRegionalManager", "Seed:SerbiaRegionalManager", "Email", SerbiaRegionalManagerEmail),
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:SerbiaRegionalManager", "Seed:SerbiaRegionalManager", "Username", SerbiaRegionalManagerUsername),
-            "Serbia",
-            "Regional Manager",
-            "Serbia Regional Manager",
-            ReadConfiguredValue(configuration, "Seed:OperationalUsers:SerbiaRegionalManager", "Seed:SerbiaRegionalManager", "Password", DefaultPassword),
-            sumadija.Name,
-            now,
-            cancellationToken);
-        await EnsureRegionalManagerAsync(
-            db,
-            serbiaRegionalManagerUser.User,
-            roles[RoleNames.RegionalManager],
-            sumadija,
-            now,
-            cancellationToken);
-        logger?.LogInformation(
-            "Ensured operational Regional Manager {Email} assigned to {RegionName}.",
-            serbiaRegionalManagerUser.User.Email,
-            sumadija.Name);
-
-        await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-
-        return new OperationalUserSeedResult(
-            AdminUserId: adminUser.User.Id,
-            ContentModeratorUserId: contentModeratorUser.User.Id,
-            CroatiaTerritoryManagerUserId: croatiaTerritoryManagerUser.User.Id,
-            CroatiaRegionalManagerUserId: croatiaRegionalManagerUser.User.Id,
-            SerbiaTerritoryManagerUserId: serbiaTerritoryManagerUser.User.Id,
-            SerbiaRegionalManagerUserId: serbiaRegionalManagerUser.User.Id,
-            CroatiaTerritoryId: croatia.Id,
-            CroatiaRegionId: dubrovnikNeretva.Id,
-            SerbiaTerritoryId: serbia.Id,
-            SerbiaRegionId: sumadija.Id);
+        return new(ids.GetValueOrDefault("Admin"), ids.GetValueOrDefault("ContentModerator"),
+            ids.GetValueOrDefault("CroatiaTerritoryManager"), ids.GetValueOrDefault("CroatiaRegionalManager"),
+            ids.GetValueOrDefault("SerbiaTerritoryManager"), ids.GetValueOrDefault("SerbiaRegionalManager"),
+            croatiaId, croatiaRegionId, serbiaId, serbiaRegionId);
     }
 
     private static async Task<Dictionary<string, Role>> EnsureRolesAsync(
@@ -467,159 +358,6 @@ public static class OperationalUserSeeder
         return region;
     }
 
-    private static async Task<OperationalUserEnsureResult> EnsureUserAsync(
-        AppDbContext db,
-        string email,
-        string username,
-        string firstName,
-        string lastName,
-        string displayName,
-        string password,
-        string? location,
-        DateTime now,
-        CancellationToken cancellationToken)
-    {
-        var normalizedEmail = NormalizeEmail(email);
-        var hasher = new PasswordHasher<User>();
-        var user = await FindUserByEmailAsync(db, normalizedEmail, cancellationToken);
-        var created = false;
-        var passwordInitialized = false;
-
-        if (user is null)
-        {
-            user = new User
-            {
-                Username = await ResolveUsernameAsync(db, username, normalizedEmail, cancellationToken),
-                Email = normalizedEmail,
-                FirstName = firstName,
-                LastName = lastName,
-                DisplayName = displayName,
-                PhoneNumber = string.Empty,
-                Location = location,
-                NeedsInterestsOnboarding = false,
-                CreatedAt = now
-            };
-
-            user.PasswordHash = hasher.HashPassword(user, password);
-            db.Users.Add(user);
-            await db.SaveChangesAsync(cancellationToken);
-            created = true;
-            passwordInitialized = true;
-
-            return new OperationalUserEnsureResult(user, created, passwordInitialized);
-        }
-
-        var changed = false;
-
-        if (string.IsNullOrWhiteSpace(user.PasswordHash))
-        {
-            user.PasswordHash = hasher.HashPassword(user, password);
-            passwordInitialized = true;
-            changed = true;
-        }
-
-        if (user.IsSuspended)
-        {
-            user.IsSuspended = false;
-            user.SuspendedAt = null;
-            user.SuspendedByUserId = null;
-            changed = true;
-        }
-
-        if (user.IsDeleted)
-        {
-            user.IsDeleted = false;
-            user.DeletedAt = null;
-            user.DeletedByUserId = null;
-            changed = true;
-        }
-
-        if (user.NeedsInterestsOnboarding)
-        {
-            user.NeedsInterestsOnboarding = false;
-            changed = true;
-        }
-
-        if (string.IsNullOrWhiteSpace(user.FirstName))
-        {
-            user.FirstName = firstName;
-            changed = true;
-        }
-
-        if (string.IsNullOrWhiteSpace(user.LastName))
-        {
-            user.LastName = lastName;
-            changed = true;
-        }
-
-        if (string.IsNullOrWhiteSpace(user.DisplayName))
-        {
-            user.DisplayName = displayName;
-            changed = true;
-        }
-
-        if (string.IsNullOrWhiteSpace(user.Location) && !string.IsNullOrWhiteSpace(location))
-        {
-            user.Location = location;
-            changed = true;
-        }
-
-        if (changed)
-        {
-            user.UpdatedAt = now;
-            await db.SaveChangesAsync(cancellationToken);
-        }
-
-        return new OperationalUserEnsureResult(user, created, passwordInitialized);
-    }
-
-    private static async Task<User?> FindUserByEmailAsync(
-        AppDbContext db,
-        string normalizedEmail,
-        CancellationToken cancellationToken)
-    {
-        var matches = await db.Users
-            .Where(existing => existing.Email.ToLower() == normalizedEmail)
-            .OrderBy(existing => existing.Id)
-            .ToListAsync(cancellationToken);
-
-        return matches.FirstOrDefault(existing =>
-                string.Equals(existing.Email, normalizedEmail, StringComparison.Ordinal))
-            ?? matches.FirstOrDefault();
-    }
-
-    private static async Task<string> ResolveUsernameAsync(
-        AppDbContext db,
-        string preferredUsername,
-        string normalizedEmail,
-        CancellationToken cancellationToken)
-    {
-        var normalizedUsername = string.IsNullOrWhiteSpace(preferredUsername)
-            ? normalizedEmail
-            : preferredUsername.Trim();
-
-        if (!await UsernameExistsAsync(db, normalizedUsername, cancellationToken))
-        {
-            return normalizedUsername;
-        }
-
-        if (!await UsernameExistsAsync(db, normalizedEmail, cancellationToken))
-        {
-            return normalizedEmail;
-        }
-
-        for (var suffix = 2; suffix < 100; suffix++)
-        {
-            var candidate = $"{normalizedUsername}-{suffix}";
-            if (!await UsernameExistsAsync(db, candidate, cancellationToken))
-            {
-                return candidate;
-            }
-        }
-
-        return $"{normalizedUsername}-{Guid.NewGuid():N}";
-    }
-
     private static Task<bool> UsernameExistsAsync(
         AppDbContext db,
         string username,
@@ -724,35 +462,6 @@ public static class OperationalUserSeeder
         }
     }
 
-    private static string ReadConfiguredValue(
-        IConfiguration configuration,
-        string operationalSectionName,
-        string legacySectionName,
-        string key,
-        string fallback)
-    {
-        var operationalValue = configuration.GetSection(operationalSectionName)[key];
-        if (!string.IsNullOrWhiteSpace(operationalValue))
-        {
-            return operationalValue.Trim();
-        }
-
-        var legacyValue = configuration.GetSection(legacySectionName)[key];
-        if (!string.IsNullOrWhiteSpace(legacyValue))
-        {
-            return legacyValue.Trim();
-        }
-
-        return fallback;
-    }
-
-    private static string NormalizeEmail(string email)
-    {
-        return string.IsNullOrWhiteSpace(email)
-            ? throw new InvalidOperationException("Operational seed user email is required.")
-            : email.Trim().ToLowerInvariant();
-    }
-
     private static string NormalizeLookupValue(string? value) =>
         string.IsNullOrWhiteSpace(value)
             ? string.Empty
@@ -760,7 +469,6 @@ public static class OperationalUserSeeder
 
     private sealed record OperationalRoleDefinition(string Name, string Description);
 
-    private sealed record OperationalUserEnsureResult(User User, bool Created, bool PasswordInitialized);
 }
 
 public sealed record OperationalUserSeedResult(

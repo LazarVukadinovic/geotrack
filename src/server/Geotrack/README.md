@@ -67,10 +67,10 @@ dotnet run --project Geotrack.Server
 
 U razvojnom okruženju, pri pokretanju se automatski primenjuju migracije i unose demo podaci ako je baza prazna.
 
-Demo korisnik:
-
-- Email: `marko.p@example.com`
-- Lozinka: `password123`
+Privilegovani nalozi zahtevaju izričito uključenu inicijalizaciju i bezbedno dostavljene
+kredencijale. Pratite [uputstvo za administratora](../../../README.md#bezbedno-inicijalno-podešavanje-administratora).
+Demo sadržaj nije dostupan u produkciji; javni seed ne kreira korisnike.
+Isključen SMTP ne isporučuje poruke i ne beleži njihove linkove ili tokene.
 
 ## Provera
 

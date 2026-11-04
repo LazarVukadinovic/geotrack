@@ -54,7 +54,7 @@ public sealed class RegionBoundaryBackfillTests
             var fixture = await CreateBackfillFixtureAsync(app, "Inside Region");
             await ImportAdmBoundaryCandidatesAsync(app);
 
-            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
             var response = await admin.PostAsJsonAsync(
                 "/api/admin/regions/backfill-boundary-candidates?countryIso3=TAA&dryRun=true",
                 new { });
@@ -99,7 +99,7 @@ public sealed class RegionBoundaryBackfillTests
             var fixture = await CreateBackfillFixtureAsync(app, "Inside Region", includeDestination: true);
             await ImportAdmBoundaryCandidatesAsync(app);
 
-            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
             var response = await admin.PostAsJsonAsync(
                 "/api/admin/regions/backfill-boundary-candidates?countryIso3=TAA&dryRun=false",
                 new { });
@@ -135,7 +135,7 @@ public sealed class RegionBoundaryBackfillTests
                         .SingleAsync());
             }
 
-            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
             var candidates = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
                 $"/api/admin/territory/regions/boundary-candidates?territoryId={fixture.TerritoryId}&level=ADM1&take=10");
             Assert.NotNull(candidates);
@@ -178,7 +178,7 @@ public sealed class RegionBoundaryBackfillTests
             var fixture = await CreateBackfillFixtureAsync(app, "Dalmatia", iso3: "HRV", includeDestination: true);
             await ImportAdmBoundaryCandidatesAsync(app);
 
-            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
             var response = await admin.PostAsJsonAsync(
                 "/api/admin/regions/backfill-boundary-candidates?countryIso3=HRV&dryRun=false",
                 new { });
@@ -232,7 +232,7 @@ public sealed class RegionBoundaryBackfillTests
 
             await using var scope = app.Services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            await SeedData.InitializeAsync(db);
+            await SeedData.InitializeAsync(db, scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>());
 
             var seedRegion = await db.Regions.SingleAsync(region => region.Name == "Dubrovnik-Neretva");
             var candidate = await db.AdministrativeBoundaryCandidates.SingleAsync(candidate =>
@@ -323,7 +323,7 @@ public sealed class RegionBoundaryBackfillTests
                     assignment.IsActive));
             }
 
-            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
             var candidates = await manager.GetFromJsonAsync<BoundaryRegionCandidateResponseDto>(
                 $"/api/admin/territory/regions/boundary-candidates?territoryId={territoryId}&level=ADM1&take=10");
 
@@ -372,7 +372,7 @@ public sealed class RegionBoundaryBackfillTests
                 await CreateBackfillFixtureAsync(noAliasApp, "Dalmatia", iso3: "TBB");
                 await ImportAdmBoundaryCandidatesAsync(noAliasApp);
 
-                using var admin = await LoginAdminAsync(noAliasApp, "zika@gmail.com", "Proba123!");
+                using var admin = await LoginAdminAsync(noAliasApp, "zika@gmail.com", "TEST-only-Fixture-9284!");
                 var ambiguousResponse = await admin.PostAsJsonAsync(
                     "/api/admin/regions/backfill-boundary-candidates?countryIso3=TAA&dryRun=true",
                     new { });
@@ -402,7 +402,7 @@ public sealed class RegionBoundaryBackfillTests
                 await CreateBackfillFixtureAsync(aliasApp, "Dalmatia", iso3: "TBB");
                 await ImportAdmBoundaryCandidatesAsync(aliasApp);
 
-                using var admin = await LoginAdminAsync(aliasApp, "zika@gmail.com", "Proba123!");
+                using var admin = await LoginAdminAsync(aliasApp, "zika@gmail.com", "TEST-only-Fixture-9284!");
                 var response = await admin.PostAsJsonAsync(
                     "/api/admin/regions/backfill-boundary-candidates?countryIso3=TBB&dryRun=true",
                     new { });
@@ -431,7 +431,7 @@ public sealed class RegionBoundaryBackfillTests
             new { });
         Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
 
-        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var managerResponse = await manager.PostAsJsonAsync(
             "/api/admin/regions/backfill-boundary-candidates?countryIso3=TAA&dryRun=true",
             new { });

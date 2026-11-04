@@ -273,7 +273,7 @@ public sealed class AdmBoundaryRegionSyncTests
                     assignment => assignment.TerritoryId == serbia.Id);
             }
 
-            using (var nikolaClient = await LoginAdminAsync(app, "nikola@gmail.com", "Proba123!"))
+            using (var nikolaClient = await LoginAdminAsync(app, "nikola@gmail.com", "TEST-only-Fixture-9284!"))
             {
                 var assignedTerritories = await nikolaClient.GetFromJsonAsync<List<TerritoryAssignedTerritoryDto>>(
                     "/api/admin/territory/territories");
@@ -293,14 +293,14 @@ public sealed class AdmBoundaryRegionSyncTests
                 Assert.Equal(HttpStatusCode.Forbidden, croatiaResponse.StatusCode);
             }
 
-            using (var mikaClient = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!"))
+            using (var mikaClient = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!"))
             {
                 var serbiaResponse = await mikaClient.GetAsync(
                     $"/api/admin/territory/regions?territoryId={serbiaId}&take=50");
                 Assert.Equal(HttpStatusCode.Forbidden, serbiaResponse.StatusCode);
             }
 
-            using (var regionalClient = await LoginAdminAsync(app, "serbia.regional@gmail.com", "Proba123!"))
+            using (var regionalClient = await LoginAdminAsync(app, "serbia.regional@gmail.com", "TEST-only-Fixture-9284!"))
             {
                 var assignedRegions = await regionalClient.GetFromJsonAsync<List<RegionalAssignedRegionDto>>(
                     "/api/admin/regional/regions");
@@ -359,7 +359,7 @@ public sealed class AdmBoundaryRegionSyncTests
                 await db.SaveChangesAsync();
             }
 
-            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
             var dryRunResponse = await admin.PostAsJsonAsync(
                 $"/api/admin/territories/{serbiaId}/regions/assign-content-by-boundary?dryRun=true",
                 new { });
@@ -425,7 +425,7 @@ public sealed class AdmBoundaryRegionSyncTests
             var otherTerritoryId = await CreateTerritoryAsync(app, "TBB");
             await ImportAdm1CandidatesAsync(app);
 
-            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
             var assignedResponse = await manager.PostAsJsonAsync(
                 $"/api/admin/territory/regions/sync-from-adm1?territoryId={assignedTerritoryId}&dryRun=true",
                 new { });
@@ -464,7 +464,7 @@ public sealed class AdmBoundaryRegionSyncTests
             var territoryId = await CreateTerritoryManagerFixtureAsync(app, "TAA");
             await ImportAdm1CandidatesAsync(app);
 
-            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
             var initial = await manager.GetFromJsonAsync<TerritoryRegionSetupStatusDto>(
                 $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
 
@@ -557,7 +557,7 @@ public sealed class AdmBoundaryRegionSyncTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var territoryId = await CreateTerritoryManagerFixtureAsync(app, "QAA");
 
-        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var status = await manager.GetFromJsonAsync<TerritoryRegionSetupStatusDto>(
             $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
 
@@ -599,7 +599,7 @@ public sealed class AdmBoundaryRegionSyncTests
                 Assert.Equal(2, summary.CreatedCount);
             }
 
-            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
             var status = await manager.GetFromJsonAsync<TerritoryRegionSetupStatusDto>(
                 $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
 
@@ -643,7 +643,7 @@ public sealed class AdmBoundaryRegionSyncTests
             var territoryId = await CreateTerritoryManagerFixtureAsync(app, "TAA");
             await ImportAdm1CandidatesAsync(app);
 
-            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+            using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
 
             var setupStatusResponse = await admin.GetAsync(
                 $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
@@ -706,7 +706,7 @@ public sealed class AdmBoundaryRegionSyncTests
                 await db.SaveChangesAsync();
             }
 
-            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+            using var manager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
             var before = await manager.GetFromJsonAsync<TerritoryRegionSetupStatusDto>(
                 $"/api/admin/territory/regions/setup-status?territoryId={territoryId}");
             Assert.NotNull(before);

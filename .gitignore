@@ -127,3 +127,24 @@ src/server/Geotrack/Geotrack.Server/media/source/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local secrets and private deployment material (never commit)
+!.env.*.example
+appsettings.local.json
+appsettings.*.local.json
+secrets.json
+.secrets/
+secrets/
+.aws/
+.ssh/
+.npmrc
+.pgpass
+pgpass.conf
+.aspnet/DataProtection-Keys/
+data-protection-keys/
+src/server/Geotrack/Geotrack.Server/media/uploads/**/*
+!src/server/Geotrack/Geotrack.Server/media/uploads/**/
+!src/server/Geotrack/Geotrack.Server/media/uploads/**/.gitkeep
+*.p8
+*.jks
+*.keystore

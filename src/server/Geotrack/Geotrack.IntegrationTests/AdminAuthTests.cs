@@ -67,7 +67,7 @@ public sealed class AdminAuthTests
             new LoginRequestDto
             {
                 Email = "moderator@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
                 RememberMe = false
             });
 
@@ -227,7 +227,7 @@ public sealed class AdminAuthTests
             Content = JsonContent.Create(new LoginRequestDto
             {
                 Email = "zika@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
                 RememberMe = true
             })
         };
@@ -255,7 +255,7 @@ public sealed class AdminAuthTests
             new LoginRequestDto
             {
                 Email = "mika@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
                 RememberMe = true
             });
         login.EnsureSuccessStatusCode();
@@ -293,7 +293,7 @@ public sealed class AdminAuthTests
             new LoginRequestDto
             {
                 Email = "zika@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
                 RememberMe = true
             });
         adminLogin.EnsureSuccessStatusCode();
@@ -362,7 +362,7 @@ public sealed class AdminAuthTests
             new LoginRequestDto
             {
                 Email = "moderator@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
                 RememberMe = false
             });
         login.EnsureSuccessStatusCode();

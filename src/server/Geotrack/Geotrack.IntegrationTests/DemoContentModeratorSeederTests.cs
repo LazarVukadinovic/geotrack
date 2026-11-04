@@ -43,10 +43,10 @@ public sealed class DemoContentModeratorSeederTests
             Assert.False(user.IsSuspended);
             Assert.False(user.IsDeleted);
             Assert.False(user.NeedsInterestsOnboarding);
-            Assert.NotEqual("Proba123!", user.PasswordHash);
+            Assert.NotEqual("TEST-only-Fixture-9284!", user.PasswordHash);
 
             var passwordResult = new PasswordHasher<User>()
-                .VerifyHashedPassword(user, user.PasswordHash, "Proba123!");
+                .VerifyHashedPassword(user, user.PasswordHash, "TEST-only-Fixture-9284!");
             Assert.NotEqual(PasswordVerificationResult.Failed, passwordResult);
 
             Assert.Contains(user.UserRoles, userRole =>
@@ -63,7 +63,7 @@ public sealed class DemoContentModeratorSeederTests
             new LoginRequestDto
             {
                 Email = "moderator@gmail.com",
-                Password = "Proba123!",
+                Password = "TEST-only-Fixture-9284!",
                 RememberMe = false
             });
 
@@ -163,7 +163,7 @@ public sealed class DemoContentModeratorSeederTests
         Assert.False(seededUser.IsDeleted);
 
         var passwordResult = new PasswordHasher<User>()
-            .VerifyHashedPassword(seededUser, seededUser.PasswordHash, "Proba123!");
+            .VerifyHashedPassword(seededUser, seededUser.PasswordHash, "TEST-only-Fixture-9284!");
         Assert.NotEqual(PasswordVerificationResult.Failed, passwordResult);
 
         Assert.Equal(1, await db.UserRoles.CountAsync(existing =>

@@ -306,18 +306,9 @@ builder.Services.AddScoped<IInterestTopicRepository, InterestTopicRepository>();
 
 var forwardedHeadersEnabled = ConfigureForwardedHeaders(builder);
 
-var jwtKey = builder.Configuration["Jwt:Key"];
-if (string.IsNullOrWhiteSpace(jwtKey))
-{
-    throw new InvalidOperationException(
-        "Jwt:Key is required. Set via user-secrets, environment variable, or appsettings.*.json.");
-}
-
-var jwtIssuer = builder.Configuration["Jwt:Issuer"]
-    ?? throw new InvalidOperationException("Jwt:Issuer is required.");
-
-var jwtAudience = builder.Configuration["Jwt:Audience"]
-    ?? throw new InvalidOperationException("Jwt:Audience is required.");
+var jwtKey = JwtConfiguration.RequireSigningKey(builder.Configuration);
+var jwtIssuer = JwtConfiguration.RequireValue(builder.Configuration, "Jwt:Issuer");
+var jwtAudience = JwtConfiguration.RequireValue(builder.Configuration, "Jwt:Audience");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -599,6 +590,8 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Validate before migrations or any other startup database work.
+_ = BootstrapAccountConfiguration.Read(app.Configuration);
 await PostgisStartup.EnsureReadyAsync(app.Services, app.Environment.IsDevelopment());
 
 var shouldSeedOperationalUsers = OperationalUserSeeder.IsEnabled(app.Environment, app.Configuration);
@@ -652,7 +645,7 @@ if (shouldAutoMigrate || shouldSeedOperationalUsers || shouldSeedDemoContent || 
 
         if (shouldSeedDemoContent)
         {
-            await SeedData.InitializeAsync(db);
+            await SeedData.InitializeAsync(db, app.Environment);
         }
         else if (shouldSeedPublicContent)
         {
@@ -1011,8 +1004,8 @@ static bool IsDemoContentSeedEnabledForEnvironment(IHostEnvironment environment,
         return false;
     }
 
-    return environment.IsDevelopment()
-        || configuration.GetValue<bool>("Seed:RunInProduction");
+    // Demo users are fixtures; no production override can enable them.
+    return environment.IsDevelopment();
 }
 
 static bool IsPublicContentSeedEnabledForEnvironment(IHostEnvironment environment, IConfiguration configuration)

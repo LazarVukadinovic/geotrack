@@ -26,7 +26,7 @@ public sealed class TerritoryAnalyticsTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateTerritoryAnalyticsFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var overview = await client.GetFromJsonAsync<TerritoryAnalyticsOverviewDto>(
             $"/api/admin/territory/analytics/overview?territoryId={fixture.AssignedTerritoryId}&period=6m&status=active&take=5");
 
@@ -87,7 +87,7 @@ public sealed class TerritoryAnalyticsTests
             $"/api/admin/territory/analytics/overview?territoryId={fixture.AssignedTerritoryId}");
         Assert.Equal(HttpStatusCode.Forbidden, regional.StatusCode);
 
-        using var territoryClient = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var territoryClient = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var unassignedTerritory = await territoryClient.GetAsync(
             $"/api/admin/territory/analytics/overview?territoryId={fixture.UnassignedTerritoryId}");
         Assert.Equal(HttpStatusCode.Forbidden, unassignedTerritory.StatusCode);
@@ -102,7 +102,7 @@ public sealed class TerritoryAnalyticsTests
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateTerritoryAnalyticsFixtureAsync(app);
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var secondary = await client.GetFromJsonAsync<TerritoryAnalyticsOverviewDto>(
             $"/api/admin/territory/analytics/overview?territoryId={fixture.AssignedTerritoryId}&period=6m&status=active&regionIds={fixture.SecondaryRegionId}");
@@ -137,7 +137,7 @@ public sealed class TerritoryAnalyticsTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateTerritoryAnalyticsFixtureAsync(app);
         var emptyTerritoryId = await CreateEmptyAssignedTerritoryAsync(app);
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var empty = await client.GetFromJsonAsync<TerritoryAnalyticsOverviewDto>(
             $"/api/admin/territory/analytics/overview?territoryId={emptyTerritoryId}&period=6m&status=active");

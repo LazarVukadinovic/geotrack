@@ -20,7 +20,7 @@ public sealed class AdminDashboardTests
     public async Task Admin_can_load_dashboard_with_current_user_and_links()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
-        using var client = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
 
         var dashboard = await client.GetFromJsonAsync<AdminDashboardDto>("/api/admin/dashboard");
 
@@ -48,11 +48,11 @@ public sealed class AdminDashboardTests
         var regionalManagerResponse = await regionalManager.GetAsync("/api/admin/dashboard");
         Assert.Equal(HttpStatusCode.Forbidden, regionalManagerResponse.StatusCode);
 
-        using var territoryManager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var territoryManager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var territoryManagerResponse = await territoryManager.GetAsync("/api/admin/dashboard");
         Assert.Equal(HttpStatusCode.Forbidden, territoryManagerResponse.StatusCode);
 
-        using var contentModerator = await LoginAdminAsync(app, "moderator@gmail.com", "Proba123!");
+        using var contentModerator = await LoginAdminAsync(app, "moderator@gmail.com", "TEST-only-Fixture-9284!");
         var contentModeratorResponse = await contentModerator.GetAsync("/api/admin/dashboard");
         Assert.Equal(HttpStatusCode.Forbidden, contentModeratorResponse.StatusCode);
     }
@@ -67,7 +67,7 @@ public sealed class AdminDashboardTests
         var anonymous = await anonymousClient.GetAsync("/api/admin/content-moderator/dashboard");
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var adminResponse = await admin.GetAsync("/api/admin/content-moderator/dashboard");
         Assert.Equal(HttpStatusCode.Forbidden, adminResponse.StatusCode);
 
@@ -76,11 +76,11 @@ public sealed class AdminDashboardTests
         var regionalManagerResponse = await regionalManager.GetAsync("/api/admin/content-moderator/dashboard");
         Assert.Equal(HttpStatusCode.Forbidden, regionalManagerResponse.StatusCode);
 
-        using var territoryManager = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var territoryManager = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var territoryManagerResponse = await territoryManager.GetAsync("/api/admin/content-moderator/dashboard");
         Assert.Equal(HttpStatusCode.Forbidden, territoryManagerResponse.StatusCode);
 
-        using var moderator = await LoginAdminAsync(app, "moderator@gmail.com", "Proba123!");
+        using var moderator = await LoginAdminAsync(app, "moderator@gmail.com", "TEST-only-Fixture-9284!");
         var dashboard = await moderator.GetFromJsonAsync<ContentModeratorDashboardDto>("/api/admin/content-moderator/dashboard");
         var expected = await GetExpectedCountsAsync(app);
 
@@ -119,7 +119,7 @@ public sealed class AdminDashboardTests
         await EnsureDashboardReviewReportsAsync(app);
         await EnsureDashboardSupportTicketsAsync(app);
 
-        using var client = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
 
         var dashboard = await client.GetFromJsonAsync<AdminDashboardDto>("/api/admin/dashboard");
         var expected = await GetExpectedCountsAsync(app);
@@ -150,7 +150,7 @@ public sealed class AdminDashboardTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         await ClearReportReviewAndAssignmentTablesAsync(app);
 
-        using var client = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await client.GetAsync("/api/admin/dashboard");
 
         response.EnsureSuccessStatusCode();

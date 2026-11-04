@@ -1,3 +1,7 @@
+// Integration-test fixture only. This file is not compiled or published with the server.
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Geotrack.Application.Security;
 using Geotrack.Domain.Entities.Users;
 using Geotrack.Infrastructure;
@@ -6,14 +10,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Geotrack.Server;
 
-public static class DemoContentModeratorSeeder
+public static class DemoAdminSeeder
 {
-    public const string EnabledConfigKey = "Seed:DemoContentModerator:Enabled";
+    public const string EnabledConfigKey = "Seed:DemoAdmin:Enabled";
 
-    private const string ConfigSectionName = "Seed:DemoContentModerator";
-    private const string DefaultEmail = "moderator@gmail.com";
-    private const string DefaultPassword = "Proba123!";
-    private const string DefaultUsername = "moderator";
+    private const string ConfigSectionName = "Seed:DemoAdmin";
+    private const string DefaultEmail = "zika@gmail.com";
+    private const string DefaultPassword = "TEST-only-Fixture-9284!";
+    private const string DefaultUsername = "zika";
 
     public static bool IsEnabled(IHostEnvironment environment, IConfiguration configuration)
     {
@@ -21,7 +25,7 @@ public static class DemoContentModeratorSeeder
         return configured ?? environment.IsDevelopment();
     }
 
-    public static async Task<DemoContentModeratorSeedResult> EnsureAsync(
+    public static async Task<DemoAdminSeedResult> EnsureAsync(
         AppDbContext db,
         IConfiguration configuration,
         ILogger? logger = null,
@@ -37,7 +41,7 @@ public static class DemoContentModeratorSeeder
 
         var now = DateTime.UtcNow;
         var hasher = new PasswordHasher<User>();
-        var role = await EnsureContentModeratorRoleAsync(db, logger, cancellationToken);
+        var role = await EnsureAdminRoleAsync(db, logger, cancellationToken);
         var user = await FindUserByEmailAsync(db, email, cancellationToken);
 
         var createdUser = false;
@@ -49,9 +53,9 @@ public static class DemoContentModeratorSeeder
             {
                 Username = await ResolveNewUsernameAsync(db, email, cancellationToken),
                 Email = email,
-                FirstName = "Content",
-                LastName = "Moderator",
-                DisplayName = "Content Moderator",
+                FirstName = "Zika",
+                LastName = "Admin",
+                DisplayName = "Zika",
                 PhoneNumber = string.Empty,
                 NeedsInterestsOnboarding = false,
                 CreatedAt = now
@@ -63,32 +67,12 @@ public static class DemoContentModeratorSeeder
             createdUser = true;
             passwordUpdated = true;
         }
-        else
+        else if (PasswordNeedsReset(hasher, user, password))
         {
-            var changed = false;
-            if (PasswordNeedsReset(hasher, user, password))
-            {
-                user.PasswordHash = hasher.HashPassword(user, password);
-                passwordUpdated = true;
-                changed = true;
-            }
-
-            if (user.IsSuspended || user.IsDeleted)
-            {
-                user.IsSuspended = false;
-                user.SuspendedAt = null;
-                user.SuspendedByUserId = null;
-                user.IsDeleted = false;
-                user.DeletedAt = null;
-                user.DeletedByUserId = null;
-                changed = true;
-            }
-
-            if (changed)
-            {
-                user.UpdatedAt = now;
-                await db.SaveChangesAsync(cancellationToken);
-            }
+            user.PasswordHash = hasher.HashPassword(user, password);
+            user.UpdatedAt = now;
+            await db.SaveChangesAsync(cancellationToken);
+            passwordUpdated = true;
         }
 
         var createdUserRole = false;
@@ -113,9 +97,9 @@ public static class DemoContentModeratorSeeder
 
         await transaction.CommitAsync(cancellationToken);
 
-        logger?.LogInformation("Ensured demo Content Moderator user {Email}.", email);
+        logger?.LogInformation("Ensured demo Admin user {Email}.", email);
 
-        return new DemoContentModeratorSeedResult(
+        return new DemoAdminSeedResult(
             Seeded: true,
             UserId: user.Id,
             RoleId: role.Id,
@@ -124,14 +108,14 @@ public static class DemoContentModeratorSeeder
             CreatedUserRole: createdUserRole);
     }
 
-    private static async Task<Role> EnsureContentModeratorRoleAsync(
+    private static async Task<Role> EnsureAdminRoleAsync(
         AppDbContext db,
         ILogger? logger,
         CancellationToken cancellationToken)
     {
         var roles = await db.Roles.ToListAsync(cancellationToken);
         var role = roles.FirstOrDefault(existing =>
-            RoleNames.Normalize(existing.Name) == RoleNames.ContentModerator);
+            RoleNames.Normalize(existing.Name) == RoleNames.Admin);
 
         if (role is not null)
         {
@@ -140,15 +124,15 @@ public static class DemoContentModeratorSeeder
 
         role = new Role
         {
-            Name = RoleNames.ContentModerator,
-            Description = "Can moderate reported reviews and content.",
+            Name = RoleNames.Admin,
+            Description = "Can manage users and administrative configuration.",
             CreatedAt = DateTime.UtcNow
         };
 
         db.Roles.Add(role);
         await db.SaveChangesAsync(cancellationToken);
 
-        logger?.LogWarning("Content Moderator role was missing and was created by the demo seed.");
+        logger?.LogWarning("Admin role was missing and was created by the demo seed.");
         return role;
     }
 
@@ -231,7 +215,7 @@ public static class DemoContentModeratorSeeder
     }
 }
 
-public sealed record DemoContentModeratorSeedResult(
+public sealed record DemoAdminSeedResult(
     bool Seeded,
     int? UserId,
     int? RoleId,

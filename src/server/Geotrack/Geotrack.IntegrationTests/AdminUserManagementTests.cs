@@ -42,7 +42,7 @@ public sealed class AdminUserManagementTests
         var nonAdminResponse = await normalUser.Client.GetAsync("/api/admin/users");
         Assert.Equal(HttpStatusCode.Forbidden, nonAdminResponse.StatusCode);
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await admin.Client.GetAsync("/api/admin/users?tab=app-users&skip=0&take=1&sort=newest");
         response.EnsureSuccessStatusCode();
 
@@ -86,7 +86,7 @@ public sealed class AdminUserManagementTests
         var nonAdminResponse = await normalUser.Client.GetAsync($"/api/admin/users/{target.Id}/preview");
         Assert.Equal(HttpStatusCode.Forbidden, nonAdminResponse.StatusCode);
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await admin.Client.GetAsync($"/api/admin/users/{target.Id}/preview");
         response.EnsureSuccessStatusCode();
 
@@ -141,7 +141,7 @@ public sealed class AdminUserManagementTests
         await AddReviewAndReportFixtureAsync(app, high.Id);
         await SuspendDirectlyAsync(app, low.Id);
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
 
         var byReviews = await admin.Client.GetFromJsonAsync<AdminUserListResponseDto>(
             $"/api/admin/users?tab=app-users&search={Uri.EscapeDataString(prefix)}&sort=reviewsDesc&skip=0&take=25");
@@ -182,7 +182,7 @@ public sealed class AdminUserManagementTests
             "Status Target User");
 
         using var targetSession = await LoginUserAsync(app, target.Email, UserPassword);
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
 
         var selfSuspend = await admin.Client.PostAsync($"/api/admin/users/{admin.UserId}/suspend", null);
         Assert.Equal(HttpStatusCode.BadRequest, selfSuspend.StatusCode);
@@ -266,7 +266,7 @@ public sealed class AdminUserManagementTests
         var validTerritory = await CreateTerritoryAsync(app, withBoundary: true);
         var invalidTerritory = await CreateTerritoryAsync(app, withBoundary: false);
 
-        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "Proba123!");
+        using var admin = await LoginAdminAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
 
         var invalidResponse = await admin.Client.PostAsJsonAsync(
             $"/api/admin/users/{target.Id}/assign-territory-manager",

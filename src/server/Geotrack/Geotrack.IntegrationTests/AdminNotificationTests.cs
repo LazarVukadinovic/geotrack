@@ -68,7 +68,7 @@ public sealed class AdminNotificationTests
     public async Task Territory_manager_notification_list_returns_empty_page_when_no_notifications_exist()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
-        using var manager = await LoginAdminAppAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAppAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var response = await manager.Client.GetAsync(
             "/api/admin/notifications?audienceRole=TerritoryManager&includeRead=true&skip=0&take=25");
@@ -111,7 +111,7 @@ public sealed class AdminNotificationTests
     public async Task Territory_manager_scope_filter_handles_null_scope_id_without_exposing_global_rows()
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
-        using var manager = await LoginAdminAppAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAppAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         await AddNotificationAsync(
             app,
@@ -430,7 +430,7 @@ public sealed class AdminNotificationTests
             item.TargetType == "ReviewReport" &&
             item.TargetId == report.ReportId));
 
-        using var moderator = await LoginAdminAppAsync(app, "moderator@gmail.com", "Proba123!");
+        using var moderator = await LoginAdminAppAsync(app, "moderator@gmail.com", "TEST-only-Fixture-9284!");
         var page = await moderator.Client.GetFromJsonAsync<AdminNotificationListDto>(
             "/api/admin/notifications?audienceRole=ContentModerator&includeRead=true&skip=0&take=25",
             JsonOptions);
@@ -454,7 +454,7 @@ public sealed class AdminNotificationTests
         var regionalResponse = await regional.Client.GetAsync("/api/admin/notifications?audienceRole=TerritoryManager");
         Assert.Equal(HttpStatusCode.Forbidden, regionalResponse.StatusCode);
 
-        using var manager = await LoginAdminAppAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAppAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var page = await manager.Client.GetFromJsonAsync<AdminNotificationListDto>(
             "/api/admin/notifications?audienceRole=TerritoryManager&includeRead=true&skip=0&take=25",
             JsonOptions);
@@ -575,7 +575,7 @@ public sealed class AdminNotificationTests
                 regionalNotification.TargetRoute);
         }
 
-        using var manager = await LoginAdminAppAsync(app, "mika@gmail.com", "Proba123!");
+        using var manager = await LoginAdminAppAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var page = await manager.Client.GetFromJsonAsync<AdminNotificationListDto>(
             "/api/admin/notifications?audienceRole=TerritoryManager&includeRead=true&skip=0&take=25",
             JsonOptions);
@@ -677,7 +677,7 @@ public sealed class AdminNotificationTests
 
     private static async Task<AuthenticatedClient> LoginAdminAsync(GeotrackApiFactory app)
     {
-        return await LoginAdminAppAsync(app, "zika@gmail.com", "Proba123!");
+        return await LoginAdminAppAsync(app, "zika@gmail.com", "TEST-only-Fixture-9284!");
     }
 
     private static async Task<AuthenticatedClient> LoginAdminAppAsync(

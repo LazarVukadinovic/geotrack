@@ -22,7 +22,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var users = await client.GetFromJsonAsync<TerritoryUserListResponseDto>(
             $"/api/admin/territory/users?territoryId={fixture.AssignedTerritoryId}&skip=0&take=8");
 
@@ -74,7 +74,7 @@ public sealed class TerritoryUserAdministrationTests
             $"/api/admin/territory/users?territoryId={fixture.AssignedTerritoryId}");
         Assert.Equal(HttpStatusCode.Forbidden, regional.StatusCode);
 
-        using var territoryClient = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var territoryClient = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var unassigned = await territoryClient.GetAsync(
             $"/api/admin/territory/users?territoryId={fixture.UnassignedTerritoryId}");
         Assert.Equal(HttpStatusCode.Forbidden, unassigned.StatusCode);
@@ -91,7 +91,7 @@ public sealed class TerritoryUserAdministrationTests
         var fixture = await CreateFixtureAsync(app);
         await AddPagedUsersAsync(app, fixture.AssignedRegionOneId, 10);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var byName = await client.GetFromJsonAsync<TerritoryUserListResponseDto>(
             $"/api/admin/territory/users?territoryId={fixture.AssignedTerritoryId}&search=Active%20Manager&skip=0&take=8");
@@ -134,7 +134,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var add = await client.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.ActiveManagerUserId}/regions",
@@ -174,7 +174,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var add = await client.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.ActiveManagerUserId}/regions",
@@ -251,7 +251,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var available = await client.GetFromJsonAsync<TerritoryUserAvailableRegionsResponseDto>(
             $"/api/admin/territory/users/{fixture.ViewerUserId}/available-regions?territoryId={fixture.AssignedTerritoryId}");
@@ -286,7 +286,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var response = await client.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.PlainUserId}/regional-manager",
@@ -329,7 +329,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var response = await client.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.PlainUserId}/regional-manager",
@@ -354,7 +354,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var response = await client.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
@@ -394,7 +394,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var response = await client.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.ActiveManagerUserId}/territory-associate",
@@ -445,7 +445,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var add = await client.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
             new TerritoryUserAddTerritoryAssociateRequestDto
@@ -488,7 +488,7 @@ public sealed class TerritoryUserAdministrationTests
         var fixture = await CreateFixtureAsync(app);
         await GrantTerritoryAssociateRoleAsync(app, "elena@example.com", fixture.AssignedTerritoryId);
 
-        using var managerClient = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var managerClient = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var add = await managerClient.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
             new TerritoryUserAddTerritoryAssociateRequestDto
@@ -541,7 +541,7 @@ public sealed class TerritoryUserAdministrationTests
         var fixture = await CreateFixtureAsync(app);
         await GrantTerritoryAssociateRoleAsync(app, "elena@example.com", fixture.AssignedTerritoryId);
 
-        using var managerClient = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var managerClient = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var add = await managerClient.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.PlainUserId}/territory-associate",
             new TerritoryUserAddTerritoryAssociateRequestDto
@@ -587,7 +587,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await client.PutAsJsonAsync(
             $"/api/admin/territory/users/{fixture.ActiveManagerUserId}",
             new TerritoryUserUpdateRequestDto
@@ -623,7 +623,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var outsideUser = await client.PutAsJsonAsync(
             $"/api/admin/territory/users/{fixture.OutOfTerritoryUserId}",
@@ -734,7 +734,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app, createCrossTerritoryManager: true);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
         var response = await client.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.CrossTerritoryManagerUserId}/remove-manager-role",
             new TerritoryUserRemoveManagerRoleRequestDto
@@ -774,7 +774,7 @@ public sealed class TerritoryUserAdministrationTests
         await using var app = await GeotrackApiFactory.CreateAsync();
         var fixture = await CreateFixtureAsync(app);
 
-        using var client = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var client = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         var outOfScope = await client.PostAsJsonAsync(
             $"/api/admin/territory/users/{fixture.OutOfTerritoryUserId}/remove-manager-role",
@@ -815,7 +815,7 @@ public sealed class TerritoryUserAdministrationTests
     {
         await using var app = await GeotrackApiFactory.CreateAsync();
 
-        using var _ = await LoginAdminAsync(app, "mika@gmail.com", "Proba123!");
+        using var _ = await LoginAdminAsync(app, "mika@gmail.com", "TEST-only-Fixture-9284!");
 
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

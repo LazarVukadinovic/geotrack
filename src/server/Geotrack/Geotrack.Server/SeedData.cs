@@ -34,18 +34,8 @@ public static class SeedData
     private const string SerbiaIso3 = "SRB";
     private const string CroatiaSeedRegionName = "Dubrovnik-Neretva";
     private const string LegacyCroatiaSeedRegionName = "Dalmatia";
-    private const string DemoRegionalManagerEmail = "pera@gmail.com";
-    private const string DemoRegionalManagerPassword = "Proba123!";
-    private const string DemoRegionalManagerUsername = "pera";
     private const string RegionalManagerRoleName = "RegionalManager";
     private const string TerritoryManagerRoleName = "TerritoryManager";
-    private const string DemoRegionalManagerRegionName = CroatiaSeedRegionName;
-    private const string SerbiaTerritoryManagerEmail = "nikola@gmail.com";
-    private const string SerbiaTerritoryManagerPassword = "Proba123!";
-    private const string SerbiaTerritoryManagerUsername = "nikola";
-    private const string SerbiaRegionalManagerEmail = "serbia.regional@gmail.com";
-    private const string SerbiaRegionalManagerPassword = "Proba123!";
-    private const string SerbiaRegionalManagerUsername = "serbia-regional";
     private const string SerbiaRegionalManagerAnchorDestinationName = "Kragujevac";
 
     private static readonly SemaphoreSlim InitializationLock = new(1, 1);
@@ -259,8 +249,10 @@ public static class SeedData
     private static bool IsSeedClock(string value)
         => TimeSpan.TryParseExact(value, @"hh\:mm", CultureInfo.InvariantCulture, out _);
 
-    public static async Task InitializeAsync(AppDbContext db)
+    public static async Task InitializeAsync(AppDbContext db, IHostEnvironment environment)
     {
+        if (!environment.IsDevelopment())
+            throw new InvalidOperationException("Demo content initialization is restricted to Development.");
         await InitializationLock.WaitAsync();
 
         try
@@ -372,7 +364,6 @@ public static class SeedData
         {
             await EnsureRolesAsync(db);
             await EnsureDemoUsersAsync(db);
-            await EnsureDemoRegionalManagerAsync(db);
             var tagLookup1 = await EnsureSmartTagTaxonomyAsync(db);
             await EnsureInterestTopicsAsync(db, tagLookup1);
             await EnsureExploreDemoPlaceTagsAsync(db, tagLookup1);
@@ -716,7 +707,6 @@ public static class SeedData
         var etMusic = await EnsureEventTypeAsync("Music", "Music and live performance events");
 
         await EnsureRolesAsync(db);
-        await EnsureDemoRegionalManagerAsync(db);
 
         var hasher = new PasswordHasher<User>();
 
@@ -2582,243 +2572,6 @@ public static class SeedData
         {
             await db.SaveChangesAsync();
         }
-    }
-
-    private static async Task EnsureSerbiaTerritoryManagerAsync(AppDbContext db, Territory serbia)
-    {
-        var now = DateTime.UtcNow;
-        var role = await EnsureSeedRoleAsync(
-            db,
-            TerritoryManagerRoleName,
-            "Can manage territories and assigned regions.",
-            now);
-        var user = await EnsureSeedUserAsync(
-            db,
-            SerbiaTerritoryManagerEmail,
-            SerbiaTerritoryManagerUsername,
-            "Nikola",
-            "Territory Manager",
-            "Nikola Territory Manager",
-            SerbiaTerritoryManagerPassword,
-            "Serbia",
-            now);
-
-        if (!await db.UserRoles.AnyAsync(existing => existing.UserId == user.Id && existing.RoleId == role.Id))
-        {
-            db.UserRoles.Add(new UserRole
-            {
-                UserId = user.Id,
-                RoleId = role.Id
-            });
-        }
-
-        if (!await db.TerritoryManagers.AnyAsync(existing => existing.UserId == user.Id))
-        {
-            db.TerritoryManagers.Add(new TerritoryManager
-            {
-                UserId = user.Id
-            });
-        }
-
-        if (!await db.TerritoryManagerTerritories.AnyAsync(existing =>
-                existing.UserId == user.Id &&
-                existing.TerritoryId == serbia.Id))
-        {
-            db.TerritoryManagerTerritories.Add(new TerritoryManagerTerritory
-            {
-                UserId = user.Id,
-                TerritoryId = serbia.Id,
-                CreatedAt = now
-            });
-        }
-
-        await db.SaveChangesAsync();
-    }
-
-    private static async Task EnsureSerbiaRegionalManagerAsync(AppDbContext db, Region region)
-    {
-        var now = DateTime.UtcNow;
-        var role = await EnsureSeedRoleAsync(
-            db,
-            RegionalManagerRoleName,
-            "Can review and approve regional user contributions.",
-            now);
-        var user = await EnsureSeedUserAsync(
-            db,
-            SerbiaRegionalManagerEmail,
-            SerbiaRegionalManagerUsername,
-            "Serbia",
-            "Regional Manager",
-            "Serbia Regional Manager",
-            SerbiaRegionalManagerPassword,
-            region.Name,
-            now);
-
-        if (!await db.UserRoles.AnyAsync(existing => existing.UserId == user.Id && existing.RoleId == role.Id))
-        {
-            db.UserRoles.Add(new UserRole
-            {
-                UserId = user.Id,
-                RoleId = role.Id
-            });
-        }
-
-        var staleAssignments = await db.RegionalManagerRegions
-            .Where(assignment =>
-                assignment.UserId == user.Id &&
-                assignment.Region.TerritoryId == region.TerritoryId &&
-                assignment.RegionId != region.Id &&
-                assignment.IsActive)
-            .ToListAsync();
-
-        foreach (var staleAssignment in staleAssignments)
-        {
-            staleAssignment.IsActive = false;
-            staleAssignment.UpdatedAt = now;
-        }
-
-        var assignment = await db.RegionalManagerRegions.FindAsync(user.Id, region.Id);
-        if (assignment is null)
-        {
-            db.RegionalManagerRegions.Add(new RegionalManagerRegion
-            {
-                UserId = user.Id,
-                RegionId = region.Id,
-                IsActive = true,
-                CreatedAt = now
-            });
-        }
-        else if (!assignment.IsActive)
-        {
-            assignment.IsActive = true;
-            assignment.UpdatedAt = now;
-        }
-
-        await db.SaveChangesAsync();
-    }
-
-    private static async Task<Role> EnsureSeedRoleAsync(
-        AppDbContext db,
-        string name,
-        string description,
-        DateTime now)
-    {
-        var role = await db.Roles.FirstOrDefaultAsync(existing => existing.Name == name);
-        if (role is not null)
-        {
-            return role;
-        }
-
-        role = new Role
-        {
-            Name = name,
-            Description = description,
-            CreatedAt = now
-        };
-
-        db.Roles.Add(role);
-        await db.SaveChangesAsync();
-        return role;
-    }
-
-    private static async Task<User> EnsureSeedUserAsync(
-        AppDbContext db,
-        string email,
-        string username,
-        string firstName,
-        string lastName,
-        string displayName,
-        string password,
-        string location,
-        DateTime now)
-    {
-        var normalizedEmail = email.ToLowerInvariant();
-        var hasher = new PasswordHasher<User>();
-        var user = await db.Users
-            .OrderBy(existing => existing.Id)
-            .FirstOrDefaultAsync(existing => existing.Email.ToLower() == normalizedEmail);
-
-        if (user is null)
-        {
-            user = new User
-            {
-                Username = await ResolveSeedUsernameAsync(db, username),
-                Email = normalizedEmail,
-                FirstName = firstName,
-                LastName = lastName,
-                DisplayName = displayName,
-                PhoneNumber = string.Empty,
-                Location = location,
-                NeedsInterestsOnboarding = false,
-                CreatedAt = now
-            };
-
-            user.PasswordHash = hasher.HashPassword(user, password);
-            db.Users.Add(user);
-            await db.SaveChangesAsync();
-            return user;
-        }
-
-        var changed = false;
-        if (SeedPasswordNeedsReset(hasher, user, password))
-        {
-            user.PasswordHash = hasher.HashPassword(user, password);
-            changed = true;
-        }
-
-        if (user.IsSuspended)
-        {
-            user.IsSuspended = false;
-            user.SuspendedAt = null;
-            user.SuspendedByUserId = null;
-            changed = true;
-        }
-
-        if (user.IsDeleted)
-        {
-            user.IsDeleted = false;
-            user.DeletedAt = null;
-            user.DeletedByUserId = null;
-            changed = true;
-        }
-
-        if (user.NeedsInterestsOnboarding)
-        {
-            user.NeedsInterestsOnboarding = false;
-            changed = true;
-        }
-
-        if (string.IsNullOrWhiteSpace(user.FirstName))
-        {
-            user.FirstName = firstName;
-            changed = true;
-        }
-
-        if (string.IsNullOrWhiteSpace(user.LastName))
-        {
-            user.LastName = lastName;
-            changed = true;
-        }
-
-        if (string.IsNullOrWhiteSpace(user.DisplayName))
-        {
-            user.DisplayName = displayName;
-            changed = true;
-        }
-
-        if (string.IsNullOrWhiteSpace(user.Location))
-        {
-            user.Location = location;
-            changed = true;
-        }
-
-        if (changed)
-        {
-            user.UpdatedAt = now;
-            await db.SaveChangesAsync();
-        }
-
-        return user;
     }
 
     private static async Task RemoveDeprecatedActivityPlaceTypeAsync(AppDbContext db)
@@ -4908,7 +4661,6 @@ public static class SeedData
         }
 
         var serbia = await EnsureSerbiaTerritoryAsync(db, now);
-        await EnsureSerbiaTerritoryManagerAsync(db, serbia);
         await ForceSetTerritoryImagesAsync(serbia,
             SeedWebp("krupajsko_vrelo"),
             SeedWebp("uvac"),
@@ -5672,7 +5424,6 @@ public static class SeedData
         await AddEntityImagesIfMissingAsync(EntityImageTargetType.Place, bigFashion.Name, placeId: bigFashion.Id, urls: new[] { SeedWebp("big-kg") });
 
         await RemoveUnreferencedLegacySerbiaRegionsAsync(db, serbia);
-        await EnsureSerbiaRegionalManagerAsync(db, kragujevacRegion);
     }
 
     private static async Task EnsureAdditionalExploreDemoDataAsync(AppDbContext db, IReadOnlyDictionary<string, Tag> tagLookup)
@@ -7538,140 +7289,6 @@ public static class SeedData
         }
 
         await db.SaveChangesAsync();
-    }
-
-    private static async Task EnsureDemoRegionalManagerAsync(AppDbContext db)
-    {
-        var now = DateTime.UtcNow;
-        var normalizedEmail = DemoRegionalManagerEmail.ToLowerInvariant();
-        var hasher = new PasswordHasher<User>();
-
-        var region = await db.Regions
-            .OrderBy(x => x.Id)
-            .FirstOrDefaultAsync(x => x.Name == DemoRegionalManagerRegionName);
-
-        region ??= await db.Regions
-            .OrderBy(x => x.Id)
-            .FirstOrDefaultAsync();
-
-        if (region is null)
-        {
-            return;
-        }
-
-        var role = await db.Roles.FirstOrDefaultAsync(x => x.Name == RegionalManagerRoleName);
-        if (role is null)
-        {
-            role = new Role
-            {
-                Name = RegionalManagerRoleName,
-                Description = "Can review and approve regional user contributions.",
-                CreatedAt = now
-            };
-
-            db.Roles.Add(role);
-            await db.SaveChangesAsync();
-        }
-
-        var user = await db.Users
-            .OrderBy(x => x.Id)
-            .FirstOrDefaultAsync(x => x.Email.ToLower() == normalizedEmail);
-
-        if (user is null)
-        {
-            user = new User
-            {
-                Username = await ResolveSeedUsernameAsync(db, DemoRegionalManagerUsername),
-                Email = normalizedEmail,
-                FirstName = "Pera",
-                LastName = "Regional Manager",
-                PasswordHash = string.Empty,
-                DisplayName = "Pera",
-                PhoneNumber = string.Empty,
-                Location = region.Name,
-                NeedsInterestsOnboarding = false,
-                CreatedAt = now
-            };
-
-            user.PasswordHash = hasher.HashPassword(user, DemoRegionalManagerPassword);
-            db.Users.Add(user);
-            await db.SaveChangesAsync();
-        }
-        else if (SeedPasswordNeedsReset(hasher, user, DemoRegionalManagerPassword))
-        {
-            user.PasswordHash = hasher.HashPassword(user, DemoRegionalManagerPassword);
-            user.UpdatedAt = now;
-            await db.SaveChangesAsync();
-        }
-
-        var hasRole = await db.UserRoles.AnyAsync(x => x.UserId == user.Id && x.RoleId == role.Id);
-        if (!hasRole)
-        {
-            db.UserRoles.Add(new UserRole
-            {
-                UserId = user.Id,
-                RoleId = role.Id
-            });
-        }
-
-        var assignment = await db.RegionalManagerRegions.FindAsync(user.Id, region.Id);
-        if (assignment is null)
-        {
-            db.RegionalManagerRegions.Add(new RegionalManagerRegion
-            {
-                UserId = user.Id,
-                RegionId = region.Id,
-                IsActive = true,
-                CreatedAt = now
-            });
-        }
-        else if (!assignment.IsActive)
-        {
-            assignment.IsActive = true;
-            assignment.UpdatedAt = now;
-        }
-
-        await db.SaveChangesAsync();
-    }
-
-    private static async Task<string> ResolveSeedUsernameAsync(AppDbContext db, string username)
-    {
-        if (!await db.Users.AnyAsync(x => x.Username.ToLower() == username.ToLowerInvariant()))
-        {
-            return username;
-        }
-
-        for (var suffix = 2; suffix < 100; suffix++)
-        {
-            var candidate = $"{username}-{suffix}";
-            if (!await db.Users.AnyAsync(x => x.Username.ToLower() == candidate.ToLowerInvariant()))
-            {
-                return candidate;
-            }
-        }
-
-        return $"{username}-{Guid.NewGuid():N}";
-    }
-
-    private static bool SeedPasswordNeedsReset(PasswordHasher<User> hasher, User user, string password)
-    {
-        if (string.IsNullOrWhiteSpace(user.PasswordHash))
-        {
-            return true;
-        }
-
-        try
-        {
-            return hasher.VerifyHashedPassword(user, user.PasswordHash, password) != PasswordVerificationResult.Success;
-        }
-        catch (ArgumentException)
-        {
-            return true;
-        }
-        catch (FormatException)
-        {
-            return true;
-        }
     }
 
     private static async Task EnsureDefaultModerationTermsAsync(AppDbContext db)

@@ -80,7 +80,7 @@ describe('AuthService', () => {
   });
 
   it('maps territory manager roles to the territory dashboard route', () => {
-    service.login('mika@gmail.com', 'Proba123!').subscribe(user => {
+    service.login('mika@gmail.com', 'TEST-only-Fixture-9284!').subscribe(user => {
       expect(user.email).toBe('mika@gmail.com');
       expect(user.role).toBe('Territory Manager');
     });
@@ -112,7 +112,7 @@ describe('AuthService', () => {
   });
 
   it('maps territory associate roles to territory admin access without territory manager identity', () => {
-    service.login('associate@example.com', 'Proba123!').subscribe(user => {
+    service.login('associate@example.com', 'TEST-only-Fixture-9284!').subscribe(user => {
       expect(user.email).toBe('associate@example.com');
       expect(user.role).toBe('Territory Associate');
     });
@@ -142,7 +142,7 @@ describe('AuthService', () => {
   });
 
   it('maps admin roles to the existing administrator dashboard route', () => {
-    service.login('zika@gmail.com', 'Proba123!').subscribe(user => {
+    service.login('zika@gmail.com', 'TEST-only-Fixture-9284!').subscribe(user => {
       expect(user.email).toBe('zika@gmail.com');
       expect(user.role).toBe('Administrator');
       expect(user.activeRoleCode).toBe('Admin');
@@ -173,7 +173,7 @@ describe('AuthService', () => {
   });
 
   it('maps content moderator roles to the content moderator dashboard route', () => {
-    service.login('moderator@gmail.com', 'Proba123!').subscribe(user => {
+    service.login('moderator@gmail.com', 'TEST-only-Fixture-9284!').subscribe(user => {
       expect(user.email).toBe('moderator@gmail.com');
       expect(user.role).toBe('Content Moderator');
       expect(user.activeRoleCode).toBe('ContentModerator');
@@ -206,7 +206,7 @@ describe('AuthService', () => {
   it('gives admin role priority over a stored non-admin view during login', () => {
     sessionStorage.setItem('geotrack_admin_active_view', 'RegionalManager');
 
-    service.login('zika@gmail.com', 'Proba123!').subscribe(user => {
+    service.login('zika@gmail.com', 'TEST-only-Fixture-9284!').subscribe(user => {
       expect(user.activeRoleCode).toBe('Admin');
       expect(user.roles).toEqual(['Admin', 'RegionalManager']);
     });
@@ -233,7 +233,7 @@ describe('AuthService', () => {
   });
 
   it('uses the existing territory-first redirect priority for multi-role admin users', () => {
-    service.login('multi@example.com', 'Proba123!').subscribe(user => {
+    service.login('multi@example.com', 'TEST-only-Fixture-9284!').subscribe(user => {
       expect(user.email).toBe('multi@example.com');
       expect(user.role).toBe('Territory Manager');
       expect(user.roles).toEqual(['TerritoryManager', 'RegionalManager']);
@@ -264,7 +264,7 @@ describe('AuthService', () => {
     sessionStorage.setItem('geotrack_admin_active_territory_id', '1');
     let resolved = false;
 
-    service.login('nikola@gmail.com', 'Proba123!').subscribe(user => {
+    service.login('nikola@gmail.com', 'TEST-only-Fixture-9284!').subscribe(user => {
       resolved = true;
       expect(user.email).toBe('nikola@gmail.com');
       expect(user.activeRoleCode).toBe('TerritoryManager');
@@ -302,7 +302,7 @@ describe('AuthService', () => {
   });
 
   it('switches the active admin view only to a role owned by the current user', () => {
-    service.login('multi@example.com', 'Proba123!').subscribe();
+    service.login('multi@example.com', 'TEST-only-Fixture-9284!').subscribe();
 
     const response = {
       accessToken: 'multi-token',
