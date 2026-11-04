@@ -547,38 +547,35 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-var allowedCorsOrigins = builder.Configuration
-    .GetSection("Cors:AllowedOrigins")
-    .Get<string[]>()
-    ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
-    .Select(origin => origin.Trim().TrimEnd('/'))
-    .Distinct(StringComparer.OrdinalIgnoreCase)
-    .ToArray()
-    ?? Array.Empty<string>();
-
-if (allowedCorsOrigins.Length == 0)
-{
-    allowedCorsOrigins = builder.Environment.IsDevelopment()
-        ? new[]
-        {
-            "http://localhost:4200",
-            "http://127.0.0.1:4200",
-            "https://localhost:4200",
-            "https://127.0.0.1:4200",
-            "http://localhost:4300",
-            "http://127.0.0.1:4300",
-            "https://localhost:4300",
-            "https://127.0.0.1:4300"
-        }
-        : new[]
-        {
-            "https://softeng.pmf.kg.ac.rs:10131",
-            "https://softeng.pmf.kg.ac.rs:10132"
-        };
-}
-
 builder.Services.AddCors(options =>
 {
+    // Resolve origins when options are created so deployment/configuration overrides apply.
+    var allowedCorsOrigins = builder.Configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>()
+        ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
+        .Select(origin => origin.Trim().TrimEnd('/'))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray()
+        ?? Array.Empty<string>();
+
+    if (allowedCorsOrigins.Length == 0)
+    {
+        allowedCorsOrigins = builder.Environment.IsDevelopment()
+            ? new[]
+            {
+                "http://localhost:4200",
+                "http://127.0.0.1:4200",
+                "https://localhost:4200",
+                "https://127.0.0.1:4200",
+                "http://localhost:4300",
+                "http://127.0.0.1:4300",
+                "https://localhost:4300",
+                "https://127.0.0.1:4300"
+            }
+            : Array.Empty<string>();
+    }
+
     options.AddPolicy("ConfiguredOrigins", policy =>
     {
         policy.WithOrigins(allowedCorsOrigins)

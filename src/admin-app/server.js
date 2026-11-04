@@ -13,8 +13,12 @@ const buildDir = path.join(__dirname, 'dist', appName, 'browser');
 const indexPath = path.join(buildDir, 'index.html');
 const backendOrigin = normalizeOrigin(
   process.env.BACKEND_ORIGIN
-    || (isProduction ? 'https://softeng.pmf.kg.ac.rs:10133' : 'http://localhost:5003')
+    || (isProduction ? '' : 'http://localhost:5003')
 );
+
+if (!backendOrigin) {
+  fail('BACKEND_ORIGIN is required when NODE_ENV=production.');
+}
 
 if (!fs.existsSync(indexPath)) {
   fail(`Angular build output was not found at ${indexPath}. Run npm run build first.`);

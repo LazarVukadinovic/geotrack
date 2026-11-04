@@ -192,7 +192,7 @@ public class AgentSecurityAndMcpTests
             });
         using var client = app.CreateClient(new WebApplicationFactoryClientOptions
         {
-            BaseAddress = new Uri("https://softeng.pmf.kg.ac.rs:10133")
+            BaseAddress = new Uri("https://localhost")
         });
 
         var get = await client.GetAsync("/api/mcp");

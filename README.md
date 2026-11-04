@@ -6,11 +6,6 @@ Backend je ASP.NET Core API koji čuva katalog, korisnike, recenzije, kolekcije,
 
 Ask Agent je backend-managed AI funkcionalnost za pitanja nad GeoTrack katalogom. Angular ne prikazuje provider/model/key opcije i ne šalje korisničke API ključeve; chat se izvršava preko server-side Gemini key pool-a. GeoTrack MCP je zaseban remote HTTP JSON-RPC tool endpoint za spoljne AI alate koji podržavaju MCP.
 
-## Objavljene aplikacije
-- Korisnička aplikacija: `https://softeng.pmf.kg.ac.rs:10131`
-- Administrativna aplikacija: `https://softeng.pmf.kg.ac.rs:10132`
-- Backend: `https://softeng.pmf.kg.ac.rs:10133`
-
 ## Bezbedno inicijalno podešavanje administratora
 
 Privilegovani nalozi nemaju podrazumevanu lozinku i ne kreiraju se automatski ni u
@@ -305,10 +300,29 @@ npm --prefix src/admin-app run serve:static
 
 Za produkciju podesite `NODE_ENV=production`, `HTTPS_PFX_PATH` i po potrebi
 `HTTPS_PFX_PASSWORD`. Podrazumevani portovi su `10131` i `10132`; `PORT` ih menja.
-`BACKEND_ORIGIN` određuje odredište `/media` preusmeravanja. Express ne prosleđuje
+`BACKEND_ORIGIN` je obavezan u produkciji i određuje odredište `/media` preusmeravanja.
+Za lokalni rad podrazumevana backend adresa je `http://localhost:5003`. Express ne prosleđuje
 `/api`: frontend produkcioni URL-ovi su u
 `src/app/environments/environment.production.ts` svake aplikacije i izmene tih
-URL-ova zahtevaju novi build.
+URL-ova zahtevaju novi build. Praćene konfiguracije sadrže samo primere sa domenom
+`example.invalid`; stvarne adrese postavite u privatnom deployment/build koraku,
+bez njihovog commit-ovanja.
+
+Backend produkcione adrese podesite kroz promenljive okruženja:
+
+```text
+Cors__AllowedOrigins__0=<origin-korisnicke-aplikacije>
+Cors__AllowedOrigins__1=<origin-administrativne-aplikacije>
+AllowedHosts=<hostname-backenda>
+Mcp__PublicBaseUrl=<javni-URL-backenda>
+Email__FrontendBaseUrl=<javni-URL-korisnicke-aplikacije>
+```
+
+Origin obuhvata protokol, hostname i port ako se koristi nestandardni port, bez
+putanje i završne kose crte. `AllowedHosts` sadrži samo hostname, bez protokola i
+porta; za više hostname-ova koristite `;`. Produkcija nema podrazumevane spoljne
+CORS adrese. `Mcp__PublicBaseUrl` podesite kada uključujete MCP, a
+`Email__FrontendBaseUrl` kada uključujete slanje emaila.
 
 Backend pokrenite iz direktorijuma `artifacts/server` komandom
 `dotnet Geotrack.Server.dll`, uz `ASPNETCORE_ENVIRONMENT=Production`, connection

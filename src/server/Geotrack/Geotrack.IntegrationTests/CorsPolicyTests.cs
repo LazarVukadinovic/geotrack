@@ -9,7 +9,7 @@ public sealed class CorsPolicyTests
     [Fact]
     public async Task Development_cors_allows_configured_origins_with_credentials()
     {
-        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var app = await CreateCorsAppAsync();
         using var client = app.CreateClient();
 
         var allowedOrigins = new[]
@@ -17,8 +17,7 @@ public sealed class CorsPolicyTests
             "http://localhost:4200",
             "http://127.0.0.1:4200",
             "http://localhost:4300",
-            "http://127.0.0.1:4300",
-            "https://softeng.pmf.kg.ac.rs:10131"
+            "http://127.0.0.1:4300"
         };
 
         foreach (var origin in allowedOrigins)
@@ -33,10 +32,10 @@ public sealed class CorsPolicyTests
     [Fact]
     public async Task Production_cors_rejects_unconfigured_origins()
     {
-        await using var app = await GeotrackApiFactory.CreateAsync(Environments.Production);
+        await using var app = await CreateCorsAppAsync(Environments.Production);
         using var client = app.CreateClient();
 
-        const string origin = "https://example.invalid";
+        const string origin = "https://app.example.invalid";
         using var request = BuildPreflightRequest(origin);
         using var response = await client.SendAsync(request);
 
@@ -46,10 +45,10 @@ public sealed class CorsPolicyTests
     [Fact]
     public async Task Production_cors_allows_configured_production_origin_with_credentials()
     {
-        await using var app = await GeotrackApiFactory.CreateAsync(Environments.Production);
+        const string origin = "https://app.example.invalid";
+        await using var app = await CreateCorsAppAsync(Environments.Production, origin);
         using var client = app.CreateClient();
 
-        const string origin = "https://softeng.pmf.kg.ac.rs:10131";
         using var request = BuildPreflightRequest(origin);
         using var response = await client.SendAsync(request);
 
@@ -59,7 +58,7 @@ public sealed class CorsPolicyTests
     [Fact]
     public async Task Security_headers_include_csp_without_inline_scripts()
     {
-        await using var app = await GeotrackApiFactory.CreateAsync();
+        await using var app = await CreateCorsAppAsync();
         using var client = app.CreateClient();
 
         using var response = await client.GetAsync("/");
@@ -75,6 +74,23 @@ public sealed class CorsPolicyTests
         Assert.Contains("form-action 'self'", csp);
         Assert.Contains("script-src 'self'", csp);
         Assert.DoesNotContain("script-src 'self' 'unsafe-inline'", csp);
+    }
+
+    private static Task<GeotrackApiFactory> CreateCorsAppAsync(
+        string environment = "Development",
+        string? allowedOrigin = null)
+    {
+        // CORS and header checks do not require demo users or catalogue content.
+        var configuration = new Dictionary<string, string?>
+        {
+            ["Seed:EnableOperationalSeed"] = "false",
+            ["Seed:EnableDemoContentSeed"] = "false",
+            ["Seed:EnablePublicContentSeed"] = "false",
+            ["Seed:SyncAdm1Regions:Enabled"] = "false"
+        };
+        if (allowedOrigin is not null)
+            configuration["Cors:AllowedOrigins:0"] = allowedOrigin;
+        return GeotrackApiFactory.CreateAsync(environment, configuration);
     }
 
     private static HttpRequestMessage BuildPreflightRequest(string origin)

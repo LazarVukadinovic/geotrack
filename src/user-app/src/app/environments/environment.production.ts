@@ -1,5 +1,6 @@
 export const environment = {
   production: true,
-  apiBaseUrl: 'https://softeng.pmf.kg.ac.rs:10133/api',
-  mediaBaseUrl: 'https://softeng.pmf.kg.ac.rs:10133/media',
+  // Replace these examples in the private deployment build configuration.
+  apiBaseUrl: 'https://api.example.invalid/api',
+  mediaBaseUrl: 'https://api.example.invalid/media',
 };
